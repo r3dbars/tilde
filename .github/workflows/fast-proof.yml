@@ -48,3 +48,43 @@ jobs:
           # On a PR, also flag whitespace / conflict markers the PR introduces.
           # Empty on push events -> proof.sh checks the working tree instead.
           PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+
+  fast-proof-macos:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so a PR can diff against its base for git diff --check.
+          fetch-depth: 0
+
+      - name: Select newest Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.6.app
+          xcodebuild -version
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build
+          # .build contains the patched dependency checkout. Keep this exact so a
+          # changed patch or patch script can never restore already-patched stale code.
+          key: macos-26-swiftpm-${{ hashFiles('Package.resolved', 'patches/mlx-swift-lm/**', 'script/patch_mlx_swift_lm.sh') }}
+
+      - name: Resolve Swift package graph
+        run: swift package resolve
+
+      - name: Patch resolved MLX Swift LM dependency
+        run: ./script/patch_mlx_swift_lm.sh
+
+      - name: Fast proof tier with Swift tests (script/proof.sh fast)
+        run: bash script/proof.sh fast
+        env:
+          # This lane exists to exercise Swift. Never allow proof.sh's generic
+          # no-toolchain fallback to turn the Swift test into a successful skip.
+          PROOF_REQUIRE_SWIFT: "1"
+          # On a PR, also flag whitespace / conflict markers the PR introduces.
+          # Empty on push events -> proof.sh checks the working tree instead.
+          PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}

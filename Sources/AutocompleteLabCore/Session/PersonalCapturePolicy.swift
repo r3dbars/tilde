@@ -78,6 +78,18 @@ public struct PersonalCapturePolicy: Equatable, Sendable {
 
     public init() {}
 
+    public func allowsAppRead(
+        personalCaptureEnabled: Bool,
+        supportStatus: CompatibilitySupportStatus
+    ) -> Bool {
+        guard personalCaptureEnabled,
+              case let .supported(profile) = supportStatus else {
+            return false
+        }
+
+        return !profile.isSensitive
+    }
+
     public func decision(for input: PersonalCaptureInput) -> PersonalCaptureDecision {
         var metadata = input.fieldClassification.traceMetadata
         metadata["personalCapturePolicy"] = "v1"

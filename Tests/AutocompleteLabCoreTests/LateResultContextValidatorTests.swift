@@ -22,6 +22,30 @@ struct LateResultContextValidatorTests {
             .stillValid(typedSinceRequest: "lo"))
     }
 
+    @Test("A result past the maximum age is invalid even when text still matches")
+    func overAgeResultInvalidates() {
+        let request = snapshot(before: "Please hel")
+        let current = snapshot(before: "Please hello")
+
+        #expect(validator.validate(
+            requestSnapshot: request,
+            currentSnapshot: current,
+            latencyMilliseconds: 1_501
+        ) == .invalid(.tooLate))
+    }
+
+    @Test("A result at the maximum age remains eligible for context validation")
+    func maximumAgeRemainsEligible() {
+        let request = snapshot(before: "Please hel")
+        let current = snapshot(before: "Please hello")
+
+        #expect(validator.validate(
+            requestSnapshot: request,
+            currentSnapshot: current,
+            latencyMilliseconds: validator.maximumResultAgeMilliseconds
+        ) == .stillValid(typedSinceRequest: "lo"))
+    }
+
     @Test("A different focused field invalidates the result")
     func changedFieldInvalidates() {
         let request = snapshot(before: "Please hel")

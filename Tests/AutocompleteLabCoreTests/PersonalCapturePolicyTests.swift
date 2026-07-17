@@ -5,6 +5,31 @@ import Testing
 struct PersonalCapturePolicyTests {
     private let policy = PersonalCapturePolicy()
 
+    @Test("Sensitive and denylisted apps cannot be read even when personal capture is enabled")
+    func blocksSensitiveAndDenylistedAppReads() {
+        let profileStore = CompatibilityProfileStore.mvp
+        let passwordAppStatus = profileStore.supportStatus(for: "com.apple.Passwords")
+        #expect(passwordAppStatus == .denylisted)
+        #expect(!policy.allowsAppRead(
+            personalCaptureEnabled: true,
+            supportStatus: passwordAppStatus
+        ))
+        let supportedSensitiveStatus = profileStore.supportStatus(for: "com.openai.atlas")
+        #expect(profileStore.profile(for: "com.openai.atlas")?.isSensitive == true)
+        #expect(!policy.allowsAppRead(
+            personalCaptureEnabled: true,
+            supportStatus: supportedSensitiveStatus
+        ))
+        #expect(!policy.allowsAppRead(
+            personalCaptureEnabled: false,
+            supportStatus: profileStore.supportStatus(for: "com.apple.TextEdit")
+        ))
+        #expect(policy.allowsAppRead(
+            personalCaptureEnabled: true,
+            supportStatus: profileStore.supportStatus(for: "com.apple.TextEdit")
+        ))
+    }
+
     @Test("Allows ordinary compose fields")
     func allowsOrdinaryComposeFields() throws {
         let decision = policy.decision(for: PersonalCaptureInput(

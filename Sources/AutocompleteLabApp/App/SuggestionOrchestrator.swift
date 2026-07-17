@@ -835,7 +835,7 @@ final class SuggestionOrchestrator {
         confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
         confidenceMetadata["modelLatencyForBudgetMilliseconds"] = String(modelLatencyForBudget)
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
+            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("late-context-validation-required"))
 
         if shouldSuppressLowConfidence {
             let trace = DisplayScoreTrace(

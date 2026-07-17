@@ -2,6 +2,7 @@ public enum LateResultContextInvalidationReason: String, Equatable, Sendable {
     case fieldChanged
     case baselineChanged
     case suffixChanged
+    case tooLate
 }
 
 public enum LateResultContextValidation: Equatable, Sendable {
@@ -14,12 +15,22 @@ public enum LateResultContextValidation: Equatable, Sendable {
 /// Latency alone does not make a completion stale. A result remains usable while focus is
 /// still in the same field and the current text extends the text that issued the request.
 public struct LateResultContextValidator: Equatable, Sendable {
-    public init() {}
+    public let maximumResultAgeMilliseconds: Int
+
+    public init(maximumResultAgeMilliseconds: Int = 1_500) {
+        self.maximumResultAgeMilliseconds = max(1, maximumResultAgeMilliseconds)
+    }
 
     public func validate(
         requestSnapshot: FocusedTextSnapshot,
-        currentSnapshot: FocusedTextSnapshot
+        currentSnapshot: FocusedTextSnapshot,
+        latencyMilliseconds: Int? = nil
     ) -> LateResultContextValidation {
+        if let latencyMilliseconds,
+           latencyMilliseconds > maximumResultAgeMilliseconds {
+            return .invalid(.tooLate)
+        }
+
         guard currentSnapshot.fieldIdentity == requestSnapshot.fieldIdentity else {
             return .invalid(.fieldChanged)
         }
