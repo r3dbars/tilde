@@ -42,6 +42,8 @@ final class SuggestionPresentationDelivery {
         _ anchorRect: CGRect,
         _ textLineRect: CGRect?,
         _ clippingRect: CGRect?,
+        _ appBundleIdentifier: String,
+        _ boundaryRect: CGRect?,
         _ textStyle: FocusedTextStyle?,
         _ renderMode: SuggestionRenderMode
     ) -> CGRect?
@@ -71,8 +73,10 @@ final class SuggestionPresentationDelivery {
             panelPresenter(
                 request.suggestion.visibleText,
                 placement.anchorRect,
-                placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
+                placement.textLineRect,
                 placement.clippingRect,
+                request.profile.bundleIdentifier,
+                request.context.elementRect,
                 request.context.textStyle,
                 placement.renderMode
             )

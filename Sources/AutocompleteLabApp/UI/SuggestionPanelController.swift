@@ -85,12 +85,17 @@ final class SuggestionPanelController {
         near anchorRect: CGRect,
         alignedTo textLineRect: CGRect?,
         boundedBy clippingRect: CGRect?,
+        appBundleIdentifier: String? = nil,
+        boundaryRect: CGRect? = nil,
         style: FocusedTextStyle?,
         renderMode: SuggestionRenderMode
     ) -> CGRect? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        let color = visualStyle.textColor(for: renderMode)
+        let color = GhostTextColorPolicy.color(
+            matching: style?.foregroundColor,
+            renderMode: renderMode
+        )
 
         let textInsets = Self.textInsets(for: renderMode)
         let textPadding = CGSize(
@@ -135,13 +140,21 @@ final class SuggestionPanelController {
                 screenHeight: screenHeight
             )
         }
+        let appKitBoundaryRect = boundaryRect.map {
+            AccessibilityCoordinateConverter.appKitRect(
+                fromAccessibilityRect: $0,
+                screenHeight: screenHeight
+            )
+        }
         let frame: CGRect
 
         switch renderMode {
         case .inlineAdjacent:
             frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+                appBundleIdentifier: appBundleIdentifier,
                 caretRect: appKitAnchorRect,
                 textLineRect: appKitTextLineRect,
+                boundaryFrame: appKitBoundaryRect,
                 textSize: size,
                 screenFrame: screenFrame,
                 clippingFrame: appKitClippingRect
@@ -165,6 +178,7 @@ final class SuggestionPanelController {
         case .floatingMirror:
             frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
                 anchorRect: appKitAnchorRect,
+                caretRect: appKitTextLineRect,
                 textSize: size,
                 screenFrame: screenFrame,
                 clippingFrame: appKitClippingRect

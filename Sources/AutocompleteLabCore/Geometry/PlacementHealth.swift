@@ -293,6 +293,17 @@ public enum PlacementHealth {
                 )
             }
 
+            if let validCaret, !caretIsSynthetic {
+                return mirrorPresentation(
+                    requestedRenderMode: requestedRenderMode,
+                    anchorRect: validCaret,
+                    anchorSource: .caret,
+                    clippingRect: clippingRect,
+                    reason: .healthy,
+                    trustPolicy: trustPolicy
+                )
+            }
+
             if let validElement {
                 return mirrorPresentation(
                     requestedRenderMode: requestedRenderMode,

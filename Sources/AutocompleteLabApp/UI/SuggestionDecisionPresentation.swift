@@ -15,6 +15,10 @@ struct SuggestionDecisionPresentation: Equatable {
         "Why now: \(Self.oneLine(summary, maxLength: 92))"
     }
 
+    func statusMenuTitle(appDisplayName: String) -> String {
+        "Quiet in \(appDisplayName): \(Self.oneLine(summary, maxLength: 64))"
+    }
+
     var diagnosticsText: String {
         summary
     }

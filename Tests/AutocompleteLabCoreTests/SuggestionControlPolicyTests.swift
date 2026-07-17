@@ -21,24 +21,25 @@ struct SuggestionControlPolicyTests {
         #expect(paused.toggleTitle == "Resume Suggestions")
     }
 
-    @Test("Fresh installs start paused until the user resumes suggestions")
-    func freshInstallsStartPausedUntilTheUserResumesSuggestions() {
+    @Test("Fresh installs start active while persisted pause is honored")
+    func freshInstallsStartActiveWhilePersistedPauseIsHonored() {
         let policy = SuggestionControlPolicy()
 
-        #expect(policy.startupState(persistedIsPaused: nil) == .paused)
+        #expect(policy.startupState(persistedIsPaused: nil) == .running)
         #expect(policy.startupState(persistedIsPaused: true) == .paused)
         #expect(policy.startupState(persistedIsPaused: false) == .running)
     }
 
-    @Test("Missing persisted pause value is different from persisted false")
-    func missingPersistedPauseValueIsDifferentFromPersistedFalse() {
+    @Test("Missing persisted pause value uses the active default")
+    func missingPersistedPauseValueUsesTheActiveDefault() {
         let policy = SuggestionControlPolicy()
 
         let missingDefaultsState = policy.startupState(persistedIsPaused: nil)
         let explicitlyResumedState = policy.startupState(persistedIsPaused: false)
 
-        #expect(missingDefaultsState.isPaused)
+        #expect(!missingDefaultsState.isPaused)
         #expect(!explicitlyResumedState.isPaused)
+        #expect(missingDefaultsState == explicitlyResumedState)
     }
 
     @Test("Paused state blocks suggestion requests with global pause reason")

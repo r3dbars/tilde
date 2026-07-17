@@ -54,6 +54,19 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "LateResultContextValidator().trimmedSuggestion(")
     }
 
+    @Test("App delegate arms input capture before making a suggestion visible")
+    func appDelegateArmsInputCaptureBeforePresentation() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(appDelegate, contains: "geometryRefreshObserver:")
+        try require(appDelegate, contains: "requestVisibleSuggestionGeometryRefresh()")
+        try requireOrder(
+            in: appDelegate,
+            earlier: "guard startKeyboardEventTapIfPossible() else {",
+            later: "switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {"
+        )
+    }
+
     @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
     func appDelegateForwardsScreenshotPathAuthorization() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
@@ -105,5 +118,14 @@ private func source(_ relativePath: String) throws -> String {
 private func require(_ text: String, contains needle: String) throws {
     if !text.contains(needle) {
         Issue.record("Expected source to contain \(needle)")
+    }
+}
+
+private func requireOrder(in text: String, earlier: String, later: String) throws {
+    guard let earlierRange = text.range(of: earlier),
+          let laterRange = text.range(of: later),
+          earlierRange.lowerBound < laterRange.lowerBound else {
+        Issue.record("Expected \(earlier) before \(later)")
+        return
     }
 }

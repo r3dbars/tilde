@@ -6,6 +6,13 @@ import Carbon.HIToolbox
 
 @Suite("Keyboard event tap key codes")
 struct KeyboardEventTapKeyCodeTests {
+    @Test("Return and keypad Enter request immediate geometry refresh")
+    func returnKeysRequestImmediateGeometryRefresh() {
+        #expect(isReturnMacVirtualKeyCode(36))
+        #expect(isReturnMacVirtualKeyCode(76))
+        #expect(!isReturnMacVirtualKeyCode(48))
+    }
+
     @Test("Mac virtual key codes map to autocomplete physical keys")
     func mapsMacVirtualKeyCodes() {
         #expect(autocompletePhysicalKey(forMacVirtualKeyCode: 6) == .z)

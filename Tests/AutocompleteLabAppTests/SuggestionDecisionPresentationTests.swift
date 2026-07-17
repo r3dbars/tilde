@@ -3,6 +3,15 @@ import Testing
 
 @Suite("Suggestion decision presentation")
 struct SuggestionDecisionPresentationTests {
+    @Test("Quiet status title surfaces the reason in the menu bar")
+    func quietStatusTitleSurfacesReason() {
+        let secure = SuggestionDecisionPresentation("Quiet: secure field")
+        let confidence = SuggestionDecisionPresentation("Blocked: low confidence")
+
+        #expect(secure.statusMenuTitle(appDisplayName: "Mail") == "Quiet in Mail: secure field")
+        #expect(confidence.statusMenuTitle(appDisplayName: "Safari") == "Quiet in Safari: low confidence")
+    }
+
     @Test("Blocked decisions become visible quiet menu copy")
     func blockedDecisionsBecomeVisibleQuietMenuCopy() {
         let presentation = SuggestionDecisionPresentation("Blocked: search fields stay quiet")

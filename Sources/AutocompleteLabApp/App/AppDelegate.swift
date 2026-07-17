@@ -364,12 +364,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionPanel = SuggestionPanelController()
     private let fieldStatusIndicator = FieldStatusIndicatorController()
     private lazy var suggestionPresentationDelivery = SuggestionPresentationDelivery(
-        panelPresenter: { [suggestionPanel] text, anchorRect, textLineRect, clippingRect, textStyle, renderMode in
+        panelPresenter: { [suggestionPanel] text, anchorRect, textLineRect, clippingRect, appBundleIdentifier, boundaryRect, textStyle, renderMode in
             suggestionPanel.show(
                 text: text,
                 near: anchorRect,
                 alignedTo: textLineRect,
                 boundedBy: clippingRect,
+                appBundleIdentifier: appBundleIdentifier,
+                boundaryRect: boundaryRect,
                 style: textStyle,
                 renderMode: renderMode
             )
@@ -504,11 +506,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
+    private var visibleSuggestionGeometryRefreshGeneration: UInt64 = 0
     private var prefixCooldownRetryTask: Task<Void, Never>?
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
     private var lastClippingRect: CGRect?
+    private var lastBoundaryRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
     private var lastRenderMode: SuggestionRenderMode?
     private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
@@ -4100,6 +4104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             passthroughTypingMatchObserver: { [weak self] transition in
                 self?.observeOptimisticTypeThrough(transition)
             },
+            geometryRefreshObserver: { [weak self] in
+                self?.requestVisibleSuggestionGeometryRefresh()
+            },
             disabledObserver: { [weak self] reason in
                 self?.handleKeyboardEventTapDisabled(reason: reason)
             }
@@ -4272,6 +4279,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setSuggestionDecision("Shown: typing through suggestion")
         _ = refreshVisibleSuggestion()
         updateKeyboardEventTapSnapshot()
+    }
+
+    private func requestVisibleSuggestionGeometryRefresh() {
+        guard suggestionSession.hasVisibleSuggestion,
+              let expectedSuggestionID = currentSuggestionState.id,
+              let profile = currentProfile,
+              let app = accessibilityClient.frontmostApplication(),
+              app.bundleIdentifier == (currentSuggestionState.appBundleIdentifier ?? profile.bundleIdentifier) else {
+            return
+        }
+
+        visibleSuggestionGeometryRefreshGeneration &+= 1
+        let generation = visibleSuggestionGeometryRefreshGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(8))
+            guard let self,
+                  generation == self.visibleSuggestionGeometryRefreshGeneration,
+                  self.suggestionSession.hasVisibleSuggestion,
+                  self.currentSuggestionState.id == expectedSuggestionID else {
+                return
+            }
+
+            self.focusedTextReader.readFocusedTextContext(
+                for: app,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+                options: FocusedTextReadOptionsPolicy.options(for: app, profile: profile)
+            ) { [weak self] result in
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          generation == self.visibleSuggestionGeometryRefreshGeneration,
+                          self.suggestionSession.hasVisibleSuggestion,
+                          self.currentSuggestionState.id == expectedSuggestionID,
+                          let rawContext = result.context else {
+                        return
+                    }
+                    let context = self.presentationAdjustedContext(
+                        rawContext,
+                        app: app,
+                        profile: profile,
+                        previousSnapshot: self.lastTextSnapshot
+                    )
+                    guard self.fieldIdentity(app: app, context: context, profile: profile)
+                            == self.currentFieldIdentity else {
+                        return
+                    }
+                    self.repositionVisibleSuggestion(context: context, profile: profile)
+                }
+            }
+        }
     }
 
     private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: String) -> Bool {
@@ -8347,6 +8403,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayScoreMetadata: displayScoreMetadata,
             replacementMetadata: replacementMetadata
         )
+        let acceptanceSnapshot = SuggestionAcceptanceSnapshot(
+            fieldIdentity: fieldIdentity,
+            targetFingerprint: targetFingerprint(context: context),
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            selectedTextLength: context.selectedTextLength
+        )
+        let presentedAt = Date()
+        suggestionSession.present(suggestion)
+        currentSuggestionState.id = suggestionID
+        currentSuggestionState.appBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
+        currentSuggestionState.fieldIdentity = fieldIdentity
+        currentSuggestionState.requestMode = request.mode
+        currentSuggestionState.textBeforeCursor = request.textBeforeCursor
+        currentSuggestionState.acceptanceSnapshot = acceptanceSnapshot
+        currentSuggestionState.displayedText = suggestion.visibleText
+        currentSuggestionState.optimisticOriginalDisplayedText = suggestion.visibleText
+        currentSuggestionState.optimisticTypedPrefix = ""
+        currentSuggestionState.fieldClassification = displayFieldClassification
+        currentSuggestionState.presentedAt = presentedAt
+        currentSuggestionState.displayScoreFinal = displayScoreTrace.score.finalScore
+        currentSuggestionState.invalidatedByUserKeyDown = false
+        keyboardEventTap?.resetPassthroughObservation()
+        updateKeyboardEventTapSnapshot()
+        guard startKeyboardEventTapIfPossible() else {
+            setSuggestionDecision("Blocked: keyboard capture unavailable")
+            hideSuggestion(reason: "keyboard-capture-unavailable")
+            return
+        }
+
         let panelRect: CGRect
         let deliveredPlacement: PlacementHealthPresentation
         switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {
@@ -8397,6 +8483,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastCaretRect = deliveredPlacement.anchorRect
         lastTextLineRect = deliveredPlacement.textLineRect
         lastClippingRect = deliveredPlacement.clippingRect
+        lastBoundaryRect = context.elementRect
         lastTextStyle = context.textStyle
         lastRenderMode = deliveredPlacement.renderMode
         lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
@@ -8404,7 +8491,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             placement: deliveredPlacement
         )
-        suggestionSession.present(suggestion)
         setSuggestionDecision(
             SuggestionStatusText.shown(
                 mode: request.mode,
@@ -8413,27 +8499,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: candidateSelectionMetadata
             )
         )
-        currentSuggestionState.id = suggestionID
-        currentSuggestionState.appBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        currentSuggestionState.fieldIdentity = fieldIdentity
-        currentSuggestionState.requestMode = request.mode
-        currentSuggestionState.textBeforeCursor = request.textBeforeCursor
-        let acceptanceSnapshot = SuggestionAcceptanceSnapshot(
-            fieldIdentity: fieldIdentity,
-            targetFingerprint: targetFingerprint(context: context),
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
-            selectedTextLength: context.selectedTextLength
-        )
-        currentSuggestionState.acceptanceSnapshot = acceptanceSnapshot
-        let presentedAt = Date()
-        currentSuggestionState.displayedText = suggestion.visibleText
-        currentSuggestionState.optimisticOriginalDisplayedText = suggestion.visibleText
-        currentSuggestionState.optimisticTypedPrefix = ""
-        currentSuggestionState.fieldClassification = displayFieldClassification
-        currentSuggestionState.presentedAt = presentedAt
-        currentSuggestionState.displayScoreFinal = displayScoreTrace.score.finalScore
-        currentSuggestionState.invalidatedByUserKeyDown = false
         cacheProofOnlyAcceptRecentSuggestionIfNeeded(
             suggestion: suggestion,
             suggestionID: suggestionID,
@@ -8449,11 +8514,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
-        guard startKeyboardEventTapIfPossible() else {
-            setSuggestionDecision("Blocked: keyboard capture unavailable")
-            hideSuggestion(reason: "keyboard-capture-unavailable")
-            return
-        }
         keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
 
         let screenshotCapture = traceScreenshotCaptureCoordinator.capture(
@@ -17114,6 +17174,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 near: placement.anchorRect,
                 alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
                 boundedBy: placement.clippingRect,
+                appBundleIdentifier: currentProfile?.bundleIdentifier,
+                boundaryRect: lastBoundaryRect,
                 style: lastTextStyle,
                 renderMode: placement.renderMode
             )
@@ -17251,6 +17313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastTextStyle = context.textStyle
+        lastBoundaryRect = context.elementRect
         lastCompatibilityLearningTrustContext = visualTrustContext
         showFieldStatusIndicator(.shown, context: context)
         guard let refreshedPlacement = refreshVisibleSuggestion(
@@ -17750,6 +17813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastCaretRect = nil
         lastTextLineRect = nil
         lastClippingRect = nil
+        lastBoundaryRect = nil
         lastTextStyle = nil
         lastRenderMode = nil
         lastCompatibilityLearningTrustContext = nil
@@ -17903,12 +17967,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "Paused in \(app.localizedName)"
         }
 
-        switch SuggestionDecisionPresentation(lastSuggestionDecision).statusKind {
+        let decisionPresentation = SuggestionDecisionPresentation(lastSuggestionDecision)
+        switch decisionPresentation.statusKind {
         case .shown:
             return "Suggesting in \(app.localizedName)"
         case .thinking:
             return "Thinking in \(app.localizedName)"
-        case .waiting, .quiet, .ready:
+        case .quiet:
+            return decisionPresentation.statusMenuTitle(appDisplayName: app.localizedName)
+        case .waiting, .ready:
             return "Ready in \(app.localizedName)"
         }
     }
