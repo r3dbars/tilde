@@ -88,6 +88,8 @@ public struct PersonalCapturePolicy: Equatable, Sendable {
         }
 
         return !profile.isSensitive
+            && profile.appFamily != .chromium
+            && profile.appFamily != .webKit
     }
 
     public func decision(for input: PersonalCaptureInput) -> PersonalCaptureDecision {

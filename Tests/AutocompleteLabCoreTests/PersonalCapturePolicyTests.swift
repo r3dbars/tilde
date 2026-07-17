@@ -15,7 +15,7 @@ struct PersonalCapturePolicyTests {
             supportStatus: passwordAppStatus
         ))
         let supportedSensitiveStatus = profileStore.supportStatus(for: "com.openai.atlas")
-        #expect(profileStore.profile(for: "com.openai.atlas")?.isSensitive == true)
+        #expect(profileStore.profile(for: "com.openai.atlas")?.appFamily == .chromium)
         #expect(!policy.allowsAppRead(
             personalCaptureEnabled: true,
             supportStatus: supportedSensitiveStatus
