@@ -203,8 +203,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Fast fallback display guard blocks stale text before display")
-    func fastFallbackDisplayGuardBlocksStaleTextBeforeDisplay() {
+    @Test("Fast fallback display guard allows text that extends the request")
+    func fastFallbackDisplayGuardAllowsExtendedRequestText() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "fast")
         let ticket = orchestrator.beginRequest(request).ticket
@@ -223,12 +223,12 @@ struct SuggestionOrchestratorTests {
             invalidatedByUserTyping: false
         )
 
-        #expect(reason == .staleText)
+        #expect(reason == nil)
     }
 
     @MainActor
-    @Test("Streaming partial display guard blocks user typing invalidation before display")
-    func streamingPartialDisplayGuardBlocksUserTypingInvalidationBeforeDisplay() {
+    @Test("Streaming partial display guard trusts a current matching snapshot after keydown")
+    func streamingPartialDisplayGuardTrustsMatchingSnapshotAfterKeydown() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "stream")
         let ticket = orchestrator.beginRequest(request).ticket
@@ -247,7 +247,51 @@ struct SuggestionOrchestratorTests {
             invalidatedByUserTyping: true
         )
 
+        #expect(reason == nil)
+    }
+
+    @MainActor
+    @Test("Display guard blocks keydown invalidation when no snapshot can validate it")
+    func displayGuardBlocksInvalidationWithoutSnapshot() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "missing-snapshot")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = testFieldIdentity(elementIdentifier: 7)
+
+        let reason = orchestrator.presentationSuppressionReason(
+            requestTicket: ticket,
+            request: request,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            currentSnapshot: nil,
+            invalidatedByUserTyping: true
+        )
+
         #expect(reason == .staleAfterKeydown)
+    }
+
+    @MainActor
+    @Test("Display guard blocks text that diverges from the request baseline")
+    func displayGuardBlocksDivergentText() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "diverged")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = testFieldIdentity(elementIdentifier: 7)
+
+        let reason = orchestrator.presentationSuppressionReason(
+            requestTicket: ticket,
+            request: request,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            currentSnapshot: FocusedTextSnapshot(
+                fieldIdentity: field,
+                textBeforeCursor: "Could we",
+                textAfterCursor: request.textAfterCursor
+            ),
+            invalidatedByUserTyping: true
+        )
+
+        #expect(reason == .staleText)
     }
 
     @MainActor
@@ -895,13 +939,13 @@ struct SuggestionOrchestratorTests {
         #expect(score.utility > 0.70)
         #expect(score.userAffinity > 0.15)
         #expect(abs(score.repetition - 0.90) < 0.001)
-        #expect(abs(score.instability - 0.50) < 0.001)
+        #expect(abs(score.instability - 0.25) < 0.001)
         #expect(score.acceptedAndKeptSampleCount == 6)
     }
 
     @MainActor
-    @Test("Late final model results are suppressed before display")
-    func lateFinalModelResultsAreSuppressedBeforeDisplay() throws {
+    @Test("Late final model results remain eligible after context validation")
+    func lateFinalModelResultsRemainEligibleAfterContextValidation() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
@@ -941,13 +985,14 @@ struct SuggestionOrchestratorTests {
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(!display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["modelDisplayLatencyBudgetMilliseconds"] == "context-validated")
     }
 
     @MainActor
-    @Test("First-visible model results use a tighter latency budget than refinements")
-    func firstVisibleModelResultsUseTighterLatencyBudget() throws {
+    @Test("First-visible and refinement results use live context instead of latency ceilings")
+    func modelResultsUseLiveContextInsteadOfLatencyCeilings() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
@@ -991,28 +1036,19 @@ struct SuggestionOrchestratorTests {
             )
         }
 
-        // First-visible with no scheduling pause: 600ms of model compute exceeds the tight 450ms
-        // ceiling, so the result is suppressed before it can paint cold and late.
         let firstVisible = decide(latency: 600, firstVisible: true)
-        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "450")
+        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "context-validated")
         #expect(firstVisible.metadata["modelIsFirstVisibleSuggestion"] == "true")
         #expect(firstVisible.metadata["modelLatencyForBudgetMilliseconds"] == "600")
-        #expect(!firstVisible.decision.shouldDisplay)
-        #expect(firstVisible.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(firstVisible.decision.shouldDisplay)
+        #expect(firstVisible.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
 
-        // First-visible but the latency is high ONLY because of the deliberate pre-model
-        // scheduling pause: model compute (600 - 240 = 360ms) is under the 450ms ceiling, so the
-        // healthy result must NOT be suppressed. (Regression guard: the ceiling bounds model
-        // compute, not the intentional pause baked into `latencyMilliseconds`.)
         let firstVisibleAfterPause = decide(latency: 600, firstVisible: true, scheduledDelay: 240)
         #expect(firstVisibleAfterPause.metadata["modelLatencyForBudgetMilliseconds"] == "360")
         #expect(firstVisibleAfterPause.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
 
-        // Refinement (a suggestion is already visible): the same 600ms stays within the looser
-        // 750ms budget on its original delay-inclusive basis, so the too-slow gate does not fire
-        // and the model can replace in place.
         let refinement = decide(latency: 600, firstVisible: false)
-        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "750")
+        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "context-validated")
         #expect(refinement.metadata["modelIsFirstVisibleSuggestion"] == "false")
         #expect(refinement.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
     }
@@ -1157,9 +1193,9 @@ struct SuggestionOrchestratorTests {
         )
 
         #expect(!conservativeDisplay.decision.shouldDisplay)
-        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
         #expect(!maxDisplay.decision.shouldDisplay)
-        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == nil)
     }
@@ -1276,7 +1312,7 @@ struct SuggestionOrchestratorTests {
         )
         let classification = ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
         let request = CompletionRequest(
-            textBeforeCursor: "Make this setting the feature configurable",
+            textBeforeCursor: "Make this",
             appBundleIdentifier: profile.bundleIdentifier,
             fieldKind: classification.kind,
             behaviorProfileID: .aiChat,
@@ -1293,7 +1329,7 @@ struct SuggestionOrchestratorTests {
         )
 
         let display = orchestrator.displayScoreDecision(
-            suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
+            suggestion: CompletionSuggestion(text: " configurable", maxVisibleWords: 8),
             request: request,
             context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
             fieldClassification: classification,
@@ -1308,7 +1344,7 @@ struct SuggestionOrchestratorTests {
 
         #expect(display.decision.shouldDisplay)
         #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
-        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") == true)
+        #expect(display.metadata["completionConfidenceReasons"]?.contains("late-context-validation-required") == true)
         #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "claude-code-terminal-host-proof")
     }
 
@@ -1488,8 +1524,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Display decision suppresses too-slow model results")
-    func displayDecisionSuppressesTooSlowModelResults() throws {
+    @Test("Display decision does not suppress a valid result solely for latency")
+    func displayDecisionDoesNotSuppressSolelyForLatency() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
@@ -1530,9 +1566,9 @@ struct SuggestionOrchestratorTests {
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(!display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
-        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") == true)
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") != true)
     }
 
     @MainActor

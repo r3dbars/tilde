@@ -9,15 +9,6 @@ struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
 
 @MainActor
 final class SuggestionOrchestrator {
-    private static let maximumFinalModelDisplayLatencyMilliseconds = 750
-    /// Tighter ceiling applied when a model result would be the *first* thing the user sees
-    /// (no instant local phrase or streamed partial already on screen). A model result that
-    /// lands later than this would paint as a stale, late ghost-text flash after the caret has
-    /// moved on, so we suppress it and let the slot stay empty rather than show it cold.
-    /// Tied to `SuggestionRequestSchedulingPolicy.instantWordResultBudgetMilliseconds` (450ms):
-    /// the model still shows when it is genuinely fast, only the slow cold paints are dropped.
-    /// Model results that *refine* an already-visible suggestion keep the looser budget above.
-    private static let maximumFirstVisibleModelDisplayLatencyMilliseconds = 450
     private static let maximumDocLocalFields = 24
     private static let maximumDocLocalSnapshotsPerField = 4
     private static let maximumDocLocalSnapshotCharacters = 12_000
@@ -342,19 +333,15 @@ final class SuggestionOrchestrator {
             return .staleField
         }
 
-        if invalidatedByUserTyping {
-            return .staleAfterKeydown
-        }
-
         guard let currentSnapshot else {
-            return nil
+            return invalidatedByUserTyping ? .staleAfterKeydown : nil
         }
 
         guard currentSnapshot.fieldIdentity == fieldIdentity else {
             return .staleField
         }
 
-        guard currentSnapshot.textBeforeCursor == request.textBeforeCursor,
+        guard currentSnapshot.textBeforeCursor.hasPrefix(request.textBeforeCursor),
               currentSnapshot.textAfterCursor == request.textAfterCursor else {
             return .staleText
         }
@@ -841,53 +828,14 @@ final class SuggestionOrchestrator {
         if claudeCodeTerminalHostProofLatencyBypass {
             confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
         }
-        let modelDisplayLatencyBudgetMilliseconds = Self.maximumFinalModelDisplayLatencyMilliseconds(
-            for: request,
-            suggestion: suggestion,
-            firstVisible: modelIsFirstVisibleSuggestion
-        )
-        // The first-visible ceiling bounds the MODEL's contribution to first paint, so it is
-        // compared against latency with the deliberate pre-model scheduling pause removed
-        // (`latencyMilliseconds` is measured from before that pause). The refinement budget keeps
-        // its original delay-inclusive basis so existing behavior is unchanged.
         let modelLatencyForBudget = modelIsFirstVisibleSuggestion
             ? max(0, latencyMilliseconds - max(0, scheduledDelayMilliseconds))
             : latencyMilliseconds
-        confidenceMetadata["modelDisplayLatencyBudgetMilliseconds"] = String(modelDisplayLatencyBudgetMilliseconds)
+        confidenceMetadata["modelDisplayLatencyBudgetMilliseconds"] = "context-validated"
         confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
         confidenceMetadata["modelLatencyForBudgetMilliseconds"] = String(modelLatencyForBudget)
-        let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && !proofLatencyBypass
-            && modelLatencyForBudget > modelDisplayLatencyBudgetMilliseconds
-        let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
-            && !proofLatencyBypass
-            && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
-        if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
-            let trace = DisplayScoreTrace(
-                score: score,
-                mode: request.mode,
-                behaviorProfileID: request.behaviorProfile.id,
-                threshold: adjustedPolicy.threshold(for: request.mode),
-                effectiveFinalScore: adjustedPolicy.effectiveFinalScore(for: score),
-                learningRestraintScoreScale: adjustedPolicy.learningRestraintScoreScale,
-                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
-                    for: request.mode,
-                    behaviorProfileID: request.behaviorProfile.id
-                )
-            )
-            let suppression = DisplayScoreSuppression(
-                reason: .tooSlowToDisplay,
-                trace: trace
-            )
-            return SuggestionDisplayScoreDecision(
-                decision: .suppress(suppression),
-                metadata: suppression.metadata
-                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
-                    .merging(confidenceMetadata) { current, _ in current }
-            )
-        }
+            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("late-context-validation-required"))
 
         if shouldSuppressLowConfidence {
             let trace = DisplayScoreTrace(
@@ -1066,36 +1014,12 @@ final class SuggestionOrchestrator {
         if context.caretIsSynthetic {
             score += 0.12
         }
+        // Latency stays observable, but live context validity decides freshness.
+        // Keep only a small instability signal for extreme delays.
         if latencyMilliseconds >= 1_500 {
-            score += 0.30
-        } else if latencyMilliseconds >= 800 {
-            score += 0.15
+            score += 0.05
         }
         return displayComponent(score)
-    }
-
-    private static func maximumFinalModelDisplayLatencyMilliseconds(
-        for request: CompletionRequest,
-        suggestion: CompletionSuggestion,
-        firstVisible: Bool
-    ) -> Int {
-        // When the model result would be the first thing shown, cap hard regardless of length:
-        // a late cold paint is worse than no paint, and the instant local lane (or nothing)
-        // should own the first-visible slot.
-        if firstVisible {
-            return maximumFirstVisibleModelDisplayLatencyMilliseconds
-        }
-
-        guard request.mode == .phraseContinuation,
-              suggestion.maxVisibleWords >= 8,
-              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
-                forVisibleWords: suggestion.maxVisibleWords
-              )
-        else {
-            return maximumFinalModelDisplayLatencyMilliseconds
-        }
-
-        return 1_000
     }
 
     nonisolated private static func displayComponent(_ value: Double) -> Double {

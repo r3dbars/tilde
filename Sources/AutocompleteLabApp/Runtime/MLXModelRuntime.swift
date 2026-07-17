@@ -17,6 +17,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let cleaner: CompletionOutputCleaner
     private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
+    private let retryBudgetPolicy: RetryBudgetPolicy
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
     private let cancellationCoordinator = RuntimeCancellationCoordinator()
 
@@ -37,7 +38,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         lengthConfiguration: CompletionLengthConfiguration = .default,
         promptBuilder: CompletionPromptBuilder? = nil,
         cleaner: CompletionOutputCleaner? = nil,
-        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
+        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker(),
+        retryBudgetPolicy: RetryBudgetPolicy = RetryBudgetPolicy()
     ) {
         self.init(
             modelDirectoryURL: modelDirectoryURL,
@@ -49,6 +51,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             promptBuilder: promptBuilder,
             cleaner: cleaner,
             candidateRanker: candidateRanker,
+            retryBudgetPolicy: retryBudgetPolicy,
             promptKVCacheConfiguration: .fromEnvironment()
         )
     }
@@ -63,6 +66,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         promptBuilder: CompletionPromptBuilder? = nil,
         cleaner: CompletionOutputCleaner? = nil,
         candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker(),
+        retryBudgetPolicy: RetryBudgetPolicy = RetryBudgetPolicy(),
         promptKVCacheConfiguration: MLXPromptKVCacheConfiguration = .fromEnvironment()
     ) {
         self.modelDirectoryURL = modelDirectoryURL
@@ -74,6 +78,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         self.promptTemplate = CompletionPromptTemplate.template(for: modelManifest?.model ?? CompletionModelPolicy.mvp.model)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.candidateRanker = candidateRanker
+        self.retryBudgetPolicy = retryBudgetPolicy
         self.integrityValidationCache = integrityValidationCache
         self.promptKVCacheOwner = MLXPromptKVCacheOwner(configuration: promptKVCacheConfiguration)
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
@@ -473,6 +478,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
         var retryAttempted = false
         var retryUsed = false
+        var retrySkippedForBudget = false
+        var retryElapsedMilliseconds: Int?
         var wordCompletionFallbackUsed = false
         var wordCompletionFallbackSource: String?
 
@@ -487,53 +494,73 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             effectiveMaxVisibleWords: effectiveMaxVisibleWords(for: request)
         )
         if let retryPrompt {
-            retryAttempted = true
-            DiagnosticsLog.shared.record(
-                "mlx-completion-retry-scheduled",
-                metadata: [
-                    "app": request.appBundleIdentifier ?? "unknown",
-                    "mode": request.mode.rawValue,
-                    "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
-                    "candidateTopScore": Self.formattedCandidateScore(candidateSelection.rankedCandidates.first?.score),
-                    "candidateWords": String(candidateSelection.rankedCandidates.first?.suggestion.visibleWordCount ?? 0)
-                ]
-            )
+            let elapsedMilliseconds = Self.milliseconds(from: startedAt, to: Date())
+            retryElapsedMilliseconds = elapsedMilliseconds
+            if !retryBudgetPolicy.shouldRetry(after: elapsedMilliseconds) {
+                retrySkippedForBudget = true
+                DiagnosticsLog.shared.record(
+                    "mlx-completion-retry-skipped-budget",
+                    metadata: [
+                        "app": request.appBundleIdentifier ?? "unknown",
+                        "mode": request.mode.rawValue,
+                        "elapsedMilliseconds": String(elapsedMilliseconds),
+                        "remainingBudgetMilliseconds": String(
+                            retryBudgetPolicy.remainingBudgetMilliseconds(after: elapsedMilliseconds)
+                        ),
+                        "minimumRetryBudgetMilliseconds": String(
+                            retryBudgetPolicy.minimumRetryBudgetMilliseconds
+                        )
+                    ]
+                )
+            } else {
+                retryAttempted = true
+                DiagnosticsLog.shared.record(
+                    "mlx-completion-retry-scheduled",
+                    metadata: [
+                        "app": request.appBundleIdentifier ?? "unknown",
+                        "mode": request.mode.rawValue,
+                        "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
+                        "candidateTopScore": Self.formattedCandidateScore(candidateSelection.rankedCandidates.first?.score),
+                        "candidateWords": String(candidateSelection.rankedCandidates.first?.suggestion.visibleWordCount ?? 0)
+                    ]
+                )
 
-            let retryGeneration = try await generateRawCompletion(
-                container: container,
-                prompt: retryPrompt.formatted(using: promptTemplate),
-                request: request,
-                requestCleaner: requestCleaner,
-                requestMaxGeneratedTokens: requestMaxGeneratedTokens,
-                cancellationEpoch: cancellationEpoch,
-                onPartialSuggestion: onPartialSuggestion
-            )
-            try cancellationCoordinator.check(epoch: cancellationEpoch)
+                let retryGeneration = try await generateRawCompletion(
+                    container: container,
+                    prompt: retryPrompt.formatted(using: promptTemplate),
+                    request: request,
+                    requestCleaner: requestCleaner,
+                    requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+                    cancellationEpoch: cancellationEpoch,
+                    onPartialSuggestion: onPartialSuggestion
+                )
+                try cancellationCoordinator.check(epoch: cancellationEpoch)
 
-            let retryCleaningResult = requestCleaner.cleanCandidatesWithReasons(
-                retryGeneration.rawOutput,
-                after: request.textBeforeCursor,
-                mode: request.mode,
-                limit: 3
-            )
-            let retryCandidates = retryCleaningResult.suggestions
-            let retrySelection = candidateRanker.selection(
-                retryCandidates,
-                mode: request.mode,
-                textBeforeCursor: request.textBeforeCursor,
-                behaviorProfileID: request.behaviorProfile.id
-            )
+                let retryCleaningResult = requestCleaner.cleanCandidatesWithReasons(
+                    retryGeneration.rawOutput,
+                    after: request.textBeforeCursor,
+                    mode: request.mode,
+                    limit: 3
+                )
+                let retryCandidates = retryCleaningResult.suggestions
+                let retrySelection = candidateRanker.selection(
+                    retryCandidates,
+                    mode: request.mode,
+                    textBeforeCursor: request.textBeforeCursor,
+                    behaviorProfileID: request.behaviorProfile.id
+                )
 
-            if retrySelection.suggestion != nil ||
-                (retrySelection.rankedCandidates.first?.score ?? 0) > (candidateSelection.rankedCandidates.first?.score ?? 0) {
-                retryUsed = true
-                prompt = retryPrompt
-                formattedPrompt = retryPrompt.formatted(using: promptTemplate)
-                generation = retryGeneration
-                rawOutput = retryGeneration.rawOutput
-                cleaningResult = retryCleaningResult
-                cleanedCandidates = retryCandidates
-                candidateSelection = retrySelection
+                if retrySelection.suggestion != nil ||
+                    (retrySelection.rankedCandidates.first?.score ?? 0) > (candidateSelection.rankedCandidates.first?.score ?? 0) {
+                    retryUsed = true
+                    prompt = retryPrompt
+                    formattedPrompt = retryPrompt.formatted(using: promptTemplate)
+                    generation = retryGeneration
+                    rawOutput = retryGeneration.rawOutput
+                    cleaningResult = retryCleaningResult
+                    cleanedCandidates = retryCandidates
+                    candidateSelection = retrySelection
+                }
             }
         }
 
@@ -592,6 +619,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["cleanedChars"] = String(cleanedSuggestion?.visibleText.count ?? 0)
         timingMetadata["retryAttempted"] = String(retryAttempted)
         timingMetadata["retryUsed"] = String(retryUsed)
+        timingMetadata["retrySkippedForBudget"] = String(retrySkippedForBudget)
+        timingMetadata["retryElapsedMilliseconds"] = retryElapsedMilliseconds.map(String.init) ?? "none"
         timingMetadata["wordCompletionFallbackUsed"] = String(wordCompletionFallbackUsed)
         if let wordCompletionFallbackSource {
             timingMetadata["wordCompletionFallbackSource"] = wordCompletionFallbackSource
@@ -617,6 +646,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             extraMetadata: cleaningResult.traceMetadata.merging([
                 "retryAttempted": String(retryAttempted),
                 "retryUsed": String(retryUsed),
+                "retrySkippedForBudget": String(retrySkippedForBudget),
+                "retryElapsedMilliseconds": retryElapsedMilliseconds.map(String.init) ?? "none",
                 "promptTemplate": formattedPrompt.templateIdentifier,
                 "rawPromptChars": String(formattedPrompt.rawPrompt?.count ?? 0),
                 "wordCompletionFallbackUsed": String(wordCompletionFallbackUsed),
