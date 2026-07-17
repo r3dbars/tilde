@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "084d30a036b87fc498dcb2dc213af8e0d8560d9f",
+  "sourceCommit": "33ea8511",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -8,7 +8,7 @@
     "runtimeProofVersion": "runtime-v2"
   },
   "hostPolicy": {
-    "policyVersion": "2026-05-31.1",
+    "policyVersion": "2026-07-17.1",
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
@@ -125,12 +125,12 @@
         "displayName": "Safari",
         "versionState": "pending",
         "versionReason": "Exact Safari build not captured in this proof pass.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "WebKit rich-editor and prompt surfaces need exact-version proof first."
+        "notes": "Experimental default-on WebKit path with native single-edit undo as the target. Password, payment, login, private-search, address-bar, and developer-tool fields remain blocked; current real-site proof is pending and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.apple.TextEdit",
@@ -163,11 +163,11 @@
         "hostBuild": "3864.500.181",
         "versionSource": "/System/Applications/Mail.app",
         "safetyMode": "notPrompt",
-        "runtimeState": "diagnosticsOnly",
-        "proofState": "blocked",
-        "killSwitch": "diagnosticsOnly",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Sensitive compose surface; suggestions remain off until insertion proof exists."
+        "notes": "Experimental default-on Mail compose path with native single-edit undo as the target. SensitiveTextFieldPolicy stays mandatory, personal capture is unchanged, and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.google.Chrome",
@@ -190,43 +190,43 @@
             "reference": "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
           }
         ],
-        "notes": "Only local textarea and local contenteditable fixtures are beta-safe. Public pages, production browser apps, browser ChatGPT, Slack, Discord, Google Docs, Notion, official CodeMirror, and default Monaco remain blocked until exact proof exists."
+        "notes": "Experimental broad browser path. Ordinary hosted writing surfaces are allowed, while password, payment, login, private-search, address-bar, and developer-tool fields remain blocked. Existing local fixture proof is partial; real-site proof is pending and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.hnc.Discord",
         "displayName": "Discord",
         "versionState": "pending",
         "versionReason": "Discord not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Composer stays disabled until no-submit proof exists."
+        "notes": "Experimental default-on Electron composer with unconditional control-character filtering and app-rollback recovery. No-send proof is pending; insertion failures auto-demote this host."
       },
       {
         "bundle": "com.hnc.DiscordCanary",
         "displayName": "Discord Canary",
         "versionState": "pending",
         "versionReason": "Discord Canary not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Composer stays disabled until no-submit proof exists."
+        "notes": "Experimental default-on Electron composer with unconditional control-character filtering and app-rollback recovery. No-send proof is pending; insertion failures auto-demote this host."
       },
       {
         "bundle": "com.hnc.DiscordPTB",
         "displayName": "Discord PTB",
         "versionState": "pending",
         "versionReason": "Discord PTB not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Composer stays disabled until no-submit proof exists."
+        "notes": "Experimental default-on Electron composer with unconditional control-character filtering and app-rollback recovery. No-send proof is pending; insertion failures auto-demote this host."
       },
       {
         "bundle": "com.microsoft.VSCode",
@@ -234,23 +234,23 @@
         "versionState": "pending",
         "versionReason": "VS Code is denylisted and not proofed.",
         "safetyMode": "notPrompt",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Monaco editor and command surface stay blocked until app-specific proof exists."
+        "notes": "Experimental floating Monaco path with explicitly degraded undo. Real-editor geometry proof is pending; command and sensitive fields stay blocked and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.openai.ChatGPT",
         "displayName": "ChatGPT",
         "versionState": "pending",
         "versionReason": "Alternate bundle ID not installed or not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "wordOnly",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Prompt composer can submit or attach context; exact-version no-submit proof is required."
+        "notes": "Experimental prompt composer with full acceptance plus word-only command-injection filtering. Exact-version no-submit proof is pending; control characters stay blocked and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.openai.atlas",
@@ -259,24 +259,24 @@
         "hostVersion": "1.2026.112.0",
         "hostBuild": "20260422141901000",
         "versionSource": "/Applications/ChatGPT Atlas.app",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "wordOnly",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Prompt/browser hybrid stays disabled until disposable prompt and page-field proof exists."
+        "notes": "Experimental prompt/browser path with full acceptance plus word-only command-injection filtering. No-submit and page-field proof are pending; sensitive browser surfaces remain blocked and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.openai.chat",
         "displayName": "ChatGPT",
         "versionState": "pending",
         "versionReason": "App not installed or not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "wordOnly",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Prompt composer can submit or attach context; exact-version no-submit proof is required."
+        "notes": "Experimental prompt composer with full acceptance plus word-only command-injection filtering. Exact-version no-submit proof is pending; control characters stay blocked and insertion failures auto-demote this host."
       },
       {
         "bundle": "com.openai.codex",
@@ -310,12 +310,12 @@
         "displayName": "Slack",
         "versionState": "pending",
         "versionReason": "Slack not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Message composer stays disabled until no-submit proof exists."
+        "notes": "Experimental default-on Electron composer with unconditional control-character filtering and app-rollback recovery. No-send proof is pending; insertion failures auto-demote this host."
       },
       {
         "bundle": "com.todesktop.230313mzl4w4u92",
@@ -323,11 +323,11 @@
         "versionState": "pending",
         "versionReason": "Cursor is denylisted and not proofed.",
         "safetyMode": "notPrompt",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Monaco editor and AI composer stay blocked until app-specific proof exists."
+        "notes": "Experimental floating Monaco path with explicitly degraded undo. Real-editor geometry and AI-composer safety proof are pending; insertion failures auto-demote this host."
       },
       {
         "bundle": "md.obsidian",
@@ -358,23 +358,23 @@
         "versionState": "pending",
         "versionReason": "Notion not proofed on this host.",
         "safetyMode": "notPrompt",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Workspace text and ProseMirror placement need disposable-page proof."
+        "notes": "Experimental synthetic-caret ProseMirror path with degraded undo. Disposable-page geometry and insertion proof are pending; personal capture remains separately gated and insertion failures auto-demote this host."
       },
       {
         "bundle": "ru.keepcoder.Telegram",
         "displayName": "Telegram",
         "versionState": "pending",
         "versionReason": "Telegram not proofed on this host.",
-        "safetyMode": "disabled",
-        "runtimeState": "disabled",
-        "proofState": "blocked",
-        "killSwitch": "hardDisabled",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Send-by-enter variants need disposable chat proof before suggestions run."
+        "notes": "Experimental default-on Electron composer with unconditional control-character filtering and app-rollback recovery. Send-by-enter proof is pending; insertion failures auto-demote this host."
       }
     ]
   },
@@ -1154,11 +1154,11 @@
     {
       "bundle": "com.apple.Safari",
       "displayName": "Safari",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Safari",
-      "status": "blocked",
+      "status": "pending",
       "owner": "webkit browser adapter lane",
-      "safetyNote": "Safari rich editors need separate textarea, contenteditable, insertion, and no-submit proof before suggestions can be enabled."
+      "safetyNote": "Experimental default-on WebKit path. Sensitive browser surfaces remain blocked, real-site proof is pending, and repeated insertion failures auto-demote or pause Safari for the session."
     },
     {
       "bundle": "com.apple.TextEdit",
@@ -1172,11 +1172,11 @@
     {
       "bundle": "com.apple.mail",
       "displayName": "Mail",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Mail",
-      "status": "blocked",
+      "status": "pending",
       "owner": "sensitive-compose lane",
-      "safetyNote": "Mail compose remains diagnostics-only because private/sensitive content and insertion safety are not proven."
+      "safetyNote": "Experimental default-on Mail path. Secure-field suppression and local-only privacy remain mandatory; native undo and compose insertion proof are pending, with automatic failure demotion enabled."
     },
     {
       "bundle": "com.google.Chrome",
@@ -1185,70 +1185,70 @@
       "surface": "Chrome local textarea/contenteditable fixtures",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Only local textarea and contenteditable fixtures count as beta-safe. Public pages, production browser apps, chat, hosted docs, Monaco, CodeMirror, and ProseMirror remain blocked until exact proof exists."
+      "safetyNote": "Experimental broad browser path. Local fixtures have partial proof; ordinary real sites now run pending proof while password, payment, login, private-search, address-bar, and developer-tool fields stay blocked."
     },
     {
       "bundle": "com.hnc.Discord",
       "displayName": "Discord",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Discord",
-      "status": "blocked",
+      "status": "pending",
       "owner": "chat no-submit proof lane",
-      "safetyNote": "Discord message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
+      "safetyNote": "Experimental default-on composer. Newline, Tab, and control characters remain blocked; no-send proof is pending and repeated failures auto-demote or pause this host."
     },
     {
       "bundle": "com.hnc.DiscordCanary",
       "displayName": "Discord Canary",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Discord Canary",
-      "status": "blocked",
+      "status": "pending",
       "owner": "chat no-submit proof lane",
-      "safetyNote": "Discord Canary message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
+      "safetyNote": "Experimental default-on composer. Newline, Tab, and control characters remain blocked; no-send proof is pending and repeated failures auto-demote or pause this host."
     },
     {
       "bundle": "com.hnc.DiscordPTB",
       "displayName": "Discord PTB",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Discord PTB",
-      "status": "blocked",
+      "status": "pending",
       "owner": "chat no-submit proof lane",
-      "safetyNote": "Discord PTB message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
+      "safetyNote": "Experimental default-on composer. Newline, Tab, and control characters remain blocked; no-send proof is pending and repeated failures auto-demote or pause this host."
     },
     {
       "bundle": "com.microsoft.VSCode",
       "displayName": "VS Code",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "VS Code",
-      "status": "blocked",
+      "status": "pending",
       "owner": "monaco editor adapter lane",
-      "safetyNote": "VS Code stays diagnostics-only until Monaco caret placement and Tab behavior are proven in the real app."
+      "safetyNote": "Experimental floating Monaco path with degraded undo. Real-editor geometry and Tab proof are pending; repeated insertion failures auto-demote or pause VS Code."
     },
     {
       "bundle": "com.openai.ChatGPT",
       "displayName": "ChatGPT",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "ChatGPT",
-      "status": "blocked",
+      "status": "pending",
       "owner": "prompt-app proof lane",
-      "safetyNote": "ChatGPT prompt composers can submit messages, attach context, and expose tools, so suggestions stay disabled until exact-version no-submit proof exists."
+      "safetyNote": "Experimental prompt path with full acceptance plus word-only command filtering. No-submit proof is pending; control characters remain blocked and repeated failures auto-demote or pause this host."
     },
     {
       "bundle": "com.openai.atlas",
       "displayName": "ChatGPT Atlas",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "ChatGPT Atlas",
-      "status": "blocked",
+      "status": "pending",
       "owner": "prompt-browser safety lane",
-      "safetyNote": "Atlas can contain private browser text and prompt chats, so it stays disabled until disposable prompt and browser-field proof verifies placement, one-word accept, and no submit."
+      "safetyNote": "Experimental prompt/browser path with word-only command filtering. Sensitive browser fields remain blocked; no-submit proof is pending and repeated failures auto-demote or pause Atlas."
     },
     {
       "bundle": "com.openai.chat",
       "displayName": "ChatGPT",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "ChatGPT",
-      "status": "blocked",
+      "status": "pending",
       "owner": "prompt-app proof lane",
-      "safetyNote": "ChatGPT prompt composers can submit messages, attach context, and expose tools, so suggestions stay disabled until exact-version no-submit proof exists."
+      "safetyNote": "Experimental prompt path with full acceptance plus word-only command filtering. No-submit proof is pending; control characters remain blocked and repeated failures auto-demote or pause this host."
     },
     {
       "bundle": "com.openai.codex",
@@ -1262,20 +1262,20 @@
     {
       "bundle": "com.tinyspeck.slackmacgap",
       "displayName": "Slack",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Slack",
-      "status": "blocked",
+      "status": "pending",
       "owner": "electron chat adapter lane",
-      "safetyNote": "Slack message composition is diagnostics-only until composer geometry, insertion safety, and no-submit behavior are proven."
+      "safetyNote": "Experimental default-on composer. Newline, Tab, and control characters remain blocked; no-send proof is pending and repeated failures auto-demote or pause Slack."
     },
     {
       "bundle": "com.todesktop.230313mzl4w4u92",
       "displayName": "Cursor",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Cursor",
-      "status": "blocked",
+      "status": "pending",
       "owner": "monaco editor adapter lane",
-      "safetyNote": "Cursor stays diagnostics-only until Monaco caret placement, AI composer safety, and Tab behavior are proven in the real app."
+      "safetyNote": "Experimental floating Monaco path with degraded undo. Real-editor geometry, AI-composer safety, and Tab proof are pending; repeated failures auto-demote or pause Cursor."
     },
     {
       "bundle": "md.obsidian",
@@ -1289,20 +1289,20 @@
     {
       "bundle": "notion.id",
       "displayName": "Notion",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Notion",
-      "status": "blocked",
+      "status": "pending",
       "owner": "prosemirror editor adapter lane",
-      "safetyNote": "Notion pages can contain private workspace text and ProseMirror placement needs proof, so suggestions stay disabled until disposable-page placement, insertion, and no-submit proof exists."
+      "safetyNote": "Experimental synthetic-caret ProseMirror path with degraded undo. Disposable-page placement and insertion proof are pending; personal capture remains separately privacy-gated."
     },
     {
       "bundle": "ru.keepcoder.Telegram",
       "displayName": "Telegram",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Telegram",
-      "status": "blocked",
+      "status": "pending",
       "owner": "chat no-submit proof lane",
-      "safetyNote": "Telegram stays diagnostics-only until send-by-enter, attachment caption, insertion, and one-word no-submit proof are captured in a disposable chat surface."
+      "safetyNote": "Experimental default-on composer. Newline, Tab, and control characters remain blocked; send-by-enter proof is pending and repeated failures auto-demote or pause Telegram."
     }
   ]
 }

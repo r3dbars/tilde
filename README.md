@@ -11,6 +11,11 @@ hard blocks kept for secure and high-risk system surfaces. If a specific app
 has bad placement or insertion, pause that app, capture a screenshot, and add a
 small compatibility fix.
 
+The current compatibility experiment also auto-demotes one app after three
+consecutive insertion verification failures and pauses it for the session after
+six. Settings can resume or manually pause that app. This safety net does not
+turn pending manual proof into a support claim.
+
 ## What It Does
 
 - runs as a macOS menu bar app
@@ -34,9 +39,12 @@ The first supported targets still have the best proof:
 - Claude desktop
 - Claude Code in supported terminal hosts
 
-Everything else uses a generic Accessibility path unless it is hard-denied or a
-field is classified as unsafe. Prompt and terminal apps stay one-word and
-fail-closed where possible; screenshots from bad apps become the adapter queue.
+Mail, Safari, Slack, Telegram, Notion, Discord, VS Code, Cursor, ChatGPT, Atlas,
+and ordinary real websites now have experimental default-on paths. Everything
+else uses generic Accessibility unless it is hard-denied or the field is unsafe.
+Sensitive browser fields stay blocked. ChatGPT and Atlas retain word-only
+command filtering even when full acceptance is used; screenshots from bad apps
+become the adapter queue.
 
 ## Privacy
 
