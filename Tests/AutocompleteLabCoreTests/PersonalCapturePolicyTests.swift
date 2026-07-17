@@ -5,6 +5,22 @@ import Testing
 struct PersonalCapturePolicyTests {
     private let policy = PersonalCapturePolicy()
 
+    @Test("Sensitive apps cannot be read even when personal capture is enabled")
+    func blocksSensitiveAppReads() {
+        #expect(!policy.allowsAppRead(
+            personalCaptureEnabled: true,
+            isSensitiveApp: true
+        ))
+        #expect(!policy.allowsAppRead(
+            personalCaptureEnabled: false,
+            isSensitiveApp: false
+        ))
+        #expect(policy.allowsAppRead(
+            personalCaptureEnabled: true,
+            isSensitiveApp: false
+        ))
+    }
+
     @Test("Allows ordinary compose fields")
     func allowsOrdinaryComposeFields() throws {
         let decision = policy.decision(for: PersonalCaptureInput(

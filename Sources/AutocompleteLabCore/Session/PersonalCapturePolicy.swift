@@ -78,6 +78,13 @@ public struct PersonalCapturePolicy: Equatable, Sendable {
 
     public init() {}
 
+    public func allowsAppRead(
+        personalCaptureEnabled: Bool,
+        isSensitiveApp: Bool
+    ) -> Bool {
+        personalCaptureEnabled && !isSensitiveApp
+    }
+
     public func decision(for input: PersonalCaptureInput) -> PersonalCaptureDecision {
         var metadata = input.fieldClassification.traceMetadata
         metadata["personalCapturePolicy"] = "v1"
