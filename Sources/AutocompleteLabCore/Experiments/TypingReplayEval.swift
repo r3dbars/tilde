@@ -3,6 +3,7 @@ import Foundation
 public struct TypingReplayCase: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let contextBefore: String
+    public let contextAfter: String
     public let actualContinuation: String
     public let appBundleIdentifier: String
     public let fieldKind: String
@@ -11,6 +12,7 @@ public struct TypingReplayCase: Codable, Equatable, Sendable, Identifiable {
     public init(
         id: String,
         contextBefore: String,
+        contextAfter: String = "",
         actualContinuation: String,
         appBundleIdentifier: String,
         fieldKind: String,
@@ -18,10 +20,27 @@ public struct TypingReplayCase: Codable, Equatable, Sendable, Identifiable {
     ) {
         self.id = id
         self.contextBefore = contextBefore
+        self.contextAfter = contextAfter
         self.actualContinuation = actualContinuation
         self.appBundleIdentifier = appBundleIdentifier
         self.fieldKind = fieldKind
         self.dayString = dayString
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, contextBefore, contextAfter, actualContinuation
+        case appBundleIdentifier, fieldKind, dayString
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        contextBefore = try values.decode(String.self, forKey: .contextBefore)
+        contextAfter = try values.decodeIfPresent(String.self, forKey: .contextAfter) ?? ""
+        actualContinuation = try values.decode(String.self, forKey: .actualContinuation)
+        appBundleIdentifier = try values.decode(String.self, forKey: .appBundleIdentifier)
+        fieldKind = try values.decode(String.self, forKey: .fieldKind)
+        dayString = try values.decode(String.self, forKey: .dayString)
     }
 }
 
@@ -319,6 +338,10 @@ public struct TypingReplayScorecard: Codable, Equatable, Sendable {
         promptFormat: String,
         variant: String,
         corpusKind: String,
+        promptContextCharacters: Int? = nil,
+        suffixEnabled: Bool? = nil,
+        fewShotSource: String? = nil,
+        decodingVariant: String? = nil,
         endToEndP95LatencyMs: Double? = nil
     ) -> TypingReplayTrendRow {
         TypingReplayTrendRow(
@@ -329,6 +352,10 @@ public struct TypingReplayScorecard: Codable, Equatable, Sendable {
             promptFormat: promptFormat,
             variant: variant,
             corpusKind: corpusKind,
+            promptContextCharacters: promptContextCharacters,
+            suffixEnabled: suffixEnabled,
+            fewShotSource: fewShotSource,
+            decodingVariant: decodingVariant,
             caseCount: caseCount,
             keystrokesSavedPerCase: keystrokesSavedPerCase,
             shownKeystrokesSavedPerCase: shownKeystrokesSavedPerCase,
@@ -365,6 +392,10 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
     public let promptFormat: String
     public let variant: String
     public let corpusKind: String
+    public let promptContextCharacters: Int?
+    public let suffixEnabled: Bool?
+    public let fewShotSource: String?
+    public let decodingVariant: String?
     public let caseCount: Int
     public let keystrokesSavedPerCase: Double
     public let shownKeystrokesSavedPerCase: Double
@@ -387,6 +418,10 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
         promptFormat: String,
         variant: String,
         corpusKind: String,
+        promptContextCharacters: Int? = nil,
+        suffixEnabled: Bool? = nil,
+        fewShotSource: String? = nil,
+        decodingVariant: String? = nil,
         caseCount: Int,
         keystrokesSavedPerCase: Double,
         shownKeystrokesSavedPerCase: Double,
@@ -408,6 +443,10 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
         self.promptFormat = promptFormat
         self.variant = variant
         self.corpusKind = corpusKind
+        self.promptContextCharacters = promptContextCharacters
+        self.suffixEnabled = suffixEnabled
+        self.fewShotSource = fewShotSource
+        self.decodingVariant = decodingVariant
         self.caseCount = caseCount
         self.keystrokesSavedPerCase = keystrokesSavedPerCase
         self.shownKeystrokesSavedPerCase = shownKeystrokesSavedPerCase

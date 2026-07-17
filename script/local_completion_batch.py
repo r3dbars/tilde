@@ -15,7 +15,8 @@ writes one JSONL result per row on stdout. It never persists raw text.
 Input (stdin), one JSON object per line:
     {"id": "row-1", "system": "...", "user": "...", "mode": "phrase",
      "template": "chat_instruct" | "raw_completion",
-     "rawPrompt": "...", "promptIsBuilt": true, "max_tokens": 16}
+     "rawPrompt": "...", "promptIsBuilt": true, "max_tokens": 16,
+     "temperature": 0.0, "top_p": 0.0, "repetition_penalty": 1.0}
 
 Output (stdout), one JSON object per line:
     {"id": "row-1", "output": "...", "ok": true, "latency_ms": 123}
@@ -142,18 +143,32 @@ def build_prompt(payload: dict, tokenizer) -> str:
         )
 
 
-def make_greedy_sampler():
-    """Return a temperature-0 sampler when the installed mlx_lm exposes one."""
+def make_sampler(temperature: float = 0.0, top_p: float = 0.0):
+    """Build the requested deterministic or sampled decoding strategy."""
     try:
         sample_utils = importlib.import_module("mlx_lm.sample_utils")
     except ImportError:
         return None
-    make_sampler = getattr(sample_utils, "make_sampler", None)
-    if make_sampler is None:
+    sampler_factory = getattr(sample_utils, "make_sampler", None)
+    if sampler_factory is None:
         return None
     try:
-        return make_sampler(temp=0.0)
+        return sampler_factory(temp=temperature, top_p=top_p)
     except TypeError:
+        return None
+
+
+def make_repetition_processors(repetition_penalty: float = 1.0):
+    """Build repetition processors when the installed mlx_lm supports them."""
+    if repetition_penalty == 1.0:
+        return None
+    try:
+        sample_utils = importlib.import_module("mlx_lm.sample_utils")
+        make_processors = getattr(sample_utils, "make_logits_processors", None)
+        if make_processors is None:
+            return None
+        return make_processors(repetition_penalty=repetition_penalty)
+    except (ImportError, TypeError):
         return None
 
 
@@ -180,10 +195,20 @@ def truncate_at_terminator(text: str) -> str:
     return text[:cut]
 
 
-def generate_once(mlx_generate, model, tokenizer, prompt: str, max_tokens: int, sampler) -> str:
+def generate_once(
+    mlx_generate,
+    model,
+    tokenizer,
+    prompt: str,
+    max_tokens: int,
+    sampler,
+    logits_processors=None,
+) -> str:
     kwargs = {"max_tokens": max_tokens, "verbose": False}
     if sampler is not None:
         kwargs["sampler"] = sampler
+    if logits_processors is not None:
+        kwargs["logits_processors"] = logits_processors
     try:
         return mlx_generate(model, tokenizer, prompt=prompt, **kwargs)
     except TypeError:
@@ -246,8 +271,6 @@ def main() -> int:
         print(f"failed to load model from {kind} {source}: {error}", file=sys.stderr)
         return 70
     load_ms = round((time.monotonic() - load_started) * 1000)
-    sampler = make_greedy_sampler()
-
     print(
         f"loaded model source={kind} loadMilliseconds={load_ms}",
         file=sys.stderr,
@@ -281,12 +304,25 @@ def main() -> int:
             row["template"] = args.template
         row_id = str(row.get("id") or "row")
         max_tokens = int(row.get("max_tokens") or 16)
+        temperature = float(row.get("temperature") or 0.0)
+        top_p = float(row.get("top_p") or 0.0)
+        repetition_penalty = float(row.get("repetition_penalty") or 1.0)
+        sampler = make_sampler(temperature=temperature, top_p=top_p)
+        logits_processors = make_repetition_processors(repetition_penalty)
         prompt = build_prompt(row, tokenizer)
         started = time.monotonic()
         if use_alarm:
             signal.setitimer(signal.ITIMER_REAL, max(0.0, float(args.row_timeout)))
         try:
-            output = generate_once(mlx_generate, model, tokenizer, prompt, max_tokens, sampler)
+            output = generate_once(
+                mlx_generate,
+                model,
+                tokenizer,
+                prompt,
+                max_tokens,
+                sampler,
+                logits_processors,
+            )
         except _RowTimeout:
             # The one-shot itimer has already fired; nothing left to disarm.
             exit_code = 75
