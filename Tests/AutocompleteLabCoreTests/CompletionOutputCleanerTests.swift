@@ -411,4 +411,27 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("   ") == nil)
     }
+
+    @Test("Reports privacy-safe output rejection reasons")
+    func reportsOutputRejectionReasons() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.cleanWithReason("   ") == .rejected(.emptyOutput))
+        #expect(cleaner.cleanWithReason("<NO_SUGGESTION>") == .rejected(.noSuggestionSentinel))
+        #expect(cleaner.cleanWithReason("press Enter to send", after: "Now") == .rejected(.unsafePromptAction))
+        #expect(cleaner.cleanWithReason("dictation", after: "dic", mode: .wordCompletion).suggestion?.visibleText == "tation")
+    }
+
+    @Test("Cleaner result exposes redacted trace metadata")
+    func cleanerResultExposesRedactedTraceMetadata() {
+        let rejected = CompletionCleanResult.rejected(.lowSignalPhrase)
+        let accepted = CompletionCleanResult.accepted(CompletionSuggestion(text: " ready now"))
+
+        #expect(rejected.traceMetadata == [
+            "completionCleanResult": "rejected",
+            "completionCleanRejectionReason": "lowSignalPhrase"
+        ])
+        #expect(accepted.traceMetadata == ["completionCleanResult": "accepted"])
+        #expect(!rejected.traceMetadata.values.contains("private typed text"))
+    }
 }
