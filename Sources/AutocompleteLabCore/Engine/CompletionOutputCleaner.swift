@@ -1,5 +1,60 @@
 import Foundation
 
+public enum CompletionCleanRejectionReason: String, Codable, Equatable, Sendable {
+    case unsafeHiddenOrControlCharacter
+    case emptyOutput
+    case noSuggestionSentinel
+    case promptInstructionEcho
+    case repeatedListMarker
+    case assistantMeta
+    case genericChatFiller
+    case unsafePromptAction
+    case startsSecondSentence
+    case visibleUIChrome
+    case assistantResponseToPrompt
+    case restartsCurrentSentence
+    case replaysCurrentSentence
+    case adviceOrToneDrift
+    case emptyAfterPrefixTrimming
+    case duplicatesVisibleTypedWords
+    case repeatsEarlierContext
+    case belowMinimumVisibleWords
+    case invalidWordCompletion
+    case lowValueSingleWordPhrase
+    case lowSignalPhrase
+}
+
+public enum CompletionCleanResult: Equatable, Sendable {
+    case accepted(CompletionSuggestion)
+    case rejected(CompletionCleanRejectionReason)
+
+    public var suggestion: CompletionSuggestion? {
+        guard case let .accepted(suggestion) = self else {
+            return nil
+        }
+        return suggestion
+    }
+
+    public var rejectionReason: CompletionCleanRejectionReason? {
+        guard case let .rejected(reason) = self else {
+            return nil
+        }
+        return reason
+    }
+
+    public var traceMetadata: [String: String] {
+        switch self {
+        case .accepted:
+            return ["completionCleanResult": "accepted"]
+        case let .rejected(reason):
+            return [
+                "completionCleanResult": "rejected",
+                "completionCleanRejectionReason": reason.rawValue
+            ]
+        }
+    }
+}
+
 public struct CompletionOutputCleaner: Equatable, Sendable {
     private static let noSuggestionToken = CompletionPromptBuilder.noSuggestionToken.lowercased()
 
@@ -15,11 +70,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     public func clean(_ rawOutput: String) -> CompletionSuggestion? {
-        clean(rawOutput, after: nil)
+        cleanWithReason(rawOutput).suggestion
     }
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
-        clean(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
+        cleanWithReason(rawOutput, after: textBeforeCursor).suggestion
     }
 
     public func cleanCandidates(
@@ -73,9 +128,32 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         )
     }
 
-    public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
+    public func clean(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode
+    ) -> CompletionSuggestion? {
+        cleanWithReason(rawOutput, after: textBeforeCursor, mode: mode).suggestion
+    }
+
+    public func cleanWithReason(_ rawOutput: String) -> CompletionCleanResult {
+        cleanWithReason(rawOutput, after: nil)
+    }
+
+    public func cleanWithReason(
+        _ rawOutput: String,
+        after textBeforeCursor: String?
+    ) -> CompletionCleanResult {
+        cleanWithReason(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
+    }
+
+    public func cleanWithReason(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode
+    ) -> CompletionCleanResult {
         guard !containsUnsafePromptHiddenOrControlCharacter(rawOutput) else {
-            return nil
+            return .rejected(.unsafeHiddenOrControlCharacter)
         }
 
         let withoutThinking = rawOutput
@@ -93,11 +171,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
 
         guard !withoutThinking.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         guard !isNoSuggestionSentinel(withoutThinking) else {
-            return nil
+            return .rejected(.noSuggestionSentinel)
         }
 
         let singleLine = withoutThinking
@@ -106,25 +184,25 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         guard !singleLine.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         guard !looksLikePromptInstructionEcho(singleLine) else {
-            return nil
+            return .rejected(.promptInstructionEcho)
         }
 
         let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
 
         guard !withoutPromptEchoLabel.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
-            return nil
+            return .rejected(.noSuggestionSentinel)
         }
 
         guard !looksLikePromptInstructionEcho(withoutPromptEchoLabel) else {
-            return nil
+            return .rejected(.promptInstructionEcho)
         }
 
         let candidateText = strippingCorrectionArrowEcho(
@@ -133,52 +211,52 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         )
 
         guard !candidateText.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         if mode.isContinuation,
            looksLikeRepeatedListMarker(candidateText) {
-            return nil
+            return .rejected(.repeatedListMarker)
         }
 
         guard !looksLikeAssistantMeta(candidateText) else {
-            return nil
+            return .rejected(.assistantMeta)
         }
 
         guard !looksLikeGenericChatFiller(candidateText) else {
-            return nil
+            return .rejected(.genericChatFiller)
         }
 
         guard !looksLikeUnsafePromptAction(candidateText) else {
-            return nil
+            return .rejected(.unsafePromptAction)
         }
 
         if mode.isContinuation,
            startsSecondSentence(candidateText) {
-            return nil
+            return .rejected(.startsSecondSentence)
         }
 
         guard !looksLikeVisibleUIChromeCandidate(candidateText, mode: mode) else {
-            return nil
+            return .rejected(.visibleUIChrome)
         }
 
         if let textBeforeCursor,
            looksLikeAssistantResponseToPrompt(candidateText, after: textBeforeCursor) {
-            return nil
+            return .rejected(.assistantResponseToPrompt)
         }
 
         if let textBeforeCursor,
            restartsCurrentSentence(candidateText, after: textBeforeCursor) {
-            return nil
+            return .rejected(.restartsCurrentSentence)
         }
 
         if let textBeforeCursor,
            replaysCurrentSentenceSpan(candidateText, after: textBeforeCursor) {
-            return nil
+            return .rejected(.replaysCurrentSentence)
         }
 
         guard !isAdviceOrToneDriftPhrase(candidateText) else {
-            return nil
+            return .rejected(.adviceOrToneDrift)
         }
 
         let normalizedSuggestion = mode == .wordCompletion ? candidateText : ensureLeadingSpace(candidateText)
@@ -190,29 +268,29 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         guard !trimmedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
+            return .rejected(.emptyAfterPrefixTrimming)
         }
 
         if mode.isContinuation,
            let textBeforeCursor,
            duplicatesVisibleTypedWords(trimmedSuggestion, after: textBeforeCursor) {
-            return nil
+            return .rejected(.duplicatesVisibleTypedWords)
         }
 
         if mode.isContinuation,
            let textBeforeCursor,
            replaysCurrentSentenceSpan(trimmedSuggestion, after: textBeforeCursor) {
-            return nil
+            return .rejected(.replaysCurrentSentence)
         }
 
         if let textBeforeCursor,
            repeatsEarlierContext(trimmedSuggestion, after: textBeforeCursor) {
-            return nil
+            return .rejected(.repeatsEarlierContext)
         }
 
         let suggestion = CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
         guard mode == .wordCompletion || suggestion.visibleWordCount >= minimumVisibleWords else {
-            return nil
+            return .rejected(.belowMinimumVisibleWords)
         }
 
         if mode == .wordCompletion,
@@ -221,29 +299,29 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
                 rawCandidate: candidateText,
                 after: textBeforeCursor
            ) {
-            return nil
+            return .rejected(.invalidWordCompletion)
         }
 
         if mode.isContinuation,
            isLowValueSingleWordPhrase(suggestion.visibleText) {
-            return nil
+            return .rejected(.lowValueSingleWordPhrase)
         }
 
         if mode.isContinuation,
            isLowSignalPhrase(suggestion.visibleText) {
-            return nil
+            return .rejected(.lowSignalPhrase)
         }
 
         if mode.isContinuation,
            isAdviceOrToneDriftPhrase(suggestion.visibleText) {
-            return nil
+            return .rejected(.adviceOrToneDrift)
         }
 
         if looksLikeVisibleUIChromeCandidate(suggestion.visibleText, mode: mode) {
-            return nil
+            return .rejected(.visibleUIChrome)
         }
 
-        return suggestion
+        return .accepted(suggestion)
     }
 
     private func candidateLines(from rawOutput: String) -> [String] {
