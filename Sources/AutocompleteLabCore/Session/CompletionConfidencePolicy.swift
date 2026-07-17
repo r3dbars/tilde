@@ -28,7 +28,7 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
 
     public init(
         lowConfidenceThreshold: Int = 60,
-        maximumDisplayLatencyMilliseconds: Int = 750
+        maximumDisplayLatencyMilliseconds: Int = 1_300
     ) {
         self.lowConfidenceThreshold = max(0, min(100, lowConfidenceThreshold))
         self.maximumDisplayLatencyMilliseconds = max(1, maximumDisplayLatencyMilliseconds)
@@ -55,21 +55,8 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
             reasons.append("unsupported-app-profile")
         }
 
-        if latencyMilliseconds > 1_000 {
-            score -= 25
-            reasons.append("slow-over-1000ms")
-        } else if latencyMilliseconds > 500 {
-            score -= 10
-            reasons.append("slow-over-500ms")
-        }
-
-        let displayLatencyBudget = displayLatencyBudgetMilliseconds(
-            suggestion: suggestion,
-            mode: mode
-        )
-        if latencyMilliseconds > displayLatencyBudget {
-            score -= 100
-            reasons.append("too-slow-to-display")
+        if latencyMilliseconds > maximumDisplayLatencyMilliseconds {
+            reasons.append("late-context-validation-required")
         }
 
         if mode == .phraseContinuation {
@@ -122,22 +109,6 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
         }
 
         return CompletionConfidenceDecision(bucket: bucket, score: score, reasons: reasons)
-    }
-
-    private func displayLatencyBudgetMilliseconds(
-        suggestion: CompletionSuggestion,
-        mode: CompletionRequestMode
-    ) -> Int {
-        guard mode == .phraseContinuation,
-              suggestion.maxVisibleWords >= 8,
-              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
-                forVisibleWords: suggestion.maxVisibleWords
-              )
-        else {
-            return maximumDisplayLatencyMilliseconds
-        }
-
-        return max(maximumDisplayLatencyMilliseconds, 1_000)
     }
 
     private func looksGenericOrAssistantLike(_ text: String) -> Bool {
