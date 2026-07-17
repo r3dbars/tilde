@@ -17,7 +17,7 @@ final class SuggestionOrchestrator {
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let docLocalPhrasePredictor: DocLocalNGramPhrasePredictor
     private let personalPhrasePredictor: PersonalNGramContinuationPredictor
-    private let commonPhrasePredictor: CommonPhraseContinuationPredictor
+    private let corpusPhrasePredictor: CorpusNGramPhrasePredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let completionConfidencePolicy: CompletionConfidencePolicy
     private let suggestionPresentationGate: SuggestionPresentationGate
@@ -33,7 +33,7 @@ final class SuggestionOrchestrator {
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
         docLocalPhrasePredictor: DocLocalNGramPhrasePredictor = DocLocalNGramPhrasePredictor(),
         personalPhrasePredictor: PersonalNGramContinuationPredictor = PersonalNGramContinuationPredictor(),
-        commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
+        corpusPhrasePredictor: CorpusNGramPhrasePredictor = CorpusNGramPhrasePredictor(),
         completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
@@ -43,7 +43,7 @@ final class SuggestionOrchestrator {
         self.wordCompletionRanker = wordCompletionRanker
         self.docLocalPhrasePredictor = docLocalPhrasePredictor
         self.personalPhrasePredictor = personalPhrasePredictor
-        self.commonPhrasePredictor = commonPhrasePredictor
+        self.corpusPhrasePredictor = corpusPhrasePredictor
         self.completionConfidencePolicy = completionConfidencePolicy
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
@@ -656,7 +656,7 @@ final class SuggestionOrchestrator {
             return personalSelection
         }
 
-        return commonPhrasePredictor.selection(
+        return corpusPhrasePredictor.selection(
             for: textBeforeCursor,
             behaviorProfileID: behaviorProfileID,
             maxVisibleWords: maxVisibleWords,
