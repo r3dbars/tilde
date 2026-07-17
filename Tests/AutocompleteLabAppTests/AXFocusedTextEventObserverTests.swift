@@ -1,3 +1,4 @@
+import ApplicationServices
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
@@ -25,6 +26,53 @@ struct AXFocusedTextEventObserverTests {
         #expect(currentGeneration != staleGeneration)
         #expect(!lifecycle.accepts(generation: staleGeneration))
         #expect(lifecycle.accepts(generation: currentGeneration))
+    }
+
+    @Test("App switches invalidate setup retries from the old target")
+    func appSwitchInvalidatesSetupRetry() {
+        var target = AXFocusedTextObservationTarget()
+        let staleGeneration = target.begin(processIdentifier: 41)
+        let currentGeneration = target.begin(processIdentifier: 42)
+
+        #expect(!target.accepts(processIdentifier: 41, generation: staleGeneration))
+        #expect(target.accepts(processIdentifier: 42, generation: currentGeneration))
+
+        target.cancel()
+
+        #expect(!target.accepts(processIdentifier: 42, generation: currentGeneration))
+    }
+
+    @Test("Setup retries are transient-only and bounded")
+    func setupRetriesAreTransientOnlyAndBounded() {
+        let policy = AXFocusedTextSetupRetryPolicy(
+            maximumRetryAttempts: 2,
+            delayMilliseconds: 25
+        )
+
+        #expect(policy.next(after: .cannotComplete, failedAttempt: 0) == .init(
+            attempt: 1,
+            delayMilliseconds: 25
+        ))
+        #expect(policy.next(after: .noValue, failedAttempt: 1) == .init(
+            attempt: 2,
+            delayMilliseconds: 25
+        ))
+        #expect(policy.next(after: .cannotComplete, failedAttempt: 2) == nil)
+        #expect(policy.next(after: .apiDisabled, failedAttempt: 0) == nil)
+    }
+
+    @Test("AX messaging uses the same bounded timeout as focused-text reads")
+    func axMessagingTimeoutIsBounded() {
+        let recorder = AXMessagingTimeoutRecorder()
+        let configurator = AXFocusedTextMessagingTimeoutConfigurator { _, timeout in
+            recorder.record(timeout)
+            return .success
+        }
+
+        let result = configurator.configure(AXUIElementCreateSystemWide())
+
+        #expect(result == .success)
+        #expect(recorder.timeouts == [0.12])
     }
 
     @Test("Coalesces an AX notification burst into one delivery")
@@ -152,5 +200,22 @@ private final class AXEventBurstRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         storage.append(burst)
+    }
+}
+
+private final class AXMessagingTimeoutRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Float] = []
+
+    var timeouts: [Float] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func record(_ timeout: Float) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(timeout)
     }
 }
