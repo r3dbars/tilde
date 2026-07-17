@@ -3869,6 +3869,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for context: FocusedTextContext,
         bundleIdentifier: String
     ) -> SyntheticTextAreaTuning {
+        if bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier {
+            return SyntheticTextAreaTuning(
+                font: NSFont.systemFont(ofSize: 16),
+                horizontalPadding: 0,
+                verticalPadding: 4,
+                // Match Codex's 16 pt web composer font. The generic 15 pt
+                // estimate increasingly overlaps text as the prompt grows.
+                inlineGap: 2,
+                centerSingleLineWhenTall: false
+            )
+        }
+
         if bundleIdentifier == "com.anthropic.claudefordesktop" {
             return SyntheticTextAreaTuning(
                 font: NSFont.systemFont(ofSize: 21),
