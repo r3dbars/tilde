@@ -35,7 +35,7 @@ private enum CLIError: Error, CustomStringConvertible {
 
 private let usage = """
 Usage:
-  SteadyTypeReplayEval [--corpus DIR | --fixture FILE] [--engine mock|batch|common|corpus]
+  SteadyTypeReplayEval [--corpus DIR | --fixture FILE] [--engine mock|batch|common|corpus|product]
     [--model ALIAS] [--variant baseline|personalized|both]
     [--prompt-format chat-instruct|raw-completion|minimal-rules|all] [--max-cases N]
     [--context-chars N] [--suffix on|off] [--few-shot-source built-in|none]
@@ -154,7 +154,7 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
         index += 1
     }
 
-    guard ["mock", "batch", "common", "corpus"].contains(options.engine) else {
+    guard ["mock", "batch", "common", "corpus", "product"].contains(options.engine) else {
         throw CLIError.usage("Invalid --engine: \(options.engine)")
     }
     guard ["baseline", "personalized", "both"].contains(options.variant) else {
@@ -261,7 +261,7 @@ private func runReplay(options: Options) async throws {
                 }
             }
         }
-    } else {
+    } else if options.engine == "common" || options.engine == "corpus" {
         for requests in requestsByFormat.values {
             for request in requests {
                 let selection = options.engine == "corpus"
@@ -277,6 +277,32 @@ private func runReplay(options: Options) async throws {
                     )
                 suggestions[request.suggestionID] = selection.suggestion?.visibleText
                 latencies[request.suggestionID] = 0
+            }
+        }
+    } else {
+        for promptFormat in options.promptFormats {
+            for variant in variants {
+                for replayCase in replayCases {
+                    let requestID = "\(promptFormat.rawValue):\(variant):\(options.decodingConfiguration.identifier):\(replayCase.id)"
+                    let memory = variant == "personalized" ? memoryByDay[replayCase.dayString] : nil
+                    let personal = memory.map {
+                        PersonalNGramContinuationPredictor().selection(
+                            for: replayCase.contextBefore,
+                            memory: $0,
+                            behaviorProfileID: .docsProse,
+                            maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords
+                        )
+                    }
+                    let selection = personal?.suggestion != nil
+                        ? personal
+                        : CorpusNGramPhrasePredictor().selection(
+                            for: replayCase.contextBefore,
+                            behaviorProfileID: .docsProse,
+                            maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords
+                        )
+                    suggestions[requestID] = selection?.suggestion?.visibleText
+                    latencies[requestID] = 0
+                }
             }
         }
     }
@@ -309,7 +335,7 @@ private func runReplay(options: Options) async throws {
                 dateISO: now,
                 gitSHA: sha,
                 engine: options.engine,
-                model: ["mock", "common", "corpus"].contains(options.engine) ? options.engine : effectiveModel,
+                model: ["mock", "common", "corpus", "product"].contains(options.engine) ? options.engine : effectiveModel,
                 promptFormat: promptFormat.rawValue,
                 variant: variant,
                 corpusKind: corpusKind,
@@ -323,8 +349,8 @@ private func runReplay(options: Options) async throws {
     }
     let runMetadata = """
     - Engine: \(options.engine)
-    - Requested model: \(["mock", "common", "corpus"].contains(options.engine) ? options.engine : options.model)
-    - Effective model: \(["mock", "common", "corpus"].contains(options.engine) ? options.engine : effectiveModel)
+    - Requested model: \(["mock", "common", "corpus", "product"].contains(options.engine) ? options.engine : options.model)
+    - Effective model: \(["mock", "common", "corpus", "product"].contains(options.engine) ? options.engine : effectiveModel)
     - Corpus: \(corpusKind)
     - Cases: \(replayCases.count)
     - Seed: \(options.seed)
