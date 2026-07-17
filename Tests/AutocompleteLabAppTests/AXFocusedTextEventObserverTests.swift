@@ -59,6 +59,8 @@ struct AXFocusedTextEventObserverTests {
         ))
         #expect(policy.next(after: .cannotComplete, failedAttempt: 2) == nil)
         #expect(policy.next(after: .apiDisabled, failedAttempt: 0) == nil)
+        #expect(policy.firstRetryableError(in: [.success, .cannotComplete]) == .cannotComplete)
+        #expect(policy.firstRetryableError(in: [.success, .notificationUnsupported]) == nil)
     }
 
     @Test("AX messaging uses the same bounded timeout as focused-text reads")

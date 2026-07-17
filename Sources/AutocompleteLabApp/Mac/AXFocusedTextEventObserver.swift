@@ -170,6 +170,10 @@ struct AXFocusedTextSetupRetryPolicy: Equatable, Sendable {
         Self.isTransient(error)
     }
 
+    func firstRetryableError(in results: [AXError]) -> AXError? {
+        results.first(where: canRetry)
+    }
+
     private static func isTransient(_ error: AXError) -> Bool {
         error == .cannotComplete || error == .noValue
     }
@@ -476,8 +480,10 @@ final class AXFocusedTextEventObserver {
         let observesSelection = Self.acceptsNotificationRegistration(selectionRegistrationResult)
         if observesValue || observesSelection {
             self.focusedElement = focusedElement
-        } else if let transientResult = [valueRegistrationResult, selectionRegistrationResult]
-            .first(where: setupRetryPolicy.canRetry) {
+        }
+        if let transientResult = setupRetryPolicy.firstRetryableError(
+            in: [valueRegistrationResult, selectionRegistrationResult]
+        ) {
             scheduleSetupRetry(
                 after: transientResult,
                 processIdentifier: processIdentifier,
