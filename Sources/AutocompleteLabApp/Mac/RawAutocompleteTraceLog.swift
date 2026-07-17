@@ -1,6 +1,11 @@
 import Foundation
 import AutocompleteLabCore
 
+enum TraceContentSensitivity: Equatable, Sendable {
+    case standard
+    case sensitiveSurface
+}
+
 final class RawAutocompleteTraceLog: @unchecked Sendable {
     static let shared = RawAutocompleteTraceLog(
         logURL: FileManager.default
@@ -367,13 +372,19 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         reason: String = "",
         screenshotPath: String = "",
         screenshotPathAuthorized: Bool = false,
+        contentSensitivity: TraceContentSensitivity = .standard,
         metadata: [String: String] = [:]
     ) {
         guard isEnabled else {
             return
         }
 
-        let rawContentEnabled = rawContentTracingEnabled
+        // Raw and screenshot debug opt-ins never override a sensitive-surface hard block.
+        // The metadata check keeps the logger boundary fail-closed if a caller carrying the
+        // standard AX classification forgets to mark the sensitivity explicitly.
+        let isSensitiveSurface = contentSensitivity == .sensitiveSurface
+            || metadata["fieldKindSuppressed"] == "true"
+        let rawContentEnabled = rawContentTracingEnabled && !isSensitiveSurface
         var traceMetadata = metadata
         if type == .suggestionSuppressed {
             traceMetadata.merge(
@@ -435,7 +446,8 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             latencyMilliseconds: latencyMilliseconds,
             outcome: outcome,
             reason: reason,
-            screenshotPath: (screenshotTracingEnabled || screenshotPathAuthorized) ? screenshotPath : "",
+            screenshotPath: !isSensitiveSurface
+                && (screenshotTracingEnabled || screenshotPathAuthorized) ? screenshotPath : "",
             metadata: AutocompleteTracePrivacyFilter.metadata(
                 proofMetadata,
                 rawContentEnabled: rawContentEnabled

@@ -1085,7 +1085,7 @@
         {
           "id": "personal-memory-warm-prefix-latency",
           "status": "complete",
-          "summary": "A current-head TextEdit run on the installed Qwen3 0.6B transformer recorded real prompt-prefix cache hits: capture-off baseline warm first-token p95 was 60 ms and personalized warm first-token p95 was 57 ms with three retrieved snippets, both below the 450 ms first-visible budget."
+          "summary": "A current-head TextEdit run on the installed Qwen3 0.6B transformer recorded real prompt-prefix cache hits: capture-off baseline warm first-token p95 was 60 ms and personalized warm first-token p95 was 57 ms with three retrieved snippets. The current presentation path applies live context validation and a 1,500 ms maximum result-age guard."
         }
       ]
     },

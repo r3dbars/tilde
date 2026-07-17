@@ -1312,7 +1312,7 @@ struct SuggestionOrchestratorTests {
         )
         let classification = ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
         let request = CompletionRequest(
-            textBeforeCursor: "Make this setting the feature configurable",
+            textBeforeCursor: "Make this",
             appBundleIdentifier: profile.bundleIdentifier,
             fieldKind: classification.kind,
             behaviorProfileID: .aiChat,
@@ -1329,7 +1329,7 @@ struct SuggestionOrchestratorTests {
         )
 
         let display = orchestrator.displayScoreDecision(
-            suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
+            suggestion: CompletionSuggestion(text: " configurable", maxVisibleWords: 8),
             request: request,
             context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
             fieldClassification: classification,

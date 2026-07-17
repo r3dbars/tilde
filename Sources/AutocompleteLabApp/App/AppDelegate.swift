@@ -1943,7 +1943,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         completesAsync: inout Bool,
         reason: String
     ) -> Bool {
-        guard appSettings.personalCaptureEnabled,
+        guard personalCapturePolicy.allowsAppRead(
+                  personalCaptureEnabled: appSettings.personalCaptureEnabled,
+                  supportStatus: profileStore.supportStatus(for: app.bundleIdentifier)
+              ),
               accessibilityClient.isTrusted,
               allowFocusedTextAXRead(for: app) else {
             return false
@@ -2530,6 +2533,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
+                contentSensitivity: Self.traceContentSensitivity(
+                    fieldClassification: suggestionFieldClassification,
+                    activationDecision: activationDecision
+                ),
                 metadata: suggestionFieldClassification.traceMetadata
                     .merging(["silenceExplanation": userFacingReason]) { current, _ in current }
             )
@@ -2821,6 +2828,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ? "idle-retry"
                     : "poll"
         )
+    }
+
+    static func traceContentSensitivity(
+        fieldClassification: AXFieldClassification,
+        activationDecision: CompletionActivationDecision
+    ) -> TraceContentSensitivity {
+        if fieldClassification.suppressesSuggestionsByDefault
+            || activationDecision.blockedReason == .sensitiveContent
+            || activationDecision.blockedReason == .secureField {
+            return .sensitiveSurface
+        }
+
+        return .standard
     }
 
     private func claudeCodeTerminalHostProofContext(
@@ -8039,7 +8059,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let typedSinceRequest: String
         switch LateResultContextValidator().validate(
             requestSnapshot: requestSnapshot,
-            currentSnapshot: currentSnapshot
+            currentSnapshot: currentSnapshot,
+            latencyMilliseconds: latencyMilliseconds
         ) {
         case let .stillValid(typedDelta):
             typedSinceRequest = typedDelta
