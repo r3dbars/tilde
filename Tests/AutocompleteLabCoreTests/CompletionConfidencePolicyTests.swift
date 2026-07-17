@@ -114,9 +114,34 @@ struct CompletionConfidencePolicyTests {
         )
 
         #expect(decision.canDisplay)
-        #expect(decision.bucket == .medium)
+        #expect(decision.bucket == .high)
         #expect(!decision.reasons.contains("long-visible-suggestion"))
         #expect(!decision.reasons.contains("too-slow-to-display"))
+    }
+
+    @Test("Latency below the context-validation ceiling does not lower confidence")
+    func latencyBelowContextValidationCeilingDoesNotLowerConfidence() {
+        #expect(policy.maximumDisplayLatencyMilliseconds == 1_300)
+
+        let fast = policy.decision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            mode: .phraseContinuation,
+            textBeforeCursor: "Can you send the notes",
+            latencyMilliseconds: 120,
+            supportLevel: .green
+        )
+        let lateButValid = policy.decision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            mode: .phraseContinuation,
+            textBeforeCursor: "Can you send the notes",
+            latencyMilliseconds: 1_300,
+            supportLevel: .green
+        )
+
+        #expect(lateButValid.score == fast.score)
+        #expect(lateButValid.bucket == .high)
+        #expect(lateButValid.canDisplay)
+        #expect(!lateButValid.reasons.contains("too-slow-to-display"))
     }
 
     @Test("Allows long phrase continuations when the slider is high")
@@ -150,7 +175,7 @@ struct CompletionConfidencePolicyTests {
         #expect(!decision.canDisplay)
         #expect(decision.bucket == .low)
         #expect(decision.reasons.contains("generic-or-assistant-like"))
-        #expect(decision.reasons.contains("slow-over-1000ms"))
+        #expect(decision.reasons.contains("late-context-validation-required"))
     }
 
     @Test("Blocks unsupported profiles")
@@ -167,18 +192,18 @@ struct CompletionConfidencePolicyTests {
         #expect(decision.reasons.contains("unsupported-app-profile"))
     }
 
-    @Test("Blocks otherwise good suggestions after the display latency budget")
-    func blocksSuggestionsAfterDisplayLatencyBudget() {
+    @Test("Keeps otherwise good late suggestions eligible for context validation")
+    func keepsLateSuggestionsEligibleForContextValidation() {
         let decision = policy.decision(
             suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
             mode: .phraseContinuation,
             textBeforeCursor: "Can you send the notes",
-            latencyMilliseconds: 900,
+            latencyMilliseconds: 1_301,
             supportLevel: .green
         )
 
-        #expect(!decision.canDisplay)
-        #expect(decision.bucket == .low)
-        #expect(decision.reasons.contains("too-slow-to-display"))
+        #expect(decision.canDisplay)
+        #expect(decision.bucket == .high)
+        #expect(decision.reasons.contains("late-context-validation-required"))
     }
 }
