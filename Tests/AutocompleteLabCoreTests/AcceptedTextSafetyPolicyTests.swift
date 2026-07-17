@@ -110,11 +110,19 @@ struct AcceptedTextSafetyPolicyTests {
     }
 
     @Test("Disabled profiles block insertion")
-    func disabledProfilesBlockInsertion() throws {
-        let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
+    func disabledProfilesBlockInsertion() {
+        let disabled = CompatibilityProfile(
+            bundleIdentifier: "com.example.Disabled",
+            displayName: "Disabled",
+            supportLevel: .unsupported,
+            supportReason: "Test-only disabled profile.",
+            renderMode: .disabled,
+            insertionMode: .disabled,
+            notes: "Test-only disabled profile."
+        )
 
         #expect(
-            policy.decision(acceptedText: " make", profile: mail)
+            policy.decision(acceptedText: " make", profile: disabled)
                 == .blocked(reason: "profile-insertion-disabled")
         )
     }

@@ -126,9 +126,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "mail",
             displayName: "Apple Mail",
             bundleIdentifierPrefixes: ["com.apple.mail"],
-            defaultRung: .detect,
+            defaultRung: .accept,
             textPath: .nativeAccessibility,
-            acceptMode: .none,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .trustAfterValidation,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -145,14 +145,14 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             verticalToleranceMultiplier: 0.65
         ),
         AppCompatibilityProfile(
-            id: "notion-blocked",
+            id: "notion",
             displayName: "Notion",
             bundleIdentifierPrefixes: ["notion.id"],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
-            boundaryClipPolicy: .ignoreFocusedTextElement
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
         AppCompatibilityProfile(
             id: "openai-composer",
@@ -162,9 +162,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.openai.chat",
                 "com.openai.codex"
             ],
-            defaultRung: .detect,
+            defaultRung: .accept,
             textPath: .nativeAccessibility,
-            acceptMode: .none,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -190,9 +190,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "company.thebrowser.Browser",
                 "org.mozilla.firefox"
             ],
-            defaultRung: .detect,
-            textPath: .webExtension,
-            acceptMode: .none,
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -228,37 +228,37 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             bundleIdentifierPrefixes: [
                 "ru.keepcoder.Telegram"
             ],
-            defaultRung: .detect,
-            textPath: .editorPlugin,
-            acceptMode: .none,
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
             verticalToleranceMultiplier: 0.65
         ),
         AppCompatibilityProfile(
-            id: "slack-blocked",
+            id: "slack",
             displayName: "Slack",
             bundleIdentifierPrefixes: ["com.tinyspeck.slackmacgap"],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
-            boundaryClipPolicy: .ignoreFocusedTextElement
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
         AppCompatibilityProfile(
-            id: "discord-blocked",
+            id: "discord",
             displayName: "Discord",
             bundleIdentifierPrefixes: [
                 "com.hnc.Discord",
                 "com.hnc.DiscordPTB",
                 "com.hnc.DiscordCanary"
             ],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
-            boundaryClipPolicy: .ignoreFocusedTextElement
+            boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
         AppCompatibilityProfile(
             id: "electron-editor",
@@ -267,9 +267,9 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.microsoft.VSCode",
                 "com.todesktop"
             ],
-            defaultRung: .detect,
-            textPath: .editorPlugin,
-            acceptMode: .none,
+            defaultRung: .accept,
+            textPath: .nativeAccessibility,
+            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,

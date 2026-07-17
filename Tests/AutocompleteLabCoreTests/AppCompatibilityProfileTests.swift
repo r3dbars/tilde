@@ -21,31 +21,31 @@ struct AppCompatibilityProfileTests {
         #expect(registry.profile(for: "com.openai.codex").id == "openai-composer")
         #expect(registry.profile(for: "com.anthropic.claudefordesktop").id == "claude-desktop")
         #expect(registry.profile(for: "com.google.Chrome").id == "browser-composer")
-        #expect(registry.profile(for: "notion.id").id == "notion-blocked")
+        #expect(registry.profile(for: "notion.id").id == "notion")
         #expect(registry.profile(for: "com.apple.finder").id == "apple-search-fields")
         #expect(registry.profile(for: "com.apple.MobileSMS").id == "apple-messaging")
         #expect(registry.profile(for: "ru.keepcoder.Telegram").id == "chat-app")
-        #expect(registry.profile(for: "com.tinyspeck.slackmacgap").id == "slack-blocked")
-        #expect(registry.profile(for: "com.hnc.Discord").id == "discord-blocked")
-        #expect(registry.profile(for: "com.hnc.DiscordPTB").id == "discord-blocked")
-        #expect(registry.profile(for: "com.hnc.DiscordCanary").id == "discord-blocked")
+        #expect(registry.profile(for: "com.tinyspeck.slackmacgap").id == "slack")
+        #expect(registry.profile(for: "com.hnc.Discord").id == "discord")
+        #expect(registry.profile(for: "com.hnc.DiscordPTB").id == "discord")
+        #expect(registry.profile(for: "com.hnc.DiscordCanary").id == "discord")
         #expect(registry.profile(for: "com.microsoft.VSCode").id == "electron-editor")
         #expect(registry.profile(for: "com.googlecode.iterm2").id == "terminal")
     }
 
-    @Test("High-value unproven collaboration apps stay blocked at the routing layer")
-    func highValueUnprovenCollaborationAppsStayBlocked() {
+    @Test("High-value collaboration apps use the experimental Accessibility path")
+    func highValueCollaborationAppsUseExperimentalAccessibility() {
         let registry = AppCompatibilityRegistry.default
-        let blockedProfiles = [
+        let enabledProfiles = [
             registry.profile(for: "notion.id"),
             registry.profile(for: "com.tinyspeck.slackmacgap"),
             registry.profile(for: "com.hnc.Discord")
         ]
 
-        for profile in blockedProfiles {
-            #expect(profile.defaultRung == .blocked)
-            #expect(profile.textPath == .blocked)
-            #expect(profile.acceptMode == .none)
+        for profile in enabledProfiles {
+            #expect(profile.defaultRung == .accept)
+            #expect(profile.textPath == .nativeAccessibility)
+            #expect(profile.acceptMode == .directAccessibility)
         }
     }
 

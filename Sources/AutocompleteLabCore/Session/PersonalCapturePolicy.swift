@@ -102,7 +102,7 @@ public struct PersonalCapturePolicy: Equatable, Sendable {
             return .blocked(reason, metadata: metadata)
         }
 
-        switch browserHostedSurfacePolicy.decision(
+        switch browserHostedSurfacePolicy.personalCaptureDecision(
             bundleIdentifier: input.bundleIdentifier,
             fingerprint: input.fingerprint
         ) {

@@ -64,6 +64,7 @@ struct SettingsCurrentAppState: Equatable {
     let isEnabled: Bool
     let disabledAppCount: Int
     let renderModeOverride: SuggestionRenderMode?
+    let autoDemotionDecision: InsertionFailureAutoDemotionDecision
 
     init(
         displayName: String,
@@ -71,7 +72,8 @@ struct SettingsCurrentAppState: Equatable {
         supportStatus: CompatibilitySupportStatus,
         isEnabled: Bool,
         disabledAppCount: Int,
-        renderModeOverride: SuggestionRenderMode? = nil
+        renderModeOverride: SuggestionRenderMode? = nil,
+        autoDemotionDecision: InsertionFailureAutoDemotionDecision = .unchanged
     ) {
         self.displayName = displayName
         self.bundleIdentifier = bundleIdentifier
@@ -79,6 +81,7 @@ struct SettingsCurrentAppState: Equatable {
         self.isEnabled = isEnabled
         self.disabledAppCount = disabledAppCount
         self.renderModeOverride = renderModeOverride
+        self.autoDemotionDecision = autoDemotionDecision
     }
 
     var canToggle: Bool {
@@ -122,6 +125,10 @@ struct SettingsCurrentAppState: Equatable {
 
         if isEnabled {
             return "\(supportStatus.userFacingReason) Suggestions are on for this app."
+        }
+
+        if autoDemotionDecision == .disableForSession {
+            return "\(supportStatus.userFacingReason) Suggestions paused automatically after repeated insertion failures — resume them whenever you like."
         }
 
         return "\(supportStatus.userFacingReason) Suggestions are paused here — resume them whenever you like."

@@ -183,54 +183,44 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesLogin(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .login))
         }
-        if matchesGoogleDocs(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .googleDocs))
+        return .allowed
+    }
+
+    /// Personal writing capture remains separately privacy-gated even though
+    /// suggestions are allowed on ordinary hosted writing surfaces.
+    public func personalCaptureDecision(
+        bundleIdentifier: String,
+        fingerprint: FocusedElementFingerprint
+    ) -> BrowserHostedSurfaceDecision {
+        let suggestionDecision = decision(
+            bundleIdentifier: bundleIdentifier,
+            fingerprint: fingerprint
+        )
+        if case .blocked = suggestionDecision {
+            return suggestionDecision
         }
-        if matchesNotion(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .notion))
-        }
-        if matchesChatGPT(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .chatGPT))
-        }
-        if matchesSlack(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .slack))
-        }
-        if matchesDiscord(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
-        }
-        if matchesWebmail(searchableText) {
-            return .blocked(BrowserHostedSurfaceBlock(surface: .webmail))
-        }
-        if matchesLocalProofFixture(searchableText) {
+        guard Self.browserBundleIdentifiers.contains(bundleIdentifier) else {
             return .allowed
         }
 
-        return .blocked(BrowserHostedSurfaceBlock(surface: .unproven))
-    }
-
-    private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
-        let matchesProofFixtureName = (searchableText.contains("autocomplete lab chrome")
-            || searchableText.contains("steadytype chrome"))
-        let hasLocalOriginToken = searchableText.contains("localhost")
-            || searchableText.contains("127.0.0.1")
-            || searchableText.contains("[::1]")
-            || searchableText.contains("file:")
-        let hasReadyLocalFixtureToken = searchableText.contains("ready=1")
-            && searchableText.contains("local")
-            && searchableText.contains("fixture")
-        let isBoringWritingFixture = searchableText.contains("textarea")
-            || searchableText.contains("contenteditable")
-        let isNonBetaFixture = searchableText.contains("chat")
-            || searchableText.contains("editor-like")
-            || searchableText.contains("monaco")
-            || searchableText.contains("prosemirror")
-            || searchableText.contains("codemirror")
-
-        return matchesProofFixtureName
-            && searchableText.contains("smoke")
-            && isBoringWritingFixture
-            && !isNonBetaFixture
-            && (hasLocalOriginToken || hasReadyLocalFixtureToken)
+        let searchableText = fingerprint.searchableText
+        let surface: BrowserHostedSurface
+        if matchesGoogleDocs(searchableText) {
+            surface = .googleDocs
+        } else if matchesNotion(searchableText) {
+            surface = .notion
+        } else if matchesChatGPT(searchableText) {
+            surface = .chatGPT
+        } else if matchesSlack(searchableText) {
+            surface = .slack
+        } else if matchesDiscord(searchableText) {
+            surface = .discord
+        } else if matchesWebmail(searchableText) {
+            surface = .webmail
+        } else {
+            surface = .unproven
+        }
+        return .blocked(BrowserHostedSurfaceBlock(surface: surface))
     }
 
     private func matchesGoogleDocs(_ searchableText: String) -> Bool {

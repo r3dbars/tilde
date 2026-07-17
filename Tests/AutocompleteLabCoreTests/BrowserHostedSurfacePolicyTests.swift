@@ -5,8 +5,8 @@ import Testing
 struct BrowserHostedSurfacePolicyTests {
     private let policy = BrowserHostedSurfacePolicy()
 
-    @Test("Chrome Google Docs is blocked until real production proof exists")
-    func blocksChromeGoogleDocs() throws {
+    @Test("Chrome Google Docs is allowed while proof remains pending")
+    func allowsChromeGoogleDocs() {
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
@@ -15,14 +15,11 @@ struct BrowserHostedSurfacePolicyTests {
             )
         )
 
-        let block = try #require(blockedSurface(from: decision))
-        #expect(block.surface == .googleDocs)
-        #expect(block.traceReason == "unsupported-browser-surface")
-        #expect(block.userFacingReason == "Google Docs needs proof first")
+        #expect(decision.canSuggest)
     }
 
     @Test("Known browsers all use the hosted surface policy")
-    func knownBrowsersAllUseHostedSurfacePolicy() throws {
+    func knownBrowsersAllUseHostedSurfacePolicy() {
         for bundleIdentifier in BrowserHostedSurfacePolicy.browserBundleIdentifiers {
             let decision = policy.decision(
                 bundleIdentifier: bundleIdentifier,
@@ -32,39 +29,41 @@ struct BrowserHostedSurfacePolicyTests {
                 )
             )
 
-            let block = try #require(blockedSurface(from: decision))
-            #expect(block.surface == .unproven)
-            #expect(block.traceMetadata["browserSurfaceDecision"] == "blocked")
+            #expect(decision.canSuggest)
         }
     }
 
-    @Test("Known browsers all block risky hosted services")
-    func knownBrowsersAllBlockRiskyHostedServices() throws {
-        let services: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
-            (FocusedElementFingerprint(windowTitle: "Project plan - Google Docs"), .googleDocs),
-            (FocusedElementFingerprint(windowTitle: "Roadmap - Notion"), .notion),
-            (FocusedElementFingerprint(windowTitle: "ChatGPT"), .chatGPT),
-            (FocusedElementFingerprint(windowTitle: "Transcripted | Slack"), .slack),
-            (FocusedElementFingerprint(windowTitle: "Discord"), .discord),
-            (FocusedElementFingerprint(windowTitle: "Outlook - Mail"), .webmail),
-            (FocusedElementFingerprint(help: "Search Google or type a URL"), .browserSearchOrAddressBar),
-            (FocusedElementFingerprint(windowTitle: "github.dev - Visual Studio Code"), .browserDeveloperTool)
+    @Test("Known browsers allow writing services but block browser chrome and developer tools")
+    func knownBrowsersApplySensitiveBoundary() throws {
+        let allowedServices = [
+            FocusedElementFingerprint(windowTitle: "Project plan - Google Docs"),
+            FocusedElementFingerprint(windowTitle: "Roadmap - Notion"),
+            FocusedElementFingerprint(windowTitle: "ChatGPT"),
+            FocusedElementFingerprint(windowTitle: "Transcripted | Slack"),
+            FocusedElementFingerprint(windowTitle: "Discord"),
+            FocusedElementFingerprint(windowTitle: "Outlook - Mail")
         ]
 
         for browserBundleIdentifier in BrowserHostedSurfacePolicy.browserBundleIdentifiers {
-            for (fingerprint, expectedSurface) in services {
-                let decision = policy.decision(
+            for fingerprint in allowedServices {
+                #expect(policy.decision(
                     bundleIdentifier: browserBundleIdentifier,
                     fingerprint: fingerprint
-                )
-
-                #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+                ).canSuggest)
             }
+            #expect(try #require(blockedSurface(from: policy.decision(
+                bundleIdentifier: browserBundleIdentifier,
+                fingerprint: FocusedElementFingerprint(help: "Search Google or type a URL")
+            ))).surface == .browserSearchOrAddressBar)
+            #expect(try #require(blockedSurface(from: policy.decision(
+                bundleIdentifier: browserBundleIdentifier,
+                fingerprint: FocusedElementFingerprint(windowTitle: "github.dev - Visual Studio Code")
+            ))).surface == .browserDeveloperTool)
         }
     }
 
-    @Test("Chrome Notion is blocked until real production proof exists")
-    func blocksChromeNotion() throws {
+    @Test("Chrome Notion is allowed while proof remains pending")
+    func allowsChromeNotion() {
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
@@ -72,12 +71,11 @@ struct BrowserHostedSurfacePolicyTests {
             )
         )
 
-        let block = try #require(blockedSurface(from: decision))
-        #expect(block.surface == .notion)
+        #expect(decision.canSuggest)
     }
 
-    @Test("Browser ChatGPT, Slack, and Discord are blocked until no-submit proof exists")
-    func blocksBrowserChatSurfaces() throws {
+    @Test("Browser ChatGPT, Slack, and Discord are allowed")
+    func allowsBrowserChatSurfaces() {
         let chatGPTDecision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
@@ -97,39 +95,33 @@ struct BrowserHostedSurfacePolicyTests {
             )
         )
 
-        #expect(try #require(blockedSurface(from: chatGPTDecision)).surface == .chatGPT)
-        #expect(try #require(blockedSurface(from: slackDecision)).surface == .slack)
-        #expect(try #require(blockedSurface(from: discordDecision)).surface == .discord)
+        #expect(chatGPTDecision.canSuggest)
+        #expect(slackDecision.canSuggest)
+        #expect(discordDecision.canSuggest)
     }
 
-    @Test("Browser webmail is blocked until reply-specific latency and undo proof exists")
-    func blocksBrowserWebmailUntilProofExists() throws {
-        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
-            (FocusedElementFingerprint(windowTitle: "Inbox - Gmail"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "Outlook - Mail"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "outlook.office.com/mail/inbox"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "outlook.office365.com/owa"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "office.com/mail"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "Yahoo Mail"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "Fastmail"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "Proton Mail"), .webmail),
-            (FocusedElementFingerprint(windowTitle: "iCloud Mail"), .webmail),
-            (FocusedElementFingerprint(title: "Email reply", windowTitle: "Office 365 Mail"), .webmail)
+    @Test("Browser webmail writing surfaces are allowed")
+    func allowsBrowserWebmail() {
+        let cases = [
+            FocusedElementFingerprint(windowTitle: "Inbox - Gmail"),
+            FocusedElementFingerprint(windowTitle: "Outlook - Mail"),
+            FocusedElementFingerprint(windowTitle: "outlook.office.com/mail/inbox"),
+            FocusedElementFingerprint(windowTitle: "outlook.office365.com/owa"),
+            FocusedElementFingerprint(windowTitle: "office.com/mail"),
+            FocusedElementFingerprint(windowTitle: "Yahoo Mail"),
+            FocusedElementFingerprint(windowTitle: "Fastmail"),
+            FocusedElementFingerprint(windowTitle: "Proton Mail"),
+            FocusedElementFingerprint(windowTitle: "iCloud Mail"),
+            FocusedElementFingerprint(title: "Email reply", windowTitle: "Office 365 Mail")
         ]
 
-        for (fingerprint, expectedSurface) in cases {
+        for fingerprint in cases {
             let decision = policy.decision(
                 bundleIdentifier: "com.google.Chrome",
                 fingerprint: fingerprint
             )
 
-            let block = try #require(blockedSurface(from: decision))
-            #expect(block.surface == expectedSurface)
-            #expect(block.traceMetadata["browserSurfaceSafetyClass"] == "browser-webmail")
-            #expect(
-                block.traceMetadata["browserSurfaceRequiredProof"]
-                    == "exact-disposable-webmail-reply-safe-tab-screenshot-insertion-undo-latency"
-            )
+            #expect(decision.canSuggest)
         }
     }
 
@@ -160,8 +152,8 @@ struct BrowserHostedSurfacePolicyTests {
         }
     }
 
-    @Test("Chrome local editor and chat fixtures stay blocked for beta")
-    func blocksChromeLocalEditorAndChatFixtures() throws {
+    @Test("Chrome local editor and chat fixtures are allowed")
+    func allowsChromeLocalEditorAndChatFixtures() {
         let cases = [
             FocusedElementFingerprint(
                 title: "Local CodeMirror-style smoke fixture editor",
@@ -187,12 +179,12 @@ struct BrowserHostedSurfacePolicyTests {
                 fingerprint: fingerprint
             )
 
-            #expect(try #require(blockedSurface(from: decision)).surface == .unproven)
+            #expect(decision.canSuggest)
         }
     }
 
-    @Test("Chrome public text field proof pages stay blocked for beta")
-    func blocksChromePublicTextFieldProofPages() throws {
+    @Test("Chrome public text field pages are allowed")
+    func allowsChromePublicTextFieldPages() {
         let cases = [
             FocusedElementFingerprint(
                 title: "Public textarea proof field",
@@ -210,12 +202,12 @@ struct BrowserHostedSurfacePolicyTests {
                 fingerprint: fingerprint
             )
 
-            #expect(try #require(blockedSurface(from: decision)).surface == .unproven)
+            #expect(decision.canSuggest)
         }
     }
 
-    @Test("Chrome fixture titles need local proof tokens")
-    func blocksSpoofedExternalFixtureTitles() throws {
+    @Test("Chrome ordinary external writing pages no longer need fixture tokens")
+    func allowsExternalWritingPagesWithoutFixtureTokens() {
         let cases = [
             FocusedElementFingerprint(
                 title: "Remote smoke textarea fixture",
@@ -233,7 +225,7 @@ struct BrowserHostedSurfacePolicyTests {
                 fingerprint: fingerprint
             )
 
-            #expect(try #require(blockedSurface(from: decision)).surface == .unproven)
+            #expect(decision.canSuggest)
         }
     }
 
@@ -276,62 +268,42 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: terminal)).surface == .browserDeveloperTool)
     }
 
-    @Test("Chrome local fixture tokens do not unlock real hosted services")
-    func localFixtureTokensDoNotUnlockRealHostedServices() throws {
-        let cases: [(BrowserHostedSurface, FocusedElementFingerprint)] = [
-            (
-                .googleDocs,
-                FocusedElementFingerprint(
-                    title: "Autocomplete Lab Chrome smoke local fixture",
-                    windowTitle: "https://docs.google.com/document/d/disposable/edit [ready=1]"
-                )
+    @Test("Chrome real hosted services are allowed regardless of fixture tokens")
+    func allowsRealHostedServicesWithFixtureTokens() {
+        let cases: [FocusedElementFingerprint] = [
+            FocusedElementFingerprint(
+                title: "Autocomplete Lab Chrome smoke local fixture",
+                windowTitle: "https://docs.google.com/document/d/disposable/edit [ready=1]"
             ),
-            (
-                .notion,
-                FocusedElementFingerprint(
-                    title: "SteadyType Chrome smoke local fixture",
-                    windowTitle: "Disposable proof - Notion [ready=1]"
-                )
+            FocusedElementFingerprint(
+                title: "SteadyType Chrome smoke local fixture",
+                windowTitle: "Disposable proof - Notion [ready=1]"
             ),
-            (
-                .chatGPT,
-                FocusedElementFingerprint(
-                    title: "Autocomplete Lab Chrome browser-chat smoke local fixture",
-                    windowTitle: "ChatGPT [ready=1]"
-                )
+            FocusedElementFingerprint(
+                title: "Autocomplete Lab Chrome browser-chat smoke local fixture",
+                windowTitle: "ChatGPT [ready=1]"
             ),
-            (
-                .slack,
-                FocusedElementFingerprint(
-                    title: "SteadyType Chrome browser-chat smoke local fixture",
-                    windowTitle: "Transcripted | Slack [ready=1]"
-                )
+            FocusedElementFingerprint(
+                title: "SteadyType Chrome browser-chat smoke local fixture",
+                windowTitle: "Transcripted | Slack [ready=1]"
             ),
-            (
-                .discord,
-                FocusedElementFingerprint(
-                    title: "SteadyType Chrome browser-chat smoke local fixture",
-                    windowTitle: "Discord [ready=1]"
-                )
+            FocusedElementFingerprint(
+                title: "SteadyType Chrome browser-chat smoke local fixture",
+                windowTitle: "Discord [ready=1]"
             ),
-            (
-                .webmail,
-                FocusedElementFingerprint(
-                    title: "SteadyType Chrome smoke local fixture",
-                    windowTitle: "Gmail - Inbox [ready=1]"
-                )
+            FocusedElementFingerprint(
+                title: "SteadyType Chrome smoke local fixture",
+                windowTitle: "Gmail - Inbox [ready=1]"
             )
         ]
 
-        for (expectedSurface, fingerprint) in cases {
+        for fingerprint in cases {
             let decision = policy.decision(
                 bundleIdentifier: "com.google.Chrome",
                 fingerprint: fingerprint
             )
 
-            let block = try #require(blockedSurface(from: decision))
-            #expect(block.surface == expectedSurface)
-            #expect(block.traceMetadata["localFixtureProofCountsForProduction"] == "false")
+            #expect(decision.canSuggest)
         }
     }
 
@@ -502,8 +474,8 @@ struct BrowserHostedSurfacePolicyTests {
         }
     }
 
-    @Test("Chrome unknown browser pages fail closed until proofed")
-    func blocksUnknownChromePages() throws {
+    @Test("Chrome ordinary browser pages are allowed")
+    func allowsUnknownChromePages() {
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
@@ -512,10 +484,7 @@ struct BrowserHostedSurfacePolicyTests {
             )
         )
 
-        let block = try #require(blockedSurface(from: decision))
-        #expect(block.surface == .unproven)
-        #expect(block.userFacingReason == "This browser page needs proof first")
-        #expect(block.traceMetadata["browserSurfaceSafetyClass"] == "browser-unknown")
+        #expect(decision.canSuggest)
     }
 
     @Test("Non-browser apps are not filtered by hosted surface fingerprints")
@@ -532,36 +501,37 @@ struct BrowserHostedSurfacePolicyTests {
 
     @Test("Trace metadata is safe and does not include raw fingerprints")
     func traceMetadataIsSafe() throws {
-        let secretTitle = "Private roadmap - Google Docs"
+        let secretTitle = "Private payment details"
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
                 title: secretTitle,
-                windowTitle: "https://docs.google.com/document/d/private-id/edit"
+                placeholder: "Credit card number",
+                windowTitle: "Checkout"
             )
         )
 
         let block = try #require(blockedSurface(from: decision))
         let metadata = block.traceMetadata
 
-        #expect(metadata["browserSurface"] == "google-docs")
+        #expect(metadata["browserSurface"] == "browser-payment")
         #expect(metadata["browserSurfaceDecision"] == "blocked")
         #expect(metadata["browserSurfaceReason"] == "unsupported-surface-needs-proof")
-        #expect(metadata["browserSurfaceSafetyClass"] == "browser-editor")
+        #expect(metadata["browserSurfaceSafetyClass"] == "browser-sensitive")
         #expect(
             metadata["browserSurfaceRequiredProof"]
-                == "exact-disposable-real-service-safe-tab-no-submit-screenshot-insertion-undo"
+                == "blocked-sensitive-browser-surface"
         )
         #expect(metadata["localFixtureProofCountsForProduction"] == "false")
         #expect(!metadata.values.contains(secretTitle))
-        #expect(!metadata.values.contains("https://docs.google.com/document/d/private-id/edit"))
+        #expect(!metadata.values.contains("Checkout"))
     }
 
     @Test("Blocked browser metadata can record lengths without raw cursor text")
     func blockedBrowserMetadataCanRecordLengthsWithoutRawCursorText() throws {
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
-            fingerprint: FocusedElementFingerprint(windowTitle: "Private roadmap - Google Docs")
+            fingerprint: FocusedElementFingerprint(placeholder: "Credit card number", windowTitle: "Checkout")
         )
 
         let block = try #require(blockedSurface(from: decision))
@@ -573,48 +543,31 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(metadata["blockedSurfaceTextRedacted"] == "true")
         #expect(metadata["textBeforeCursorChars"] == "21")
         #expect(metadata["textAfterCursorChars"] == "8")
-        #expect(!metadata.values.contains("Private roadmap"))
+        #expect(!metadata.values.contains("Checkout"))
     }
 
-    @Test("Browser chat blocks are tagged for no-submit metrics")
-    func browserChatBlocksAreTaggedForNoSubmitMetrics() throws {
+    @Test("Browser chat classifications remain available for telemetry")
+    func browserChatClassificationsRemainAvailable() {
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(windowTitle: "Transcripted - Slack")
         )
 
-        let block = try #require(blockedSurface(from: decision))
-        let metadata = block.traceMetadata
-
-        #expect(metadata["browserSurface"] == "slack")
-        #expect(metadata["browserSurfaceSafetyClass"] == "browser-chat")
-        #expect(
-            metadata["browserSurfaceRequiredProof"]
-                == "exact-disposable-real-service-one-word-no-submit-screenshot-insertion"
-        )
-        #expect(metadata["localFixtureProofCountsForProduction"] == "false")
-        #expect(metadata["promptSafetyMetricSurface"] == "browser-chat")
+        #expect(decision.canSuggest)
+        #expect(BrowserHostedSurface.slack.safetyClass == "browser-chat")
+        #expect(BrowserHostedSurface.slack.requiredProofKind == "exact-disposable-real-service-one-word-no-submit-screenshot-insertion")
     }
 
-    @Test("Browser webmail blocks are tagged separately from chat and unknown pages")
-    func browserWebmailBlocksAreTaggedSeparately() throws {
+    @Test("Browser webmail classification remains distinct")
+    func browserWebmailClassificationRemainsDistinct() {
         let decision = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(windowTitle: "Outlook - Mail")
         )
 
-        let block = try #require(blockedSurface(from: decision))
-        let metadata = block.traceMetadata
-
-        #expect(block.surface == .webmail)
-        #expect(block.userFacingReason == "Browser email needs proof first")
-        #expect(metadata["browserSurface"] == "webmail")
-        #expect(metadata["browserSurfaceSafetyClass"] == "browser-webmail")
-        #expect(
-            metadata["browserSurfaceRequiredProof"]
-                == "exact-disposable-webmail-reply-safe-tab-screenshot-insertion-undo-latency"
-        )
-        #expect(metadata["promptSafetyMetricSurface"] == "browser-webmail")
+        #expect(decision.canSuggest)
+        #expect(BrowserHostedSurface.webmail.safetyClass == "browser-webmail")
+        #expect(BrowserHostedSurface.webmail.requiredProofKind == "exact-disposable-webmail-reply-safe-tab-screenshot-insertion-undo-latency")
     }
 
     @Test("Browser sensitive blocks are tagged separately")

@@ -59,8 +59,8 @@ struct CommandContextPanelStateTests {
         #expect(state.statusText == "Ready: press Suggest. Copy writes to clipboard only.")
     }
 
-    @Test("Sensitive diagnostics-only apps cannot request context suggestions")
-    func sensitiveDiagnosticsOnlyAppsCannotRequestContextSuggestions() {
+    @Test("A paused experimental app without readable context cannot request suggestions")
+    func pausedExperimentalAppWithoutContextCannotRequestSuggestions() {
         let state = CommandContextPanelState(
             appDisplayName: "Atlas",
             bundleIdentifier: "com.openai.atlas",
@@ -73,12 +73,12 @@ struct CommandContextPanelStateTests {
             statusMessage: ""
         )
 
-        #expect(state.appText == "App: Atlas | Diagnostics-only: ChatGPT Atlas")
-        #expect(state.pathText == "Path: off for sensitive app")
+        #expect(state.appText == "App: Atlas | Yellow: ChatGPT Atlas")
+        #expect(state.pathText == "Path: copy fallback only; inline stays off")
         #expect(!state.canRequestSuggestion)
         #expect(!state.canCopySuggestion)
-        #expect(state.requestUnavailableReason == "Sensitive apps stay off here.")
-        #expect(state.statusText == "Not ready: Sensitive apps stay off here.")
+        #expect(state.requestUnavailableReason == "No focused text field was readable.")
+        #expect(state.statusText == "Not ready: No focused text field was readable.")
     }
 
     @Test("Denylisted apps cannot request context suggestions")

@@ -112,7 +112,7 @@ public struct HostCompatibilityPolicy: Equatable, Sendable {
 }
 
 public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
-    public static let currentPolicyVersion = "2026-05-31.1"
+    public static let currentPolicyVersion = "2026-07-17.1"
 
     public let policyVersion: String
     public let policies: [String: HostCompatibilityPolicy]
@@ -178,10 +178,10 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             displayName: "Mail",
             hostVersion: .exact(shortVersion: "16.0", build: "3864.500.181", source: "/System/Applications/Mail.app"),
             safetyMode: .notPrompt,
-            runtimeState: .diagnosticsOnly,
-            proofState: .blocked,
-            killSwitch: .diagnosticsOnly,
-            notes: "Sensitive compose surface; suggestions remain off until insertion proof exists."
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; manual Mail proof is pending. Sensitive-field suppression remains mandatory, with insertion-failure auto-demotion and the per-app pause as safety nets."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.MobileSMS",
@@ -200,31 +200,31 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             bundleIdentifier: "com.openai.atlas",
             displayName: "ChatGPT Atlas",
             hostVersion: .exact(shortVersion: "1.2026.112.0", build: "20260422141901000", source: "/Applications/ChatGPT Atlas.app"),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Prompt/browser hybrid stays disabled until disposable prompt and page-field proof exists."
+            safetyMode: .wordOnly,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance with word-only prompt character safety; manual proof is pending. Control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.chat",
             displayName: "ChatGPT",
             hostVersion: .pending(reason: "App not installed or not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Prompt composer can submit or attach context; exact-version no-submit proof is required."
+            safetyMode: .wordOnly,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance with word-only prompt character safety; exact-version manual proof is pending. Control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.ChatGPT",
             displayName: "ChatGPT",
             hostVersion: .pending(reason: "Alternate bundle ID not installed or not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Prompt composer can submit or attach context; exact-version no-submit proof is required."
+            safetyMode: .wordOnly,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance with word-only prompt character safety; exact-version manual proof is pending. Control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.google.Chrome",
@@ -238,7 +238,7 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-textarea.png"),
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-contenteditable.png")
             ],
-            notes: "Only local textarea and local contenteditable fixtures are beta-safe. Public pages, production browser apps, browser ChatGPT, Slack, Discord, Google Docs, Notion, official CodeMirror, and default Monaco remain blocked until exact proof exists."
+            notes: "Local textarea and contenteditable fixtures have partial proof. Other real sites are experimentally enabled but unproven; payment, password, login, address-bar, private-search, and developer-tool surfaces remain blocked."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.codex",
@@ -286,91 +286,91 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             bundleIdentifier: "com.apple.Safari",
             displayName: "Safari",
             hostVersion: .pending(reason: "Exact Safari build not captured in this proof pass."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "WebKit rich-editor and prompt surfaces need exact-version proof first."
+            safetyMode: .notPrompt,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; WebKit manual proof is pending. Sensitive browser surfaces remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.tinyspeck.slackmacgap",
             displayName: "Slack",
             hostVersion: .pending(reason: "Slack not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Message composer stays disabled until no-submit proof exists."
+            safetyMode: .notPrompt,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; manual composer proof is pending. Newline, Tab, and control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "ru.keepcoder.Telegram",
             displayName: "Telegram",
             hostVersion: .pending(reason: "Telegram not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Send-by-enter variants need disposable chat proof before suggestions run."
+            safetyMode: .notPrompt,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; send-by-enter manual proof is pending. Newline, Tab, and control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "notion.id",
             displayName: "Notion",
             hostVersion: .pending(reason: "Notion not proofed on this host."),
             safetyMode: .notPrompt,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Workspace text and ProseMirror placement need disposable-page proof."
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance with synthetic caret placement; ProseMirror manual proof is pending. Auto-demotion and per-app pause contain geometry or insertion failures."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.hnc.Discord",
             displayName: "Discord",
             hostVersion: .pending(reason: "Discord not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Composer stays disabled until no-submit proof exists."
+            safetyMode: .notPrompt,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; manual composer proof is pending. Control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.hnc.DiscordPTB",
             displayName: "Discord PTB",
             hostVersion: .pending(reason: "Discord PTB not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Composer stays disabled until no-submit proof exists."
+            safetyMode: .notPrompt,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; manual composer proof is pending. Control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.hnc.DiscordCanary",
             displayName: "Discord Canary",
             hostVersion: .pending(reason: "Discord Canary not proofed on this host."),
-            safetyMode: .disabled,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Composer stays disabled until no-submit proof exists."
+            safetyMode: .notPrompt,
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on full acceptance; manual composer proof is pending. Control characters remain blocked, with auto-demotion and per-app pause available."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "VS Code",
-            hostVersion: .pending(reason: "VS Code is denylisted and not proofed."),
+            hostVersion: .pending(reason: "VS Code is not proofed on this host."),
             safetyMode: .notPrompt,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Monaco editor and command surface stay blocked until app-specific proof exists."
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on floating mode; Monaco geometry proof is pending. Auto-demotion and per-app pause contain insertion failures."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.todesktop.230313mzl4w4u92",
             displayName: "Cursor",
-            hostVersion: .pending(reason: "Cursor is denylisted and not proofed."),
+            hostVersion: .pending(reason: "Cursor is not proofed on this host."),
             safetyMode: .notPrompt,
-            runtimeState: .disabled,
-            proofState: .blocked,
-            killSwitch: .hardDisabled,
-            notes: "Monaco editor and AI composer stay blocked until app-specific proof exists."
+            runtimeState: .userToggleAllowed,
+            proofState: .pending,
+            killSwitch: .perHostDisable,
+            notes: "Experimental default-on floating mode; Monaco geometry proof is pending. Auto-demotion and per-app pause contain insertion failures."
         )
     ])
 }

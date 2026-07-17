@@ -95,22 +95,34 @@ struct SettingsWindowControllerStateTests {
     func unsupportedAndMissingCurrentAppsReadPlainlyAndCannotToggle() {
         let store = CompatibilityProfileStore.mvp
         let diagnosticsOnly = SettingsCurrentAppState(
-            displayName: "Mail",
-            bundleIdentifier: "com.apple.mail",
-            supportStatus: store.supportStatus(for: "com.apple.mail"),
+            displayName: "Xcode",
+            bundleIdentifier: "com.apple.dt.Xcode",
+            supportStatus: store.supportStatus(for: "com.apple.dt.Xcode"),
             isEnabled: false,
             disabledAppCount: 1
         )
 
-        #expect(diagnosticsOnly.statusText == "Mail: suggestions aren’t available here")
+        #expect(diagnosticsOnly.statusText == "Xcode: suggestions aren’t available here")
         #expect(
             diagnosticsOnly.detailText
-                == "Mail compose is sensitive and insertion is not proven. Suggestions stay off here."
+                == "Blocked because this kind of app can expose secrets or shell input. Suggestions stay off here."
         )
         #expect(diagnosticsOnly.fallbackText == "Suggestions aren’t available in this app.")
-        #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
+        #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Xcode")
         #expect(!diagnosticsOnly.canToggle)
         #expect(!diagnosticsOnly.canChangePlacement)
+
+        let autoDisabled = SettingsCurrentAppState(
+            displayName: "Mail",
+            bundleIdentifier: "com.apple.mail",
+            supportStatus: store.supportStatus(for: "com.apple.mail"),
+            isEnabled: false,
+            disabledAppCount: 0,
+            autoDemotionDecision: .disableForSession
+        )
+        #expect(autoDisabled.canToggle)
+        #expect(autoDisabled.menuToggleTitle == "Resume in Mail")
+        #expect(autoDisabled.detailText.contains("paused automatically"))
 
         let unsupported = SettingsCurrentAppState(
             displayName: "Unknown",
@@ -213,15 +225,15 @@ struct SettingsWindowControllerStateTests {
         #expect(profileMode.placementButtonTitle == "Show in a Floating Box")
         #expect(profileMode.canChangePlacement)
 
-        let sensitive = SettingsCurrentAppState(
-            displayName: "Mail",
-            bundleIdentifier: "com.apple.mail",
-            supportStatus: store.supportStatus(for: "com.apple.mail"),
+        let unsupported = SettingsCurrentAppState(
+            displayName: "Xcode",
+            bundleIdentifier: "com.apple.dt.Xcode",
+            supportStatus: store.supportStatus(for: "com.apple.dt.Xcode"),
             isEnabled: false,
             disabledAppCount: 0
         )
 
-        #expect(!sensitive.canChangePlacement)
+        #expect(!unsupported.canChangePlacement)
     }
 
     @Test("Accessibility permission copy says what the app reads and keeps local")
