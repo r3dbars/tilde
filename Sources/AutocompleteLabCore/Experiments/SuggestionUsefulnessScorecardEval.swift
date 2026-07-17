@@ -639,7 +639,7 @@ enum SuggestionUsefulnessScorecardEvaluator {
             fieldKind: .multilineCompose
         )
         let start = Date(timeIntervalSince1970: 0)
-        var repeatedTypedOverSuppressor = AnnoyanceSuppressor()
+        var repeatedTypedOverSuppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true)
         _ = repeatedTypedOverSuppressor.record(.typedOver, context: context, now: start)
         _ = repeatedTypedOverSuppressor.record(.typedOver, context: context, now: start.addingTimeInterval(1))
         results.append(SuggestionUsefulnessGateResult(
@@ -651,7 +651,10 @@ enum SuggestionUsefulnessScorecardEvaluator {
             ).traceReason == "quiet-mode-field"
         ))
 
-        var keptSuppressor = AnnoyanceSuppressor(fieldQuietThreshold: 10)
+        var keptSuppressor = AnnoyanceSuppressor(
+            automaticQuietModesEnabled: true,
+            fieldQuietThreshold: 10
+        )
         _ = keptSuppressor.record(.typedOver, context: context, now: start)
         _ = keptSuppressor.record(.acceptedAndKept, context: context, now: start.addingTimeInterval(5))
         results.append(SuggestionUsefulnessGateResult(

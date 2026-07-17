@@ -16,6 +16,25 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(policy.decision(for: input, now: now) == .allowed)
     }
 
+    @Test("Production defaults never cool down or restrain a prefix")
+    func productionDefaultsNeverCoolDownOrRestrainPrefix() {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        for reason in [
+            PrefixFamilyCooldownReason.typedOver,
+            .escapeDismissal,
+            .deletion,
+            .acceptedThenDeleted
+        ] {
+            #expect(policy.record(reason, input: input, now: now) == nil)
+            #expect(policy.decision(for: input, now: now) == .allowed)
+        }
+
+        #expect(!policy.eagernessAdjustment(for: input, now: now).isActive)
+    }
+
     @Test("Explicit typed-over cooldowns can still escalate")
     func explicitTypedOverCooldownCanEscalate() throws {
         var policy = PrefixFamilyCooldownPolicy(
@@ -57,7 +76,7 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Repeated typed over misses make the same prefix family less eager after cooldown")
     func repeatedTypedOverMissesMakeSamePrefixFamilyLessEagerAfterCooldown() throws {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(typedOverEagernessThreshold: 1.5)
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "I think this works")
 
@@ -80,6 +99,7 @@ struct PrefixFamilyCooldownPolicyTests {
         var policy = PrefixFamilyCooldownPolicy(
             typedOverCooldownMilliseconds: 0,
             repeatedTypedOverCooldownMilliseconds: 0,
+            typedOverEagernessThreshold: 1.5,
             typedOverEagernessHalfLifeSeconds: 5
         )
         let now = Date(timeIntervalSince1970: 1_000)
@@ -96,7 +116,8 @@ struct PrefixFamilyCooldownPolicyTests {
     func repeatedTypedOverEagernessIsScopedByAppFieldModeAndPrefixFamily() {
         var policy = PrefixFamilyCooldownPolicy(
             typedOverCooldownMilliseconds: 0,
-            repeatedTypedOverCooldownMilliseconds: 0
+            repeatedTypedOverCooldownMilliseconds: 0,
+            typedOverEagernessThreshold: 1.5
         )
         let now = Date(timeIntervalSince1970: 1_000)
         let blocked = input(textBeforeCursor: "I think this works")
@@ -125,7 +146,7 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Escape starts a fifteen second cooldown")
     func escapeStartsFifteenSecondCooldown() {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(escapeCooldownMilliseconds: 15_000)
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "Can you please")
 
@@ -140,7 +161,7 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Escape cooldown is scoped to the dismissed field")
     func escapeCooldownIsScopedToDismissedField() {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(escapeCooldownMilliseconds: 15_000)
         let now = Date(timeIntervalSince1970: 1_000)
         let dismissed = input(textBeforeCursor: "Can you please")
 
@@ -167,7 +188,10 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Repeated Escape escalates to a longer cooldown")
     func repeatedEscapeEscalatesToLongerCooldown() throws {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(
+            escapeCooldownMilliseconds: 15_000,
+            repeatedEscapeCooldownMilliseconds: 60_000
+        )
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "Can you please")
 
@@ -188,7 +212,7 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Deletion starts a short stabilization cooldown")
     func deletionStartsShortStabilizationCooldown() {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(deletionCooldownMilliseconds: 250)
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "Can you")
 
@@ -201,7 +225,7 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Accepted then deleted starts a long prefix cooldown")
     func acceptedThenDeletedStartsLongPrefixCooldown() throws {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(acceptedThenDeletedCooldownMilliseconds: 180_000)
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "I think this works")
 
@@ -217,7 +241,10 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Repeated accepted then deleted escalates to a much longer cooldown")
     func repeatedAcceptedThenDeletedEscalatesToMuchLongerCooldown() throws {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(
+            acceptedThenDeletedCooldownMilliseconds: 180_000,
+            repeatedAcceptedThenDeletedCooldownMilliseconds: 600_000
+        )
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "I think this works")
 
@@ -331,6 +358,7 @@ struct PrefixFamilyCooldownPolicyTests {
         var policy = PrefixFamilyCooldownPolicy(
             typedOverCooldownMilliseconds: 0,
             repeatedTypedOverCooldownMilliseconds: 0,
+            typedOverEagernessThreshold: 1.5,
             traceFingerprintSecret: Data("unit-test-secret".utf8)
         )
         let now = Date(timeIntervalSince1970: 1_000)

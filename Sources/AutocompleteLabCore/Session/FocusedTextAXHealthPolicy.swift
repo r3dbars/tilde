@@ -63,6 +63,7 @@ public struct FocusedTextAXHealthState: Equatable, Sendable {
 public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
     public static let typingResponsiveness = FocusedTextAXHealthPolicy()
 
+    public let automaticCooldownEnabled: Bool
     public let slowQueueDelayMilliseconds: Int
     public let slowReadDurationMilliseconds: Int
     public let repeatedSlowReadCount: Int
@@ -72,6 +73,7 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
     public let maximumTrackedApps: Int
 
     public init(
+        automaticCooldownEnabled: Bool = false,
         slowQueueDelayMilliseconds: Int = 80,
         slowReadDurationMilliseconds: Int = 80,
         repeatedSlowReadCount: Int = 2,
@@ -80,6 +82,7 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
         cooldownMilliseconds: Int = 750,
         maximumTrackedApps: Int = 16
     ) {
+        self.automaticCooldownEnabled = automaticCooldownEnabled
         self.slowQueueDelayMilliseconds = max(0, slowQueueDelayMilliseconds)
         self.slowReadDurationMilliseconds = max(0, slowReadDurationMilliseconds)
         self.repeatedSlowReadCount = max(1, repeatedSlowReadCount)
@@ -94,6 +97,11 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
         now: Date,
         state: inout FocusedTextAXHealthState
     ) -> FocusedTextAXHealthPollDecision {
+        guard automaticCooldownEnabled else {
+            state.apps.removeValue(forKey: bundleIdentifier)
+            return .allowed(recovery: nil)
+        }
+
         guard !bundleIdentifier.isEmpty,
               let health = state.apps[bundleIdentifier],
               let cooldownUntil = health.cooldownUntil,
@@ -182,6 +190,17 @@ public struct FocusedTextAXHealthPolicy: Equatable, Sendable {
 
         health.lastObservedAt = now
         health.lastSlowReason = reason
+
+        guard automaticCooldownEnabled else {
+            state.apps[bundleIdentifier] = health
+            trimTrackedApps(in: &state)
+            return FocusedTextAXHealthObservation(
+                slowReason: reason,
+                slowReadCount: health.slowReadCount,
+                cooldown: nil,
+                didStartCooldown: false
+            )
+        }
 
         let requiredSlowReadCount = hasContext ? repeatedSlowReadCount : missingContextSlowReadCount
         if health.slowReadCount >= requiredSlowReadCount {
