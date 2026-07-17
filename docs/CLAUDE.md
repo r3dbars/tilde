@@ -13,6 +13,9 @@ Start map:
 Rules:
 
 - Keep docs short and decision-oriented.
+- Research notes cite public sources, avoid proprietary implementation details,
+  separate observed facts from guesses, and prefer official runtime and
+  platform docs over blogs for architecture choices.
 - Do not imply external model servers are required.
 - Separate proven behavior from plans or guesses.
 - Do not paste private typed text or raw screenshots into docs.
