@@ -21,6 +21,8 @@ struct SuggestionPresentationDeliveryTests {
         #expect(store.panelAnchorRect == request.placement.anchorRect)
         #expect(store.panelTextLineRect == request.placement.textLineRect)
         #expect(store.panelClippingRect == request.placement.clippingRect)
+        #expect(store.panelAppBundleIdentifier == request.profile.bundleIdentifier)
+        #expect(store.panelBoundaryRect == request.context.elementRect)
         #expect(store.panelRenderMode == .inlineAdjacent)
         #expect(store.panelRenderModes == [.inlineAdjacent])
         #expect(store.fieldStatusContexts == [request.context])
@@ -87,12 +89,14 @@ struct SuggestionPresentationDeliveryTests {
 
     private func makeDelivery(store: DeliveryStore) -> SuggestionPresentationDelivery {
         SuggestionPresentationDelivery(
-            panelPresenter: { text, anchorRect, textLineRect, clippingRect, _, renderMode in
+            panelPresenter: { text, anchorRect, textLineRect, clippingRect, appBundleIdentifier, boundaryRect, _, renderMode in
                 store.panelText = text
                 store.panelAnchorRect = anchorRect
                 store.panelTextLineRect = textLineRect
                 store.panelTextLineRects.append(textLineRect)
                 store.panelClippingRect = clippingRect
+                store.panelAppBundleIdentifier = appBundleIdentifier
+                store.panelBoundaryRect = boundaryRect
                 store.panelRenderMode = renderMode
                 store.panelRenderModes.append(renderMode)
                 return store.nextPanelRect()
@@ -174,6 +178,8 @@ private final class DeliveryStore {
     var panelTextLineRect: CGRect?
     var panelTextLineRects: [CGRect?] = []
     var panelClippingRect: CGRect?
+    var panelAppBundleIdentifier: String?
+    var panelBoundaryRect: CGRect?
     var panelRenderMode: SuggestionRenderMode?
     var panelRenderModes: [SuggestionRenderMode] = []
     var fieldStatusContexts: [FocusedTextContext] = []

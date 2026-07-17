@@ -122,6 +122,7 @@ public enum SuggestionPanelFrameCalculator {
 
     public static func floatingMirrorFrame(
         anchorRect: CGRect,
+        caretRect: CGRect? = nil,
         textSize: CGSize,
         screenFrame: CGRect,
         clippingFrame: CGRect? = nil,
@@ -138,10 +139,8 @@ public enum SuggestionPanelFrameCalculator {
         )
         let height = max(textSize.height, min(max(anchorRect.height, 20), 30))
         let preferredX = anchorRect.minX + 8
-        let isWholeEditorAnchor = anchorRect.height > 80
-        let preferredY = isWholeEditorAnchor
-            ? anchorRect.midY - (height / 2)
-            : anchorRect.maxY - height - 4
+        let verticalAnchor = caretRect ?? anchorRect
+        let preferredY = verticalAnchor.maxY - height - 4
 
         return CGRect(
             x: clampedOrigin(

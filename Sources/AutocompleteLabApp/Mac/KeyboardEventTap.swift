@@ -7,11 +7,13 @@ final class KeyboardEventTap: @unchecked Sendable {
     typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> KeyboardEventTapHandlingResult
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
     typealias PassthroughTypingMatchObserver = @MainActor @Sendable (KeyboardOptimisticTypeThroughTransition) -> Void
+    typealias GeometryRefreshObserver = @MainActor @Sendable () -> Void
     typealias DisabledObserver = @MainActor @Sendable (_ reason: String) -> Void
 
     private let handler: Handler
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
     private let passthroughTypingMatchObserver: PassthroughTypingMatchObserver?
+    private let geometryRefreshObserver: GeometryRefreshObserver?
     private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
     private let consumptionPolicy = KeyboardEventTapConsumptionPolicy()
@@ -42,12 +44,14 @@ final class KeyboardEventTap: @unchecked Sendable {
         handler: @escaping Handler,
         passthroughKeyDownObserver: PassthroughKeyDownObserver? = nil,
         passthroughTypingMatchObserver: PassthroughTypingMatchObserver? = nil,
+        geometryRefreshObserver: GeometryRefreshObserver? = nil,
         disabledObserver: DisabledObserver? = nil,
         tapPlacement: KeyboardEventTapPlacement = .fromEnvironment()
     ) {
         self.handler = handler
         self.passthroughKeyDownObserver = passthroughKeyDownObserver
         self.passthroughTypingMatchObserver = passthroughTypingMatchObserver
+        self.geometryRefreshObserver = geometryRefreshObserver
         self.disabledObserver = disabledObserver
         self.tapPlacement = tapPlacement
     }
@@ -312,6 +316,9 @@ final class KeyboardEventTap: @unchecked Sendable {
                         passthroughTypingMatchObserver(transition)
                     }
                 }
+                if let geometryRefreshObserver {
+                    Task { @MainActor in geometryRefreshObserver() }
+                }
                 return finish(
                     Unmanaged.passUnretained(event),
                     key: key,
@@ -325,6 +332,9 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Task { @MainActor in
                     passthroughKeyDownObserver()
                 }
+            }
+            if isReturnMacVirtualKeyCode(keyCode), let geometryRefreshObserver {
+                Task { @MainActor in geometryRefreshObserver() }
             }
             return finish(
                 Unmanaged.passUnretained(event),
@@ -979,6 +989,10 @@ func shouldTreatOtherKeyAsTypingPassthrough(
     case .backtick, .z, .other:
         return true
     }
+}
+
+func isReturnMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
+    keyCode == 36 || keyCode == 76
 }
 
 func keyboardEventTapDiagnosticMetadata(event: CGEvent) -> [String: String] {

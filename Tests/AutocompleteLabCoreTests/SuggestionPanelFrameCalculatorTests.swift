@@ -166,8 +166,8 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.width > 0)
     }
 
-    @Test("Mirror fallback anchors in the middle of large focused elements")
-    func mirrorFallbackAnchorsInMiddleOfLargeFocusedElements() {
+    @Test("Mirror fallback avoids jumping to the middle of large focused elements")
+    func mirrorFallbackAvoidsMiddleOfLargeFocusedElements() {
         let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
             anchorRect: CGRect(x: 80, y: 600, width: 500, height: 220),
             textSize: CGSize(width: 180, height: 18),
@@ -175,8 +175,21 @@ struct SuggestionPanelFrameCalculatorTests {
         )
 
         #expect(frame.minX == 88)
-        #expect(frame.minY == 695)
+        #expect(frame.minY == 786)
         #expect(frame.width == 190)
+    }
+
+    @Test("Mirror fallback follows a fresh caret inside a large editor")
+    func mirrorFallbackFollowsCaretInsideLargeEditor() {
+        let frame = SuggestionPanelFrameCalculator.floatingMirrorFrame(
+            anchorRect: CGRect(x: 80, y: 200, width: 500, height: 620),
+            caretRect: CGRect(x: 240, y: 430, width: 1, height: 20),
+            textSize: CGSize(width: 180, height: 18),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900)
+        )
+
+        #expect(frame.minY == 416)
+        #expect(frame.maxY == 446)
     }
 
     @Test("Keeps floating mirror inside vertical editor clipping")

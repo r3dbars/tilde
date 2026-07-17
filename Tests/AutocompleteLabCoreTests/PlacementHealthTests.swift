@@ -4,6 +4,29 @@ import Testing
 
 @Suite("Placement health")
 struct PlacementHealthTests {
+    @Test("Floating mirror prefers a real caret over the whole editor")
+    func floatingMirrorPrefersRealCaretOverWholeEditor() {
+        let caret = CGRect(x: 180, y: 420, width: 1, height: 20)
+        let plan = PlacementHealth.plan(
+            requestedRenderMode: .floatingMirror,
+            fallbackRenderMode: nil,
+            caretRect: caret,
+            elementRect: CGRect(x: 80, y: 180, width: 520, height: 500),
+            windowRect: CGRect(x: 40, y: 120, width: 640, height: 620),
+            textLineRect: caret,
+            caretIsSynthetic: false,
+            allowsDetachedSuggestions: true
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected floating mirror placement")
+            return
+        }
+
+        #expect(presentation.anchorSource == .caret)
+        #expect(presentation.anchorRect == caret)
+    }
+
     @Test("Keeps healthy inline caret placement")
     func keepsHealthyInlineCaretPlacement() {
         let plan = PlacementHealth.plan(
