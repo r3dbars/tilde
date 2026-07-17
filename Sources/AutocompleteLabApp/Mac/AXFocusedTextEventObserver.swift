@@ -17,6 +17,7 @@ final class AXFocusedTextEventCoalescer: @unchecked Sendable {
 
     private let interval: TimeInterval
     private let queue: DispatchQueue
+    private let queueIdentityKey = DispatchSpecificKey<UInt8>()
     private let delivery: Delivery
     private let lock = NSLock()
     private var generation: UInt64 = 0
@@ -34,6 +35,7 @@ final class AXFocusedTextEventCoalescer: @unchecked Sendable {
         self.interval = max(0.01, min(interval, 0.02))
         self.queue = queue
         self.delivery = delivery
+        self.queue.setSpecific(key: queueIdentityKey, value: 1)
     }
 
     func submit(processIdentifier: pid_t, notification: AXFocusedTextNotificationKind) {
@@ -57,6 +59,12 @@ final class AXFocusedTextEventCoalescer: @unchecked Sendable {
             generation += 1
             pendingProcessIdentifier = nil
             pendingNotifications.removeAll(keepingCapacity: true)
+        }
+
+        // A flush may already have extracted its burst before cancellation took the lock.
+        // Drain that handoff so no pre-cancellation delivery can fire after this returns.
+        if DispatchQueue.getSpecific(key: queueIdentityKey) == nil {
+            queue.sync(flags: .barrier) {}
         }
     }
 
