@@ -13,7 +13,9 @@ final class PersonalizationCoordinator {
     private let indexer: PersonalWritingMemoryIndexer
     private let capturePolicy: PersonalCapturePolicy
     private let contextPolicy: PersonalizationContextPolicy
-    private var rebuildTimer: Timer?
+    private let rebuildDebounce: Duration
+    private var rebuildTask: Task<Void, Never>?
+    private var indexingIsEnabled = false
     private var cachedFieldKey: String?
     private var cachedContext: PersonalContext?
     private var cachedMemoryRevision: UInt64?
@@ -21,11 +23,13 @@ final class PersonalizationCoordinator {
     init(
         indexer: PersonalWritingMemoryIndexer = .shared,
         capturePolicy: PersonalCapturePolicy = PersonalCapturePolicy(),
-        contextPolicy: PersonalizationContextPolicy = PersonalizationContextPolicy()
+        contextPolicy: PersonalizationContextPolicy = PersonalizationContextPolicy(),
+        rebuildDebounce: Duration = .seconds(45)
     ) {
         self.indexer = indexer
         self.capturePolicy = capturePolicy
         self.contextPolicy = contextPolicy
+        self.rebuildDebounce = rebuildDebounce
     }
 
     func selection(
@@ -71,23 +75,31 @@ final class PersonalizationCoordinator {
     }
 
     func refreshIndexing(isEnabled: Bool) {
-        rebuildTimer?.invalidate()
-        rebuildTimer = nil
+        rebuildTask?.cancel()
+        rebuildTask = nil
+        indexingIsEnabled = isEnabled
         cachedFieldKey = nil
         cachedContext = nil
         cachedMemoryRevision = nil
         guard isEnabled else { return }
         indexer.rebuild()
-        let timer = Timer(timeInterval: 30 * 60, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.indexer.rebuild() }
+    }
+
+    func scheduleRebuildAfterAcceptedOrKeptText() {
+        guard indexingIsEnabled else { return }
+        rebuildTask?.cancel()
+        rebuildTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.rebuildDebounce)
+            guard !Task.isCancelled, self.indexingIsEnabled else { return }
+            self.indexer.rebuild()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        rebuildTimer = timer
     }
 
     func stop() {
-        rebuildTimer?.invalidate()
-        rebuildTimer = nil
+        indexingIsEnabled = false
+        rebuildTask?.cancel()
+        rebuildTask = nil
     }
 
     func deleteAll() {

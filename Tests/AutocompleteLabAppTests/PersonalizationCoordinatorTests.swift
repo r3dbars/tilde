@@ -7,6 +7,46 @@ import AutocompleteLabCore
 @Suite("Personalization coordinator")
 struct PersonalizationCoordinatorTests {
     @MainActor
+    @Test("Accepted writing schedules a debounced local index rebuild")
+    func acceptedWritingSchedulesRebuild() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PersonalizationCoordinatorDebounceTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let indexer = PersonalWritingMemoryIndexer(personalCaptureFolderURL: folder)
+        let coordinator = PersonalizationCoordinator(
+            indexer: indexer,
+            rebuildDebounce: .milliseconds(10)
+        )
+        coordinator.refreshIndexing(isEnabled: true)
+        indexer.waitForPendingWork()
+        let initialRevision = indexer.currentSnapshot().revision
+        try """
+        # SteadyType Personal Capture
+
+        ## 12:00:00 - Editor
+        typed:
+        ```text
+        accepted writing rebuilds the local memory quickly
+        ```
+        - App: `com.example.editor`
+        - Kind: `multilineCompose`
+        - Deleted chars: 0
+        """.write(
+            to: folder.appendingPathComponent("2026-07-17.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        coordinator.scheduleRebuildAfterAcceptedOrKeptText()
+        try await Task.sleep(for: .milliseconds(30))
+        indexer.waitForPendingWork()
+
+        #expect(indexer.currentSnapshot().revision > initialRevision)
+        #expect(indexer.currentMemory()?.snippets.first?.text.contains("accepted writing") == true)
+        coordinator.stop()
+    }
+
+    @MainActor
     @Test("Applies every gate and keeps retrieved context stable within a field")
     func gatesAndStabilizesFieldContext() throws {
         let folder = FileManager.default.temporaryDirectory

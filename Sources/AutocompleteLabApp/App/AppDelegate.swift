@@ -6859,6 +6859,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             )
             persistAcceptedTextStyleMemory()
+            personalizationCoordinator.scheduleRebuildAfterAcceptedOrKeptText()
         }
         persistAcceptedAndKeptLearning()
         return signal
@@ -9355,6 +9356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptanceID: baseline.acceptanceID,
             acceptMode: baseline.acceptMode
         )
+        personalizationCoordinator.scheduleRebuildAfterAcceptedOrKeptText()
     }
 
     private func recordPersonalCaptureAcceptanceSurvival(_ result: AcceptanceSurvivalCheckResult) {
