@@ -16,7 +16,7 @@ struct MenuBarStatusItemConfiguration: Equatable {
 
 enum SuggestionTuningDefaultsMigration {
     static func maxVisibleWords(_ value: Int, shouldMigrate: Bool) -> Int {
-        guard shouldMigrate, value == 3 || value == 5 else {
+        guard shouldMigrate, value == 3 || value == 5 || value == 8 else {
             return value
         }
         return SuggestionTuning.defaultMaxVisibleWords

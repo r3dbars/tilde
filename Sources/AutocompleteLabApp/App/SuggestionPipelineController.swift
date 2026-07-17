@@ -328,6 +328,8 @@ final class SuggestionPipelineController {
     // MARK: - Pause state (typing / insertion / throttle / manual reset)
 
     func pausePolling(now: Date, durationMilliseconds: Int) {
+        requestedPollTask?.cancel()
+        requestedPollTask = nil
         pollingPause.pause(now: now, durationMilliseconds: durationMilliseconds)
     }
 
