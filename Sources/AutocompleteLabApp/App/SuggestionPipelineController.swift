@@ -68,6 +68,7 @@ final class SuggestionPipelineController {
     private var latencyStats = FocusedTextPollLatencyStats()
     private var skipStats = FocusedTextPollSkipStats()
     private var pollingPause = FocusedTextPollingPause()
+    private var accessibilityBackoffPause = FocusedTextPollingPause()
 
     init(host: SuggestionPipelineHost) {
         self.host = host
@@ -97,6 +98,8 @@ final class SuggestionPipelineController {
     /// focus identity, activation, placement, and freshness guard.
     func requestPollSoon(afterMilliseconds delayMilliseconds: Int) {
         requestedPollTask?.cancel()
+        // A keystroke makes the normal typing pause obsolete, but it must not
+        // erase a backoff installed after a slow Accessibility read.
         pollingPause = FocusedTextPollingPause()
 
         requestedPollTask = Task { @MainActor [weak self] in
@@ -143,6 +146,10 @@ final class SuggestionPipelineController {
 
     private func pollFocusedTextIfIdle(bypassingCadence: Bool = false) {
         let now = Date()
+        guard !accessibilityBackoffPause.isPaused(now: now) else {
+            return
+        }
+
         if bypassingCadence {
             let signals = host.focusedTextPollCadenceSignals()
             guard signals.isTrustedForAccessibility,
@@ -303,7 +310,7 @@ final class SuggestionPipelineController {
             return
         }
 
-        pollingPause.pause(
+        accessibilityBackoffPause.pause(
             now: Date(),
             durationMilliseconds: recommendation.pauseMilliseconds,
             policy: backoffPolicy
@@ -325,15 +332,20 @@ final class SuggestionPipelineController {
     }
 
     func pausePollingWithBackoff(now: Date, durationMilliseconds: Int) {
-        pollingPause.pause(now: now, durationMilliseconds: durationMilliseconds, policy: backoffPolicy)
+        accessibilityBackoffPause.pause(
+            now: now,
+            durationMilliseconds: durationMilliseconds,
+            policy: backoffPolicy
+        )
     }
 
     func isPollingPaused(now: Date) -> Bool {
-        pollingPause.isPaused(now: now)
+        pollingPause.isPaused(now: now) || accessibilityBackoffPause.isPaused(now: now)
     }
 
     func resetPollingPause() {
         pollingPause = FocusedTextPollingPause()
+        accessibilityBackoffPause = FocusedTextPollingPause()
     }
 
     // MARK: - Thin policy pass-throughs for the host's async completion path

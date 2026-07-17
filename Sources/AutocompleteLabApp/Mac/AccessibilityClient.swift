@@ -379,7 +379,9 @@ final class AccessibilityClient: @unchecked Sendable {
 
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         configureMessagingTimeout(for: appElement)
-        let treeHasTextNodes = accessibilityTreeHasTextNodes(in: appElement)
+        let treeHasTextNodes = options.forceManualAccessibilityWakeAfterMissingContext
+            ? false
+            : accessibilityTreeHasTextNodes(in: appElement)
         let decision = AXManualAccessibilityWakePolicy.decision(
             appFamily: appFamily,
             focusedReadReturnedContext: false,
