@@ -4,24 +4,24 @@ import Testing
 
 @Suite("Prefix family cooldown policy")
 struct PrefixFamilyCooldownPolicyTests {
-    @Test("Typed over starts a cooldown past the immediate resurface window")
-    func typedOverStartsCooldownPastImmediateResurfaceWindow() {
+    @Test("Typed over does not suppress the next request")
+    func typedOverDoesNotSuppressNextRequest() {
         var policy = PrefixFamilyCooldownPolicy()
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "I think this works")
 
         let cooldown = policy.record(.typedOver, input: input, now: now)
 
-        #expect(cooldown?.reason == .typedOver)
-        #expect(cooldown?.durationMilliseconds == 2_500)
-        #expect(cooldown?.prefixTokenCount == 3)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(2.4)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(2.6)) == .allowed)
+        #expect(cooldown == nil)
+        #expect(policy.decision(for: input, now: now) == .allowed)
     }
 
-    @Test("Repeated typed over escalates to a longer cooldown")
-    func repeatedTypedOverEscalatesToLongerCooldown() throws {
-        var policy = PrefixFamilyCooldownPolicy()
+    @Test("Explicit typed-over cooldowns can still escalate")
+    func explicitTypedOverCooldownCanEscalate() throws {
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 2_500,
+            repeatedTypedOverCooldownMilliseconds: 15_000
+        )
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "I think this works")
 
@@ -287,7 +287,10 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Cooldowns are scoped by app field mode and prefix family")
     func scopedByAppFieldModeAndPrefixFamily() {
-        var policy = PrefixFamilyCooldownPolicy()
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 2_500,
+            repeatedTypedOverCooldownMilliseconds: 15_000
+        )
         let now = Date(timeIntervalSince1970: 1_000)
         let blocked = input(textBeforeCursor: "I think this works")
 
@@ -302,7 +305,11 @@ struct PrefixFamilyCooldownPolicyTests {
 
     @Test("Trace metadata is shape only")
     func traceMetadataIsShapeOnly() throws {
-        var policy = PrefixFamilyCooldownPolicy(traceFingerprintSecret: Data("unit-test-secret".utf8))
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 2_500,
+            repeatedTypedOverCooldownMilliseconds: 15_000,
+            traceFingerprintSecret: Data("unit-test-secret".utf8)
+        )
         let recordedCooldown = policy.record(
             .typedOver,
             input: input(textBeforeCursor: "secret customer name"),
@@ -345,9 +352,19 @@ struct PrefixFamilyCooldownPolicyTests {
     @Test("Prefix family fingerprints are stable and keyed")
     func prefixFamilyFingerprintsAreStableAndKeyed() throws {
         let secret = Data("unit-test-secret".utf8)
-        var policy = PrefixFamilyCooldownPolicy(traceFingerprintSecret: secret)
-        var samePolicy = PrefixFamilyCooldownPolicy(traceFingerprintSecret: secret)
+        var policy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 2_500,
+            repeatedTypedOverCooldownMilliseconds: 15_000,
+            traceFingerprintSecret: secret
+        )
+        var samePolicy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 2_500,
+            repeatedTypedOverCooldownMilliseconds: 15_000,
+            traceFingerprintSecret: secret
+        )
         var differentSecretPolicy = PrefixFamilyCooldownPolicy(
+            typedOverCooldownMilliseconds: 2_500,
+            repeatedTypedOverCooldownMilliseconds: 15_000,
             traceFingerprintSecret: Data("different-secret".utf8)
         )
 

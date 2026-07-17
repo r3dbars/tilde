@@ -120,8 +120,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     private var acceptedThenDeletedEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
 
     public init(
-        typedOverCooldownMilliseconds: Int = 2_500,
-        repeatedTypedOverCooldownMilliseconds: Int = 15_000,
+        typedOverCooldownMilliseconds: Int = 0,
+        repeatedTypedOverCooldownMilliseconds: Int = 0,
         escapeCooldownMilliseconds: Int = 15_000,
         repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
