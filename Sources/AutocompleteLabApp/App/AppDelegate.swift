@@ -2514,6 +2514,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
+                contentSensitivity: suggestionFieldClassification.suppressesSuggestionsByDefault
+                    ? .sensitiveSurface
+                    : .standard,
                 metadata: suggestionFieldClassification.traceMetadata
                     .merging(["silenceExplanation": userFacingReason]) { current, _ in current }
             )
