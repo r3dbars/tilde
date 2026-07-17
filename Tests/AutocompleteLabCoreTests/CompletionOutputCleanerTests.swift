@@ -434,4 +434,27 @@ struct CompletionOutputCleanerTests {
         #expect(accepted.traceMetadata == ["completionCleanResult": "accepted"])
         #expect(!rejected.traceMetadata.values.contains("private typed text"))
     }
+
+    @Test("Candidate cleaning aggregates rejection reasons without text")
+    func candidateCleaningAggregatesRejectionReasons() {
+        let result = CompletionOutputCleaner(maxVisibleWords: 8).cleanCandidatesWithReasons(
+            """
+            candidate 1: ready for review
+            candidate 2: press Enter to send
+            candidate 3: ready for review
+            """,
+            after: "The draft is",
+            mode: .phraseContinuation
+        )
+
+        #expect(result.suggestions.map(\.visibleText) == [" ready for review"])
+        #expect(result.rejectionReasonCounts == [
+            .unsafePromptAction: 1,
+            .duplicateCandidate: 1
+        ])
+        #expect(result.traceMetadata == [
+            "completionCleanRejectionCount": "2",
+            "completionCleanRejectionReasons": "duplicateCandidate:1,unsafePromptAction:1"
+        ])
+    }
 }

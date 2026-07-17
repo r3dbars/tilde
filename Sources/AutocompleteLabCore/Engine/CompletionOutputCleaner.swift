@@ -22,6 +22,7 @@ public enum CompletionCleanRejectionReason: String, Codable, Equatable, Sendable
     case invalidWordCompletion
     case lowValueSingleWordPhrase
     case lowSignalPhrase
+    case duplicateCandidate
 }
 
 public enum CompletionCleanResult: Equatable, Sendable {
@@ -55,6 +56,30 @@ public enum CompletionCleanResult: Equatable, Sendable {
     }
 }
 
+public struct CompletionCleanCandidatesResult: Equatable, Sendable {
+    public let suggestions: [CompletionSuggestion]
+    public let rejectionReasonCounts: [CompletionCleanRejectionReason: Int]
+
+    public init(
+        suggestions: [CompletionSuggestion],
+        rejectionReasonCounts: [CompletionCleanRejectionReason: Int]
+    ) {
+        self.suggestions = suggestions
+        self.rejectionReasonCounts = rejectionReasonCounts
+    }
+
+    public var traceMetadata: [String: String] {
+        let reasons = rejectionReasonCounts
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.key.rawValue):\($0.value)" }
+            .joined(separator: ",")
+        return [
+            "completionCleanRejectionCount": String(rejectionReasonCounts.values.reduce(0, +)),
+            "completionCleanRejectionReasons": reasons.isEmpty ? "none" : reasons
+        ]
+    }
+}
+
 public struct CompletionOutputCleaner: Equatable, Sendable {
     private static let noSuggestionToken = CompletionPromptBuilder.noSuggestionToken.lowercased()
 
@@ -83,17 +108,37 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         mode: CompletionRequestMode,
         limit: Int = 3
     ) -> [CompletionSuggestion] {
+        cleanCandidatesWithReasons(
+            rawOutput,
+            after: textBeforeCursor,
+            mode: mode,
+            limit: limit
+        ).suggestions
+    }
+
+    public func cleanCandidatesWithReasons(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        limit: Int = 3
+    ) -> CompletionCleanCandidatesResult {
         let maxCandidateCount = max(1, limit)
         var seen: Set<String> = []
         var suggestions: [CompletionSuggestion] = []
+        var rejectionReasonCounts: [CompletionCleanRejectionReason: Int] = [:]
 
         for candidateLine in candidateLines(from: rawOutput) {
-            guard let suggestion = clean(candidateLine, after: textBeforeCursor, mode: mode) else {
+            let result = cleanWithReason(candidateLine, after: textBeforeCursor, mode: mode)
+            guard let suggestion = result.suggestion else {
+                if let reason = result.rejectionReason {
+                    rejectionReasonCounts[reason, default: 0] += 1
+                }
                 continue
             }
 
             let key = normalizedCandidateKey(suggestion.visibleText)
             guard seen.insert(key).inserted else {
+                rejectionReasonCounts[.duplicateCandidate, default: 0] += 1
                 continue
             }
 
@@ -103,7 +148,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             }
         }
 
-        return suggestions
+        return CompletionCleanCandidatesResult(
+            suggestions: suggestions,
+            rejectionReasonCounts: rejectionReasonCounts
+        )
     }
 
     public func cleanBestCandidate(

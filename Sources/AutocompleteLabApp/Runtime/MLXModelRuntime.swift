@@ -458,12 +458,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         try cancellationCoordinator.check(epoch: cancellationEpoch)
 
         var rawOutput = generation.rawOutput
-        var cleanedCandidates = requestCleaner.cleanCandidates(
+        var cleaningResult = requestCleaner.cleanCandidatesWithReasons(
             generation.rawOutput,
             after: request.textBeforeCursor,
             mode: request.mode,
             limit: 3
         )
+        var cleanedCandidates = cleaningResult.suggestions
         var candidateSelection = candidateRanker.selection(
             cleanedCandidates,
             mode: request.mode,
@@ -509,12 +510,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             )
             try cancellationCoordinator.check(epoch: cancellationEpoch)
 
-            let retryCandidates = requestCleaner.cleanCandidates(
+            let retryCleaningResult = requestCleaner.cleanCandidatesWithReasons(
                 retryGeneration.rawOutput,
                 after: request.textBeforeCursor,
                 mode: request.mode,
                 limit: 3
             )
+            let retryCandidates = retryCleaningResult.suggestions
             let retrySelection = candidateRanker.selection(
                 retryCandidates,
                 mode: request.mode,
@@ -529,6 +531,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 formattedPrompt = retryPrompt.formatted(using: promptTemplate)
                 generation = retryGeneration
                 rawOutput = retryGeneration.rawOutput
+                cleaningResult = retryCleaningResult
                 cleanedCandidates = retryCandidates
                 candidateSelection = retrySelection
             }
@@ -582,6 +585,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["userPromptChars"] = String(formattedPrompt.user.count)
         timingMetadata["rawChars"] = String(rawOutput.count)
         timingMetadata["cleanedCandidateCount"] = String(cleanedCandidates.count)
+        timingMetadata.merge(cleaningResult.traceMetadata) { current, _ in current }
         timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
         timingMetadata["candidateScoreMargin"] = Self.formattedCandidateScore(candidateSelection.scoreMargin)
         timingMetadata["candidateSuppressionReason"] = candidateSelection.suppressionReason?.rawValue ?? "none"
@@ -610,14 +614,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             suggestionID: request.suggestionID,
             latencyMilliseconds: totalMilliseconds,
             firstTokenLatencyMilliseconds: generation.firstChunkMilliseconds,
-            extraMetadata: [
+            extraMetadata: cleaningResult.traceMetadata.merging([
                 "retryAttempted": String(retryAttempted),
                 "retryUsed": String(retryUsed),
                 "promptTemplate": formattedPrompt.templateIdentifier,
                 "rawPromptChars": String(formattedPrompt.rawPrompt?.count ?? 0),
                 "wordCompletionFallbackUsed": String(wordCompletionFallbackUsed),
                 "wordCompletionFallbackSource": wordCompletionFallbackSource ?? "none"
-            ]
+            ]) { current, _ in current }
         )
 
         try cancellationCoordinator.check(epoch: cancellationEpoch)
