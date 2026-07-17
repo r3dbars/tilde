@@ -923,7 +923,7 @@ func isModifierOnlyMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
 }
 
 func isBackspaceMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
-    keyCode == 51 || keyCode == 117
+    keyCode == 51
 }
 
 func keyboardEventTapTypedCharacter(event: CGEvent) -> Character? {
