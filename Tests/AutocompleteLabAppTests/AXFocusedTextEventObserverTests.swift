@@ -106,6 +106,36 @@ struct AXFocusedTextEventObserverTests {
         #expect(delivered.wait(timeout: .now() + 0.08) == .timedOut)
         #expect(recorder.bursts.isEmpty)
     }
+
+    @Test("Cancellation waits for an in-flight delivery handoff")
+    func cancellationWaitsForInFlightDelivery() {
+        let deliveryStarted = DispatchSemaphore(value: 0)
+        let releaseDelivery = DispatchSemaphore(value: 0)
+        let cancellationStarted = DispatchSemaphore(value: 0)
+        let cancellationReturned = DispatchSemaphore(value: 0)
+        let coalescer = AXFocusedTextEventCoalescer(interval: 0.01) { _ in
+            deliveryStarted.signal()
+            _ = releaseDelivery.wait(timeout: .now() + 1)
+        }
+
+        coalescer.submit(processIdentifier: 42, notification: .valueChanged)
+        #expect(deliveryStarted.wait(timeout: .now() + 1) == .success)
+
+        DispatchQueue.global().async {
+            cancellationStarted.signal()
+            coalescer.cancelPending()
+            cancellationReturned.signal()
+        }
+
+        #expect(cancellationStarted.wait(timeout: .now() + 1) == .success)
+        let returnedBeforeDeliveryFinished = cancellationReturned.wait(timeout: .now() + 0.08)
+        releaseDelivery.signal()
+
+        if returnedBeforeDeliveryFinished == .timedOut {
+            #expect(cancellationReturned.wait(timeout: .now() + 1) == .success)
+        }
+        #expect(returnedBeforeDeliveryFinished == .timedOut)
+    }
 }
 
 private final class AXEventBurstRecorder: @unchecked Sendable {
