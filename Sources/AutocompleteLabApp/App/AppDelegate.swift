@@ -7982,7 +7982,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let typedSinceRequest: String
         switch LateResultContextValidator().validate(
             requestSnapshot: requestSnapshot,
-            currentSnapshot: currentSnapshot
+            currentSnapshot: currentSnapshot,
+            latencyMilliseconds: latencyMilliseconds
         ) {
         case let .stillValid(typedDelta):
             typedSinceRequest = typedDelta
