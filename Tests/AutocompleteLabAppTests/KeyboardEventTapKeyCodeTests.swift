@@ -237,7 +237,11 @@ struct KeyboardEventTapKeyCodeTests {
             event.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
             _ = eventTap.handle(type: .keyDown, event: event)
         }
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitForEventTapObservation {
+            observations.matchCount == 4
+                && observations.invalidationCount == 0
+                && observations.lastRemainingText == "iculty"
+        }
 
         #expect(observations.matchCount == 4)
         #expect(observations.invalidationCount == 0)
@@ -269,10 +273,23 @@ struct KeyboardEventTapKeyCodeTests {
         event.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
 
         _ = eventTap.handle(type: .keyDown, event: event)
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitForEventTapObservation {
+            observations.invalidationCount == 1
+        }
 
         #expect(observations.matchCount == 0)
         #expect(observations.invalidationCount == 1)
+    }
+}
+
+private func waitForEventTapObservation(
+    _ condition: @escaping @Sendable () -> Bool
+) async throws {
+    for _ in 0..<100 {
+        if condition() {
+            return
+        }
+        try await Task.sleep(for: .milliseconds(10))
     }
 }
 
