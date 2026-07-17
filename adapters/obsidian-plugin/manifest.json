@@ -1,9 +1,0 @@
-{
-  "id": "autocomplete-lab",
-  "name": "Autocomplete Lab",
-  "version": "0.1.0",
-  "minAppVersion": "1.5.0",
-  "description": "Prototype local inline autocomplete adapter for Obsidian.",
-  "author": "r3dbars",
-  "isDesktopOnly": true
-}
