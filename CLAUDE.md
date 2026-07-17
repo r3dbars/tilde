@@ -54,5 +54,5 @@ The system is split into two layers, and the split is load-bearing — keep it.
 - **Keep the model runtime app-owned.** Production UX must not require users to start Ollama, llama.cpp, Python, or any separate server. Mock engines are fine for dev/tests only.
 - **Keep support claims strict.** If a proof gate is missing, say it is missing. Don't broaden compatibility claims ahead of proof.
 - **Add tests with each meaningful behavior change**, and update the matching proof docs when you change annoyance, acceptance, visibility, insertion, or fallback behavior.
-- **Every tracked folder gets an `AGENTS.md` and a `CLAUDE.md`.** When adding guide files inside a SwiftPM target folder, also add the path to that target's `exclude:` list in `Package.swift` so the package still loads.
+- **Keep guide pairs only for real local boundaries.** A folder with no rules beyond its nearest ownership guide should inherit that guide instead of adding duplicate `AGENTS.md` and `CLAUDE.md` files. When adding guide files inside a SwiftPM target folder, also add the path to that target's `exclude:` list in `Package.swift` so the package still loads.
 - **Dependency patches** under `patches/` are temporary and version-pinned; prefer fixing app code over patching upstream, and re-run runtime tests after changing a patch.

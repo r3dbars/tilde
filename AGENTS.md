@@ -40,7 +40,7 @@ Avoid early:
 
 ## Repo structure
 
-- Every tracked folder should have an `AGENTS.md` file and a `CLAUDE.md` file that explain what belongs there.
+- Keep an `AGENTS.md` + `CLAUDE.md` pair only when a folder has rules that differ from its nearest ownership guide; folders with no additional boundary inherit that guide.
 - When adding guide files inside a SwiftPM target folder, update `Package.swift` excludes so the package still loads cleanly.
 - Keep the model runtime app-owned. Do not require users to start Ollama, llama.cpp, or any other separate server.
 - Mock engines are fine for development and tests, but production UX should feel like one Mac app.
