@@ -28,7 +28,7 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
 
     public init(
         lowConfidenceThreshold: Int = 60,
-        maximumDisplayLatencyMilliseconds: Int = 750
+        maximumDisplayLatencyMilliseconds: Int = 2_000
     ) {
         self.lowConfidenceThreshold = max(0, min(100, lowConfidenceThreshold))
         self.maximumDisplayLatencyMilliseconds = max(1, maximumDisplayLatencyMilliseconds)
@@ -78,7 +78,9 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
                wordCount < CompletionModelPolicy.preferredMinimumVisibleWords(
                    forVisibleWords: suggestion.maxVisibleWords
                ) {
-                score -= 45
+                // A short-but-correct continuation beats an empty slot; nudge the
+                // score instead of vetoing the suggestion outright.
+                score -= 25
                 reasons.append("too-short-daily-driver-phrase")
             }
 
@@ -98,11 +100,15 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
             let contextWords = textBeforeCursor
                 .split(whereSeparator: { $0.isWhitespace })
                 .count
+            // Thin context lowers confidence but must not sink an otherwise clean
+            // suggestion below the display threshold on its own: most real typing
+            // starts from one or two words, and the old -55 made short replies
+            // effectively suggestion-free.
             if contextWords < 2 {
-                score -= 55
+                score -= 25
                 reasons.append("thin-context")
             } else if contextWords < 4 {
-                score -= 20
+                score -= 10
                 reasons.append("thin-context")
             }
         }

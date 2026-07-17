@@ -34,11 +34,11 @@ struct PrefixFamilyCooldownPolicyTests {
         let repeated = try #require(maybeRepeated)
 
         #expect(repeated.reason == .typedOver)
-        #expect(repeated.durationMilliseconds == 15_000)
+        #expect(repeated.durationMilliseconds == 10_000)
         #expect(repeated.isEscalated)
         #expect(repeated.metadata["prefixCooldownEscalated"] == "true")
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(15.4)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(15.6)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(10.4)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(10.6)) == .allowed)
     }
 
     @Test("One typed over miss does not make future suggestions less eager")
@@ -123,19 +123,19 @@ struct PrefixFamilyCooldownPolicyTests {
         ).isActive)
     }
 
-    @Test("Escape starts a fifteen second cooldown")
-    func escapeStartsFifteenSecondCooldown() {
+    @Test("Escape starts an eight second cooldown")
+    func escapeStartsEightSecondCooldown() {
         var policy = PrefixFamilyCooldownPolicy()
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "Can you please")
 
         let cooldown = policy.record(.escapeDismissal, input: input, now: now)
 
-        #expect(cooldown?.durationMilliseconds == 15_000)
+        #expect(cooldown?.durationMilliseconds == 8_000)
         #expect(cooldown?.metadata["prefixCooldownReason"] == "escape-cooldown")
         #expect(cooldown?.isEscalated == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(14.9)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(15.1)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(7.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(8.1)) == .allowed)
     }
 
     @Test("Escape cooldown is scoped to the dismissed field")
@@ -179,11 +179,11 @@ struct PrefixFamilyCooldownPolicyTests {
         )
         let repeated = try #require(maybeRepeated)
 
-        #expect(repeated.durationMilliseconds == 60_000)
+        #expect(repeated.durationMilliseconds == 30_000)
         #expect(repeated.isEscalated)
         #expect(repeated.metadata["prefixCooldownEscalated"] == "true")
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(64.9)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(65.1)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(34.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(35.1)) == .allowed)
     }
 
     @Test("Deletion starts a short stabilization cooldown")
@@ -209,10 +209,10 @@ struct PrefixFamilyCooldownPolicyTests {
         let cooldown = try #require(recordedCooldown)
 
         #expect(cooldown.reason == .acceptedThenDeleted)
-        #expect(cooldown.durationMilliseconds == 180_000)
+        #expect(cooldown.durationMilliseconds == 30_000)
         #expect(cooldown.metadata["prefixCooldownReason"] == "acceptedThenDeleted")
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(179.9)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(180.1)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(29.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(30.1)) == .allowed)
     }
 
     @Test("Repeated accepted then deleted escalates to a much longer cooldown")
@@ -225,14 +225,14 @@ struct PrefixFamilyCooldownPolicyTests {
         let maybeRepeated = policy.record(
             .acceptedThenDeleted,
             input: input,
-            now: now.addingTimeInterval(60)
+            now: now.addingTimeInterval(10)
         )
         let repeated = try #require(maybeRepeated)
 
-        #expect(repeated.durationMilliseconds == 600_000)
+        #expect(repeated.durationMilliseconds == 90_000)
         #expect(repeated.isEscalated)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(659.9)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(660.1)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(99.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(100.1)) == .allowed)
     }
 
     @Test("Repeated accepted then deleted makes that prefix less eager after cooldown")
