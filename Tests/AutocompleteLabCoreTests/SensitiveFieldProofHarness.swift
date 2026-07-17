@@ -1,4 +1,5 @@
 import Foundation
+import AutocompleteLabCore
 
 public enum SensitiveFieldProofLevel: String, Codable, Equatable, Sendable {
     case localFixture
