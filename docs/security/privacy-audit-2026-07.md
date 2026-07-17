@@ -6,7 +6,7 @@ Method: source review plus synthetic sentinel tests only. No personal writing or
 
 ## Result
 
-Two medium-severity privacy boundary failures were confirmed and fixed on separate branches. No network transmission path, permissive local artifact, or unredacted default export was found.
+Two medium-severity privacy boundary failures were confirmed and fixed on separate branches. No production path that uploads typed or personal content, permissive local artifact, or unredacted default export was found.
 
 | ID | Severity | Finding | Status |
 | --- | --- | --- | --- |
@@ -33,7 +33,9 @@ Reviewed boundaries:
 
 The disabled-app branch could call `pollPersonalCaptureOnly` before the later `profile.isSensitive` suggestion guard, and the unsupported-app branch passed `nil` for denylisted apps (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1717-1757`). The central entry point then interpreted a missing profile as non-sensitive before reading the field (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1930-1939`). It now passes `CompatibilityProfileStore.supportStatus` into `PersonalCapturePolicy.allowsAppRead` before any Accessibility read. Synthetic policy tests prove both a denylisted password manager and a supported-sensitive app remain blocked, while the wiring test locks the authoritative store lookup (`Tests/AutocompleteLabCoreTests/PersonalCapturePolicyTests.swift:8-35`, `Tests/AutocompleteLabAppTests/LiveSuggestionWiringTests.swift:63-72`).
 
-## Verified controls
+## Reviewed control observations
+
+Canonical privacy and no-leak guarantees live in the [proof manifest](../product/proof-manifest.json) and the sentinel suites for [trace redaction](../../Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift), [report export](../../Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift), and [owner-only storage](../../Tests/AutocompleteLabAppTests/SecureLocalStorageTests.swift). The bullets below are point-in-time source observations from the pinned audit baseline, not a second guarantee registry.
 
 - Personal Capture is off by default (`Sources/AutocompleteLabApp/App/AppSettings.swift:125-135`) and local-only. Policy rejects secure fields, sensitive text patterns, browser-hosted editors, and suppressed field kinds (`Sources/AutocompleteLabCore/Session/PersonalCapturePolicy.swift:81-127`).
 - Default raw traces redact all text-bearing event fields and metadata before persistence (`Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:399-442`).
