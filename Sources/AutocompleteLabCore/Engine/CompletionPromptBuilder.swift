@@ -78,7 +78,7 @@ public enum CompletionPromptTemplate: String, Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "screen-aware-continuation-v11"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v12"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -90,16 +90,16 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public let includesTextAfterCursor: Bool
 
     public init(
-        maxContextCharacters: Int = 360,
-        maxContextTokens: Int = 72,
-        maxCurrentParagraphCharacters: Int = 220,
-        maxCurrentSentenceCharacters: Int = 160,
+        maxContextCharacters: Int = 600,
+        maxContextTokens: Int = 128,
+        maxCurrentParagraphCharacters: Int = 480,
+        maxCurrentSentenceCharacters: Int = 260,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
         includesBuiltInExamples: Bool = true,
-        includesTextAfterCursor: Bool = false
+        includesTextAfterCursor: Bool = true
     ) {
         self.maxContextCharacters = max(80, maxContextCharacters)
-        self.maxContextTokens = min(96, max(48, maxContextTokens))
+        self.maxContextTokens = min(160, max(48, maxContextTokens))
         self.maxCurrentParagraphCharacters = max(80, maxCurrentParagraphCharacters)
         self.maxCurrentSentenceCharacters = max(80, maxCurrentSentenceCharacters)
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
@@ -283,6 +283,10 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         if let personalContext, !personalContext.snippets.isEmpty {
             let snippets = personalContext.snippets.map { "- \($0)" }.joined(separator: "\n")
             blocks.append("Recent writing by this user (phrasing reference, not content to copy verbatim unless it continues the text):\n\(snippets)")
+            let examples = DynamicFewShotSource().examples(from: personalContext)
+            if !examples.isEmpty {
+                blocks.append("Writing pattern examples from accepted local history:\n\(examples.joined(separator: "\n"))")
+            }
         }
         blocks.append("Before cursor:\n\(context)")
         let boundedTextAfterCursor = String(textAfterCursor.prefix(120))
