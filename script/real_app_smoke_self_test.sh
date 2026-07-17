@@ -8,6 +8,11 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
+script/real_app_smoke_usage.sh >"$TMP_DIR/usage-helper.txt"
+if ! cmp -s "$TMP_DIR/help.txt" "$TMP_DIR/usage-helper.txt"; then
+  echo "real app smoke entrypoint help must match the extracted usage helper exactly" >&2
+  exit 1
+fi
 if ! grep -F "fails closed unless" "$TMP_DIR/help.txt" >/dev/null ||
    ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1" "$TMP_DIR/help.txt" >/dev/null; then
