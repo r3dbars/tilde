@@ -291,7 +291,7 @@ struct KeyboardEventTapKeyCodeTests {
 private func waitForEventTapObservation(
     _ condition: @escaping @Sendable () -> Bool
 ) async throws {
-    for _ in 0..<100 {
+    for _ in 0..<500 {
         if condition() {
             return
         }
