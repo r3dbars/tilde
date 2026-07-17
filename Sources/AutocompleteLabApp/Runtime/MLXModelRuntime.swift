@@ -18,6 +18,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
     private let retryBudgetPolicy: RetryBudgetPolicy
+    private let decodingStrategyPolicy = CompletionDecodingStrategyPolicy()
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
     private let cancellationCoordinator = RuntimeCancellationCoordinator()
 
@@ -451,12 +452,17 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let promptBuiltAt = Date()
         let requestCleaner = cleaner(for: request)
         let requestMaxGeneratedTokens = maxGeneratedTokens(for: request)
-        var generation = try await generateRawCompletion(
+        let decodingStrategy = decodingStrategyPolicy.strategy(
+            for: request.mode,
+            maxGeneratedTokens: requestMaxGeneratedTokens
+        )
+        var generation = try await generateRawCompletions(
             container: container,
             prompt: formattedPrompt,
             request: request,
             requestCleaner: requestCleaner,
             requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+            decodingStrategy: decodingStrategy,
             cancellationEpoch: cancellationEpoch,
             onPartialSuggestion: onPartialSuggestion
         )
@@ -525,12 +531,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                     ]
                 )
 
-                let retryGeneration = try await generateRawCompletion(
+                let retryGeneration = try await generateRawCompletions(
                     container: container,
                     prompt: retryPrompt.formatted(using: promptTemplate),
                     request: request,
                     requestCleaner: requestCleaner,
                     requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+                    decodingStrategy: decodingStrategy,
                     cancellationEpoch: cancellationEpoch,
                     onPartialSuggestion: onPartialSuggestion
                 )
@@ -603,6 +610,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["cleanupMilliseconds"] = String(Self.milliseconds(from: generation.generatedAt, to: cleanedAt))
         timingMetadata["totalMilliseconds"] = String(totalMilliseconds)
         timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
+        timingMetadata["decodingStrategy"] = decodingStrategy.identifier
         timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
         timingMetadata["promptTemplate"] = formattedPrompt.templateIdentifier
         // Prompt-size proxies for prefill cost. On the default ChatSession path, prefill +
@@ -668,12 +676,58 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let promptCacheTraceMetadata: [String: String]
     }
 
+    private func generateRawCompletions(
+        container: ModelContainer,
+        prompt: FormattedCompletionPrompt,
+        request: CompletionRequest,
+        requestCleaner: CompletionOutputCleaner,
+        requestMaxGeneratedTokens: Int,
+        decodingStrategy: CompletionDecodingStrategy,
+        cancellationEpoch: Int,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> RawCompletionGeneration {
+        var generations: [RawCompletionGeneration] = []
+        for sampleIndex in 0..<decodingStrategy.sampleCount {
+            let sampleStrategy = decodingStrategy.strategy(forSampleAt: sampleIndex)
+            let partialObserver: @Sendable (CompletionSuggestion) -> Void
+            if sampleIndex == 0 {
+                partialObserver = onPartialSuggestion
+            } else {
+                partialObserver = { _ in }
+            }
+            let generation = try await generateRawCompletion(
+                container: container,
+                prompt: prompt,
+                request: request,
+                requestCleaner: requestCleaner,
+                requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+                decodingStrategy: sampleStrategy,
+                cancellationEpoch: cancellationEpoch,
+                onPartialSuggestion: partialObserver
+            )
+            generations.append(generation)
+        }
+
+        let last = generations[generations.count - 1]
+        var metadata = last.promptCacheTraceMetadata
+        metadata["decodingStrategy"] = decodingStrategy.identifier
+        return RawCompletionGeneration(
+            rawOutput: generations.map(\.rawOutput).joined(separator: "\n"),
+            firstChunkMilliseconds: generations.compactMap(\.firstChunkMilliseconds).min(),
+            sessionMilliseconds: generations.reduce(0) { $0 + $1.sessionMilliseconds },
+            generationMilliseconds: generations.reduce(0) { $0 + $1.generationMilliseconds },
+            generatedAt: last.generatedAt,
+            promptCacheTraceMetadata: metadata
+        )
+    }
+
     private func generateRawCompletion(
         container: ModelContainer,
         prompt: FormattedCompletionPrompt,
         request: CompletionRequest,
         requestCleaner: CompletionOutputCleaner,
         requestMaxGeneratedTokens: Int,
+        decodingStrategy: CompletionDecodingStrategy,
         cancellationEpoch: Int,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> RawCompletionGeneration {
@@ -695,6 +749,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 request: request,
                 requestCleaner: requestCleaner,
                 requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+                decodingStrategy: decodingStrategy,
                 cancellationEpoch: cancellationEpoch,
                 onPartialSuggestion: onPartialSuggestion,
                 promptCacheTraceMetadata: promptCacheTraceMetadata
@@ -707,6 +762,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             request: request,
             requestCleaner: requestCleaner,
             requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+            decodingStrategy: decodingStrategy,
             cancellationEpoch: cancellationEpoch,
             onPartialSuggestion: onPartialSuggestion,
             promptCacheLookup: promptCacheLookup
@@ -719,6 +775,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         request: CompletionRequest,
         requestCleaner: CompletionOutputCleaner,
         requestMaxGeneratedTokens: Int,
+        decodingStrategy: CompletionDecodingStrategy,
         cancellationEpoch: Int,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void,
         promptCacheTraceMetadata: [String: String]
@@ -729,7 +786,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             instructions: prompt.system,
             generateParameters: GenerateParameters(
                 maxTokens: requestMaxGeneratedTokens,
-                temperature: 0
+                temperature: Float(decodingStrategy.temperature),
+                topP: Float(decodingStrategy.topP),
+                repetitionPenalty: decodingStrategy.repetitionPenalty.map(Float.init)
             ),
             additionalContext: ["enable_thinking": false]
         )
@@ -797,6 +856,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         request: CompletionRequest,
         requestCleaner: CompletionOutputCleaner,
         requestMaxGeneratedTokens: Int,
+        decodingStrategy: CompletionDecodingStrategy,
         cancellationEpoch: Int,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void,
         promptCacheLookup: RuntimeStaticPromptCacheLookup
@@ -804,7 +864,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let sessionStartedAt = Date()
         let generateParameters = GenerateParameters(
             maxTokens: requestMaxGeneratedTokens,
-            temperature: 0
+            temperature: Float(decodingStrategy.temperature),
+            topP: Float(decodingStrategy.topP),
+            repetitionPenalty: decodingStrategy.repetitionPenalty.map(Float.init)
         )
         let preparedInput = try await container.prepare(input: UserInput(
             chat: [
