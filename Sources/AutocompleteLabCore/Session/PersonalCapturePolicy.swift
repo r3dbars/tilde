@@ -80,9 +80,14 @@ public struct PersonalCapturePolicy: Equatable, Sendable {
 
     public func allowsAppRead(
         personalCaptureEnabled: Bool,
-        isSensitiveApp: Bool
+        supportStatus: CompatibilitySupportStatus
     ) -> Bool {
-        personalCaptureEnabled && !isSensitiveApp
+        guard personalCaptureEnabled,
+              case let .supported(profile) = supportStatus else {
+            return false
+        }
+
+        return !profile.isSensitive
     }
 
     public func decision(for input: PersonalCaptureInput) -> PersonalCaptureDecision {

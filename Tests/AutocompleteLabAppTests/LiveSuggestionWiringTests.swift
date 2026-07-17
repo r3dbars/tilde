@@ -60,6 +60,16 @@ struct LiveSuggestionWiringTests {
         )
     }
 
+    @Test("Personal capture uses authoritative app support status before AX reads")
+    func personalCaptureUsesAuthoritativeSupportStatus() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(
+            appDelegate,
+            contains: "supportStatus: profileStore.supportStatus(for: app.bundleIdentifier)"
+        )
+    }
+
     @Test("App delegate rearms cancelled suggestions after typing settles")
     func appDelegateRearmsCancelledSuggestionsAfterTypingSettles() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
