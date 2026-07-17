@@ -6,7 +6,8 @@ Opt-in git hooks live here. Enable them for this clone with:
 
 Start with:
 
-- `pre-push` — runs `script/proof.sh fast` (the fast proof gate) before every push.
+- `pre-push` — runs `PROOF_DIFF_BASE=origin/main script/proof.sh fast` (the fast
+  local-first proof gate) before every push.
 
 Rules:
 
