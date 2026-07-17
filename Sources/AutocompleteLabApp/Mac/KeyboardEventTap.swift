@@ -1,14 +1,17 @@
 import ApplicationServices
 import AutocompleteLabCore
+import Carbon.HIToolbox
 import Foundation
 
 final class KeyboardEventTap: @unchecked Sendable {
     typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> KeyboardEventTapHandlingResult
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
+    typealias PassthroughTypingMatchObserver = @MainActor @Sendable (KeyboardOptimisticTypeThroughTransition) -> Void
     typealias DisabledObserver = @MainActor @Sendable (_ reason: String) -> Void
 
     private let handler: Handler
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
+    private let passthroughTypingMatchObserver: PassthroughTypingMatchObserver?
     private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
     private let consumptionPolicy = KeyboardEventTapConsumptionPolicy()
@@ -38,11 +41,13 @@ final class KeyboardEventTap: @unchecked Sendable {
     init(
         handler: @escaping Handler,
         passthroughKeyDownObserver: PassthroughKeyDownObserver? = nil,
+        passthroughTypingMatchObserver: PassthroughTypingMatchObserver? = nil,
         disabledObserver: DisabledObserver? = nil,
         tapPlacement: KeyboardEventTapPlacement = .fromEnvironment()
     ) {
         self.handler = handler
         self.passthroughKeyDownObserver = passthroughKeyDownObserver
+        self.passthroughTypingMatchObserver = passthroughTypingMatchObserver
         self.disabledObserver = disabledObserver
         self.tapPlacement = tapPlacement
     }
@@ -193,7 +198,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         passthroughLock.unlock()
     }
 
-    fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             lifecycleLock.lock()
             let shouldIgnoreDisabledCallback = isStopping || eventTap == nil
@@ -294,10 +299,27 @@ final class KeyboardEventTap: @unchecked Sendable {
                 )
             }
 
+            let snapshot = currentSnapshot()
             markPassthroughObserved(
-                allowingAutocompleteKey: currentSnapshot()
-                    .allowsAutocompleteKeyAfterPassthroughObservation
+                allowingAutocompleteKey: snapshot.allowsAutocompleteKeyAfterPassthroughObservation
             )
+            if let transition = optimisticTypeThroughTransition(
+                event: event,
+                keyCode: keyCode
+            ) {
+                if let passthroughTypingMatchObserver {
+                    Task { @MainActor in
+                        passthroughTypingMatchObserver(transition)
+                    }
+                }
+                return finish(
+                    Unmanaged.passUnretained(event),
+                    key: key,
+                    decision: "passthrough-type-through-match",
+                    eventMetadata: eventMetadata,
+                    startedAt: startedAt
+                )
+            }
             markSnapshotInvalidatedByTyping()
             if let passthroughKeyDownObserver {
                 Task { @MainActor in
@@ -532,6 +554,27 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.unlock()
     }
 
+    private func optimisticTypeThroughTransition(
+        event: CGEvent,
+        keyCode: Int64
+    ) -> KeyboardOptimisticTypeThroughTransition? {
+        snapshotLock.lock()
+        defer { snapshotLock.unlock() }
+
+        guard snapshot.allowsOptimisticTypeThrough,
+              !snapshot.isInvalidatedByUserTyping else { return nil }
+
+        let transition: KeyboardOptimisticTypeThroughTransition?
+        if isBackspaceMacVirtualKeyCode(keyCode) {
+            transition = snapshot.retreatOptimisticTypeThrough()
+        } else if let typedCharacter = keyboardEventTapTypedCharacter(event: event) {
+            transition = snapshot.advanceOptimisticTypeThrough(typedCharacter: typedCharacter)
+        } else {
+            transition = nil
+        }
+        return transition
+    }
+
     private func markPassthroughObserved(allowingAutocompleteKey: Bool) {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = true
@@ -675,6 +718,10 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var hasPendingAcceptedInsertionUndo: Bool
     var acceptAllShortcut: AcceptAllShortcut
     var visibleSuggestionID: String?
+    var visibleSuggestionRemainingText: String?
+    var visibleSuggestionOriginalText: String?
+    var optimisticTypedPrefix: String
+    var allowsOptimisticTypeThrough: Bool
 
     init(
         hasVisibleSuggestion: Bool = false,
@@ -684,7 +731,11 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         allowsAutocompleteKeyAfterPassthroughObservation: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
         acceptAllShortcut: AcceptAllShortcut = .shiftTab,
-        visibleSuggestionID: String? = nil
+        visibleSuggestionID: String? = nil,
+        visibleSuggestionRemainingText: String? = nil,
+        visibleSuggestionOriginalText: String? = nil,
+        optimisticTypedPrefix: String = "",
+        allowsOptimisticTypeThrough: Bool = true
     ) {
         self.hasVisibleSuggestion = hasVisibleSuggestion
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
@@ -694,6 +745,73 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
         self.visibleSuggestionID = visibleSuggestionID
+        self.visibleSuggestionRemainingText = visibleSuggestionRemainingText
+        self.visibleSuggestionOriginalText = visibleSuggestionOriginalText ?? visibleSuggestionRemainingText
+        self.optimisticTypedPrefix = optimisticTypedPrefix
+        self.allowsOptimisticTypeThrough = allowsOptimisticTypeThrough
+    }
+
+    mutating func advanceOptimisticTypeThrough(
+        typedCharacter: Character,
+        matcher: OptimisticTypeThroughMatcher = OptimisticTypeThroughMatcher()
+    ) -> KeyboardOptimisticTypeThroughTransition? {
+        guard hasVisibleSuggestion,
+              let remaining = visibleSuggestionRemainingText else {
+            return nil
+        }
+        let nextPrefix = optimisticTypedPrefix + String(typedCharacter)
+        switch matcher.advance(typedCharacter: typedCharacter, remaining: remaining) {
+        case let .matched(newRemaining):
+            optimisticTypedPrefix = nextPrefix
+            visibleSuggestionRemainingText = newRemaining
+            return .matched(typedCharacter: typedCharacter, typedPrefix: nextPrefix, remainingText: newRemaining)
+        case .exhausted:
+            optimisticTypedPrefix = nextPrefix
+            visibleSuggestionRemainingText = ""
+            return .matched(typedCharacter: typedCharacter, typedPrefix: nextPrefix, remainingText: "")
+        case .mismatch:
+            return nil
+        }
+    }
+
+    mutating func retreatOptimisticTypeThrough(
+        matcher: OptimisticTypeThroughMatcher = OptimisticTypeThroughMatcher()
+    ) -> KeyboardOptimisticTypeThroughTransition? {
+        guard hasVisibleSuggestion,
+              !optimisticTypedPrefix.isEmpty,
+              let original = visibleSuggestionOriginalText else {
+            return nil
+        }
+        let nextPrefix = String(optimisticTypedPrefix.dropLast())
+        switch matcher.retreat(typedPrefix: optimisticTypedPrefix, originalRemaining: original) {
+        case let .matched(newRemaining):
+            optimisticTypedPrefix = nextPrefix
+            visibleSuggestionRemainingText = newRemaining
+            return .retreated(typedPrefix: nextPrefix, remainingText: newRemaining)
+        case .exhausted:
+            optimisticTypedPrefix = nextPrefix
+            visibleSuggestionRemainingText = ""
+            return .retreated(typedPrefix: nextPrefix, remainingText: "")
+        case .mismatch:
+            return nil
+        }
+    }
+}
+
+enum KeyboardOptimisticTypeThroughTransition: Equatable, Sendable {
+    case matched(typedCharacter: Character, typedPrefix: String, remainingText: String)
+    case retreated(typedPrefix: String, remainingText: String)
+
+    var typedPrefix: String {
+        switch self {
+        case let .matched(_, typedPrefix, _), let .retreated(typedPrefix, _): typedPrefix
+        }
+    }
+
+    var remainingText: String {
+        switch self {
+        case let .matched(_, _, remainingText), let .retreated(_, remainingText): remainingText
+        }
     }
 }
 
@@ -802,6 +920,37 @@ func isModifierOnlyMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
     default:
         false
     }
+}
+
+func isBackspaceMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
+    keyCode == 51 || keyCode == 117
+}
+
+func keyboardEventTapTypedCharacter(event: CGEvent) -> Character? {
+    var actualLength = 0
+    var utf16 = [UniChar](repeating: 0, count: 8)
+    event.keyboardGetUnicodeString(
+        maxStringLength: utf16.count,
+        actualStringLength: &actualLength,
+        unicodeString: &utf16
+    )
+    guard actualLength > 0 else { return nil }
+    let text = String(decoding: utf16.prefix(actualLength), as: UTF16.self)
+    guard text.count == 1 else { return nil }
+    return text.first
+}
+
+func currentKeyboardInputSourceAllowsOptimisticTypeThrough() -> Bool {
+    let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+    guard let rawType = TISGetInputSourceProperty(source, kTISPropertyInputSourceType) else {
+        return false
+    }
+    let type = unsafeBitCast(rawType, to: CFString.self) as String
+    return keyboardInputSourceTypeAllowsOptimisticTypeThrough(type)
+}
+
+func keyboardInputSourceTypeAllowsOptimisticTypeThrough(_ type: String) -> Bool {
+    type == (kTISTypeKeyboardLayout as String)
 }
 
 func shouldPassThroughAutocompleteKeyAfterPassthroughObservation(

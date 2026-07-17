@@ -1,6 +1,7 @@
 import Testing
 import ApplicationServices
 import AutocompleteLabCore
+import Carbon.HIToolbox
 @testable import AutocompleteLabApp
 
 @Suite("Keyboard event tap key codes")
@@ -157,5 +158,150 @@ struct KeyboardEventTapKeyCodeTests {
         #expect(KeyboardEventTapPlacement.fromEnvironment([key: "hid"]) == .hid)
         #expect(KeyboardEventTapPlacement.fromEnvironment([key: "cgHIDEventTap"]) == .hid)
         #expect(KeyboardEventTapPlacement.fromEnvironment([key: "bogus"]) == .session)
+    }
+
+    @Test("Matching keydown bursts shrink without invalidating the event tap snapshot")
+    func matchingKeydownBurstShrinksWithoutInvalidation() {
+        var snapshot = KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: true,
+            isInvalidatedByUserTyping: false,
+            visibleSuggestionID: "suggestion",
+            visibleSuggestionRemainingText: "difficulty"
+        )
+
+        #expect(snapshot.advanceOptimisticTypeThrough(typedCharacter: "d")?.remainingText == "ifficulty")
+        #expect(snapshot.advanceOptimisticTypeThrough(typedCharacter: "i")?.remainingText == "fficulty")
+        #expect(snapshot.advanceOptimisticTypeThrough(typedCharacter: "f")?.remainingText == "ficulty")
+        #expect(snapshot.advanceOptimisticTypeThrough(typedCharacter: "f")?.remainingText == "iculty")
+        #expect(!snapshot.isInvalidatedByUserTyping)
+        #expect(snapshot.optimisticTypedPrefix == "diff")
+    }
+
+    @Test("Backspace restores the optimistically consumed suggestion prefix")
+    func backspaceRestoresOptimisticPrefix() {
+        var snapshot = KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: true,
+            visibleSuggestionID: "suggestion",
+            visibleSuggestionRemainingText: "difficulty"
+        )
+        _ = snapshot.advanceOptimisticTypeThrough(typedCharacter: "d")
+        _ = snapshot.advanceOptimisticTypeThrough(typedCharacter: "i")
+
+        let transition = snapshot.retreatOptimisticTypeThrough()
+
+        #expect(transition?.remainingText == "ifficulty")
+        #expect(snapshot.optimisticTypedPrefix == "d")
+    }
+
+    @Test("Type-through lifecycle reasons do not count as ignored suggestions")
+    func typeThroughReasonsDoNotCountAsIgnored() {
+        #expect(suggestionHiddenOutcome(for: "type-through-baselineChanged") == "typed-through")
+        #expect(suggestionHiddenOutcome(for: "type-through-textAfterCursorChanged") == "typed-through")
+        #expect(suggestionHiddenOutcome(for: "type-through-staleField") == "typed-through")
+        #expect(suggestionHiddenOutcome(for: "optimistic-type-through-mismatch") == "typed-through")
+        #expect(suggestionHiddenOutcome(for: "hidden") == "ignored")
+    }
+
+    @Test("Input methods fail closed while direct keyboard layouts can match optimistically")
+    func inputMethodsFailClosedForOptimisticMatching() {
+        #expect(keyboardInputSourceTypeAllowsOptimisticTypeThrough(kTISTypeKeyboardLayout as String))
+        #expect(!keyboardInputSourceTypeAllowsOptimisticTypeThrough(kTISTypeKeyboardInputMode as String))
+        #expect(!keyboardInputSourceTypeAllowsOptimisticTypeThrough(kTISTypeKeyboardInputMethodWithoutModes as String))
+    }
+
+    @Test("Matching keydown burst posts shrink callbacks without invalidation")
+    func matchingKeydownBurstUsesOptimisticObserver() async throws {
+        let observations = EventTapObserverState()
+        let eventTap = KeyboardEventTap(
+            handler: { _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
+            passthroughKeyDownObserver: {
+                observations.recordInvalidation()
+            },
+            passthroughTypingMatchObserver: { transition in
+                observations.recordMatch(remainingText: transition.remainingText)
+            }
+        )
+        eventTap.updateSnapshot(KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: true,
+            visibleSuggestionID: "suggestion",
+            visibleSuggestionRemainingText: "difficulty"
+        ))
+
+        for (keyCode, character) in [(2, "d"), (34, "i"), (3, "f"), (3, "f")] {
+            let event = try #require(CGEvent(
+                keyboardEventSource: nil,
+                virtualKey: CGKeyCode(keyCode),
+                keyDown: true
+            ))
+            var utf16 = Array(character.utf16)
+            event.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+            _ = eventTap.handle(type: .keyDown, event: event)
+        }
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(observations.matchCount == 4)
+        #expect(observations.invalidationCount == 0)
+        #expect(observations.lastRemainingText == "iculty")
+    }
+
+    @Test("Input-method snapshot disables optimistic matching")
+    func inputMethodSnapshotDisablesOptimisticMatching() async throws {
+        let observations = EventTapObserverState()
+        let eventTap = KeyboardEventTap(
+            handler: { _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
+            passthroughKeyDownObserver: { observations.recordInvalidation() },
+            passthroughTypingMatchObserver: { transition in
+                observations.recordMatch(remainingText: transition.remainingText)
+            }
+        )
+        eventTap.updateSnapshot(KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: true,
+            visibleSuggestionID: "suggestion",
+            visibleSuggestionRemainingText: "difficulty",
+            allowsOptimisticTypeThrough: false
+        ))
+        let event = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 2,
+            keyDown: true
+        ))
+        var utf16 = Array("d".utf16)
+        event.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+
+        _ = eventTap.handle(type: .keyDown, event: event)
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(observations.matchCount == 0)
+        #expect(observations.invalidationCount == 1)
+    }
+}
+
+private final class EventTapObserverState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var matches = 0
+    private var invalidations = 0
+    private var remainingText: String?
+
+    var matchCount: Int { withLock { matches } }
+    var invalidationCount: Int { withLock { invalidations } }
+    var lastRemainingText: String? { withLock { remainingText } }
+
+    func recordMatch(remainingText: String) {
+        lock.lock()
+        matches += 1
+        self.remainingText = remainingText
+        lock.unlock()
+    }
+
+    func recordInvalidation() {
+        lock.lock()
+        invalidations += 1
+        lock.unlock()
+    }
+
+    private func withLock<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
     }
 }
