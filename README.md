@@ -93,3 +93,9 @@ Full private beta validation lives in:
 ```
 
 The repo also includes smoke tests, privacy checks, runtime checks, proof manifests, and visual placement evidence under `script/` and `docs/product/`.
+
+Before opening a PR, run `./script/proof.sh fast`. This local-first command is
+the authoritative deterministic proof. The hosted Fast Proof workflow is
+manual-only and informational; see
+[`docs/product/local-first-proof-workflow.md`](docs/product/local-first-proof-workflow.md)
+for the exact PR evidence contract.

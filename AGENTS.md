@@ -48,10 +48,11 @@ Avoid early:
 
 ## Keeping main green
 
-- Before opening a PR or pushing, run the fast proof gate: `./script/proof.sh fast`
-  (the cheap proof tier, target < ~10 min). It is the single entry point CI runs on
-  every PR to `main` (`.github/workflows/fast-proof.yml`); wire it to run on push
-  with `git config core.hookspath .githooks`.
+- Before opening a PR or pushing, run the local-first fast proof gate:
+  `PROOF_DIFF_BASE=origin/main ./script/proof.sh fast` (the cheap proof tier,
+  target < ~10 min). It is the authoritative deterministic proof; the hosted
+  workflow (`.github/workflows/fast-proof.yml`) is manual-only and never a PR
+  gate. Wire the local hook with `git config core.hookspath .githooks`.
 - The gate is tiered. Blocking checks (coverage manifest, `script/*.py` byte-compile,
   harness self-tests, whitespace, core `swift test`) fail the build. Proof-status
   checks that still need a pending *manual* proof (e.g. `check_proof_manifest.sh`)
