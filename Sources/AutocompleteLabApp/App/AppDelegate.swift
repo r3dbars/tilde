@@ -14,6 +14,15 @@ struct MenuBarStatusItemConfiguration: Equatable {
     )
 }
 
+enum SuggestionTuningDefaultsMigration {
+    static func maxVisibleWords(_ value: Int, shouldMigrate: Bool) -> Int {
+        guard shouldMigrate, value == 3 || value == 5 else {
+            return value
+        }
+        return SuggestionTuning.defaultMaxVisibleWords
+    }
+}
+
 struct CodexProofFocusedTargetPolicy {
     static let bundleIdentifier = "com.openai.codex"
     static let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
@@ -20216,9 +20225,10 @@ private extension AppDelegate {
             : SuggestionTuning.defaultLearningRestraintLevel
 
         if shouldMigrateDailyDriverDefaults {
-            if maxVisibleWords > SuggestionTuning.defaultMaxVisibleWords {
-                maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
-            }
+            maxVisibleWords = SuggestionTuningDefaultsMigration.maxVisibleWords(
+                maxVisibleWords,
+                shouldMigrate: true
+            )
             if phraseStartWords == 3 {
                 phraseStartWords = SuggestionTuning.defaultPhraseStartWords
             }
