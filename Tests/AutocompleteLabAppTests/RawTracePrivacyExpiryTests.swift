@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabCore
 
 @Suite("Raw trace privacy expiry")
 struct RawTracePrivacyExpiryTests {
@@ -122,14 +123,24 @@ struct RawTracePrivacyExpiryTests {
         log.setRawContentTracingEnabled(true)
         log.setScreenshotTracingEnabled(true)
 
+        let systemPrompt = "synthetic-system-prompt-sentinel"
+        let userPrompt = "synthetic-user-prompt-sentinel"
+        let cleanedVisibleText = "synthetic-cleaned-visible-sentinel"
+        let displayedText = "synthetic-displayed-sentinel"
+        let remainingVisibleText = "synthetic-remaining-visible-sentinel"
         log.record(
             type: .suggestionSuppressed,
             suggestionID: "sensitive-one",
             appBundleIdentifier: "com.example.synthetic",
             textBeforeCursor: "synthetic-password-sentinel",
             textAfterCursor: "synthetic-otp-sentinel",
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
             rawOutput: "synthetic-output-sentinel",
+            cleanedVisibleText: cleanedVisibleText,
+            displayedText: displayedText,
             acceptedText: "synthetic-accepted-sentinel",
+            remainingVisibleText: remainingVisibleText,
             reason: "blocked-field-kind",
             screenshotPath: "/synthetic/sensitive-screenshot.png",
             contentSensitivity: .sensitiveSurface,
@@ -139,10 +150,30 @@ struct RawTracePrivacyExpiryTests {
         let event = try #require(log.recentEvents(limit: 1).first)
         #expect(event.textBeforeCursor == "String(27 chars)")
         #expect(event.textAfterCursor == "String(22 chars)")
+        #expect(event.systemPrompt == "String(\(systemPrompt.count) chars)")
+        #expect(event.userPrompt == "String(\(userPrompt.count) chars)")
         #expect(event.rawOutput == "String(25 chars)")
+        #expect(event.cleanedVisibleText == "String(\(cleanedVisibleText.count) chars)")
+        #expect(event.displayedText == "String(\(displayedText.count) chars)")
         #expect(event.acceptedText == "String(27 chars)")
+        #expect(event.remainingVisibleText == "String(\(remainingVisibleText.count) chars)")
         #expect(event.screenshotPath.isEmpty)
         #expect(event.metadata["privatePrompt"] == "String(27 chars)")
+    }
+
+    @MainActor
+    @Test("Sensitive-content activation blocks mark ordinary fields sensitive for tracing")
+    func activationSensitiveContentFailsClosedAtAppDelegateSeam() {
+        let ordinaryField = AXFieldClassification(kind: .multilineCompose, reason: "synthetic-compose")
+
+        #expect(AppDelegate.traceContentSensitivity(
+            fieldClassification: ordinaryField,
+            activationDecision: .block(.sensitiveContent)
+        ) == .sensitiveSurface)
+        #expect(AppDelegate.traceContentSensitivity(
+            fieldClassification: ordinaryField,
+            activationDecision: .block(.tooLittleContext)
+        ) == .standard)
     }
 
     @Test("Suppressed field metadata fails closed at the logger boundary")
