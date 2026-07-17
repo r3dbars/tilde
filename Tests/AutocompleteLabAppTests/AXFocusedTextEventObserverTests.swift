@@ -4,6 +4,29 @@ import Testing
 
 @Suite("AX focused text event coalescer")
 struct AXFocusedTextEventObserverTests {
+    @Test("Stop invalidates an activation captured by the old lifecycle")
+    func stopInvalidatesPendingActivation() {
+        var lifecycle = AXFocusedTextObserverLifecycle()
+        let pendingActivationGeneration = lifecycle.start()
+
+        lifecycle.stop()
+
+        #expect(!lifecycle.isStarted)
+        #expect(!lifecycle.accepts(generation: pendingActivationGeneration))
+    }
+
+    @Test("Restart accepts only the new observer generation")
+    func restartRejectsStaleLifecycle() {
+        var lifecycle = AXFocusedTextObserverLifecycle()
+        let staleGeneration = lifecycle.start()
+        lifecycle.stop()
+        let currentGeneration = lifecycle.start()
+
+        #expect(currentGeneration != staleGeneration)
+        #expect(!lifecycle.accepts(generation: staleGeneration))
+        #expect(lifecycle.accepts(generation: currentGeneration))
+    }
+
     @Test("Coalesces an AX notification burst into one delivery")
     func coalescesBurst() {
         let recorder = AXEventBurstRecorder()

@@ -89,6 +89,28 @@ final class AXFocusedTextEventCoalescer: @unchecked Sendable {
     }
 }
 
+struct AXFocusedTextObserverLifecycle: Equatable, Sendable {
+    private(set) var isStarted = false
+    private(set) var generation: UInt64 = 0
+
+    mutating func start() -> UInt64 {
+        if !isStarted {
+            generation &+= 1
+            isStarted = true
+        }
+        return generation
+    }
+
+    mutating func stop() {
+        generation &+= 1
+        isStarted = false
+    }
+
+    func accepts(generation candidate: UInt64) -> Bool {
+        isStarted && generation == candidate
+    }
+}
+
 /// Owns the native AX notification lifecycle for the frontmost application.
 ///
 /// The delivered burst contains only notification kinds and a process identifier. It never
@@ -104,6 +126,7 @@ final class AXFocusedTextEventObserver {
     private var observer: AXObserver?
     private var applicationElement: AXUIElement?
     private var focusedElement: AXUIElement?
+    private var lifecycle = AXFocusedTextObserverLifecycle()
     private(set) var observedProcessIdentifier: pid_t?
 
     init(
@@ -132,6 +155,7 @@ final class AXFocusedTextEventObserver {
             return
         }
 
+        let registrationGeneration = lifecycle.start()
         let center = workspace.notificationCenter
         workspaceNotificationTokens = [
             center.addObserver(
@@ -143,9 +167,12 @@ final class AXFocusedTextEventObserver {
                     notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                         as? NSRunningApplication
                 )?.processIdentifier
-                Task { @MainActor [weak self] in
+                MainActor.assumeIsolated {
                     if let processIdentifier {
-                        self?.observe(processIdentifier: processIdentifier)
+                        self?.handleActivation(
+                            processIdentifier: processIdentifier,
+                            generation: registrationGeneration
+                        )
                     }
                 }
             },
@@ -158,10 +185,11 @@ final class AXFocusedTextEventObserver {
                     notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                         as? NSRunningApplication
                 )?.processIdentifier
-                Task { @MainActor [weak self] in
-                    if self?.observedProcessIdentifier == processIdentifier {
-                        self?.tearDownObserver()
-                    }
+                MainActor.assumeIsolated {
+                    self?.handleDeactivation(
+                        processIdentifier: processIdentifier,
+                        generation: registrationGeneration
+                    )
                 }
             },
             center.addObserver(
@@ -173,27 +201,53 @@ final class AXFocusedTextEventObserver {
                     notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                         as? NSRunningApplication
                 )?.processIdentifier
-                Task { @MainActor [weak self] in
-                    if self?.observedProcessIdentifier == processIdentifier {
-                        self?.tearDownObserver()
-                    }
+                MainActor.assumeIsolated {
+                    self?.handleDeactivation(
+                        processIdentifier: processIdentifier,
+                        generation: registrationGeneration
+                    )
                 }
             }
         ]
 
         if let processIdentifier = workspace.frontmostApplication?.processIdentifier {
-            observe(processIdentifier: processIdentifier)
+            handleActivation(
+                processIdentifier: processIdentifier,
+                generation: registrationGeneration
+            )
         }
     }
 
     func stop() {
+        lifecycle.stop()
         let center = workspace.notificationCenter
         workspaceNotificationTokens.forEach(center.removeObserver)
         workspaceNotificationTokens.removeAll()
         tearDownObserver()
     }
 
+    private func handleActivation(processIdentifier: pid_t, generation: UInt64) {
+        guard lifecycle.accepts(generation: generation) else {
+            return
+        }
+
+        observe(processIdentifier: processIdentifier)
+    }
+
+    private func handleDeactivation(processIdentifier: pid_t?, generation: UInt64) {
+        guard lifecycle.accepts(generation: generation),
+              observedProcessIdentifier == processIdentifier else {
+            return
+        }
+
+        tearDownObserver()
+    }
+
     private func observe(processIdentifier: pid_t) {
+        guard lifecycle.isStarted else {
+            return
+        }
+
         guard observedProcessIdentifier != processIdentifier else {
             return
         }
@@ -310,7 +364,8 @@ final class AXFocusedTextEventObserver {
     }
 
     private func handle(notification: AXFocusedTextNotificationKind) {
-        guard let processIdentifier = observedProcessIdentifier else {
+        guard lifecycle.isStarted,
+              let processIdentifier = observedProcessIdentifier else {
             return
         }
 
@@ -345,8 +400,8 @@ final class AXFocusedTextEventObserver {
         let owner = Unmanaged<AXFocusedTextEventObserver>
             .fromOpaque(context)
             .takeUnretainedValue()
-        Task { @MainActor [weak owner] in
-            owner?.handle(notification: notification)
+        MainActor.assumeIsolated {
+            owner.handle(notification: notification)
         }
     }
 
