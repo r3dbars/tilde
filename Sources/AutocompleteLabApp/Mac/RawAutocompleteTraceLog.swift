@@ -1,7 +1,7 @@
 import Foundation
 import AutocompleteLabCore
 
-enum TraceContentSensitivity: Sendable {
+enum TraceContentSensitivity: Equatable, Sendable {
     case standard
     case sensitiveSurface
 }

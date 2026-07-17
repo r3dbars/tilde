@@ -2514,9 +2514,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
-                contentSensitivity: suggestionFieldClassification.suppressesSuggestionsByDefault
-                    ? .sensitiveSurface
-                    : .standard,
+                contentSensitivity: Self.traceContentSensitivity(
+                    fieldClassification: suggestionFieldClassification,
+                    activationDecision: activationDecision
+                ),
                 metadata: suggestionFieldClassification.traceMetadata
                     .merging(["silenceExplanation": userFacingReason]) { current, _ in current }
             )
@@ -2808,6 +2809,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ? "idle-retry"
                     : "poll"
         )
+    }
+
+    static func traceContentSensitivity(
+        fieldClassification: AXFieldClassification,
+        activationDecision: CompletionActivationDecision
+    ) -> TraceContentSensitivity {
+        if fieldClassification.suppressesSuggestionsByDefault
+            || activationDecision.blockedReason == .sensitiveContent
+            || activationDecision.blockedReason == .secureField {
+            return .sensitiveSurface
+        }
+
+        return .standard
     }
 
     private func claudeCodeTerminalHostProofContext(
