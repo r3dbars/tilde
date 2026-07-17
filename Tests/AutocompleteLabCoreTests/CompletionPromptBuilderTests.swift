@@ -150,7 +150,10 @@ struct CompletionPromptBuilderTests {
     @Test("Prompt asks for a bounded continuation only")
     func promptAsksForBoundedContinuationOnly() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
-        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I think we should",
+            maxVisibleWords: 5
+        ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Length setting: short"))
@@ -681,7 +684,8 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "Can you make this easier to",
-            appBundleIdentifier: "com.openai.codex"
+            appBundleIdentifier: "com.openai.codex",
+            maxVisibleWords: 5
         ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))

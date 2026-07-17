@@ -8,7 +8,7 @@ struct SuggestionAggressivenessTests {
         let tuning = SuggestionTuning()
 
         #expect(tuning.aggressivenessLevel == 4)
-        #expect(tuning.maxVisibleWords == 8)
+        #expect(tuning.maxVisibleWords == 4)
         #expect(tuning.wordStartCharacters == 2)
         #expect(tuning.phraseStartWords == 2)
         #expect(tuning.responseSpeedLevel == 5)
@@ -16,7 +16,7 @@ struct SuggestionAggressivenessTests {
         #expect(tuning.learningRestraintLevel == 1)
         #expect(tuning.displayName == "Very Proactive")
         #expect(tuning.pace == .eager)
-        #expect(tuning.traceMetadata["suggestionMaxVisibleWords"] == "8")
+        #expect(tuning.traceMetadata["suggestionMaxVisibleWords"] == "4")
 
         let activation = tuning.activationPolicy(supportPace: tuning.pace)
         #expect(activation.decision(

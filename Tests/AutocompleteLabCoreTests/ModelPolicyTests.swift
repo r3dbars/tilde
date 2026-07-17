@@ -7,21 +7,21 @@ struct ModelPolicyTests {
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .qwen35FourB)
+        #expect(policy.model == .qwen3Medium)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 20)
-        #expect(policy.maxVisibleWords == 8)
+        #expect(policy.maxGeneratedTokens == 10)
+        #expect(policy.maxVisibleWords == 4)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
 
-    @Test("Small draft experiment uses an app-owned Qwen MLX model without changing the MVP default")
-    func smallDraftExperimentUsesQwen3Medium() {
+    @Test("Small draft experiment stays smaller than the shipped Qwen model")
+    func smallDraftExperimentUsesQwen3Small() {
         let policy = CompletionModelPolicy.smallDraftExperiment
 
-        #expect(CompletionModelPolicy.mvp.model == .qwen35FourB)
-        #expect(policy.model == .qwen3Medium)
+        #expect(CompletionModelPolicy.mvp.model == .qwen3Medium)
+        #expect(policy.model == .qwen3Small)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
         #expect(policy.minimumMemoryGB < CompletionModelPolicy.mvp.minimumMemoryGB)
@@ -63,11 +63,8 @@ struct ModelPolicyTests {
         #expect(policy.allowsVisibleWordCount(1))
         #expect(policy.allowsVisibleWordCount(2))
         #expect(policy.allowsVisibleWordCount(3))
-        #expect(policy.allowsVisibleWordCount(5))
-        #expect(policy.allowsVisibleWordCount(6))
-        #expect(policy.allowsVisibleWordCount(7))
-        #expect(policy.allowsVisibleWordCount(8))
-        #expect(!policy.allowsVisibleWordCount(9))
+        #expect(policy.allowsVisibleWordCount(4))
+        #expect(!policy.allowsVisibleWordCount(5))
     }
 
     @Test("Request modes cap generated tokens by autocomplete role")
@@ -88,9 +85,9 @@ struct ModelPolicyTests {
             "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
         ])
 
-        #expect(defaultConfiguration.maxVisibleWords == 8)
-        #expect(defaultConfiguration.maxGeneratedTokens == 20)
-        #expect(defaultConfiguration.displaySummary == "8 words / 20 tokens")
+        #expect(defaultConfiguration.maxVisibleWords == 4)
+        #expect(defaultConfiguration.maxGeneratedTokens == 10)
+        #expect(defaultConfiguration.displaySummary == "4 words / 10 tokens")
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
@@ -133,8 +130,8 @@ struct ModelPolicyTests {
         #expect(oneWord.maxVisibleWords == 1)
         #expect(oneWord.maxGeneratedTokens == 4)
         #expect(threeWord.experimentArm == .length3Word)
-        #expect(threeWord.maxVisibleWords == 8)
-        #expect(threeWord.maxGeneratedTokens == 20)
+        #expect(threeWord.maxVisibleWords == 4)
+        #expect(threeWord.maxGeneratedTokens == 10)
         #expect(overridden.experimentArm == .length1Word)
         #expect(overridden.maxVisibleWords == 3)
         #expect(overridden.maxGeneratedTokens == 9)
@@ -176,9 +173,9 @@ struct ModelPolicyTests {
         #expect(CompletionModelPolicy.mvp.supports(hardware))
     }
 
-    @Test("16 GB Apple Silicon profile supports the 4B MVP target")
-    func sixteenGBSupportsTheFourBMVPTarget() {
-        let hardware = HardwareProfile(chipName: "M1", memoryGB: 16, isAppleSilicon: true)
+    @Test("8 GB Apple Silicon profile supports the 1.7B MVP target")
+    func eightGBSupportsTheQwenMediumMVPTarget() {
+        let hardware = HardwareProfile(chipName: "M1", memoryGB: 8, isAppleSilicon: true)
 
         #expect(CompletionModelPolicy.mvp.supports(hardware))
     }

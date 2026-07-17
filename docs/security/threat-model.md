@@ -224,7 +224,7 @@ model manifests in `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swi
 1. **Transport** is HTTPS via the Hugging Face SDK with an **immutable pinned revision** (commit
    hash) — good. But there is **no certificate/host pinning** in app code, so a rogue CA / MITM
    (A3) that can also satisfy the SDK's checks is not additionally constrained by us.
-2. **The normal-launch default is anchored.** `qwen35FourBMLX4Bit` has baked `ExpectedFile`
+2. **The normal-launch default is anchored.** `qwen3MediumMLX4Bit` has baked `ExpectedFile`
    byte counts and SHA-256s, and they are enforced
    (`ModelAssetIntegrityReceipt.validateExpectedFiles` → "known-good checksum mismatch"). Some
    explicitly selected legacy manifests, including `Gemma4E4BItOptiQ`, still have no pinned

@@ -28,6 +28,7 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 }
 
 public struct CompletionModelPolicy: Equatable, Sendable {
+    private static let compactTokenBudgetVisibleWordLimit = 8
     public static let minimumVisibleWords = 1
     public static let maximumVisibleWords = 20
     public static let minimumGeneratedTokens = 3
@@ -63,24 +64,24 @@ public struct CompletionModelPolicy: Equatable, Sendable {
     }
 
     public static let mvp = CompletionModelPolicy(
-        model: .qwen35FourB,
+        model: .qwen3Medium,
         runtimeOwnership: .appOwnedEmbedded,
-        minimumMemoryGB: 16,
-        maxGeneratedTokens: 20,
-        maxVisibleWords: 8,
-        debounceMilliseconds: 15,
-        targetLatencyMilliseconds: 50,
+        minimumMemoryGB: 8,
+        maxGeneratedTokens: 10,
+        maxVisibleWords: 4,
+        debounceMilliseconds: 10,
+        targetLatencyMilliseconds: 150,
         reasoningEnabled: false
     )
 
     public static let smallDraftExperiment = CompletionModelPolicy(
-        model: .qwen3Medium,
+        model: .qwen3Small,
         runtimeOwnership: .appOwnedEmbedded,
-        minimumMemoryGB: 8,
-        maxGeneratedTokens: 16,
-        maxVisibleWords: 5,
+        minimumMemoryGB: 6,
+        maxGeneratedTokens: 8,
+        maxVisibleWords: 3,
         debounceMilliseconds: 10,
-        targetLatencyMilliseconds: 35,
+        targetLatencyMilliseconds: 100,
         reasoningEnabled: false
     )
 
@@ -102,7 +103,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
 
     public static func generatedTokenBudget(forVisibleWords visibleWords: Int) -> Int {
         let visibleWords = clampedVisibleWords(visibleWords)
-        guard visibleWords > mvp.maxVisibleWords else {
+        guard visibleWords > compactTokenBudgetVisibleWordLimit else {
             return clampedGeneratedTokens(visibleWords + 6)
         }
 
@@ -200,7 +201,7 @@ public enum AutocompleteExperimentArm: String, Codable, Equatable, Sendable, Cas
     public var defaultMaxVisibleWords: Int {
         switch self {
         case .length3Word:
-            8
+            4
         case .length1Word:
             1
         }
@@ -209,7 +210,7 @@ public enum AutocompleteExperimentArm: String, Codable, Equatable, Sendable, Cas
     public var defaultMaxGeneratedTokens: Int {
         switch self {
         case .length3Word:
-            20
+            10
         case .length1Word:
             4
         }

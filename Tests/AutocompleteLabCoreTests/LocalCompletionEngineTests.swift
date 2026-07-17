@@ -15,12 +15,12 @@ struct LocalCompletionEngineTests {
 
         let configuration = await runner.lastConfiguration
         #expect(configuration?.model == CompletionModelPolicy.mvp.model)
-        #expect(configuration?.maxGeneratedTokens == 20)
-        #expect(configuration?.maxVisibleWords == 8)
+        #expect(configuration?.maxGeneratedTokens == 10)
+        #expect(configuration?.maxVisibleWords == 4)
         #expect(configuration?.reasoningEnabled == false)
-        #expect(configuration?.promptTemplate == .chatInstruct)
-        #expect(await runner.lastPrompt?.template == .chatInstruct)
-        #expect(await runner.lastPrompt?.system.contains("Inline autocomplete") == true)
+        #expect(configuration?.promptTemplate == .rawCompletion)
+        #expect(await runner.lastPrompt?.template == .rawCompletion)
+        #expect(await runner.lastPrompt?.rawPrompt?.contains("Inline autocomplete") == true)
     }
 
     @Test("Runtime config allows the extended word slider")
