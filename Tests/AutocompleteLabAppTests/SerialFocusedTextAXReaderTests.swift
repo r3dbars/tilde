@@ -111,6 +111,7 @@ struct SerialFocusedTextAXReaderTests {
 
         #expect(options == .syntheticTextAreaFastPath)
         #expect(options.useMinimalFingerprint)
+        #expect(!options.skipParameterizedTextGeometry)
         #expect(options.windowReadMode == .identifierOnly)
         #expect(options.windowReadMode.plan == FocusedTextWindowReadPlan(
             readsIdentifier: true,
