@@ -61,6 +61,34 @@ struct FocusedTextSignalModePolicyTests {
         #expect(policy.heartbeatInterval(for: "com.example.electron", state: state) == 0.08)
     }
 
+    @Test("Silent key downs demote event-driven mode and restore polling cadence")
+    func silentKeyDownsDemoteEventDrivenMode() {
+        let policy = FocusedTextSignalModePolicy(
+            eventPromotionThreshold: 1,
+            silentKeyDownDemotionThreshold: 2
+        )
+        var state = FocusedTextSignalModeState()
+
+        policy.record(.eventConfirmedRead, for: "com.example.editor", state: &state)
+        #expect(policy.mode(for: "com.example.editor", state: state) == .eventDriven)
+        #expect(policy.heartbeatInterval(for: "com.example.editor", state: state) == 1.5)
+
+        let first = policy.record(
+            .keyDown(axNotificationObservedSinceLastKeyDown: false),
+            for: "com.example.editor",
+            state: &state
+        )
+        let second = policy.record(
+            .keyDown(axNotificationObservedSinceLastKeyDown: false),
+            for: "com.example.editor",
+            state: &state
+        )
+
+        #expect(first == .init(previousMode: .eventDriven, mode: .eventDriven))
+        #expect(second == .init(previousMode: .eventDriven, mode: .polling))
+        #expect(policy.heartbeatInterval(for: "com.example.editor", state: state) == 0.08)
+    }
+
     @Test("App state is isolated by bundle identifier")
     func appStateIsIsolated() {
         let policy = FocusedTextSignalModePolicy(
