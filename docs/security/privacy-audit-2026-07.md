@@ -10,8 +10,8 @@ Two medium-severity privacy boundary failures were confirmed and fixed on separa
 
 | ID | Severity | Finding | Status |
 | --- | --- | --- | --- |
-| PA-01 | Medium | Explicit raw-content and screenshot trace opt-ins could persist text and screenshot paths from fields already classified as sensitive (`Sources/AutocompleteLabApp/App/AppDelegate.swift:2507`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:376`). | Fixed in draft PR [#168](https://github.com/r3dbars/steadytype/pull/168) with a fail-closed logger boundary and synthetic regression coverage. |
-| PA-02 | Medium | A sensitive compatibility profile could reach the disabled-app Personal Capture branch before the profile's sensitive-app guard (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1737`, `Sources/AutocompleteLabApp/App/AppDelegate.swift:1757`, `Sources/AutocompleteLabApp/App/AppDelegate.swift:1930`). | Fixed in draft PR [#169](https://github.com/r3dbars/steadytype/pull/169) with a central sensitive-app read guard and synthetic policy coverage. |
+| PA-01 | Medium | Explicit raw-content and screenshot trace opt-ins could persist content from suppressed fields and from ordinary fields whose activation assessment detected secret-shaped text (`Sources/AutocompleteLabApp/App/AppDelegate.swift:2507`, `Sources/AutocompleteLabCore/Session/CompletionActivationPolicy.swift:204`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:376`). | Fixed in draft PR [#168](https://github.com/r3dbars/steadytype/pull/168) with a fail-closed logger boundary, activation-decision wiring, and synthetic regression coverage. |
+| PA-02 | Medium | Sensitive profiles could reach Personal Capture before the later profile guard, while denylisted apps had no effective profile and were therefore treated as non-sensitive (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1717`, `Sources/AutocompleteLabApp/App/AppDelegate.swift:1737`, `Sources/AutocompleteLabApp/App/AppDelegate.swift:1930`). | Fixed in draft PR [#169](https://github.com/r3dbars/steadytype/pull/169) with an authoritative support-status guard before AX reads. |
 | PA-03 | Low | Native communication apps do not yet have an explicit Personal Capture blocklist contract; the policy has browser-hosted and field checks only (`Sources/AutocompleteLabCore/Session/PersonalCapturePolicy.swift:81`). | Follow-up [#166](https://github.com/r3dbars/steadytype/issues/166). |
 | PA-04 | Low | Developer environment overrides for raw and screenshot tracing do not share the Settings UI's one-hour expiry (`Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:75`). | Follow-up [#163](https://github.com/r3dbars/steadytype/issues/163). |
 | PA-05 | Low | Trace signal fields rely on current call-site discipline instead of typed allowlists at the persistence boundary (`Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:398`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:436`). | Follow-up [#165](https://github.com/r3dbars/steadytype/issues/165). |
@@ -20,18 +20,18 @@ Two medium-severity privacy boundary failures were confirmed and fixed on separa
 
 ### PA-01 — sensitive surfaces in raw traces
 
-`RawAutocompleteTraceLog` normally redacts typed text, but explicit raw tracing bypassed that redaction (`Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:376-442`). The activation-policy trace call could still supply text from a field that `SensitiveTextFieldPolicy` had suppressed (`Sources/AutocompleteLabApp/App/AppDelegate.swift:2507-2518`). The logger now accepts an explicit sensitivity marker, also fails closed when `fieldKindSuppressed=true`, and drops both raw text and screenshot paths for that event. Synthetic sentinels cover every text-bearing field, metadata, and screenshot paths (`Tests/AutocompleteLabAppTests/RawTracePrivacyExpiryTests.swift:106`).
+`RawAutocompleteTraceLog` normally redacts typed text, but explicit raw tracing bypassed that redaction (`Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:376-442`). The activation-policy trace call could still supply text from a suppressed field or an ordinary compose field blocked as `.sensitiveContent` (`Sources/AutocompleteLabApp/App/AppDelegate.swift:2507-2522`). The app now derives trace sensitivity from both field classification and the activation decision. The logger also fails closed when `fieldKindSuppressed=true`, and drops both raw text and screenshot paths for that event. Synthetic sentinels cover every text-bearing field, metadata, screenshot paths, and the ordinary-field activation seam (`Tests/AutocompleteLabAppTests/RawTracePrivacyExpiryTests.swift:107-177`).
 
 Reviewed boundaries:
 
 - secure Accessibility fields return before trace capture (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1885`);
 - browser-hosted surfaces send empty text (`Sources/AutocompleteLabApp/App/AppDelegate.swift:2166-2176`);
-- native sensitive fields reach the activation-policy event and are now redacted at the logger boundary;
+- native suppressed fields and normal fields with secret-shaped content reach the activation-policy event and are now redacted at the logger boundary;
 - screenshot capture occurs only after activation succeeds, and the logger also drops any sensitive screenshot path defensively.
 
 ### PA-02 — Personal Capture sensitive-app bypass
 
-The disabled-app branch could call `pollPersonalCaptureOnly` before the later `profile.isSensitive` suggestion guard (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1737-1757`). The central Personal Capture entry point previously checked only enablement, AX trust, and AX-read eligibility before reading the field (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1930-1939`). It now checks `PersonalCapturePolicy.allowsAppRead` before any Accessibility read. Synthetic policy tests prove capture is denied for a sensitive app even when Personal Capture is enabled (`Tests/AutocompleteLabCoreTests/PersonalCapturePolicyTests.swift:8`).
+The disabled-app branch could call `pollPersonalCaptureOnly` before the later `profile.isSensitive` suggestion guard, and the unsupported-app branch passed `nil` for denylisted apps (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1717-1757`). The central entry point then interpreted a missing profile as non-sensitive before reading the field (`Sources/AutocompleteLabApp/App/AppDelegate.swift:1930-1939`). It now passes `CompatibilityProfileStore.supportStatus` into `PersonalCapturePolicy.allowsAppRead` before any Accessibility read. Synthetic policy tests prove both a denylisted password manager and a supported-sensitive app remain blocked, while the wiring test locks the authoritative store lookup (`Tests/AutocompleteLabCoreTests/PersonalCapturePolicyTests.swift:8-35`, `Tests/AutocompleteLabAppTests/LiveSuggestionWiringTests.swift:63-72`).
 
 ## Verified controls
 
@@ -64,6 +64,9 @@ The targeted synthetic suites are:
 ```sh
 swift test --jobs 1 --filter RawTracePrivacyExpiryTests
 swift test --jobs 1 --filter PersonalCapturePolicyTests
+swift test --jobs 1 --filter LiveSuggestionWiringTests
 ```
+
+These suites passed 6, 7, and 7 tests respectively on the corrected PR heads.
 
 Privacy export behavior is additionally covered by `RawTraceReportExportTests`, `PrivacyExportProofCommandTests`, and the fast proof gate. Manual or live-user-content proof was neither required nor performed for this source-level audit.
