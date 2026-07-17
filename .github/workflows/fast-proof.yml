@@ -82,6 +82,9 @@ jobs:
       - name: Fast proof tier with Swift tests (script/proof.sh fast)
         run: bash script/proof.sh fast
         env:
+          # This lane exists to exercise Swift. Never allow proof.sh's generic
+          # no-toolchain fallback to turn the Swift test into a successful skip.
+          PROOF_REQUIRE_SWIFT: "1"
           # On a PR, also flag whitespace / conflict markers the PR introduces.
           # Empty on push events -> proof.sh checks the working tree instead.
           PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
