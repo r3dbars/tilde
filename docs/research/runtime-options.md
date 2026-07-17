@@ -8,26 +8,28 @@ model server.
 The product should own the model runtime. The user launches one Mac app and
 autocomplete works.
 
-## Current Preferred Path: MLX + Qwen3.5 4B
+## Current Preferred Path: MLX + Qwen3 1.7B
 
 MLX is the current runtime path because it is Apple Silicon native and already
-lives behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the current
+lives behind the app-owned `ModelRuntime` boundary. Qwen3 1.7B is the current
 default (`RuntimeBootstrapPlan.preferredMLX` / `CompletionModelPolicy.mvp.model`)
-because its immutable source and local integrity receipt are verified before MLX
-warms it. Gemma 4 E4B IT OptiQ remains selectable for explicit trials. LiteRT-LM
+because a fixed 34-prompt local race on 2026-07-16 measured a 129ms median for
+two words and 139ms for four words. The tested Gemma 2 2B MLX model was slower
+(203ms and 214ms respectively). The immutable Qwen source and local integrity
+receipt are verified before MLX warms it. Gemma remains selectable for explicit trials. LiteRT-LM
 stays tracked as a future candidate for app-owned packaging research, but it is
 not a runtime fallback in the app or beta UX.
 
-The default beta model asset is Qwen3.5 4B (4-bit):
+The default beta model asset is Qwen3 1.7B (4-bit):
 
 ```text
-~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/SteadyType/Models/Qwen3Medium/MLX/qwen3-1.7b-4bit
 ```
 
 The matching development download alias is:
 
 ```bash
-script/download_mlx_model.py --model qwen35-4b
+script/download_mlx_model.py --model qwen3-1.7b
 ```
 
 Gemma 4 E4B IT OptiQ stays available as a selectable alternative
@@ -40,7 +42,7 @@ Local Model`. The app rechecks the asset and retries the MLX runtime after the
 download completes.
 
 The default model source is pinned to Hugging Face revision
-`32f3e8ecf65426fc3306969496342d504bfa13f3`. Install and repair flows write a
+`3b1b1768f8f8cf8351c712464f906e86c2b8269e`. Install and repair flows write a
 local `.steadytype-model-integrity.json` receipt with file sizes and SHA-256
 hashes. `./script/check_model_asset.py` verifies that receipt before beta use.
 
@@ -48,7 +50,7 @@ Sources:
 
 - [MLX Swift LM GitHub](https://github.com/ml-explore/mlx-swift-lm)
 - [MLX Swift LM package](https://github.com/ml-explore/mlx-swift-lm/blob/main/Package.swift)
-- [Qwen3.5 4B MLX model](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit)
+- [Qwen3 1.7B MLX model](https://huggingface.co/mlx-community/Qwen3-1.7B-4bit)
 
 ## macOS Target
 
@@ -67,10 +69,10 @@ Build settings:
 
 These are useful for developer trials, not the default beta promise:
 
-- `qwen35-4b` or `qwen3.5-4b`: preferred Qwen3.5 4B beta asset.
+- `qwen35-4b` or `qwen3.5-4b`: larger Qwen3.5 4B quality comparison.
 - `qwen35-9b` or `qwen3.5-9b`: Qwen3.5 9B 4-bit, better quality trial with higher cost.
-- `qwen3-1.7b`: smaller Qwen3 baseline.
-- `small-draft-1b`: named 1B-class draft lane alias for `qwen3-1.7b`.
+- `qwen3-1.7b`: preferred fast Qwen3 asset.
+- `small-draft-1b`: compatibility alias for `qwen3-1.7b`.
 - `qwen3-0.6b`: very small smoke-test baseline.
 - `gemma-4-e2b`: historical Gemma E2B candidate.
 - `gemma-4-e4b`, `gemma4-e4b`, or `gemma-4-e4b-4bit`: Gemma 4 E4B MLX trial.
@@ -83,10 +85,9 @@ native build.
 
 ## Small Draft Lane
 
-The small/faster experiment lane is `small-draft-1b`, which resolves to the
-pinned Qwen3 1.7B 4-bit MLX asset. This lane exists for speed and draft-quality
-experiments only. It must not replace the 4B default unless it wins on both
-blind quality and latency.
+The legacy `small-draft-1b` alias resolves to the pinned Qwen3 1.7B 4-bit MLX
+asset. The fixed 2026-07-16 race promoted that model after it beat the 4B default
+on short-completion latency while keeping comparable blind quality.
 
 Download or inspect the asset:
 
@@ -171,7 +172,7 @@ Use the MLX/Hugging Face directory format under:
 The preferred beta asset currently resolves to:
 
 ```text
-~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/SteadyType/Models/Qwen3Medium/MLX/qwen3-1.7b-4bit
 ```
 
 The directory should contain at least:
@@ -181,7 +182,7 @@ The directory should contain at least:
 - one or more `.safetensors` weight files
 - `.steadytype-model-integrity.json`
 
-The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`. Gemma 4 E4B IT
+The default model repo is `mlx-community/Qwen3-1.7B-4bit`. Gemma 4 E4B IT
 OptiQ remains explicitly selectable for compatibility testing.
 
 ## Future Candidate: LiteRT-LM
@@ -198,15 +199,14 @@ Sources:
 
 - app-owned runtime
 - no user-managed server
-- Qwen3.5 4B 4-bit default beta asset; Gemma 4 E4B IT OptiQ explicitly selectable
+- Qwen3 1.7B 4-bit default beta asset; larger Qwen and Gemma models explicitly selectable
 - macOS 14 or newer on Apple Silicon for the private beta
-- Apple Silicon with 16 GB RAM first target
+- Apple Silicon with 8 GB RAM first target
 - reasoning off
-- 9 generated tokens by default
-- 1-3 visible words by default
-- p95 first-visible latency at or below 750ms for supported status
-- p95 first-visible latency at or below 1000ms for caveated status
-- average latency under 700ms as a private beta target
-- stretch latency under 300ms after warmup
+- 10 generated tokens by default
+- 1-4 visible words by default
+- median two- and four-word latency at or below 150ms on the primary development Mac
+- p95 first-visible latency at or below 250ms for supported status
+- no second-generation phrase retry for the default four-word path
 - no beta if runtime falls back to mock output
 - default latency proof: `./script/model_latency_report.py --default-model-proof`

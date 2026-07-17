@@ -684,8 +684,8 @@ struct SettingsWindowControllerStateTests {
 
         #expect(quiet.statusText == "How eager: Quiet")
         #expect(quiet.detailText == "Fewer suggestions. Waits longer.")
-        #expect(quiet.maxWordsText == "Longest suggestion: 8 words")
-        #expect(quiet.maxWordsDetailText == "Aims for 3–8 words when there’s enough context.")
+        #expect(quiet.maxWordsText == "Longest suggestion: 4 words")
+        #expect(quiet.maxWordsDetailText == "Allows suggestions up to 4 words long.")
         #expect(normal.statusText == "How eager: Normal")
         #expect(normal.detailText == "Balanced suggestions.")
         #expect(normal.maxWordsText == "Longest suggestion: 12 words")

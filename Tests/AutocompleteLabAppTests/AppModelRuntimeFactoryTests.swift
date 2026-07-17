@@ -13,8 +13,8 @@ struct AppModelRuntimeFactoryTests {
         let bundle = AppModelRuntimeFactory.makeRuntime(environment: [:], defaults: defaults)
 
         #expect(bundle.experimentArm == .length3Word)
-        #expect(bundle.lengthConfiguration.maxVisibleWords == 8)
-        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 20)
+        #expect(bundle.lengthConfiguration.maxVisibleWords == 4)
+        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 10)
         #expect(defaults.string(forKey: AppModelRuntimeFactory.experimentArmDefaultsKey) == "length_3_word")
     }
 
@@ -60,7 +60,7 @@ struct AppModelRuntimeFactoryTests {
             defaults: defaults
         )
 
-        #expect(bundle.modelDirectoryURL.path.contains("/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"))
+        #expect(bundle.modelDirectoryURL.path.contains("/Models/Qwen3Medium/MLX/qwen3-1.7b-4bit"))
         #expect(bundle.bootstrapPlan.activeCandidate == .unavailable)
         #expect(bundle.bootstrapPlan.assetState.statusSummary.contains("missing model asset"))
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
@@ -147,7 +147,7 @@ struct AppModelRuntimeFactoryTests {
         )
 
         #expect(bundle.modelOverrideName == nil)
-        #expect(bundle.bootstrapPlan.preferredAsset == .qwen35FourBMLX)
+        #expect(bundle.bootstrapPlan.preferredAsset == .qwen3MediumMLX)
         #expect(bundle.bootstrapPlan.preferredAsset.source != nil)
         #expect(!bundle.modelDirectoryURL.path.hasPrefix(rootURL.path))
     }

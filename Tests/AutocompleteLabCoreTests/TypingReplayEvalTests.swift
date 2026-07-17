@@ -129,7 +129,7 @@ struct TypingReplayEvalTests {
         let gate = TypingReplayGateEvaluator()
 
         #expect(gate.shouldDisplay(suggestionText: "alpha beta gamma", replayCase: replayCase))
-        #expect(!gate.shouldDisplay(suggestionText: "alpha", replayCase: replayCase))
+        #expect(gate.shouldDisplay(suggestionText: "alpha", replayCase: replayCase))
         #expect(!gate.shouldDisplay(
             suggestionText: "alpha beta gamma",
             replayCase: replayCase,

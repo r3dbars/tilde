@@ -433,6 +433,32 @@ struct MLXModelRuntimeWarmGateTests {
             ),
             effectiveMaxVisibleWords: 5
         ) != nil)
+
+        #expect(MLXModelRuntime.retryPromptForShortHighWordCandidate(
+            request: CompletionRequest(
+                textBeforeCursor: "Please make the next step ",
+                maxVisibleWords: 4,
+                mode: .phraseContinuation
+            ),
+            cleanedCandidates: [],
+            candidateSelection: CompletionCandidateRanker().selection(
+                [],
+                mode: .phraseContinuation,
+                textBeforeCursor: "Please make the next step "
+            ),
+            effectiveMaxVisibleWords: 4
+        ) == nil)
+    }
+
+    @Test("Raw completion prompts bypass chat templates")
+    func rawCompletionPromptsBypassChatTemplates() throws {
+        let prompt = CompletionPrompt(system: "Continue the text.", user: "Before cursor: hello")
+            .formatted(using: .rawCompletion)
+        let chatPrompt = CompletionPrompt(system: "Continue the text.", user: "Before cursor: hello")
+            .formatted(using: .chatInstruct)
+
+        #expect(MLXModelRuntime.directRawPromptText(for: prompt) == prompt.rawPrompt)
+        #expect(MLXModelRuntime.directRawPromptText(for: chatPrompt) == nil)
     }
 
     @Test("Word completion retry prompt repairs empty model candidates")

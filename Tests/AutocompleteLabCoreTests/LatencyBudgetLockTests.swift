@@ -54,11 +54,11 @@ struct LatencyBudgetLockTests {
     func defaultCompletionPolicyShapeIsLocked() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .qwen35FourB)
-        #expect(policy.targetLatencyMilliseconds == 50)
-        #expect(policy.maxGeneratedTokens == 20)
-        #expect(policy.maxVisibleWords == 8)
-        #expect(policy.minimumMemoryGB == 16)
+        #expect(policy.model == .qwen3Medium)
+        #expect(policy.targetLatencyMilliseconds == 150)
+        #expect(policy.maxGeneratedTokens == 10)
+        #expect(policy.maxVisibleWords == 4)
+        #expect(policy.minimumMemoryGB == 8)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
     }
 
@@ -68,7 +68,7 @@ struct LatencyBudgetLockTests {
         // and the default completion policy must agree on the model. Historically the docs
         // Drift between the runtime asset and prompt policy can silently select the wrong model.
         #expect(LocalModelAssetManifest.preferredMLX.model == CompletionModelPolicy.mvp.model)
-        #expect(LocalModelAssetManifest.preferredMLX.model == .qwen35FourB)
+        #expect(LocalModelAssetManifest.preferredMLX.model == .qwen3Medium)
         #expect(LocalModelAssetManifest.preferredMLX.source != nil)
     }
 }

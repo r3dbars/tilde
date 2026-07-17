@@ -13,7 +13,7 @@ struct SuggestionPresentationGateTests {
             phase: .streamingPartial
         ))
 
-        #expect(!gate.shouldPresent(
+        #expect(gate.shouldPresent(
             CompletionSuggestion(text: " ready to"),
             mode: .phraseContinuation,
             phase: .streamingPartial
@@ -120,14 +120,14 @@ struct SuggestionPresentationGateTests {
         )
         var state = StreamingPresentationState()
 
-        #expect(!gate.shouldPresentStreamingPartial(
+        #expect(gate.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this"),
             mode: .phraseContinuation,
             state: &state,
             nowMilliseconds: 90
         ))
 
-        #expect(gate.shouldPresentStreamingPartial(
+        #expect(!gate.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this work"),
             mode: .phraseContinuation,
             state: &state,

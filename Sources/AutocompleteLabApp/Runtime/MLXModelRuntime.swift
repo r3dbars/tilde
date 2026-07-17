@@ -647,7 +647,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             promptKVCacheOwner.configuration.isEnabled
         }
 
-        guard promptKVCacheEnabled, !usesVisionLanguageFactory else {
+        let usesDirectRawCompletion = prompt.template == .rawCompletion && !usesVisionLanguageFactory
+        guard (promptKVCacheEnabled || usesDirectRawCompletion), !usesVisionLanguageFactory else {
             let bypassReason: MLXPromptKVCacheMissReason = usesVisionLanguageFactory
                 ? .visionLanguageRuntime
                 : .envFlagOff
@@ -771,13 +772,22 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             maxTokens: requestMaxGeneratedTokens,
             temperature: 0
         )
-        let preparedInput = try await container.prepare(input: UserInput(
-            chat: [
-                .system(promptCacheLookup.systemPrompt),
-                .user(prompt.user)
-            ],
-            additionalContext: ["enable_thinking": false]
-        ))
+        let preparedInput: LMInput
+        let promptInputMode: String
+        if let rawPrompt = Self.directRawPromptText(for: prompt) {
+            let tokenizer = await container.tokenizer
+            preparedInput = LMInput(tokens: MLXArray(tokenizer.encode(text: rawPrompt)))
+            promptInputMode = "direct_tokens"
+        } else {
+            preparedInput = try await container.prepare(input: UserInput(
+                chat: [
+                    .system(promptCacheLookup.systemPrompt),
+                    .user(prompt.user)
+                ],
+                additionalContext: ["enable_thinking": false]
+            ))
+            promptInputMode = "chat_template"
+        }
         let preparedAt = Date()
         let promptTokens = preparedInput.text.tokens.asArray(Int.self)
         let lookup = stateQueue.sync {
@@ -793,6 +803,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         // Decompose the otherwise-lumped session setup so prefill cost is attributable on both
         // cache hit and miss: tokenization (container.prepare) vs cache/iterator setup.
         promptCacheTraceMetadata["preparePromptMilliseconds"] = String(Self.milliseconds(from: sessionStartedAt, to: preparedAt))
+        promptCacheTraceMetadata["promptInputMode"] = promptInputMode
         promptCacheTraceMetadata["promptTokenCount"] = String(promptTokens.count)
         promptCacheTraceMetadata["appendTokenCount"] = String(lookup.appendTokens.count)
 
@@ -924,6 +935,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
     }
 
+    static func directRawPromptText(for prompt: FormattedCompletionPrompt) -> String? {
+        guard prompt.template == .rawCompletion else {
+            return nil
+        }
+
+        return prompt.rawPrompt ?? prompt.user
+    }
+
     static func retryPromptForEmptyWordCompletionCandidate(
         request: CompletionRequest,
         cleanedCandidates: [CompletionSuggestion],
@@ -1001,7 +1020,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         effectiveMaxVisibleWords: Int
     ) -> CompletionPrompt? {
         guard request.mode.isContinuation,
-              effectiveMaxVisibleWords >= 3,
+              effectiveMaxVisibleWords > CompletionModelPolicy.mvp.maxVisibleWords,
               candidateSelection.suggestion == nil,
               candidateSelection.suppressionReason == .lowTopScore
                 || candidateSelection.suppressionReason == .noCandidates

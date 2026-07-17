@@ -172,7 +172,9 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         runtimeCandidate: .mlx,
         cacheDirectoryName: "Models/Qwen3Medium/MLX",
         fileName: "qwen3-1.7b-4bit",
-        expectedMinimumBytes: 768 * 1024 * 1024
+        source: .qwen3MediumMLX4Bit,
+        expectedMinimumBytes: 900 * 1024 * 1024,
+        requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
     public static let qwen35NineBMLX = LocalModelAssetManifest(
@@ -194,7 +196,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
-    public static let preferredMLX = qwen35FourBMLX
+    public static let preferredMLX = qwen3MediumMLX
 
     public static let selectableMLXManifests: [String: LocalModelAssetManifest] = [
         "gemma-4-e2b": .gemma4E2BMLX,
@@ -357,6 +359,24 @@ public struct LocalModelAssetSource: Equatable, Sendable {
             .init(path: "tokenizer_config.json", byteCount: 1_139, sha256: "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"),
             .init(path: "video_preprocessor_config.json", byteCount: 385, sha256: "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"),
             .init(path: "vocab.json", byteCount: 6_722_759, sha256: "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003")
+        ]
+    )
+
+    public static let qwen3MediumMLX4Bit = LocalModelAssetSource(
+        repoID: "mlx-community/Qwen3-1.7B-4bit",
+        revision: "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+        allowPatterns: defaultMLXAllowPatterns,
+        estimatedBytes: 985_000_000,
+        licenseURL: "https://huggingface.co/mlx-community/Qwen3-1.7B-4bit",
+        expectedFiles: [
+            .init(path: "config.json", byteCount: 937, sha256: "507a6701220524eb8b283425bf0856a9ae4f21f4052e563896ddd668994b1dc7"),
+            .init(path: "merges.txt", byteCount: 1_671_853, sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"),
+            .init(path: "model.safetensors", byteCount: 968_080_210, sha256: "0e86d9677e519323849eac1bc272caae88567a481ff188c431f70be543d9995f"),
+            .init(path: "model.safetensors.index.json", byteCount: 49_731, sha256: "1e3058d4ba4b04e4de35b74467725cbef90ff022198404218e48f21adc9cfa15"),
+            .init(path: "special_tokens_map.json", byteCount: 613, sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"),
+            .init(path: "tokenizer.json", byteCount: 11_422_654, sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"),
+            .init(path: "tokenizer_config.json", byteCount: 9_706, sha256: "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0"),
+            .init(path: "vocab.json", byteCount: 2_776_833, sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910")
         ]
     )
 

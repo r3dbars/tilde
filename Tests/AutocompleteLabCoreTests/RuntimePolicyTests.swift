@@ -178,7 +178,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Qwen3.5 4B)")
+        #expect(missingReport.summary == "download needed (Qwen3 1.7B)")
         #expect(missingReport.detail == "The local model is not installed yet. Expected folder: /tmp/gemma")
         #expect(missingReport.action == .installModel)
 
@@ -324,14 +324,14 @@ struct RuntimePolicyTests {
         #expect(!report.allowsSuggestions)
     }
 
-    @Test("Receipt-backed Qwen 3.5 4B asset manifest is the preferred MLX runtime")
-    func qwen35FourBAssetManifestIsPreferredMLXRuntime() throws {
+    @Test("Receipt-backed Qwen3 1.7B asset manifest is the preferred MLX runtime")
+    func qwen3MediumAssetManifestIsPreferredMLXRuntime() throws {
         let manifest = LocalModelAssetManifest.preferredMLX
 
-        #expect(manifest.model == .qwen35FourB)
+        #expect(manifest.model == .qwen3Medium)
         #expect(manifest.runtimeCandidate == .mlx)
-        #expect(manifest.cacheDirectoryName.contains("Qwen35FourB"))
-        #expect(manifest.fileName == "Qwen3.5-4B-4bit")
+        #expect(manifest.cacheDirectoryName.contains("Qwen3Medium"))
+        #expect(manifest.fileName == "qwen3-1.7b-4bit")
         let source = try #require(manifest.source)
         #expect(source.immutableRevisionError == nil)
         #expect(!source.expectedFiles.isEmpty)
@@ -378,8 +378,8 @@ struct RuntimePolicyTests {
 
     @Test("Named MLX manifests support local model trials")
     func namedMLXManifestsSupportLocalModelTrials() {
-        #expect(LocalModelAssetManifest.mlxManifest(named: nil) == .qwen35FourBMLX)
-        #expect(LocalModelAssetManifest.mlxManifest(named: "") == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: nil) == .qwen3MediumMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "") == .qwen3MediumMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "qwen35-4b") == .qwen35FourBMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: " Qwen3.5-9B ") == .qwen35NineBMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b") == .gemma4E4BMLX)
@@ -390,7 +390,7 @@ struct RuntimePolicyTests {
         #expect(LocalModelAssetManifest.mlxManifest(named: "qwen3-1.7b") == .qwen3MediumMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "qwen3-1.7b-base") == .qwen3MediumMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "small-draft-1b") == .qwen3MediumMLX)
-        #expect(LocalModelAssetManifest.mlxManifest(named: "unknown") == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "unknown") == .qwen3MediumMLX)
     }
 
     @Test("MLX model asset validation expects a Hugging Face directory")
@@ -495,12 +495,12 @@ struct RuntimePolicyTests {
             samples: [
                 CompletionLatencySample(candidate: .mlx, milliseconds: 10, tokenCount: 1),
                 CompletionLatencySample(candidate: .mlx, milliseconds: 10, tokenCount: 1),
-                CompletionLatencySample(candidate: .mlx, milliseconds: 90, tokenCount: 1)
+                CompletionLatencySample(candidate: .mlx, milliseconds: 160, tokenCount: 1)
             ]
         )
 
-        #expect(benchmark.averageLatencyMilliseconds == 36)
-        #expect(benchmark.p95LatencyMilliseconds == 90)
+        #expect(benchmark.averageLatencyMilliseconds == 60)
+        #expect(benchmark.p95LatencyMilliseconds == 160)
         #expect(!benchmark.passesAutocompleteTarget())
     }
 
