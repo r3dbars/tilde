@@ -31,6 +31,10 @@ public enum AutocompleteTracePrivacyFilter {
     }
 
     static func metadataValue(forKey key: String, value: String) -> String {
+        if isTraceSignalMetadataKey(key), isKnownSafeCounterList(value) {
+            return value
+        }
+
         let logSafeValue = DiagnosticsMetadataRedactor.logSafeValue(forKey: key, value: value)
         guard isTraceSignalMetadataKey(key) else {
             return logSafeValue
@@ -390,6 +394,28 @@ public enum AutocompleteTracePrivacyFilter {
         "workspace-app-activated",
         "workspace-app-deactivated",
         "wrong-app-or-field-before-accept",
-        "wrong-context"
+        "wrong-context",
+        "adviceOrToneDrift",
+        "assistantMeta",
+        "assistantResponseToPrompt",
+        "belowMinimumVisibleWords",
+        "duplicateCandidate",
+        "duplicatesVisibleTypedWords",
+        "emptyAfterPrefixTrimming",
+        "emptyOutput",
+        "genericChatFiller",
+        "invalidWordCompletion",
+        "lowSignalPhrase",
+        "lowValueSingleWordPhrase",
+        "noSuggestionSentinel",
+        "promptInstructionEcho",
+        "repeatedListMarker",
+        "repeatsEarlierContext",
+        "replaysCurrentSentence",
+        "restartsCurrentSentence",
+        "startsSecondSentence",
+        "unsafeHiddenOrControlCharacter",
+        "unsafePromptAction",
+        "visibleUIChrome"
     ]
 }
