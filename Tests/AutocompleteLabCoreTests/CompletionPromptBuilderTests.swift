@@ -6,7 +6,7 @@ struct CompletionPromptBuilderTests {
     @Test("Continuation prompt includes bounded personal guidance and snippets")
     func continuationPromptIncludesPersonalContext() {
         let context = PersonalContext(
-            snippets: ["I keep launch notes direct.", "The proof should stay focused."],
+            snippets: ["I keep launch notes direct and easy to scan.", "The proof should stay focused."],
             profileGuidance: "Personal writing profile: keep phrasing direct."
         )
         let request = CompletionRequest(textBeforeCursor: "The launch note should", personalContext: context)
@@ -14,7 +14,8 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("Personal writing profile: keep phrasing direct."))
         #expect(prompt.user.contains("Recent writing by this user (phrasing reference, not content to copy verbatim unless it continues the text):"))
-        #expect(prompt.user.contains("- I keep launch notes direct."))
+        #expect(prompt.user.contains("- I keep launch notes direct and easy to scan."))
+        #expect(prompt.user.contains("Writing pattern examples from accepted local history:"))
         #expect(prompt.user.hasPrefix("Recent writing by this user"))
         #expect(request.behaviorProfileTraceMetadata["personalContextSnippetCount"] == "2")
     }
@@ -727,15 +728,15 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Do not invent commitments"))
     }
 
-    @Test("Prompt excludes text after cursor by default")
-    func promptExcludesTextAfterCursorByDefault() {
+    @Test("Prompt includes bounded text after cursor by default")
+    func promptIncludesTextAfterCursorByDefault() {
         let prompt = CompletionPromptBuilder().prompt(for: CompletionRequest(
             textBeforeCursor: "The rollout should",
             textAfterCursor: "without repeating this suffix"
         ))
 
-        #expect(!prompt.user.contains("Text after cursor"))
-        #expect(!prompt.user.contains("without repeating this suffix"))
+        #expect(prompt.user.contains("Text after cursor"))
+        #expect(prompt.user.contains("without repeating this suffix"))
     }
 
     @Test("Replay prompt can include bounded text after cursor")
