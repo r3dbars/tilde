@@ -161,9 +161,24 @@ struct CompatibilityProfileTests {
     func denylistedAppsAreBlocked() {
         let store = CompatibilityProfileStore.mvp
 
-        #expect(store.allows(bundleIdentifier: "com.apple.Terminal"))
+        #expect(!store.allows(bundleIdentifier: "com.apple.Terminal"))
         #expect(!store.allows(bundleIdentifier: "com.1password.1password"))
         #expect(!store.allows(bundleIdentifier: "com.apple.Passwords"))
+    }
+
+    @Test("Terminal hosts are blocked from the generic profile store")
+    func terminalHostsAreBlockedFromGenericProfileStore() {
+        let store = CompatibilityProfileStore.mvp
+
+        for bundleIdentifier in ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts {
+            #expect(store.supportStatus(for: bundleIdentifier) == .denylisted)
+            #expect(!store.allows(bundleIdentifier: bundleIdentifier))
+        }
+
+        #expect(store.supportStatus(for: "dev.warp.Warp-Stable") == .denylisted)
+        #expect(!store.allows(bundleIdentifier: "dev.warp.Warp-Stable"))
+        #expect(!store.denylistedBundleIdentifiers.contains(ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofProfile.canPresentSuggestions)
     }
 
     @Test("Highest-risk developer and system apps stay denylisted by default")
@@ -216,7 +231,7 @@ struct CompatibilityProfileTests {
     func supportStatusExplainsBlockedApps() {
         let store = CompatibilityProfileStore.mvp
 
-        #expect(store.supportStatus(for: "com.apple.Terminal").summary == "yellow: Generic App")
+        #expect(store.supportStatus(for: "com.apple.Terminal").summary == "blocked: denylisted app")
         #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: ChatGPT Atlas")
         #expect(store.supportStatus(for: "com.example.UnknownEditor").summary == "yellow: Generic App")
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
