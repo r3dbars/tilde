@@ -86,6 +86,11 @@ CaretRectResolver|research|Sources/AutocompleteLabCore/Geometry/CaretRectResolve
 MockModelRuntime|proof-only|Sources/AutocompleteLabCore/Runtime/MockModelRuntime.swift|Test runtime helper, not production app runtime behavior.
 FocusedTextPollGateDecision|research|Sources/AutocompleteLabCore/Session/FocusedTextPollGatePolicy.swift|Polling gate candidate is tested but not wired into the live polling loop yet.
 FocusedTextPollGatePolicy|research|Sources/AutocompleteLabCore/Session/FocusedTextPollGatePolicy.swift|Polling gate candidate is tested but not wired into the live polling loop yet.
+FocusedTextSignalMode|experimental|Sources/AutocompleteLabCore/Session/FocusedTextSignalModePolicy.swift|Event-first focused-text mode groundwork is tested but intentionally not wired until the in-flight app integration settles.
+FocusedTextSignalModePolicy|experimental|Sources/AutocompleteLabCore/Session/FocusedTextSignalModePolicy.swift|Event-first focused-text mode groundwork is tested but intentionally not wired until the in-flight app integration settles.
+FocusedTextSignalModeState|experimental|Sources/AutocompleteLabCore/Session/FocusedTextSignalModePolicy.swift|Event-first focused-text mode groundwork is tested but intentionally not wired until the in-flight app integration settles.
+FocusedTextSignalModeTransition|experimental|Sources/AutocompleteLabCore/Session/FocusedTextSignalModePolicy.swift|Event-first focused-text mode groundwork is tested but intentionally not wired until the in-flight app integration settles.
+FocusedTextSignalObservation|experimental|Sources/AutocompleteLabCore/Session/FocusedTextSignalModePolicy.swift|Event-first focused-text mode groundwork is tested but intentionally not wired until the in-flight app integration settles.
 PlacementUncertaintyDecision|research|Sources/AutocompleteLabCore/Session/PlacementUncertaintySuppressor.swift|Placement uncertainty suppressor is tested but not wired into live display gating yet.
 PlacementUncertaintySuppressor|research|Sources/AutocompleteLabCore/Session/PlacementUncertaintySuppressor.swift|Placement uncertainty suppressor is tested but not wired into live display gating yet.
 SensitiveFieldProofFixture|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
