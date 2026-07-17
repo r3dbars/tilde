@@ -103,6 +103,83 @@ struct RawTracePrivacyExpiryTests {
         #expect(!FileManager.default.fileExists(atPath: survivalInspectorDebug.path))
     }
 
+    @Test("Sensitive surfaces stay redacted when raw tracing is enabled")
+    func sensitiveSurfacesOverrideRawTracing() throws {
+        let suiteName = "RawTracePrivacyExpiryTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTracePrivacyExpiryTests-\(UUID().uuidString)")
+        let log = RawAutocompleteTraceLog(
+            logURL: temporaryFolder.appendingPathComponent("traces.jsonl"),
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            userDefaults: defaults,
+            environment: [:]
+        )
+        log.setRawContentTracingEnabled(true)
+        log.setScreenshotTracingEnabled(true)
+
+        log.record(
+            type: .suggestionSuppressed,
+            suggestionID: "sensitive-one",
+            appBundleIdentifier: "com.example.synthetic",
+            textBeforeCursor: "synthetic-password-sentinel",
+            textAfterCursor: "synthetic-otp-sentinel",
+            rawOutput: "synthetic-output-sentinel",
+            acceptedText: "synthetic-accepted-sentinel",
+            reason: "blocked-field-kind",
+            screenshotPath: "/synthetic/sensitive-screenshot.png",
+            contentSensitivity: .sensitiveSurface,
+            metadata: ["privatePrompt": "synthetic-metadata-sentinel"]
+        )
+
+        let event = try #require(log.recentEvents(limit: 1).first)
+        #expect(event.textBeforeCursor == "String(27 chars)")
+        #expect(event.textAfterCursor == "String(22 chars)")
+        #expect(event.rawOutput == "String(25 chars)")
+        #expect(event.acceptedText == "String(27 chars)")
+        #expect(event.screenshotPath.isEmpty)
+        #expect(event.metadata["privatePrompt"] == "String(27 chars)")
+    }
+
+    @Test("Suppressed field metadata fails closed at the logger boundary")
+    func suppressedFieldMetadataOverridesRawTracing() throws {
+        let suiteName = "RawTracePrivacyExpiryTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTracePrivacyExpiryTests-\(UUID().uuidString)")
+        let log = RawAutocompleteTraceLog(
+            logURL: temporaryFolder.appendingPathComponent("traces.jsonl"),
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            userDefaults: defaults,
+            environment: [:]
+        )
+        log.setRawContentTracingEnabled(true)
+        log.setScreenshotTracingEnabled(true)
+
+        log.record(
+            type: .suggestionSuppressed,
+            suggestionID: "metadata-sensitive-one",
+            textBeforeCursor: "synthetic-secret-sentinel",
+            screenshotPath: "/synthetic/sensitive-screenshot.png",
+            metadata: [
+                "fieldKind": "secure",
+                "fieldKindSuppressed": "true"
+            ]
+        )
+
+        let event = try #require(log.recentEvents(limit: 1).first)
+        #expect(event.textBeforeCursor == "String(25 chars)")
+        #expect(event.screenshotPath.isEmpty)
+    }
+
     @Test("Delete all removes generated local report artifacts too")
     func deleteAllRemovesGeneratedReportArtifacts() throws {
         let suiteName = "RawTracePrivacyExpiryTests.\(UUID().uuidString)"
