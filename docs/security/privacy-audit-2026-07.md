@@ -8,6 +8,8 @@ Method: source review plus synthetic sentinel tests only. No personal writing or
 
 Two medium-severity privacy boundary failures were confirmed and fixed on separate branches. No production path that uploads typed or personal content, permissive local artifact, or unredacted default export was found.
 
+Merge dependency: this report must merge after draft PRs [#168](https://github.com/r3dbars/steadytype/pull/168) and [#169](https://github.com/r3dbars/steadytype/pull/169). The fixed statuses and confirmed-fix descriptions below refer to that stacked state; until both remediation PRs land on `main`, PA-01 and PA-02 remain open there.
+
 | ID | Severity | Finding | Status |
 | --- | --- | --- | --- |
 | PA-01 | Medium | Explicit raw-content and screenshot trace opt-ins could persist content from suppressed fields and from ordinary fields whose activation assessment detected secret-shaped text (`Sources/AutocompleteLabApp/App/AppDelegate.swift:2507`, `Sources/AutocompleteLabCore/Session/CompletionActivationPolicy.swift:204`, `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:376`). | Fixed in draft PR [#168](https://github.com/r3dbars/steadytype/pull/168) with a fail-closed logger boundary, activation-decision wiring, and synthetic regression coverage. |
