@@ -1,60 +1,43 @@
-# Autocomplete Lab Agent Guide
+# SteadyType Agent Guide
 
-This repo is separate from Transcripted on purpose.
+Open-source macOS autocomplete app; the owner daily-drives it. The bar for
+every change: does it make the app feel faster, more accurate, or simpler? If
+a change adds process instead of product, don't.
 
 ## Product stance
 
-- Treat this as an experiment first, not a committed Transcripted feature.
-- Keep the app tiny until real people prove it is useful.
-- The test is simple: does inline help make writing feel easier, or does it get annoying?
-- Privacy is a product requirement. Do not store or send typed text unless the user explicitly turns that on.
+- The test is simple: does inline help make writing feel easier, or does it get
+  annoying? A suggestion that never appears fails that test just as hard as an
+  annoying one.
+- Privacy is a hard requirement. Never store or transmit raw typed text,
+  prompts, model output, accepted text, or screenshots unless the user
+  explicitly opts in. Never print them in scripts or logs.
+- Keep the model runtime app-owned. Users must never need Ollama, llama.cpp,
+  Python, or any separate server. Mock engines are for dev/tests only.
+- Fail loudly, not silently. If the app can't suggest (no permission, no model,
+  broken field), the user should be able to see why.
 
-## MVP boundary
+## Architecture rules
 
-Start with:
-
-- macOS menu bar app
-- Accessibility permission
-- active text field / caret detection
-- floating suggestion near the cursor
-- Tab accepts the next word
-- Esc dismisses
-- local-first inference
-- app allowlist while testing
-
-Avoid early:
-
-- personalization
-- broad telemetry
-- cloud-only inference
-- browser-specific heroics
-- Transcripted integration
-- true inline ghost text until the floating overlay proves useful
-
-## Technical bias
-
-- Prefer Swift/AppKit for the Mac plumbing.
-- Use existing open-source examples as references, but do not copy proprietary Co-Typist code.
-- Use public Co-Typist docs and local bundle metadata only as behavior/architecture clues.
-- Keep experiments small and easy to throw away.
-
-## Repo structure
-
-- Every tracked folder should have an `AGENTS.md` file and a `CLAUDE.md` file that explain what belongs there.
-- When adding guide files inside a SwiftPM target folder, update `Package.swift` excludes so the package still loads cleanly.
-- Keep the model runtime app-owned. Do not require users to start Ollama, llama.cpp, or any other separate server.
-- Mock engines are fine for development and tests, but production UX should feel like one Mac app.
-- Add tests with each meaningful behavior change.
+- `Sources/AutocompleteLabCore` — pure, deterministic Swift. All autocomplete
+  *decisions* live here as small policy types with focused tests. No AppKit,
+  Accessibility, MLX, or process management.
+- `Sources/AutocompleteLabApp` — the native shell: Accessibility, event taps,
+  insertion, overlay UI, MLX runtime. As little decision logic as possible.
+  `AppDelegate.swift` is oversized and being decomposed — shrink it, never
+  grow it.
+- Prefer deleting or merging policies over adding new ones. Before adding a
+  gate/suppressor/cooldown, check whether an existing one already covers it —
+  compounding independent thresholds is how this app once became silent.
+- Add or update tests with each behavior change.
 
 ## Keeping main green
 
-- Before opening a PR or pushing, run the fast proof gate: `./script/proof.sh fast`
-  (the cheap proof tier, target < ~10 min). It is the single entry point CI runs on
-  every PR to `main` (`.github/workflows/fast-proof.yml`); wire it to run on push
-  with `git config core.hookspath .githooks`.
-- The gate is tiered. Blocking checks (coverage manifest, `script/*.py` byte-compile,
-  harness self-tests, whitespace, core `swift test`) fail the build. Proof-status
-  checks that still need a pending *manual* proof (e.g. `check_proof_manifest.sh`)
-  run report-only. Keep proof gates honest: pending proof stays pending — do not
-  flip a report lane to blocking until its manual proof actually lands.
-- The broad pre-beta gate stays `./script/beta_readiness.sh`.
+- Pre-merge gate: `./script/proof.sh fast` — whitespace, python byte-compile,
+  harness self-tests, core `swift test`. CI runs exactly this
+  (`.github/workflows/fast-proof.yml`); enable locally on push with
+  `git config core.hookspath .githooks`.
+- Release gate (macOS, manual): `./script/release_check.sh` — bundle checks,
+  model asset, and the live network-egress privacy proof. All lanes blocking.
+- No new scripts without a consumer; no docs nothing reads; no per-folder
+  guide files (this file and CLAUDE.md at the root are the only two).
