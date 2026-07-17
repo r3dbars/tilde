@@ -8,6 +8,20 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 AUTOCOMPLETE_LAB_REPO_ROOT="$ROOT_DIR" "$CHECK" >/dev/null
 
+mkdir -p "$TMP_DIR/missing-boundary/docs"
+sed '/Research notes cite public sources/d' "$ROOT_DIR/docs/AGENTS.md" \
+  >"$TMP_DIR/missing-boundary/docs/AGENTS.md"
+cp "$ROOT_DIR/docs/CLAUDE.md" "$TMP_DIR/missing-boundary/docs/CLAUDE.md"
+
+if AUTOCOMPLETE_LAB_REPO_ROOT="$TMP_DIR/missing-boundary" "$CHECK" >"$TMP_DIR/missing-boundary.out" 2>&1; then
+  echo "agent guide contract self-test: missing boundary unexpectedly passed" >&2
+  exit 1
+fi
+
+grep -Fq "docs/AGENTS.md is missing the consolidated research boundary" \
+  "$TMP_DIR/missing-boundary.out" \
+  || { echo "agent guide contract self-test: failure did not identify the missing boundary" >&2; exit 1; }
+
 mkdir -p "$TMP_DIR/docs/research"
 cp "$ROOT_DIR/docs/AGENTS.md" "$TMP_DIR/docs/AGENTS.md"
 cp "$ROOT_DIR/docs/CLAUDE.md" "$TMP_DIR/docs/CLAUDE.md"
