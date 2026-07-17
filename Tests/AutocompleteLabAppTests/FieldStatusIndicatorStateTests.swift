@@ -3,6 +3,15 @@ import Testing
 
 @Suite("Field status indicator state")
 struct FieldStatusIndicatorStateTests {
+    @Test("Blocked state stays out of the typing surface")
+    func blockedStateStaysOutOfTypingSurface() {
+        #expect(!FieldStatusIndicatorState.blocked.shouldShowNearField)
+        #expect(FieldStatusIndicatorState.ready.shouldShowNearField)
+        #expect(FieldStatusIndicatorState.thinking.shouldShowNearField)
+        #expect(FieldStatusIndicatorState.shown.shouldShowNearField)
+        #expect(FieldStatusIndicatorState.waiting.shouldShowNearField)
+    }
+
     @Test("Blocked state can explain why the field is quiet")
     func blockedStateCanExplainWhyTheFieldIsQuiet() {
         let state = FieldStatusIndicatorState.blocked.withReason("surface needs proof first")

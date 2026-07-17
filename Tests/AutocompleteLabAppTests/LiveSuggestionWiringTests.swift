@@ -63,6 +63,15 @@ struct LiveSuggestionWiringTests {
         #expect(!eagerPollPolicy.contains("!suggestionSession.hasVisibleSuggestion"))
     }
 
+    @Test("Partial-word phrase requests show an instant word bridge before model refinement")
+    func partialWordPhraseRequestsUseInstantWordBridge() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(appDelegate, contains: "if request.partialWordShape != nil")
+        try require(appDelegate, contains: "fastTriggerReason = \"fast-word-bridge\"")
+        try require(appDelegate, contains: "then keep the phrase request alive so the model can extend past that word")
+    }
+
     @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
     func appDelegateForwardsScreenshotPathAuthorization() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")

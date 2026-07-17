@@ -5,6 +5,31 @@ import Testing
 struct TypeThroughPrefixStateMachineTests {
     private let machine = TypeThroughPrefixStateMachine()
 
+    @Test("Matching a predicted word keeps the phrase stable letter by letter")
+    func matchingPredictedWordKeepsPhraseStable() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(
+                text: "discussion about the launch",
+                maxVisibleWords: 8
+            )
+        )
+
+        let transition = machine.apply(
+            to: &session,
+            input: input(
+                baselineBefore: "Start the ",
+                currentBefore: "Start the discussi"
+            )
+        )
+
+        #expect(transition == .survived(TypeThroughPrefixSurvival(
+            typedCharacterCount: 8,
+            remainingVisibleCharacterCount: 19,
+            consumedFullSuggestion: false
+        )))
+        #expect(session.visibleSuggestion?.visibleText == "on about the launch")
+    }
+
     @Test("Typed character matching the visible head trims the suggestion")
     func typedCharacterMatchingVisibleHeadTrimsSuggestion() {
         var session = SuggestionSession(

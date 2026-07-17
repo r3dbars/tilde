@@ -13,6 +13,10 @@ struct FieldStatusIndicatorState: Equatable {
     let kind: Kind
     let accessibilityLabel: String
 
+    var shouldShowNearField: Bool {
+        kind != .blocked
+    }
+
     static let ready = FieldStatusIndicatorState(
         kind: .ready,
         accessibilityLabel: "SteadyType is on in this field"
