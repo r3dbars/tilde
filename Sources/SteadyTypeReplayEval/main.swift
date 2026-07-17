@@ -35,7 +35,7 @@ private enum CLIError: Error, CustomStringConvertible {
 
 private let usage = """
 Usage:
-  SteadyTypeReplayEval [--corpus DIR | --fixture FILE] [--engine mock|batch]
+  SteadyTypeReplayEval [--corpus DIR | --fixture FILE] [--engine mock|batch|common|corpus]
     [--model ALIAS] [--variant baseline|personalized|both]
     [--prompt-format chat-instruct|raw-completion|minimal-rules|all] [--max-cases N]
     [--context-chars N] [--suffix on|off] [--few-shot-source built-in|none]
@@ -154,7 +154,7 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
         index += 1
     }
 
-    guard ["mock", "batch"].contains(options.engine) else {
+    guard ["mock", "batch", "common", "corpus"].contains(options.engine) else {
         throw CLIError.usage("Invalid --engine: \(options.engine)")
     }
     guard ["baseline", "personalized", "both"].contains(options.variant) else {
@@ -252,13 +252,31 @@ private func runReplay(options: Options) async throws {
             suggestions = result.suggestionsByID
             latencies = result.latencyMillisecondsByID
         }
-    } else {
+    } else if options.engine == "mock" {
         let engine = MockCompletionEngine()
         for requests in requestsByFormat.values {
             for request in requests {
                 if let suggestion = try await engine.suggestion(for: request) {
                     suggestions[request.suggestionID] = suggestion.visibleText
                 }
+            }
+        }
+    } else {
+        for requests in requestsByFormat.values {
+            for request in requests {
+                let selection = options.engine == "corpus"
+                    ? CorpusNGramPhrasePredictor().selection(
+                        for: request.textBeforeCursor,
+                        behaviorProfileID: request.behaviorProfileID,
+                        maxVisibleWords: request.maxVisibleWords
+                    )
+                    : CommonPhraseContinuationPredictor().selection(
+                        for: request.textBeforeCursor,
+                        behaviorProfileID: request.behaviorProfileID,
+                        maxVisibleWords: request.maxVisibleWords
+                    )
+                suggestions[request.suggestionID] = selection.suggestion?.visibleText
+                latencies[request.suggestionID] = 0
             }
         }
     }
@@ -291,7 +309,7 @@ private func runReplay(options: Options) async throws {
                 dateISO: now,
                 gitSHA: sha,
                 engine: options.engine,
-                model: options.engine == "mock" ? "mock" : effectiveModel,
+                model: ["mock", "common", "corpus"].contains(options.engine) ? options.engine : effectiveModel,
                 promptFormat: promptFormat.rawValue,
                 variant: variant,
                 corpusKind: corpusKind,
@@ -305,8 +323,8 @@ private func runReplay(options: Options) async throws {
     }
     let runMetadata = """
     - Engine: \(options.engine)
-    - Requested model: \(options.engine == "mock" ? "mock" : options.model)
-    - Effective model: \(options.engine == "mock" ? "mock" : effectiveModel)
+    - Requested model: \(["mock", "common", "corpus"].contains(options.engine) ? options.engine : options.model)
+    - Effective model: \(["mock", "common", "corpus"].contains(options.engine) ? options.engine : effectiveModel)
     - Corpus: \(corpusKind)
     - Cases: \(replayCases.count)
     - Seed: \(options.seed)

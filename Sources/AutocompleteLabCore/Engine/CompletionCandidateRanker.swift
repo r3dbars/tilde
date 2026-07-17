@@ -217,7 +217,7 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             return 0
         }
 
-        for prior in CommonPhraseContinuationPrior.defaultPriors where context.hasSuffix(prior.contextSuffix) {
+        for prior in CorpusNGramPhrasePredictor.defaultPriors where context.hasSuffix(prior.contextSuffix) {
             guard candidateWords.starts(with: prior.continuationWords) else {
                 continue
             }
