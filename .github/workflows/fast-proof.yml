@@ -69,9 +69,9 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             .build
-          key: macos-26-swiftpm-${{ hashFiles('Package.resolved') }}
-          restore-keys: |
-            macos-26-swiftpm-
+          # .build contains the patched dependency checkout. Keep this exact so a
+          # changed patch or patch script can never restore already-patched stale code.
+          key: macos-26-swiftpm-${{ hashFiles('Package.resolved', 'patches/mlx-swift-lm/**', 'script/patch_mlx_swift_lm.sh') }}
 
       - name: Resolve Swift package graph
         run: swift package resolve
