@@ -8,6 +8,25 @@ enum ReplayPromptFormat: String, CaseIterable {
     case minimalRules = "minimal-rules"
 }
 
+struct ReplayPromptConfiguration: Equatable, Sendable {
+    var contextCharacters = 360
+    var includesTextAfterCursor = false
+    var includesBuiltInExamples = true
+
+    var fewShotSource: String { includesBuiltInExamples ? "built-in" : "none" }
+}
+
+struct ReplayDecodingConfiguration: Equatable, Sendable {
+    var maxTokens = 20
+    var temperature = 0.0
+    var topP = 0.0
+    var repetitionPenalty = 1.0
+
+    var identifier: String {
+        "tokens-\(maxTokens)-temp-\(temperature)-top-p-\(topP)-repeat-\(repetitionPenalty)"
+    }
+}
+
 struct BatchModelEngine {
     struct Result: Sendable {
         let suggestionsByID: [String: String]
@@ -46,14 +65,20 @@ struct BatchModelEngine {
     /// without creating a request/response deadlock.
     func suggestions(
         for requests: [CompletionRequest],
-        promptFormatByID: [String: ReplayPromptFormat]
+        promptFormatByID: [String: ReplayPromptFormat],
+        promptConfiguration: ReplayPromptConfiguration = ReplayPromptConfiguration(),
+        decodingConfiguration: ReplayDecodingConfiguration = ReplayDecodingConfiguration()
     ) throws -> Result {
         guard !requests.isEmpty else { return Result(suggestionsByID: [:], latencyMillisecondsByID: [:]) }
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let input = try requests.map { request -> Data in
-            let productionPrompt = CompletionPromptBuilder().prompt(for: request)
+            let productionPrompt = CompletionPromptBuilder(
+                maxContextCharacters: promptConfiguration.contextCharacters,
+                includesBuiltInExamples: promptConfiguration.includesBuiltInExamples,
+                includesTextAfterCursor: promptConfiguration.includesTextAfterCursor
+            ).prompt(for: request)
             let formatted: FormattedCompletionPrompt
             switch promptFormatByID[request.suggestionID] ?? .chatInstruct {
             case .chatInstruct:
@@ -73,7 +98,10 @@ struct BatchModelEngine {
                 template: formatted.templateIdentifier,
                 rawPrompt: formatted.rawPrompt,
                 promptIsBuilt: true,
-                maxTokens: 20
+                maxTokens: decodingConfiguration.maxTokens,
+                temperature: decodingConfiguration.temperature,
+                topP: decodingConfiguration.topP,
+                repetitionPenalty: decodingConfiguration.repetitionPenalty
             ))
         }.reduce(into: Data()) { data, row in
             data.append(row)
@@ -184,10 +212,16 @@ private struct BatchRequest: Encodable {
     let rawPrompt: String?
     let promptIsBuilt: Bool
     let maxTokens: Int
+    let temperature: Double
+    let topP: Double
+    let repetitionPenalty: Double
 
     enum CodingKeys: String, CodingKey {
         case id, system, user, template, rawPrompt, promptIsBuilt
         case maxTokens = "max_tokens"
+        case temperature
+        case topP = "top_p"
+        case repetitionPenalty = "repetition_penalty"
     }
 }
 

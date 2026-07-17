@@ -13,6 +13,8 @@ private struct Options {
     var model = "gemma-4-e4b-it-optiq"
     var variant = "both"
     var promptFormats: [ReplayPromptFormat] = [.chatInstruct]
+    var promptConfiguration = ReplayPromptConfiguration()
+    var decodingConfiguration = ReplayDecodingConfiguration()
     var maxCases = 150
     var seed: UInt64 = 0
     var outputMarkdownURL: URL?
@@ -36,6 +38,8 @@ Usage:
   SteadyTypeReplayEval [--corpus DIR | --fixture FILE] [--engine mock|batch]
     [--model ALIAS] [--variant baseline|personalized|both]
     [--prompt-format chat-instruct|raw-completion|minimal-rules|all] [--max-cases N]
+    [--context-chars N] [--suffix on|off] [--few-shot-source built-in|none]
+    [--max-tokens N] [--temperature N] [--top-p N] [--repetition-penalty N]
     [--seed N] [--out-md FILE] [--trend [FILE]]
   SteadyTypeReplayEval live-scorecard [--corpus DIR] [--trend [FILE]] [--out-md FILE]
 """
@@ -101,6 +105,34 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
             let value = try requiredValue(for: argument)
             guard let parsed = Int(value), parsed > 0 else { throw CLIError.usage("Invalid --max-cases: \(value)") }
             options.maxCases = parsed
+        case "--context-chars":
+            let value = try requiredValue(for: argument)
+            guard let parsed = Int(value), parsed >= 80 else { throw CLIError.usage("Invalid --context-chars: \(value)") }
+            options.promptConfiguration.contextCharacters = parsed
+        case "--suffix":
+            let value = try requiredValue(for: argument)
+            guard ["on", "off"].contains(value) else { throw CLIError.usage("Invalid --suffix: \(value)") }
+            options.promptConfiguration.includesTextAfterCursor = value == "on"
+        case "--few-shot-source":
+            let value = try requiredValue(for: argument)
+            guard ["built-in", "none"].contains(value) else { throw CLIError.usage("Invalid --few-shot-source: \(value)") }
+            options.promptConfiguration.includesBuiltInExamples = value == "built-in"
+        case "--max-tokens":
+            let value = try requiredValue(for: argument)
+            guard let parsed = Int(value), parsed > 0 else { throw CLIError.usage("Invalid --max-tokens: \(value)") }
+            options.decodingConfiguration.maxTokens = parsed
+        case "--temperature":
+            let value = try requiredValue(for: argument)
+            guard let parsed = Double(value), parsed >= 0 else { throw CLIError.usage("Invalid --temperature: \(value)") }
+            options.decodingConfiguration.temperature = parsed
+        case "--top-p":
+            let value = try requiredValue(for: argument)
+            guard let parsed = Double(value), (0...1).contains(parsed) else { throw CLIError.usage("Invalid --top-p: \(value)") }
+            options.decodingConfiguration.topP = parsed
+        case "--repetition-penalty":
+            let value = try requiredValue(for: argument)
+            guard let parsed = Double(value), parsed > 0 else { throw CLIError.usage("Invalid --repetition-penalty: \(value)") }
+            options.decodingConfiguration.repetitionPenalty = parsed
         case "--seed":
             let value = try requiredValue(for: argument)
             guard let parsed = UInt64(value) else { throw CLIError.usage("Invalid --seed: \(value)") }
@@ -159,7 +191,7 @@ private func runReplay(options: Options) async throws {
     for promptFormat in options.promptFormats {
         for variant in variants {
             for replayCase in replayCases {
-                let requestID = "\(promptFormat.rawValue):\(variant):\(replayCase.id)"
+                let requestID = "\(promptFormat.rawValue):\(variant):\(options.decodingConfiguration.identifier):\(replayCase.id)"
                 let personalContext = variant == "personalized"
                     ? memoryByDay[replayCase.dayString]?.personalContext(for: PersonalContextQuery(
                         textBeforeCursor: replayCase.contextBefore,
@@ -168,6 +200,7 @@ private func runReplay(options: Options) async throws {
                     : nil
                 requestsByFormat[promptFormat, default: []].append(CompletionRequest(
                     textBeforeCursor: replayCase.contextBefore,
+                    textAfterCursor: options.promptConfiguration.includesTextAfterCursor ? replayCase.contextAfter : "",
                     appBundleIdentifier: replayCase.appBundleIdentifier,
                     fieldKind: AXFieldKind(rawValue: replayCase.fieldKind) ?? .unknown,
                     personalContext: personalContext,
@@ -195,7 +228,12 @@ private func runReplay(options: Options) async throws {
                 modelAlias: effectiveModel,
                 scriptURL: scriptURL,
                 pythonURL: pythonURL
-            ).suggestions(for: allRequests, promptFormatByID: promptFormatByID)
+            ).suggestions(
+                for: allRequests,
+                promptFormatByID: promptFormatByID,
+                promptConfiguration: options.promptConfiguration,
+                decodingConfiguration: options.decodingConfiguration
+            )
             suggestions = result.suggestionsByID
             latencies = result.latencyMillisecondsByID
         } catch BatchModelEngine.Error.failed(status: 70) where effectiveModel == "gemma-4-e4b-it-optiq" {
@@ -205,7 +243,12 @@ private func runReplay(options: Options) async throws {
                 modelAlias: effectiveModel,
                 scriptURL: scriptURL,
                 pythonURL: pythonURL
-            ).suggestions(for: allRequests, promptFormatByID: promptFormatByID)
+            ).suggestions(
+                for: allRequests,
+                promptFormatByID: promptFormatByID,
+                promptConfiguration: options.promptConfiguration,
+                decodingConfiguration: options.decodingConfiguration
+            )
             suggestions = result.suggestionsByID
             latencies = result.latencyMillisecondsByID
         }
@@ -228,7 +271,7 @@ private func runReplay(options: Options) async throws {
     let gate = TypingReplayGateEvaluator()
     for promptFormat in options.promptFormats {
         for variant in variants {
-            let prefix = "\(promptFormat.rawValue):\(variant):"
+            let prefix = "\(promptFormat.rawValue):\(variant):\(options.decodingConfiguration.identifier):"
             let scores = replayCases.map { replayCase in
                 let requestID = prefix + replayCase.id
                 let raw = suggestions[requestID]
@@ -252,11 +295,26 @@ private func runReplay(options: Options) async throws {
                 promptFormat: promptFormat.rawValue,
                 variant: variant,
                 corpusKind: corpusKind,
+                promptContextCharacters: options.promptConfiguration.contextCharacters,
+                suffixEnabled: options.promptConfiguration.includesTextAfterCursor,
+                fewShotSource: options.promptConfiguration.fewShotSource,
+                decodingVariant: options.decodingConfiguration.identifier,
                 endToEndP95LatencyMs: percentile95(formatLatencies)
             ))
         }
     }
-    let markdown = "# SteadyType Replay Eval\n\n" + markdownSections.joined(separator: "\n\n") + "\n"
+    let runMetadata = """
+    - Engine: \(options.engine)
+    - Model: \(options.engine == "mock" ? "mock" : effectiveModel)
+    - Corpus: \(corpusKind)
+    - Cases: \(replayCases.count)
+    - Seed: \(options.seed)
+    - Prompt context characters: \(options.promptConfiguration.contextCharacters)
+    - Text after cursor: \(options.promptConfiguration.includesTextAfterCursor ? "enabled" : "disabled")
+    - Few-shot source: \(options.promptConfiguration.fewShotSource)
+    - Decoding: \(options.decodingConfiguration.identifier)
+    """
+    let markdown = "# SteadyType Replay Eval\n\n" + runMetadata + "\n\n" + markdownSections.joined(separator: "\n\n") + "\n"
     if options.trendRequested {
         let destination = options.trendURL ?? defaultTrendURL(corpusKind: corpusKind)
         try appendTrendRows(trendRows, to: destination, ownerOnly: corpusKind == "personal")

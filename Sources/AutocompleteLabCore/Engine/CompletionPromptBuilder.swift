@@ -86,19 +86,25 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public let maxCurrentParagraphCharacters: Int
     public let maxCurrentSentenceCharacters: Int
     public let maxVisibleWords: Int
+    public let includesBuiltInExamples: Bool
+    public let includesTextAfterCursor: Bool
 
     public init(
         maxContextCharacters: Int = 360,
         maxContextTokens: Int = 72,
         maxCurrentParagraphCharacters: Int = 220,
         maxCurrentSentenceCharacters: Int = 160,
-        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
+        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
+        includesBuiltInExamples: Bool = true,
+        includesTextAfterCursor: Bool = false
     ) {
         self.maxContextCharacters = max(80, maxContextCharacters)
         self.maxContextTokens = min(96, max(48, maxContextTokens))
         self.maxCurrentParagraphCharacters = max(80, maxCurrentParagraphCharacters)
         self.maxCurrentSentenceCharacters = max(80, maxCurrentSentenceCharacters)
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
+        self.includesBuiltInExamples = includesBuiltInExamples
+        self.includesTextAfterCursor = includesTextAfterCursor
     }
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
@@ -112,6 +118,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             context: context,
             visiblePageContext: request.visiblePageContext,
             personalContext: request.mode.isContinuation ? request.personalContext : nil,
+            textAfterCursor: includesTextAfterCursor ? request.textAfterCursor : "",
             suffix: suffixLabel(for: request.mode, visibleWords: effectiveMaxVisibleWords)
         )
 
@@ -167,7 +174,9 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
         let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
-        let exampleGuidance = exampleGuidance(forVisibleWords: effectiveMaxVisibleWords)
+        let exampleGuidance = includesBuiltInExamples
+            ? exampleGuidance(forVisibleWords: effectiveMaxVisibleWords)
+            : ""
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: continue naturally up to the visible word limit. If the limit is high and the next sentence is obvious, a longer sentence chunk is allowed."
             : "Phrase mode: continue only the current local thought. If visible context implies what the user is replying to or writing about, use it."
@@ -264,6 +273,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         context: String,
         visiblePageContext: VisiblePageContext?,
         personalContext: PersonalContext?,
+        textAfterCursor: String,
         suffix: String
     ) -> String {
         var blocks: [String] = []
@@ -275,6 +285,11 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             blocks.append("Recent writing by this user (phrasing reference, not content to copy verbatim unless it continues the text):\n\(snippets)")
         }
         blocks.append("Before cursor:\n\(context)")
+        let boundedTextAfterCursor = String(textAfterCursor.prefix(120))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !boundedTextAfterCursor.isEmpty {
+            blocks.append("Text after cursor (do not repeat):\n\(boundedTextAfterCursor)")
+        }
         blocks.append(suffix)
         return blocks.joined(separator: "\n\n")
     }
