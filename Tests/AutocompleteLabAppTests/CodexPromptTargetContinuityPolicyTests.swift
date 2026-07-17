@@ -7,22 +7,6 @@ import Testing
 struct CodexPromptTargetContinuityPolicyTests {
     private let policy = CodexPromptTargetContinuityPolicy()
 
-    @Test("Codex bypasses automatic quiet mode without changing other apps")
-    func codexBypassesAutomaticQuietMode() {
-        let silencePolicy = CodexAutomaticSilencePolicy()
-        let quietUntil = Date().addingTimeInterval(900)
-        let observed = QuietMode.field(until: quietUntil, reason: .typedOver, score: 0.8)
-
-        #expect(silencePolicy.effectiveQuietMode(
-            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
-            observedQuietMode: observed
-        ) == .normal)
-        #expect(silencePolicy.effectiveQuietMode(
-            appBundleIdentifier: "com.apple.TextEdit",
-            observedQuietMode: observed
-        ) == observed)
-    }
-
     @Test("Presentation preparation defers before any focused-context refresh")
     func presentationPreparationDefersBeforeAnyFocusedContextRefresh() {
         let preparationPolicy = CodexPromptPresentationPreparationPolicy()

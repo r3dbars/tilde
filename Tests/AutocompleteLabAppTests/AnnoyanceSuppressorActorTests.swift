@@ -7,7 +7,9 @@ import Testing
 struct AnnoyanceSuppressorActorTests {
     @Test("Records signals and returns the current quiet mode")
     func recordsSignalsAndReturnsQuietMode() async {
-        let actor = AnnoyanceSuppressorActor()
+        let actor = AnnoyanceSuppressorActor(
+            suppressor: AnnoyanceSuppressor(automaticQuietModesEnabled: true)
+        )
         let context = AnnoyanceContext(
             appBundleIdentifier: "com.apple.TextEdit",
             fieldIdentifier: "field-1"
@@ -23,7 +25,9 @@ struct AnnoyanceSuppressorActorTests {
 
     @Test("Clearing a field removes field scoped quiet mode")
     func clearingFieldRemovesFieldScopedQuietMode() async {
-        let actor = AnnoyanceSuppressorActor()
+        let actor = AnnoyanceSuppressorActor(
+            suppressor: AnnoyanceSuppressor(automaticQuietModesEnabled: true)
+        )
         let context = AnnoyanceContext(
             appBundleIdentifier: "com.apple.TextEdit",
             fieldIdentifier: "field-1"

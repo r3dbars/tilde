@@ -292,7 +292,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
     private let codexPromptTargetContinuityPolicy = CodexPromptTargetContinuityPolicy()
-    private let codexAutomaticSilencePolicy = CodexAutomaticSilencePolicy()
     private let codexPromptPresentationRefreshRetryPolicy = CodexPromptPresentationRefreshRetryPolicy()
     private let codexPromptPresentationPreparationPolicy = CodexPromptPresentationPreparationPolicy()
     private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
@@ -2628,11 +2627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: requestMode,
             fieldKind: suggestionFieldClassification.kind
         )
-        let observedQuietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
-        let quietMode = codexAutomaticSilencePolicy.effectiveQuietMode(
-            appBundleIdentifier: profile.bundleIdentifier,
-            observedQuietMode: observedQuietMode
-        )
+        let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive else {
             setSuggestionDecision(SuggestionStatusText.notShown(reason: quietMode.traceReason))
             showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)
@@ -4599,7 +4594,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: "escape",
                 metadata: metadata
             )
-            suppressCurrentField(reason: "escape")
             hideSuggestion(
                 reason: "escape",
                 metadata: [
@@ -5980,7 +5974,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "insertionResult": String(describing: result)
                     ]
                 )
-                if baseline.profile.suppressesAfterInsertionFailure {
+                if insertionFailureSuppressionPolicy.shouldSuppressField(
+                    profile: baseline.profile,
+                    failureReason: "insert-verification-failed"
+                ) {
                     suppressField(
                         baseline.fieldIdentity,
                         profile: baseline.profile,
@@ -6117,8 +6114,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "insertionResult": outcome
             ]
         )
-        if baseline.profile.suppressesAfterInsertionFailure {
-            suppressCurrentField(reason: reason)
+        if insertionFailureSuppressionPolicy.shouldSuppressField(
+            profile: baseline.profile,
+            failureReason: reason
+        ) {
+            suppressField(
+                baseline.fieldIdentity,
+                profile: baseline.profile,
+                reason: reason
+            )
         }
         hideSuggestion(
             reason: "insert-verification-failed",
@@ -6924,7 +6928,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: metadata
         )
 
-        if baseline.profile.suppressesAfterInsertionFailure {
+        if insertionFailureSuppressionPolicy.shouldSuppressField(
+            profile: baseline.profile,
+            failureReason: reason.rawValue
+        ) {
             suppressField(
                 baseline.fieldIdentity,
                 profile: baseline.profile,
@@ -17986,16 +17993,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setSuggestionDecision(_ decision: String) {
         lastSuggestionDecision = decision
-    }
-
-    private func suppressCurrentField(reason: String) {
-        guard let currentProfile,
-              currentProfile.suppressesUntilBlurAfterEscape,
-              let currentFieldIdentity else {
-            return
-        }
-
-        suppressField(currentFieldIdentity, profile: currentProfile, reason: reason)
     }
 
     private func suppressCurrentFieldAfterInsertionFailure(reason: String) {

@@ -24,7 +24,7 @@ struct AnnoyanceSuppressorTests {
     @Test("Rapid Escape quiets the current field")
     func rapidEscapeQuietsField() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor()
+        var suppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true)
 
         let update = suppressor.record(.rapidEscDismissal, context: context, now: start)
 
@@ -40,7 +40,7 @@ struct AnnoyanceSuppressorTests {
     @Test("Repeated severe failures quiet the app")
     func repeatedSevereFailuresQuietApp() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor()
+        var suppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true)
 
         _ = suppressor.record(.wrongInsertion, context: context, now: start)
         _ = suppressor.record(.wrongInsertion, context: context, now: start.addingTimeInterval(10))
@@ -51,7 +51,7 @@ struct AnnoyanceSuppressorTests {
     @Test("Repeated caret geometry failures quiet the current field")
     func repeatedCaretGeometryFailuresQuietField() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor()
+        var suppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true)
 
         _ = suppressor.record(.caretGeometryFailed, context: context, now: start)
         #expect(suppressor.quietMode(for: context, now: start) == .normal)
@@ -64,7 +64,7 @@ struct AnnoyanceSuppressorTests {
     @Test("Wrong insertion hard-stops the field")
     func wrongInsertionHardStopsField() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor(fieldQuietThreshold: 10)
+        var suppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true, fieldQuietThreshold: 10)
 
         _ = suppressor.record(.wrongInsertion, context: context, now: start)
 
@@ -74,7 +74,7 @@ struct AnnoyanceSuppressorTests {
     @Test("Accepted then deleted hard-stops the current field")
     func acceptedThenDeletedHardStopsCurrentField() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor(fieldQuietThreshold: 10)
+        var suppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true, fieldQuietThreshold: 10)
 
         let update = suppressor.record(.acceptedThenDeleted, context: context, now: start)
 
@@ -101,7 +101,7 @@ struct AnnoyanceSuppressorTests {
     @Test("Repeated typed-over misses quiet the current field")
     func repeatedTypedOverMissesQuietField() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor()
+        var suppressor = AnnoyanceSuppressor(automaticQuietModesEnabled: true)
 
         let first = suppressor.record(.typedOver, context: context, now: start)
         #expect(first.startedQuietModes.isEmpty)
@@ -120,12 +120,27 @@ struct AnnoyanceSuppressorTests {
     @Test("Quiet modes expire")
     func quietModesExpire() {
         let start = Date(timeIntervalSince1970: 0)
-        var suppressor = AnnoyanceSuppressor(fieldQuietDurationSeconds: 15 * 60)
+        var suppressor = AnnoyanceSuppressor(
+            automaticQuietModesEnabled: true,
+            fieldQuietDurationSeconds: 15 * 60
+        )
 
         _ = suppressor.record(.rapidEscDismissal, context: context, now: start)
 
         #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(60)).isActive)
         #expect(!suppressor.quietMode(for: context, now: start.addingTimeInterval(15 * 60 + 1)).isActive)
+    }
+
+    @Test("Production defaults never enter automatic quiet mode")
+    func productionDefaultsNeverEnterAutomaticQuietMode() {
+        let start = Date(timeIntervalSince1970: 0)
+        var suppressor = AnnoyanceSuppressor()
+
+        _ = suppressor.record(.wrongInsertion, context: context, now: start)
+        _ = suppressor.record(.typedOver, context: context, now: start.addingTimeInterval(1))
+        _ = suppressor.record(.rapidEscDismissal, context: context, now: start.addingTimeInterval(2))
+
+        #expect(suppressor.quietMode(for: context, now: start.addingTimeInterval(2)) == .normal)
     }
 
     @Test("Manual disable policy marks repeated disables default-off over seven days")

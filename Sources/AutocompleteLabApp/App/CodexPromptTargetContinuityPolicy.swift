@@ -46,17 +46,6 @@ struct CodexPromptPresentationPreparationPolicy {
     }
 }
 
-struct CodexAutomaticSilencePolicy {
-    func effectiveQuietMode(
-        appBundleIdentifier: String,
-        observedQuietMode: QuietMode
-    ) -> QuietMode {
-        appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            ? .normal
-            : observedQuietMode
-    }
-}
-
 struct CodexPromptPresentationRefreshRetryPolicy {
     let maximumAttempts: Int
     let delayMilliseconds: Int

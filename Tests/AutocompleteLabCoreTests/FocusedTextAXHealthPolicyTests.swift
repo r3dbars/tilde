@@ -7,6 +7,7 @@ struct FocusedTextAXHealthPolicyTests {
     @Test("One slow read does not start cooldown")
     func oneSlowReadDoesNotStartCooldown() {
         let policy = FocusedTextAXHealthPolicy(
+            automaticCooldownEnabled: true,
             slowReadDurationMilliseconds: 80,
             repeatedSlowReadCount: 2
         )
@@ -30,6 +31,7 @@ struct FocusedTextAXHealthPolicyTests {
     @Test("Repeated slow reads cooldown the same bundle")
     func repeatedSlowReadsCooldownSameBundle() throws {
         let policy = FocusedTextAXHealthPolicy(
+            automaticCooldownEnabled: true,
             slowReadDurationMilliseconds: 80,
             repeatedSlowReadCount: 2,
             slowReadWindowMilliseconds: 1_000,
@@ -129,6 +131,7 @@ struct FocusedTextAXHealthPolicyTests {
     @Test("Poll decision suppresses cooling bundle and recovers")
     func pollDecisionSuppressesCoolingBundleAndRecovers() throws {
         let policy = FocusedTextAXHealthPolicy(
+            automaticCooldownEnabled: true,
             slowReadDurationMilliseconds: 80,
             repeatedSlowReadCount: 2,
             cooldownMilliseconds: 500
@@ -190,6 +193,7 @@ struct FocusedTextAXHealthPolicyTests {
     @Test("Queue delay can start cooldown")
     func queueDelayCanStartCooldown() throws {
         let policy = FocusedTextAXHealthPolicy(
+            automaticCooldownEnabled: true,
             slowQueueDelayMilliseconds: 80,
             slowReadDurationMilliseconds: 1_000,
             repeatedSlowReadCount: 2
@@ -219,6 +223,7 @@ struct FocusedTextAXHealthPolicyTests {
     @Test("Slow reads without focused text context cooldown immediately")
     func slowReadsWithoutFocusedTextContextCooldownImmediately() throws {
         let policy = FocusedTextAXHealthPolicy(
+            automaticCooldownEnabled: true,
             slowReadDurationMilliseconds: 80,
             repeatedSlowReadCount: 3,
             missingContextSlowReadCount: 1,
@@ -264,6 +269,34 @@ struct FocusedTextAXHealthPolicyTests {
         #expect(!observation.isSlow)
         #expect(!observation.didStartCooldown)
         #expect(observation.cooldown == nil)
+    }
+
+    @Test("Production defaults never cooldown accessibility reads")
+    func productionDefaultsNeverCooldownAccessibilityReads() {
+        let policy = FocusedTextAXHealthPolicy(
+            slowReadDurationMilliseconds: 80,
+            repeatedSlowReadCount: 1
+        )
+        var state = FocusedTextAXHealthState()
+        let now = Date(timeIntervalSince1970: 100)
+
+        let observation = policy.recordRead(
+            bundleIdentifier: "com.example.Editor",
+            queueDelayMilliseconds: 0,
+            readDurationMilliseconds: 200,
+            hasContext: false,
+            now: now,
+            state: &state
+        )
+
+        #expect(observation.isSlow)
+        #expect(!observation.didStartCooldown)
+        #expect(observation.cooldown == nil)
+        #expect(policy.pollDecision(
+            for: "com.example.Editor",
+            now: now,
+            state: &state
+        ) == .allowed(recovery: nil))
     }
 
     private func isSameTime(_ lhs: Date, _ rhs: Date) -> Bool {

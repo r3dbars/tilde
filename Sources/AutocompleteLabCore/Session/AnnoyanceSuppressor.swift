@@ -119,6 +119,7 @@ public struct AnnoyanceUpdate: Equatable, Sendable {
 }
 
 public struct AnnoyanceSuppressor: Equatable, Sendable {
+    public let automaticQuietModesEnabled: Bool
     public let halfLifeSeconds: TimeInterval
     public let fieldQuietDurationSeconds: TimeInterval
     public let appQuietDurationSeconds: TimeInterval
@@ -136,6 +137,7 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
     private var severeEventCountsByAppDay: [String: Int] = [:]
 
     public init(
+        automaticQuietModesEnabled: Bool = false,
         halfLifeSeconds: TimeInterval = 20 * 60,
         fieldQuietDurationSeconds: TimeInterval = 15 * 60,
         appQuietDurationSeconds: TimeInterval = 30 * 60,
@@ -144,6 +146,7 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         appQuietThreshold: Double = 1.5,
         globalQuietThreshold: Double = 2.5
     ) {
+        self.automaticQuietModesEnabled = automaticQuietModesEnabled
         self.halfLifeSeconds = halfLifeSeconds
         self.fieldQuietDurationSeconds = fieldQuietDurationSeconds
         self.appQuietDurationSeconds = appQuietDurationSeconds
@@ -183,6 +186,16 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         let globalScore = globalBucket.score
 
         var started: [QuietMode] = []
+        guard automaticQuietModesEnabled else {
+            return AnnoyanceUpdate(
+                signal: signal,
+                fieldScore: fieldScore,
+                appScore: appScore,
+                globalScore: globalScore,
+                startedQuietModes: []
+            )
+        }
+
         if Self.hardStopsField(signal) || fieldScore >= fieldQuietThreshold {
             let mode = QuietMode.field(
                 until: now.addingTimeInterval(fieldQuietDurationSeconds),
@@ -232,6 +245,10 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         for context: AnnoyanceContext,
         now: Date = Date()
     ) -> QuietMode {
+        guard automaticQuietModesEnabled else {
+            return .normal
+        }
+
         expireQuietModes(now: now)
 
         if globalQuietMode.isActive {

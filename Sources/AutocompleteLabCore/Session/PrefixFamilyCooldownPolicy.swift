@@ -122,15 +122,15 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public init(
         typedOverCooldownMilliseconds: Int = 0,
         repeatedTypedOverCooldownMilliseconds: Int = 0,
-        escapeCooldownMilliseconds: Int = 15_000,
-        repeatedEscapeCooldownMilliseconds: Int = 60_000,
-        deletionCooldownMilliseconds: Int = 250,
-        acceptedThenDeletedCooldownMilliseconds: Int = 180_000,
-        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 600_000,
+        escapeCooldownMilliseconds: Int = 0,
+        repeatedEscapeCooldownMilliseconds: Int = 0,
+        deletionCooldownMilliseconds: Int = 0,
+        acceptedThenDeletedCooldownMilliseconds: Int = 0,
+        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 0,
         prefixFamilyTokenLimit: Int = 3,
-        typedOverEagernessThreshold: Double = 1.5,
+        typedOverEagernessThreshold: Double = .greatestFiniteMagnitude,
         typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60,
-        acceptedThenDeletedEagernessThreshold: Double = 1.5,
+        acceptedThenDeletedEagernessThreshold: Double = .greatestFiniteMagnitude,
         acceptedThenDeletedEagernessHalfLifeSeconds: TimeInterval = 30 * 60,
         traceFingerprintSecret: Data = Data()
     ) {
