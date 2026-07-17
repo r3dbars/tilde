@@ -84,9 +84,13 @@ public struct InsertionUndoRecoverabilityModel: Equatable, Sendable {
         }
 
         switch profile.bundleIdentifier {
-        case "com.apple.TextEdit", "com.google.Chrome":
+        case "com.apple.TextEdit", "com.google.Chrome", "com.apple.mail", "com.apple.Safari":
             return .nativeSingleEdit
-        case "com.apple.Notes", "md.obsidian":
+        case "com.tinyspeck.slackmacgap", "ru.keepcoder.Telegram", "org.telegram.desktop",
+             "com.hnc.Discord", "com.hnc.DiscordCanary", "com.hnc.DiscordPTB",
+             "com.openai.chat", "com.openai.atlas":
+            return .appRollback
+        case "com.apple.Notes", "md.obsidian", "notion.id", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92":
             return .degraded
         default:
             return profile.supportsOneWordAcceptance ? .degraded : .unavailable

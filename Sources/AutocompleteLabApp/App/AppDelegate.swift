@@ -538,6 +538,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
+    private var insertionFailureAutoDemotionPolicy = InsertionFailureAutoDemotionPolicy()
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
@@ -1435,9 +1436,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayName: app.localizedName,
             bundleIdentifier: app.bundleIdentifier,
             supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
-            isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
+            isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+                && insertionFailureAutoDemotionPolicy.decision(for: app.bundleIdentifier) != .disableForSession,
             disabledAppCount: disabledBundleIdentifiers.count,
-            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
+            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride,
+            autoDemotionDecision: insertionFailureAutoDemotionPolicy.decision(for: app.bundleIdentifier)
         )
     }
 
@@ -1601,18 +1604,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        let proofAdjustedProfile: CompatibilityProfile
         if shouldUseCodexFullAcceptNoSubmitProofProfile(
             appBundleIdentifier: app.bundleIdentifier,
             profile: profile
         ) {
-            return profile.replacingAcceptanceProofMode(
+            proofAdjustedProfile = profile.replacingAcceptanceProofMode(
                 supportsFullAcceptance: true,
                 requiresNoSubmitAcceptanceProof: false,
                 notes: "\(profile.notes) Proof-only Codex full-accept no-submit scenario is active."
             )
+        } else {
+            proofAdjustedProfile = profile
         }
 
-        return profile
+        if insertionFailureAutoDemotionPolicy.decision(for: app.bundleIdentifier) == .demoteToWordOnly {
+            return proofAdjustedProfile.replacingAcceptanceProofMode(
+                supportsFullAcceptance: false,
+                requiresNoSubmitAcceptanceProof: proofAdjustedProfile.requiresNoSubmitAcceptanceProof,
+                notes: "\(proofAdjustedProfile.notes) Full acceptance is auto-demoted for this session after insertion verification failures."
+            )
+        }
+        return proofAdjustedProfile
     }
 
     private func shouldUseCodexFullAcceptNoSubmitProofProfile(
@@ -1644,6 +1657,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> Bool {
+        guard insertionFailureAutoDemotionPolicy.decision(for: app.bundleIdentifier) != .disableForSession else {
+            return false
+        }
         guard appProofModeCoordinator.allows(
             appBundleIdentifier: app.bundleIdentifier,
             suggestionBundleIdentifier: profile.bundleIdentifier
@@ -5687,6 +5703,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func recordInsertionFailureAutoDemotion(
+        result: InsertionVerificationResult,
+        bundleIdentifier: String
+    ) {
+        let previousDecision = insertionFailureAutoDemotionPolicy.decision(for: bundleIdentifier)
+        let decision = insertionFailureAutoDemotionPolicy.record(
+            result: result,
+            bundleIdentifier: bundleIdentifier
+        )
+        guard decision != previousDecision else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "insertion-failure-auto-demotion",
+            metadata: [
+                "app": bundleIdentifier,
+                "decision": decision.rawValue,
+                "failureCount": String(
+                    insertionFailureAutoDemotionPolicy.consecutiveFailureCount(for: bundleIdentifier)
+                )
+            ]
+        )
+        if decision == .disableForSession {
+            invalidatePendingSuggestionRequest()
+            hideSuggestion(reason: "insertion-failure-auto-disabled")
+            stopKeyboardEventTapNow(reason: "insertion-failure-auto-disabled")
+        }
+        refreshRuntimeChrome()
+    }
+
     private func scheduleInsertionVerification(
         acceptedText: String,
         baseline: InsertionVerificationBaseline?
@@ -5865,6 +5912,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
 
+                recordInsertionFailureAutoDemotion(
+                    result: result,
+                    bundleIdentifier: baseline.profile.bundleIdentifier
+                )
+
                 DiagnosticsLog.shared.record(
                     "insert-verification-final-failure",
                     metadata: [
@@ -5926,6 +5978,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hideSuggestion(reason: "insert-verification-failed")
                 return
             }
+
+            recordInsertionFailureAutoDemotion(
+                result: result,
+                bundleIdentifier: baseline.profile.bundleIdentifier
+            )
 
             if baseline.retryCount > 0 {
                 DiagnosticsLog.shared.record(
@@ -19294,7 +19351,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let shouldDisable = !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        let wasAutoDisabled = insertionFailureAutoDemotionPolicy.decision(for: app.bundleIdentifier)
+            == .disableForSession
+        let shouldDisable = !wasAutoDisabled
+            && !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        if wasAutoDisabled {
+            insertionFailureAutoDemotionPolicy.reset(bundleIdentifier: app.bundleIdentifier)
+        }
         var selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
         selection.set(app.bundleIdentifier, disabled: shouldDisable)
         disabledBundleIdentifiers = selection.bundleIdentifiers

@@ -39,7 +39,9 @@ struct HostCompatibilityPolicyTests {
         ] {
             let policy = try #require(catalog.policy(for: bundleIdentifier))
             #expect(policy.hostVersion.isExact)
-            #expect(policy.killSwitch == .proofModeRequired || policy.killSwitch == .hardDisabled)
+            #expect(policy.runtimeState == .userToggleAllowed)
+            #expect(policy.proofState == .pending)
+            #expect(policy.killSwitch == .perHostDisable)
         }
 
         let codex = try #require(catalog.policy(for: "com.openai.codex"))
@@ -60,9 +62,9 @@ struct HostCompatibilityPolicyTests {
         ] {
             let policy = try #require(catalog.policy(for: bundleIdentifier))
             #expect(!policy.hostVersion.isExact)
-            #expect(policy.runtimeState == .disabled)
-            #expect(policy.proofState == .blocked)
-            #expect(policy.killSwitch == .hardDisabled)
+            #expect(policy.runtimeState == .userToggleAllowed)
+            #expect(policy.proofState == .pending)
+            #expect(policy.killSwitch == .perHostDisable)
         }
     }
 
@@ -76,7 +78,7 @@ struct HostCompatibilityPolicyTests {
         for policy in wordOnlyPolicies {
             let profile = try #require(profiles[policy.bundleIdentifier])
             #expect(profile.supportsOneWordAcceptance)
-            if policy.bundleIdentifier == "com.openai.codex" {
+            if profile.supportsFullAcceptance {
                 #expect(profile.supportsFullAcceptance)
                 #expect(!profile.requiresNoSubmitAcceptanceProof)
                 #expect(policy.killSwitch == .perHostDisable)
@@ -85,14 +87,15 @@ struct HostCompatibilityPolicyTests {
                 #expect(profile.requiresNoSubmitAcceptanceProof)
                 #expect([.proofModeRequired, .perHostDisable].contains(policy.killSwitch))
             }
-            #expect(!policy.proofArtifacts.isEmpty)
+            if policy.proofState != .pending {
+                #expect(!policy.proofArtifacts.isEmpty)
+            }
         }
     }
 
-    @Test("Send surfaces are never classified as not prompt")
-    func sendSurfacesAreNeverClassifiedAsNotPrompt() throws {
-        let sendSurfaceBundleIdentifiers = [
-            "com.apple.MobileSMS",
+    @Test("Experimental chat surfaces use not-prompt mode while control-character safety remains universal")
+    func experimentalChatSurfacesUseNotPromptMode() throws {
+        let experimentalChatBundleIdentifiers = [
             "com.tinyspeck.slackmacgap",
             "ru.keepcoder.Telegram",
             "com.hnc.Discord",
@@ -102,10 +105,11 @@ struct HostCompatibilityPolicyTests {
         let profiles = CompatibilityProfileStore.mvp.profiles
         let policies = HostCompatibilityPolicyCatalog.mvp.policies
 
-        for bundleIdentifier in sendSurfaceBundleIdentifiers {
-            #expect(try #require(profiles[bundleIdentifier]).promptAppSafetyMode != .notPrompt)
-            #expect(try #require(policies[bundleIdentifier]).safetyMode != .notPrompt)
+        for bundleIdentifier in experimentalChatBundleIdentifiers {
+            #expect(try #require(profiles[bundleIdentifier]).promptAppSafetyMode == .notPrompt)
+            #expect(try #require(policies[bundleIdentifier]).safetyMode == .notPrompt)
         }
+        #expect(try #require(profiles["com.apple.MobileSMS"]).promptAppSafetyMode == .wordOnly)
     }
 
     @Test("Normal beta toggles include default-on dogfood apps")
@@ -115,10 +119,23 @@ struct HostCompatibilityPolicyTests {
             "com.apple.TextEdit",
             "com.apple.Notes",
             "md.obsidian",
+            "com.apple.mail",
             "com.google.Chrome",
+            "com.apple.Safari",
             "com.openai.codex",
+            "com.openai.atlas",
+            "com.openai.chat",
+            "com.openai.ChatGPT",
             "com.anthropic.claude-code",
-            "com.anthropic.claudefordesktop"
+            "com.anthropic.claudefordesktop",
+            "com.tinyspeck.slackmacgap",
+            "ru.keepcoder.Telegram",
+            "notion.id",
+            "com.hnc.Discord",
+            "com.hnc.DiscordPTB",
+            "com.hnc.DiscordCanary",
+            "com.microsoft.VSCode",
+            "com.todesktop.230313mzl4w4u92"
         ])
 
         let userToggleBundles = Set(catalog.policies.values

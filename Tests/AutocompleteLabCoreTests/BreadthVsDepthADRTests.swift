@@ -52,15 +52,12 @@ struct BreadthVsDepthADRTests {
         #expect(CompatibilityRoutingSettings.mvp.suppressSecureFields == true)
     }
 
-    @Test("Send surfaces are never treated as not-a-prompt")
-    func sendSurfacesAreNeverTreatedAsNotPrompt() throws {
-        // Messages / Slack / Discord are sendable surfaces: Return can submit, so
-        // they must never be downgraded to `.notPrompt` (the relaxed,
-        // not-a-prompt-surface mode). They may be `.disabled`, `.clickOnly`, or
-        // `.wordOnly` — anything except `.notPrompt`. Locked on both the
-        // compatibility profile and the host policy.
+    @Test("Control-character filtering protects experimentally enabled send surfaces")
+    func controlCharacterFilteringProtectsSendSurfaces() throws {
+        // The broad-coverage experiment deliberately classifies collaboration
+        // apps as not-prompt. Submission safety is instead locked by the
+        // unconditional accepted-text newline, Tab, and control-character gate.
         let sendSurfaceBundleIdentifiers = [
-            "com.apple.MobileSMS",       // Messages
             "com.tinyspeck.slackmacgap", // Slack
             "com.hnc.Discord"            // Discord
         ]
@@ -70,13 +67,16 @@ struct BreadthVsDepthADRTests {
 
         for bundleIdentifier in sendSurfaceBundleIdentifiers {
             let profile = try #require(profiles[bundleIdentifier])
-            #expect(profile.promptAppSafetyMode != .notPrompt)
-            #expect(profile.promptAppSafetyMode.isPromptSurface)
+            #expect(profile.promptAppSafetyMode == .notPrompt)
 
             let policy = try #require(policies[bundleIdentifier])
-            #expect(policy.safetyMode != .notPrompt)
-            #expect(policy.safetyMode.isPromptSurface)
+            #expect(policy.safetyMode == .notPrompt)
         }
+
+        let safety = AcceptedTextSafetyPolicy()
+        let textEdit = try #require(profiles["com.apple.TextEdit"])
+        #expect(!safety.decision(acceptedText: "hello\n", profile: textEdit).canInsert)
+        #expect(!safety.decision(acceptedText: "hello\t", profile: textEdit).canInsert)
     }
 
     // MARK: Behavior — breadth and guardrails meet at the router

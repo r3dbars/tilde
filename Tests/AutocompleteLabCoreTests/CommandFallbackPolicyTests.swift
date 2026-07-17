@@ -37,8 +37,8 @@ struct CommandFallbackPolicyTests {
         #expect(unsupported.statusText == "Fallback: not needed; cursor placement is available.")
     }
 
-    @Test("sensitive apps and fields do not offer copy-only fallback")
-    func sensitiveAppsAndFieldsDoNotOfferCopyOnlyFallback() {
+    @Test("newly enabled apps use inline while sensitive fields stay unavailable")
+    func newlyEnabledAppsUseInlineWhileSensitiveFieldsStayUnavailable() {
         let store = CompatibilityProfileStore.mvp
         let mail = CommandFallbackPolicy().decision(
             supportStatus: store.supportStatus(for: "com.apple.mail"),
@@ -50,26 +50,26 @@ struct CommandFallbackPolicyTests {
             fieldKind: .search
         )
 
-        #expect(mail.availability == .unavailable)
-        #expect(mail.reason == .sensitiveApp)
-        #expect(mail.statusText == "Fallback: unavailable in sensitive apps or fields.")
+        #expect(mail.availability == .inlineAvailable)
+        #expect(mail.reason == .inlineAvailable)
+        #expect(mail.statusText == "Fallback: not needed; cursor placement is available.")
         #expect(searchField.availability == .unavailable)
         #expect(searchField.reason == .sensitiveField)
         #expect(searchField.statusText == "Fallback: unavailable in sensitive apps or fields.")
     }
 
-    @Test("non-sensitive diagnostics-only profiles can offer copy-only fallback")
-    func nonSensitiveDiagnosticsOnlyProfilesCanOfferCopyOnlyFallback() {
+    @Test("newly enabled browser profiles use inline")
+    func newlyEnabledBrowserProfilesUseInline() {
         let store = CompatibilityProfileStore.mvp
         let safari = CommandFallbackPolicy().decision(
             supportStatus: store.supportStatus(for: "com.apple.Safari"),
             isEnabled: true
         )
 
-        #expect(safari.availability == .copyOnly)
-        #expect(safari.reason == .diagnosticsOnlyProfile)
-        #expect(safari.canCopyOnly)
-        #expect(safari.statusText == "Fallback: copy-only; cursor placement and auto-insert stay off until testing passes.")
+        #expect(safari.availability == .inlineAvailable)
+        #expect(safari.reason == .inlineAvailable)
+        #expect(!safari.canCopyOnly)
+        #expect(safari.statusText == "Fallback: not needed; cursor placement is available.")
     }
 
     @Test("yellow low-confidence placement falls back to copy-only")

@@ -48,8 +48,8 @@ struct CompatibilityRouterTests {
         #expect(decision.suppressionReason == nil)
     }
 
-    @Test("Browser and editor adapters start detect-only until real integrations exist")
-    func adapterTargetsStartDetectOnly() {
+    @Test("Browser adapters use Accessibility while unproven editor adapters stay detect-only")
+    func browserAdaptersUseAccessibility() {
         let router = CompatibilityRouter()
         let chrome = router.decision(
             for: CompatibilityEvaluationContext(
@@ -77,9 +77,9 @@ struct CompatibilityRouterTests {
             )
         )
 
-        #expect(chrome.textPath == .webExtension)
-        #expect(chrome.suppressionReason == .detectOnly("browser-composer"))
-        #expect(!chrome.shouldRequestSuggestion)
+        #expect(chrome.textPath == .nativeAccessibility)
+        #expect(chrome.suppressionReason == nil)
+        #expect(chrome.shouldRequestSuggestion)
 
         #expect(obsidian.textPath == .editorPlugin)
         #expect(obsidian.suppressionReason == .detectOnly("obsidian"))

@@ -91,4 +91,22 @@ struct InsertionUndoRecoverabilityTests {
         #expect(metadata["rollbackMechanism"] == "appRollback")
         #expect(metadata["failureRecoverability"] == "recoverable")
     }
+
+    @Test("Newly enabled apps declare their honest undo level")
+    func newlyEnabledAppsDeclareUndoLevel() throws {
+        let store = CompatibilityProfileStore.mvp
+        let mail = try #require(store.profile(for: "com.apple.mail"))
+        let safari = try #require(store.profile(for: "com.apple.Safari"))
+        let slack = try #require(store.profile(for: "com.tinyspeck.slackmacgap"))
+        let discord = try #require(store.profile(for: "com.hnc.Discord"))
+        let notion = try #require(store.profile(for: "notion.id"))
+        let vscode = try #require(store.profile(for: "com.microsoft.VSCode"))
+
+        #expect(model.expectedGuarantee(for: mail, acceptMode: "acceptAllVisible") == .nativeSingleEdit)
+        #expect(model.expectedGuarantee(for: safari, acceptMode: "acceptAllVisible") == .nativeSingleEdit)
+        #expect(model.expectedGuarantee(for: slack, acceptMode: "acceptAllVisible") == .appRollback)
+        #expect(model.expectedGuarantee(for: discord, acceptMode: "acceptAllVisible") == .appRollback)
+        #expect(model.expectedGuarantee(for: notion, acceptMode: "acceptAllVisible") == .degraded)
+        #expect(model.expectedGuarantee(for: vscode, acceptMode: "acceptAllVisible") == .degraded)
+    }
 }
