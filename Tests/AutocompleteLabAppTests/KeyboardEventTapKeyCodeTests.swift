@@ -24,6 +24,12 @@ struct KeyboardEventTapKeyCodeTests {
         #expect(!isModifierOnlyMacVirtualKeyCode(6))
     }
 
+    @Test("Forward Delete does not rewind optimistic type-through")
+    func forwardDeleteDoesNotRewindOptimisticTypeThrough() {
+        #expect(isBackspaceMacVirtualKeyCode(51))
+        #expect(!isBackspaceMacVirtualKeyCode(117))
+    }
+
     @Test("Stale passthrough observations only block genuinely invalidated suggestions")
     func stalePassthroughObservationsOnlyBlockInvalidatedSuggestions() {
         #expect(!shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
