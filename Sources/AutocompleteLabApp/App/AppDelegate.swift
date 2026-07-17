@@ -292,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
     private let codexPromptTargetContinuityPolicy = CodexPromptTargetContinuityPolicy()
+    private let codexAutomaticSilencePolicy = CodexAutomaticSilencePolicy()
     private let codexPromptPresentationRefreshRetryPolicy = CodexPromptPresentationRefreshRetryPolicy()
     private let codexPromptPresentationPreparationPolicy = CodexPromptPresentationPreparationPolicy()
     private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
@@ -2627,7 +2628,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: requestMode,
             fieldKind: suggestionFieldClassification.kind
         )
-        let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
+        let observedQuietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
+        let quietMode = codexAutomaticSilencePolicy.effectiveQuietMode(
+            appBundleIdentifier: profile.bundleIdentifier,
+            observedQuietMode: observedQuietMode
+        )
         guard !quietMode.isActive else {
             setSuggestionDecision(SuggestionStatusText.notShown(reason: quietMode.traceReason))
             showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)

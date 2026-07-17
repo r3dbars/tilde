@@ -56,6 +56,10 @@ public struct InsertionVerificationContextRecoveryPolicy: Equatable, Sendable {
             return canRecoverObsidianCodeMirrorSwap(input)
         }
 
+        if input.profile.bundleIdentifier == "com.openai.codex" {
+            return canRecoverCodexPromptIdentityChurn(input)
+        }
+
         if input.profile.appFamily == .chromium {
             return canRecoverChromiumTargetFingerprintChurn(input)
         }
@@ -70,6 +74,14 @@ public struct InsertionVerificationContextRecoveryPolicy: Equatable, Sendable {
         default:
             return false
         }
+    }
+
+    private func canRecoverCodexPromptIdentityChurn(_ input: InsertionVerificationContextRecoveryInput) -> Bool {
+        guard input.mismatch == .fieldIdentity else {
+            return false
+        }
+
+        return normalizedRole(input.contextRole) == "axtextarea"
     }
 
     private func canRecoverChromiumTargetFingerprintChurn(_ input: InsertionVerificationContextRecoveryInput) -> Bool {

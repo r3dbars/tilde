@@ -101,6 +101,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.openai.codex")?.isSensitive == false)
         #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
+        #expect(store.profile(for: "com.openai.codex")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claude-code")?.graduationDecision == .wordOnly)
@@ -474,7 +475,7 @@ struct CompatibilityProfileTests {
         )
         #expect(
             codex.userFacingSafetySummary
-                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Prompt safety mode is word-only. Insertion fails closed if the primary method is not verified."
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Prompt safety mode is word-only."
         )
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
