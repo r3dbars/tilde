@@ -305,7 +305,8 @@ private func runReplay(options: Options) async throws {
     }
     let runMetadata = """
     - Engine: \(options.engine)
-    - Model: \(options.engine == "mock" ? "mock" : effectiveModel)
+    - Requested model: \(options.engine == "mock" ? "mock" : options.model)
+    - Effective model: \(options.engine == "mock" ? "mock" : effectiveModel)
     - Corpus: \(corpusKind)
     - Cases: \(replayCases.count)
     - Seed: \(options.seed)
