@@ -564,6 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
+    private var hasSurfacedModelSetupUI = false
     private var automaticTerminationActivity: NSObjectProtocol?
     private var didDisableAutomaticTermination = false
     private var modelInstallTask: Task<Void, Never>?
@@ -1325,6 +1326,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rearmFocusedTextAfterRuntimeReady()
         }
         if report.stage == .failed || report.action == .repairModel {
+            showSettings()
+        } else if report.stage == .downloadNeeded, !hasSurfacedModelSetupUI {
+            // A missing model must not be a silent no-op: without this, a first
+            // run with no model asset is a menu bar icon that never suggests
+            // anything and never says why. Surface Settings once per launch.
+            hasSurfacedModelSetupUI = true
             showSettings()
         }
         DiagnosticsLog.shared.record(
