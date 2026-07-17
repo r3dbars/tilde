@@ -61,6 +61,21 @@ struct SuggestionPipelineControllerTests {
         #expect(host.pollCount == 0)
         #expect(controller.isPollingPaused(now: now))
     }
+
+    @MainActor
+    @Test("Insertion pauses cancel delayed requested polls")
+    func insertionPausesCancelDelayedRequestedPolls() async throws {
+        let host = PollingHostStub()
+        let controller = SuggestionPipelineController(host: host)
+        let now = Date()
+
+        controller.requestPollSoon(afterMilliseconds: 40)
+        controller.pausePolling(now: now, durationMilliseconds: 1_000)
+        try await Task.sleep(for: .milliseconds(80))
+
+        #expect(host.pollCount == 0)
+        #expect(controller.isPollingPaused(now: now))
+    }
 }
 
 @MainActor

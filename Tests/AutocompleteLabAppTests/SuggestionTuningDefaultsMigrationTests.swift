@@ -7,6 +7,7 @@ struct SuggestionTuningDefaultsMigrationTests {
     func migratesPriorDefaults() {
         #expect(SuggestionTuningDefaultsMigration.maxVisibleWords(3, shouldMigrate: true) == 4)
         #expect(SuggestionTuningDefaultsMigration.maxVisibleWords(5, shouldMigrate: true) == 4)
+        #expect(SuggestionTuningDefaultsMigration.maxVisibleWords(8, shouldMigrate: true) == 4)
     }
 
     @Test("Preserves explicit long-suggestion preferences")
