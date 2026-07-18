@@ -377,7 +377,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
-    private var acceptedInsertionUndoExpirationTask: Task<Void, Never>?
+    private let acceptedInsertionUndoExpirationHost = AcceptedInsertionUndoExpirationHost()
     private let acceptedInsertionUndoRecoveryMode = AcceptedInsertionUndoRecoveryMode.fromEnvironment()
     private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
@@ -463,7 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboardEventCaptureHost.cancelIdleStop()
         insertionVerificationHost.cancel()
         deferredTerminalHostAcceptanceTask?.cancel()
-        acceptedInsertionUndoExpirationTask?.cancel()
+        acceptedInsertionUndoExpirationHost.cancel()
         modelRuntimeWarmHost.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
@@ -4782,12 +4782,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleAcceptedInsertionUndoExpiration(acceptanceID: String, expiresAt: Date) {
-        acceptedInsertionUndoExpirationTask?.cancel()
-        acceptedInsertionUndoExpirationTask = Task { @MainActor [weak self] in
-            let delay = max(0, expiresAt.timeIntervalSinceNow)
-            try? await Task.sleep(for: .milliseconds(Int(delay * 1_000)))
-            guard !Task.isCancelled,
-                  let self,
+        acceptedInsertionUndoExpirationHost.schedule(expiresAt: expiresAt) { [weak self] in
+            guard let self,
                   self.pendingAcceptedInsertionUndo?.acceptanceID == acceptanceID else {
                 return
             }
@@ -4969,8 +4965,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        acceptedInsertionUndoExpirationTask?.cancel()
-        acceptedInsertionUndoExpirationTask = nil
+        acceptedInsertionUndoExpirationHost.cancel()
         self.pendingAcceptedInsertionUndo = nil
         DiagnosticsLog.shared.record(
             "accepted-insertion-undo-cleared",
