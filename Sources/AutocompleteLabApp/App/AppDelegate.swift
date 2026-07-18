@@ -307,6 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
@@ -533,7 +534,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
-    private var runtimeWarmTask: Task<Void, Never>?
     private var pauseExpirationTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
@@ -630,7 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         insertionVerificationTask?.cancel()
         deferredTerminalHostAcceptanceTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
-        runtimeWarmTask?.cancel()
+        modelRuntimeWarmHost.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         suggestionPipeline.stopPolling()
@@ -1236,79 +1236,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func warmModelRuntime() {
         let candidate = modelRuntimeBundle.activeCandidate
-        let runtime = modelRuntime
-        let startedAt = Date()
-
-        guard modelRuntimeBundle.bootstrapPlan.canWarmPreferredRuntime else {
-            let reason = modelRuntimeBundle.bootstrapPlan.unavailableReason ?? "local model runtime is not ready"
-            applyRuntimeState(.unavailable(reason: reason))
-            DiagnosticsLog.shared.record(
-                "runtime-warm-skipped",
-                metadata: [
-                    "candidate": candidate.rawValue,
-                    "reason": reason,
-                    "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
-                ]
-            )
-            return
-        }
-
-        applyRuntimeState(.warming(candidate: candidate))
-        DiagnosticsLog.shared.record(
-            "runtime-warm-start",
-            metadata: [
-                "candidate": candidate.rawValue,
-                "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
-            ]
-        )
-
-        runtimeWarmTask?.cancel()
-        runtimeWarmTask = Task { [weak self, runtime, candidate] in
-            do {
-                try await runtime.warm()
-            } catch is CancellationError {
-                await MainActor.run {
-                    DiagnosticsLog.shared.record(
-                        "runtime-warm-cancelled",
-                        metadata: [
-                            "candidate": candidate.rawValue,
-                            "warmMilliseconds": String(Self.elapsedMilliseconds(since: startedAt))
-                        ]
-                    )
-                }
-                return
-            } catch {
-                await MainActor.run {
-                    DiagnosticsLog.shared.record(
-                        "runtime-warm-failed",
-                        metadata: [
-                            "candidate": candidate.rawValue,
-                            "reason": error.localizedDescription,
-                            "warmMilliseconds": String(Self.elapsedMilliseconds(since: startedAt))
-                        ]
-                    )
-                    self?.applyRuntimeState(.failed(candidate: candidate, reason: error.localizedDescription))
-                }
-                return
-            }
-
-            let state = await runtime.state
-            await MainActor.run {
-                DiagnosticsLog.shared.record(
-                    "runtime-warm-succeeded",
-                    metadata: [
-                        "candidate": candidate.rawValue,
-                        "state": state.statusSummary,
-                        "warmMilliseconds": String(Self.elapsedMilliseconds(since: startedAt))
-                    ]
-                )
+        modelRuntimeWarmHost.start(
+            runtime: modelRuntime,
+            candidate: candidate,
+            canWarm: modelRuntimeBundle.bootstrapPlan.canWarmPreferredRuntime,
+            unavailableReason: modelRuntimeBundle.bootstrapPlan.unavailableReason,
+            modelDirectoryPath: modelRuntimeBundle.modelDirectoryURL.path,
+            applyState: { [weak self] state in
                 self?.applyRuntimeState(state)
             }
-        }
-    }
-
-    private static func elapsedMilliseconds(since startedAt: Date) -> Int {
-        max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+        )
     }
 
     private func applyRuntimeState(_ state: LocalRuntimeState) {
@@ -18661,7 +18598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func reloadModelRuntimeAfterInstall() {
         let previousRuntime = modelRuntime
-        runtimeWarmTask?.cancel()
+        modelRuntimeWarmHost.cancel()
         invalidatePendingSuggestionRequest()
         previousRuntime.cancel()
         modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
