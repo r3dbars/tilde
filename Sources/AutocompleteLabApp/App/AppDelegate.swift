@@ -393,9 +393,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handler: self,
         developerMenuEnabled: developerMenuEnabled
     )
+    private lazy var workspaceObserverHost = WorkspaceObserverHost(handler: self)
 
-    private var workspaceFocusObservers: [NSObjectProtocol] = []
-    private var screenGeometryObserver: NSObjectProtocol?
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
     private var resourceDiagnosticsTimer: Timer?
     private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
@@ -504,8 +503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
-        startWorkspaceFocusObservers()
-        startScreenGeometryObserver()
+        workspaceObserverHost.start()
         suggestionPipeline.startPolling()
         startResourceDiagnostics()
         DispatchQueue.main.async { [weak self] in
@@ -533,8 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalizationCoordinator.stop()
         suggestionSummonHotKey.stop()
         manualSuggestionRetryTask?.cancel()
-        stopWorkspaceFocusObservers()
-        stopScreenGeometryObserver()
+        workspaceObserverHost.stop()
         stopProofOnlyAcceptCommandObserver()
         stopKeyboardEventTapNow(reason: "terminate")
         fieldStatusIndicator.hide()
@@ -551,115 +548,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: AppResidencyPolicy.automaticTerminationReason
             )
         }
-    }
-
-    private func startWorkspaceFocusObservers() {
-        guard workspaceFocusObservers.isEmpty else {
-            return
-        }
-
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceFocusObservers = [
-            center.addObserver(
-                forName: NSWorkspace.didActivateApplicationNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                let bundleIdentifier = (
-                    notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                )?.bundleIdentifier
-                Task { @MainActor in
-                    self?.handleWorkspaceFocusChange(
-                        reason: "workspace-app-activated",
-                        kind: .activated,
-                        bundleIdentifier: bundleIdentifier
-                    )
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.didDeactivateApplicationNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                let bundleIdentifier = (
-                    notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                )?.bundleIdentifier
-                Task { @MainActor in
-                    self?.handleWorkspaceFocusChange(
-                        reason: "workspace-app-deactivated",
-                        kind: .deactivated,
-                        bundleIdentifier: bundleIdentifier
-                    )
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.willSleepNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.systemWillSleep)
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.didWakeNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.systemDidWake)
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.screensDidSleepNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.displaysDidSleep)
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.screensDidWakeNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.displaysDidWake)
-                }
-            }
-        ]
-    }
-
-    private func stopWorkspaceFocusObservers() {
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceFocusObservers.forEach { center.removeObserver($0) }
-        workspaceFocusObservers.removeAll()
-    }
-
-    private func startScreenGeometryObserver() {
-        guard screenGeometryObserver == nil else {
-            return
-        }
-
-        screenGeometryObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleScreenGeometryChange()
-            }
-        }
-    }
-
-    private func stopScreenGeometryObserver() {
-        guard let observer = screenGeometryObserver else {
-            return
-        }
-
-        NotificationCenter.default.removeObserver(observer)
-        screenGeometryObserver = nil
     }
 
     private func startProofOnlyAcceptCommandObserver() {
@@ -20275,6 +20163,25 @@ extension AppDelegate: StatusMenuActionHandling {
             resetCurrentAppLearning()
         case .quit:
             quit()
+        }
+    }
+}
+
+// MARK: - Workspace observer wiring
+
+extension AppDelegate: WorkspaceObserverEventHandling {
+    func handleWorkspaceObserverEvent(_ event: WorkspaceObserverEvent) {
+        switch event {
+        case let .workspaceFocusChanged(reason, kind, bundleIdentifier):
+            handleWorkspaceFocusChange(
+                reason: reason,
+                kind: kind,
+                bundleIdentifier: bundleIdentifier
+            )
+        case let .suggestionInterruption(kind):
+            handleSuggestionInterruption(kind)
+        case .screenGeometryChanged:
+            handleScreenGeometryChange()
         }
     }
 }
