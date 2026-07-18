@@ -6,15 +6,37 @@ import Testing
 struct AppProofCommandRunnerTests {
     @Test("Live automatic proof entry point exists and is executable")
     func liveAutomaticProofEntryPointExistsAndIsExecutable() {
-        let repositoryRootURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let repositoryRootURL = repositoryRootURL()
         let entryPointURL = AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL)
 
         #expect(AppProofCommandPlan.proofEntryPointRelativePath == "script/real_app_smoke.sh")
         #expect(FileManager.default.fileExists(atPath: entryPointURL.path))
         #expect(FileManager.default.isExecutableFile(atPath: entryPointURL.path))
+    }
+
+    @Test("Automatic proof entry point preserves parser output and exit contracts")
+    func automaticProofEntryPointPreservesParserOutputAndExitContracts() throws {
+        let textEdit = try runProofEntryPoint(["textedit", "--skip-build", "--dry-run"])
+        #expect(textEdit.status == 0)
+        #expect(textEdit.standardOutput == "real_app_smoke: DRY RUN app=textedit fixture=textarea skipBuild=1\n")
+        #expect(textEdit.standardError.isEmpty)
+
+        let chrome = try runProofEntryPoint([
+            "chrome", "--fixture", "contenteditable", "--skip-build", "--dry-run"
+        ])
+        #expect(chrome.status == 0)
+        #expect(chrome.standardOutput == "real_app_smoke: DRY RUN app=chrome fixture=contenteditable skipBuild=1\n")
+        #expect(chrome.standardError.isEmpty)
+
+        let unsupported = try runProofEntryPoint(["chrome", "--fixture", "unsupported", "--dry-run"])
+        #expect(unsupported.status == 2)
+        #expect(unsupported.standardOutput.isEmpty)
+        #expect(unsupported.standardError == "real_app_smoke: unsupported Chrome fixture 'unsupported'\n")
+
+        let missingApp = try runProofEntryPoint([])
+        #expect(missingApp.status == 2)
+        #expect(missingApp.standardOutput.isEmpty)
+        #expect(missingApp.standardError.hasPrefix("Usage: script/real_app_smoke.sh"))
     }
 
     @Test("TextEdit proof plan runs the safe skip-build smoke lane")
@@ -230,6 +252,47 @@ struct AppProofCommandRunnerTests {
 
         #expect(resolvedURL?.standardizedFileURL == sourceRootURL.standardizedFileURL)
     }
+
+    private func repositoryRootURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func runProofEntryPoint(_ arguments: [String]) throws -> ProofEntryPointResult {
+        let process = Process()
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [
+            "bash",
+            AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL()).path
+        ] + arguments
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        try process.run()
+        process.waitUntilExit()
+
+        return ProofEntryPointResult(
+            status: process.terminationStatus,
+            standardOutput: String(
+                data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? "",
+            standardError: String(
+                data: standardError.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+        )
+    }
+}
+
+private struct ProofEntryPointResult {
+    let status: Int32
+    let standardOutput: String
+    let standardError: String
 }
 
 @MainActor

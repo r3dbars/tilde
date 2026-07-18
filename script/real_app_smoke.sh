@@ -168,6 +168,8 @@ current_app_is_running() {
 
 current_app_is_running || fail "current checkout's SteadyType app is not running"
 
+# build_and_run.sh waits for this same lock, so acquire it only after any
+# delegated build has finished.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   fail "another real-app smoke is already running"
 fi
@@ -202,10 +204,12 @@ wait_for_suggestion() {
 type_disposable_text() {
   local process_name="$1"
   local process_pid="${2:-}"
-  osascript - "$process_name" "$process_pid" <<'APPLESCRIPT' >/dev/null
+  local expected_window_title="${3:-}"
+  osascript - "$process_name" "$process_pid" "$expected_window_title" <<'APPLESCRIPT' >/dev/null
 on run argv
   set targetProcessName to item 1 of argv
   set targetProcessPID to item 2 of argv
+  set expectedWindowTitle to item 3 of argv
   tell application "System Events"
     if targetProcessPID is "" then
       set targetProcess to process targetProcessName
@@ -213,7 +217,14 @@ on run argv
       set targetProcess to first process whose unix id is (targetProcessPID as integer)
     end if
     set frontmost of targetProcess to true
+    if expectedWindowTitle is not "" then
+      if not (exists window expectedWindowTitle of targetProcess) then error "disposable smoke window is unavailable"
+      perform action "AXRaise" of window expectedWindowTitle of targetProcess
+    end if
     delay 0.2
+    if expectedWindowTitle is not "" and name of front window of targetProcess is not expectedWindowTitle then
+      error "disposable smoke window is not frontmost"
+    end if
     keystroke "Smoke proof feels inst"
   end tell
 end run
@@ -230,7 +241,7 @@ run_textedit() {
   open -a TextEdit "$fixture_file"
   sleep 0.8
   start_line="$(line_count "$LOG_PATH")"
-  type_disposable_text "TextEdit"
+  type_disposable_text "TextEdit" "" "$TEXTEDIT_WINDOW_TITLE"
   wait_for_suggestion "$start_line" "com.apple.TextEdit"
   echo "real_app_smoke: PASS app=textedit fixture=disposable"
 }
