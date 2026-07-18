@@ -919,6 +919,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionSchedulingHost = SuggestionSchedulingHost(
+        dependencies: SuggestionSchedulingHostDependencies(
+            cancelPrefixCooldownRetry: { [weak self] in self?.cancelPrefixCooldownRetry() },
+            cancelPendingSuggestionTask: { [weak self] reason in
+                self?.cancelPendingSuggestionTask(reason: reason)
+            },
+            setLastRequestedTextBeforeCursor: { [weak self] text in
+                self?.lastRequestedTextBeforeCursor = text
+            },
+            suggestionRequestPreparationHost: suggestionRequestPreparationHost,
+            suggestionOrchestrator: suggestionOrchestrator,
+            runtimeProofOptions: runtimeProofOptions,
+            activeAppProofBundleIdentifiers: activeAppProofBundleIdentifiers,
+            recentWordMemoryWords: { [weak self] scope in
+                self?.recentWordMemory.words(for: scope) ?? []
+            },
+            suggestionSession: suggestionSession,
+            currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
+            acceptedAndKeptSignal: { [unowned self] request, fieldClassification, profile in
+                self.acceptedAndKeptSignal(
+                    request: request,
+                    fieldClassification: fieldClassification,
+                    profile: profile
+                )
+            },
+            acceptedAndKeptLearning: { [weak self] in
+                self?.acceptedAndKeptLearning ?? AcceptedAndKeptLearningStore()
+            },
+            shouldAskModelForWordCompletionFallback: { [unowned self] visiblePageContext in
+                self.shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext)
+            },
+            shouldUsePredictiveWordFallback: { [unowned self] profile, visiblePageContext in
+                self.shouldUsePredictiveWordFallback(
+                    profile: profile,
+                    visiblePageContext: visiblePageContext
+                )
+            },
+            shouldUsePredictivePhraseFallback: { [unowned self] profile, behaviorProfileID, visiblePageContext in
+                self.shouldUsePredictivePhraseFallback(
+                    profile: profile,
+                    behaviorProfileID: behaviorProfileID,
+                    visiblePageContext: visiblePageContext
+                )
+            },
+            triggerPolicy: { [unowned self] profile in self.triggerPolicy(for: profile) },
+            suggestionTypingBurstSuppressionHost: suggestionTypingBurstSuppressionHost,
+            suggestionRequestExecutionHost: suggestionRequestExecutionHost,
+            suggestionIdleRetryState: suggestionIdleRetryState,
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+            },
+            recordAnnoyanceSignal: { [weak self] signal, context, suggestionID, reason, metadata in
+                self?.recordAnnoyanceSignal(
+                    signal,
+                    context: context,
+                    suggestionID: suggestionID,
+                    reason: reason,
+                    metadata: metadata
+                )
+            },
+            annoyanceContext: { [unowned self] appBundleIdentifier, fieldIdentity, requestMode, fieldKind in
+                self.annoyanceContext(
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentity,
+                    requestMode: requestMode,
+                    fieldKind: fieldKind
+                )
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            hideSuggestion: { [weak self] in self?.hideSuggestion() },
+            presentSuggestion: { [weak self] suggestion, suggestionID, request, context, profile, fieldIdentity, renderMode, latencyMilliseconds, triggerReason, requestTicket, candidateSelectionMetadata, refreshBeforePresenting in
+                self?.presentSuggestion(
+                    suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    renderMode: renderMode,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    requestTicket: requestTicket,
+                    candidateSelectionMetadata: candidateSelectionMetadata,
+                    refreshBeforePresenting: refreshBeforePresenting
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6478,11 +6574,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visiblePageContext: VisiblePageContext?,
         triggerReason: String = "poll"
     ) {
-        cancelPrefixCooldownRetry()
-        cancelPendingSuggestionTask(reason: "new-request")
-        lastRequestedTextBeforeCursor = context.textBeforeCursor
-
-        let preparation = suggestionRequestPreparationHost.prepare(
+        suggestionSchedulingHost.scheduleSuggestion(
             context: context,
             profile: profile,
             appBundleIdentifier: appBundleIdentifier,
@@ -6496,494 +6588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             visiblePageContext: visiblePageContext,
             triggerReason: triggerReason
         )
-        let orchestration = preparation.orchestration
-        let request = orchestration.request
-        let suggestionID = orchestration.suggestionID
-        let fieldIdentityDescription = orchestration.fieldIdentityDescription
-        let requestMetadata = preparation.requestMetadata
-        let requestTicket = orchestration.ticket
-        let requestStartedAt = orchestration.startedAt
-        let requestSchedule = preparation.requestSchedule
-        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
-            ? [:]
-            : typingBurstDecision.traceMetadata
-
-        let disablesFastWordCompletionForProof = runtimeProofOptions.disablesFastWordCompletion(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-        let disablesWordCompletionForProof = runtimeProofOptions.disablesWordCompletion(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-        let disablesPhraseContinuationForProof = runtimeProofOptions.disablesPhraseContinuation(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-        let disablesFastPhraseFallbackForProof = runtimeProofOptions.disablesFastPhraseFallback(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-
-        if requestMode == .wordCompletion,
-           disablesWordCompletionForProof {
-            DiagnosticsLog.shared.record(
-                "word-completion-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "proof-word-completion-disabled",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "proof-word-completion-disabled",
-                metadata: [
-                    "renderMode": renderMode.rawValue,
-                    "proofDisableReason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
-                ]
-                .merging(requestMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": "proof-word-completion-disabled"
-                ]
-            )
-            setSuggestionDecision("Blocked: proof word completion disabled")
-            hideSuggestion()
-            return
-        }
-
-        if requestMode == .wordCompletion,
-           !disablesFastWordCompletionForProof {
-            let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
-                + (visiblePageContext?.completionCandidateWords ?? [])
-            let allowPredictiveFallback = shouldUsePredictiveWordFallback(
-                profile: profile,
-                visiblePageContext: visiblePageContext
-            )
-            let fastSelection = suggestionOrchestrator.fastWordSelection(
-                for: context.textBeforeCursor,
-                recentWords: candidateWords,
-                allowPredictiveFallback: allowPredictiveFallback
-            )
-            let fastSelectionMetadata = fastSelection.traceMetadata
-                .merging(timingLane.traceMetadata) { current, _ in current }
-            if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionOrchestrator.shouldSuppressRepetition(
-                    fastSuggestion.visibleText,
-                    mode: request.mode,
-                    scope: appBundleIdentifier
-                ) else {
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "fast-word-completion",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: fastSuggestion.visibleText,
-                        displayedText: fastSuggestion.visibleText,
-                        latencyMilliseconds: 0,
-                        reason: "repeated-miss",
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastSelectionMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": "repeated-miss",
-                            "triggerReason": "fast-word-completion"
-                        ]
-                    )
-                    recordAnnoyanceSignal(
-                        .repeatedRejection,
-                        context: annoyanceContext(
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            requestMode: request.mode,
-                            fieldKind: fieldClassification.kind
-                        ),
-                        suggestionID: suggestionID,
-                        reason: "repeated-miss"
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                    hideSuggestion()
-                    return
-                }
-
-                presentSuggestion(
-                    fastSuggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: 0,
-                    triggerReason: "fast-word-completion",
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: fastSelectionMetadata,
-                    refreshBeforePresenting: false
-                )
-                return
-            }
-
-            if timingLane == .instantWord {
-                let reason = "instant-word-no-local-candidate"
-                RawAutocompleteTraceLog.shared.record(
-                    type: .suggestionSuppressed,
-                    suggestionID: suggestionID,
-                    appBundleIdentifier: appBundleIdentifier,
-                    fieldIdentity: fieldIdentityDescription,
-                    requestMode: request.mode.rawValue,
-                    triggerReason: "fast-word-completion",
-                    textBeforeCursor: request.textBeforeCursor,
-                    textAfterCursor: request.textAfterCursor,
-                    reason: reason,
-                    metadata: [
-                        "renderMode": renderMode.rawValue
-                    ]
-                    .merging(timingLane.traceMetadata) { current, _ in current }
-                    .merging(fastSelectionMetadata) { current, _ in current }
-                    .merging(requestMetadata) { current, _ in current }
-                )
-                if suggestionSession.hasVisibleSuggestion {
-                    setSuggestionDecision("Shown: no instant word replacement")
-                    repositionVisibleSuggestion(context: context, profile: profile)
-                    return
-                }
-
-                setSuggestionDecision("Waiting: no instant word match")
-                hideSuggestion()
-                return
-            }
-
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "fast-word-completion",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "no-fast-word-candidate",
-                metadata: [
-                    "renderMode": renderMode.rawValue
-                ]
-                .merging(fastSelectionMetadata) { current, _ in current }
-                .merging(requestMetadata) { current, _ in current }
-            )
-            if shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext) {
-                setSuggestionDecision("Queued: model word completion")
-            } else if suggestionSession.hasVisibleSuggestion {
-                setSuggestionDecision("Shown: no fast word replacement")
-                repositionVisibleSuggestion(context: context, profile: profile)
-                return
-            } else {
-                setSuggestionDecision(SuggestionStatusText.notShown(reason: "no-fast-word-candidate"))
-                hideSuggestion()
-                return
-            }
-        } else if requestMode == .wordCompletion,
-                  disablesFastWordCompletionForProof {
-            DiagnosticsLog.shared.record(
-                "fast-word-completion-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disableFastWordCompletionEnvironmentKey
-                ]
-            )
-            setSuggestionDecision("Queued: proof model word completion")
-        }
-
-        if requestMode == .phraseContinuation,
-           disablesPhraseContinuationForProof {
-            DiagnosticsLog.shared.record(
-                "phrase-continuation-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disablePhraseContinuationEnvironmentKey
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "proof-phrase-continuation-disabled",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "proof-phrase-continuation-disabled",
-                metadata: [
-                    "renderMode": renderMode.rawValue,
-                    "proofDisableReason": RuntimeProofOptions.disablePhraseContinuationEnvironmentKey
-                ]
-                .merging(requestMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": "proof-phrase-continuation-disabled"
-                ]
-            )
-            setSuggestionDecision("Blocked: proof phrase continuation disabled")
-            hideSuggestion()
-            return
-        }
-
-        var fastPhraseFallbackMetadata: [String: String] = [:]
-        var didPresentFastPhraseFallback = false
-        if requestMode == .phraseContinuation,
-           !disablesFastPhraseFallbackForProof {
-            let allowsClaudeCodeProofPromptPrediction =
-                appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
-            let allowsPredictivePhraseFallback =
-                allowsClaudeCodeProofPromptPrediction
-                || shouldUsePredictivePhraseFallback(
-                    profile: profile,
-                    behaviorProfileID: request.behaviorProfileID,
-                    visiblePageContext: visiblePageContext
-                )
-            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
-                for: context.textBeforeCursor,
-                docLocalContextTexts: orchestration.docLocalContextTexts,
-                personalWritingMemory: orchestration.personalWritingMemory,
-                behaviorProfileID: request.behaviorProfileID,
-                maxVisibleWords: request.maxVisibleWords,
-                allowPredictiveFallback: allowsPredictivePhraseFallback,
-                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
-            )
-            let fastSelectionMetadata = fastSelection.traceMetadata
-                .merging(timingLane.traceMetadata) { current, _ in current }
-            if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionOrchestrator.shouldSuppressRepetition(
-                    fastSuggestion.visibleText,
-                    mode: request.mode,
-                    scope: appBundleIdentifier
-                ) else {
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: fastSuggestion.visibleText,
-                        displayedText: fastSuggestion.visibleText,
-                        latencyMilliseconds: 0,
-                        reason: "repeated-miss",
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastSelectionMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": "repeated-miss",
-                            "triggerReason": "canned-bridge"
-                        ]
-                    )
-                    recordAnnoyanceSignal(
-                        .repeatedRejection,
-                        context: annoyanceContext(
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            requestMode: request.mode,
-                            fieldKind: fieldClassification.kind
-                        ),
-                        suggestionID: suggestionID,
-                        reason: "repeated-miss"
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                    hideSuggestion()
-                    return
-                }
-
-                let acceptedAndKeptSignal = acceptedAndKeptSignal(
-                    request: request,
-                    fieldClassification: fieldClassification,
-                    profile: profile
-                )
-                let learningDecision = suggestionOrchestrator.fastPhraseFallbackLearningDecision(
-                    acceptedAndKeptSignal: acceptedAndKeptSignal,
-                    probabilityThreshold: acceptedAndKeptLearning.probabilityThreshold(for: request.mode)
-                )
-                let fastPresentationMetadata = fastSelectionMetadata
-                    .merging(learningDecision.metadata) { current, _ in current }
-                if learningDecision.shouldSuppress {
-                    let reason = learningDecision.reason ?? "fast-phrase-learning-restraint"
-                    fastPhraseFallbackMetadata = [
-                        "fastPhraseFallbackChecked": "true",
-                        "fastPhraseFallbackOutcome": reason
-                    ]
-                    .merging(fastPresentationMetadata) { current, _ in current }
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        latencyMilliseconds: 0,
-                        reason: reason,
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastPresentationMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": reason,
-                            "triggerReason": "canned-bridge"
-                        ]
-                        .merging(learningDecision.metadata) { current, _ in current }
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-                } else {
-                    presentSuggestion(
-                        fastSuggestion,
-                        suggestionID: suggestionID,
-                        request: request,
-                        context: context,
-                        profile: profile,
-                        fieldIdentity: fieldIdentity,
-                        renderMode: renderMode,
-                        latencyMilliseconds: 0,
-                        triggerReason: "canned-bridge",
-                        requestTicket: requestTicket,
-                        candidateSelectionMetadata: fastPresentationMetadata,
-                        refreshBeforePresenting: false
-                    )
-                    didPresentFastPhraseFallback = suggestionSession.hasVisibleSuggestion
-                        && currentSuggestionState.id == suggestionID
-                    fastPhraseFallbackMetadata = [
-                        "fastPhraseFallbackChecked": "true",
-                        "fastPhraseFallbackOutcome": didPresentFastPhraseFallback
-                            ? "shown-then-model"
-                            : "presentation-blocked-model-only",
-                        "fastPhraseFallbackVisibleWords": String(fastSuggestion.visibleWordCount)
-                    ]
-                    .merging(fastPresentationMetadata) { current, _ in current }
-                    if didPresentFastPhraseFallback {
-                        setSuggestionDecision("Shown: instant phrase; refining with model")
-                    }
-                }
-            }
-
-            let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
-            if fastPhraseFallbackMetadata.isEmpty {
-                fastPhraseFallbackMetadata = [
-                    "fastPhraseFallbackChecked": "true",
-                    "fastPhraseFallbackOutcome": fastPhraseFallbackOutcome
-                ]
-                .merging(fastSelectionMetadata) { current, _ in current }
-                setSuggestionDecision("Queued: model phrase after instant \(fastPhraseFallbackOutcome)")
-            }
-        } else if requestMode == .phraseContinuation,
-                  disablesFastPhraseFallbackForProof {
-            DiagnosticsLog.shared.record(
-                "fast-phrase-fallback-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disableFastPhraseFallbackEnvironmentKey
-                ]
-            )
-            setSuggestionDecision("Queued: proof model phrase continuation")
-        }
-
-        if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
-            suggestionTypingBurstSuppressionHost.handle(
-                input: SuggestionTypingBurstSuppressionInput(
-                    suggestionID: suggestionID,
-                    appBundleIdentifier: appBundleIdentifier,
-                    fieldIdentity: fieldIdentity,
-                    requestMode: request.mode,
-                    requestTextBeforeCursor: request.textBeforeCursor,
-                    requestTextAfterCursor: request.textAfterCursor,
-                    fieldIdentityDescription: fieldIdentityDescription,
-                    context: context,
-                    profile: profile,
-                    fieldClassification: fieldClassification,
-                    renderMode: renderMode,
-                    typingBurstMetadata: typingBurstMetadata,
-                    fastPhraseFallbackMetadata: fastPhraseFallbackMetadata,
-                    requestMetadata: requestMetadata,
-                    settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
-                ),
-                didPresentFastPhraseFallback: didPresentFastPhraseFallback
-            )
-            return
-        }
-
-        recordSuggestionEvent(
-            "suggestion-request-scheduled",
-            context: context,
-            profile: profile,
-            metadata: [
-                "requestMode": request.mode.rawValue,
-                "triggerReason": triggerReason,
-                "traceID": String(suggestionID.prefix(8)),
-                "suggestionID": suggestionID
-            ]
-            .merging(typingBurstMetadata) { current, _ in current }
-            .merging(fastPhraseFallbackMetadata) { current, _ in current }
-            .merging(requestSchedule.traceMetadata) { current, _ in current }
-            .merging(requestMetadata) { current, _ in current }
-        )
-        suggestionIdleRetryState.cancel()
-        suggestionRequestExecutionHost.schedule(
-            input: SuggestionModelResultInput(
-                suggestionID: suggestionID,
-                request: request,
-                context: context,
-                profile: profile,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentity,
-                fieldClassification: fieldClassification,
-                fieldIdentityDescription: fieldIdentityDescription,
-                renderMode: renderMode,
-                requestMetadata: requestMetadata,
-                requestSchedule: requestSchedule,
-                requestTicket: requestTicket,
-                requestStartedAt: requestStartedAt
-            )
-        )
     }
-
     private func presentSuggestion(
         _ suggestion: CompletionSuggestion,
         suggestionID: String,
