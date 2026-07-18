@@ -314,6 +314,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         disabledObserver: { [weak self] reason in
             self?.handleKeyboardEventTapDisabled(reason: reason)
+        },
+        idleStateProvider: { [weak self] in
+            KeyboardEventCaptureIdleState(
+                hasVisibleSuggestion: self?.suggestionSession.hasVisibleSuggestion == true,
+                isSuggestionPanelVisible: self?.suggestionPanel.isVisible == true,
+                hasPendingAcceptedInsertionUndo: self?.acceptedInsertionUndoIsActive() == true
+            )
         }
     )
     private var keyboardEventTap: KeyboardEventCaptureHost? {
@@ -3749,11 +3756,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleKeyboardEventTapStopIfIdle() {
-        keyboardEventCaptureHost.scheduleStopIfIdle(
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            isSuggestionPanelVisible: suggestionPanel.isVisible,
-            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
-        )
+        keyboardEventCaptureHost.scheduleStopIfIdle()
     }
 
     private func cancelKeyboardEventTapIdleStop() {

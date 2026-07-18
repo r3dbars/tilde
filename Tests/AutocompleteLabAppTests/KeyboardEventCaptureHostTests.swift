@@ -52,7 +52,14 @@ struct KeyboardEventCaptureHostTests {
             handler: { _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
             passthroughKeyDownObserver: {},
             passthroughTypingMatchObserver: { _ in },
-            disabledObserver: { _ in }
+            disabledObserver: { _ in },
+            idleStateProvider: {
+                KeyboardEventCaptureIdleState(
+                    hasVisibleSuggestion: false,
+                    isSuggestionPanelVisible: false,
+                    hasPendingAcceptedInsertionUndo: false
+                )
+            }
         )
     }
 }
