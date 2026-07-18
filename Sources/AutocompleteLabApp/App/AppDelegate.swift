@@ -810,6 +810,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() }
         )
     )
+    private lazy var suggestionPresentationSuppressionTraceHost = SuggestionPresentationSuppressionTraceHost(
+        dependencies: SuggestionPresentationSuppressionTraceHostDependencies(
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -7041,28 +7053,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "presentationFreshnessSource": verifiedRefreshContext == nil ? "cached-snapshot" : "live-refresh"
                 ]) { current, _ in current }
             setSuggestionDecision("Blocked: \(reason)")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: metadata
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: originalContext,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
-                .merging(metadata) { current, _ in current }
+            suggestionPresentationSuppressionTraceHost.record(
+                input: SuggestionPresentationSuppressionTraceInput(
+                    suggestion: suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: originalContext,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    reason: reason,
+                    traceMetadata: metadata,
+                    eventMetadata: ["reason": reason]
+                        .merging(metadata) { current, _ in current }
+                )
             )
             hideSuggestion(reason: reason)
             return
@@ -7094,31 +7099,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let reason = refreshReason == "transient-codex-prompt-target"
                 ? "stale-prompt-target"
                 : refreshReason
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
-                    .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: originalContext,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
+            let metadata = traceGeometryMetadata(context: originalContext, renderMode: renderMode)
                 .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
+            suggestionPresentationSuppressionTraceHost.record(
+                input: SuggestionPresentationSuppressionTraceInput(
+                    suggestion: suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: originalContext,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    reason: reason,
+                    traceMetadata: metadata,
+                    eventMetadata: ["reason": reason]
+                        .merging(metadata) { current, _ in current }
+                )
             )
             setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
             hideSuggestion(reason: reason)
@@ -7180,41 +7178,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let suppression = placementSuppression.suppression
             let commandFallbackMetadata = placementSuppression.metadata
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: suppression.reason.rawValue,
-                metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(commandFallbackMetadata) { current, _ in current }
-                    .merging(suppression.metadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
+            let placementMetadata = traceGeometryMetadata(
                 context: context,
-                profile: profile,
-                metadata: [
-                    "reason": suppression.reason.rawValue
-                ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(commandFallbackMetadata) { current, _ in current }
-                .merging(suppression.metadata) { current, _ in current }
+                renderMode: learningAdjustment.effectiveRenderMode
             )
-            let placementMetadata = traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(commandFallbackMetadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
+            suggestionPresentationSuppressionTraceHost.record(
+                input: SuggestionPresentationSuppressionTraceInput(
+                    suggestion: suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    reason: suppression.reason.rawValue,
+                    traceMetadata: placementMetadata,
+                    eventMetadata: ["reason": suppression.reason.rawValue]
+                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                        .merging(learningAdjustment.metadata) { current, _ in current }
+                        .merging(commandFallbackMetadata) { current, _ in current }
+                        .merging(suppression.metadata) { current, _ in current }
+                )
+            )
             recordPlacementUncertainty(
                 suggestionID: suggestionID,
                 appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
@@ -7313,39 +7303,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
             }
             setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-                    .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(lateSuggestionMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
+            let suppressionMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(lateSuggestionMetadata) { current, _ in current }
+                .merging(lateSuggestionMetadata) { current, _ in current }
+            suggestionPresentationSuppressionTraceHost.record(
+                input: SuggestionPresentationSuppressionTraceInput(
+                    suggestion: suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    reason: reason,
+                    traceMetadata: suppressionMetadata,
+                    eventMetadata: ["reason": reason]
+                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                        .merging(learningAdjustment.metadata) { current, _ in current }
+                        .merging(placement.metadata) { current, _ in current }
+                        .merging(candidateSelectionMetadata) { current, _ in current }
+                        .merging(displayScoreMetadata) { current, _ in current }
+                        .merging(lateSuggestionMetadata) { current, _ in current }
+                )
             )
             if shouldKeepCurrentVisibleSuggestion {
                 setSuggestionDecision(
@@ -7381,39 +7365,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard replacementVisibilityAction == .presentProposed else {
             let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"
             setSuggestionDecision("Kept current suggestion: \(reason)")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-                    .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(replacementMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
+            let suppressionMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
+            suggestionPresentationSuppressionTraceHost.record(
+                input: SuggestionPresentationSuppressionTraceInput(
+                    suggestion: suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    reason: reason,
+                    traceMetadata: suppressionMetadata,
+                    eventMetadata: ["reason": reason]
+                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                        .merging(learningAdjustment.metadata) { current, _ in current }
+                        .merging(placement.metadata) { current, _ in current }
+                        .merging(candidateSelectionMetadata) { current, _ in current }
+                        .merging(displayScoreMetadata) { current, _ in current }
+                        .merging(replacementMetadata) { current, _ in current }
+                )
             )
 
             switch replacementVisibilityAction {
@@ -7456,39 +7434,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case let .failure(failure):
             let reason = failure.reason
             setSuggestionDecision("Blocked: \(reason)")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-                    .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(replacementMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
+            let suppressionMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
                 .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(placement.metadata) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
                 .merging(replacementMetadata) { current, _ in current }
+            suggestionPresentationSuppressionTraceHost.record(
+                input: SuggestionPresentationSuppressionTraceInput(
+                    suggestion: suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    reason: reason,
+                    traceMetadata: suppressionMetadata,
+                    eventMetadata: ["reason": reason]
+                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
+                        .merging(learningAdjustment.metadata) { current, _ in current }
+                        .merging(placement.metadata) { current, _ in current }
+                        .merging(candidateSelectionMetadata) { current, _ in current }
+                        .merging(displayScoreMetadata) { current, _ in current }
+                        .merging(replacementMetadata) { current, _ in current }
+                )
             )
             hideSuggestion(reason: reason)
             return
