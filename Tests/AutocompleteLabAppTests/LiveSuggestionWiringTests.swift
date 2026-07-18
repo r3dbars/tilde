@@ -99,7 +99,7 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "scheduleCodexPromptPresentationAfterAXCooldown(")
         try require(appDelegate, contains: "codex-prompt-presentation-deferred-for-ax-cooldown")
         try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
-        try require(appDelegate, contains: "fieldStatusIndicator.hide()")
+        try require(appDelegate, contains: "suggestionChromeHost.hideFieldStatusIndicator()")
         try require(appDelegate, contains: "switch codexPromptTargetContinuityHost.presentationPreparationPolicy.preparation(")
         try require(appDelegate, contains: "case let .deferForAXCooldown(delayMilliseconds):")
         try require(appDelegate, contains: "case .refreshFocusedContext:")

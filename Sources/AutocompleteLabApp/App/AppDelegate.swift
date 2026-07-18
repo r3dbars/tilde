@@ -273,23 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FocusedTextPollingThrottleSuggestionVisibilityPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
-    private let suggestionPanel = SuggestionPanelController()
-    private let fieldStatusIndicator = FieldStatusIndicatorController()
-    private lazy var suggestionPresentationDelivery = SuggestionPresentationDelivery(
-        panelPresenter: { [suggestionPanel] text, anchorRect, textLineRect, clippingRect, textStyle, renderMode in
-            suggestionPanel.show(
-                text: text,
-                near: anchorRect,
-                alignedTo: textLineRect,
-                boundedBy: clippingRect,
-                style: textStyle,
-                renderMode: renderMode
-            )
-        },
-        fieldStatusPresenter: { [weak self] context in
-            self?.showFieldStatusIndicator(.shown, context: context)
-        }
-    )
+    private lazy var suggestionChromeHost = SuggestionChromeHost()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     /// First extracted slice of the suggestion pipeline: owns the focused-text polling driver
     /// (timer, cadence, in-flight guard, throttle/pause, latency/skip stats). AppDelegate holds
@@ -318,7 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         idleStateProvider: { [weak self] in
             KeyboardEventCaptureIdleState(
                 hasVisibleSuggestion: self?.suggestionSession.hasVisibleSuggestion == true,
-                isSuggestionPanelVisible: self?.suggestionPanel.isVisible == true,
+                isSuggestionPanelVisible: self?.suggestionChromeHost.isSuggestionPanelVisible == true,
                 hasPendingAcceptedInsertionUndo: self?.acceptedInsertionUndoIsActive() == true
             )
         }
@@ -490,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspaceObserverHost.stop()
         stopProofOnlyAcceptCommandObserver()
         stopKeyboardEventTapNow(reason: "terminate")
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
     }
 
     func startProofOnlyAcceptCommandObserver() {
@@ -747,7 +731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(geometryTraceMetadata()) { current, _ in current }
         hideSuggestion(reason: "stale-geometry-screen-layout-changed", metadata: metadata)
         stopKeyboardEventTapNow(reason: interruption.keyboardCaptureStopReason)
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
             interruption.diagnosticEvent,
             metadata: metadata
@@ -773,7 +757,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stopKeyboardEventTapNow(reason: decision.keyboardCaptureStopReason)
         }
         if decision.shouldHideFieldStatus {
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
         }
         DiagnosticsLog.shared.record(
             decision.diagnosticEvent,
@@ -789,7 +773,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard suggestionSession.hasVisibleSuggestion
             || suggestionOrchestrator.currentRequest != nil
             || currentFieldIdentity != nil
-            || fieldStatusIndicator.isVisible else {
+            || suggestionChromeHost.isFieldStatusIndicatorVisible else {
             return
         }
 
@@ -1243,7 +1227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? false
             )
             hideSuggestion(reason: reason.hideReason)
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
 
@@ -1271,7 +1255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Blocked: unsupported app")
             updateStatusMenu(app: activeApp, profile: nil, appEnabled: false)
             hideSuggestion()
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
 
@@ -1410,7 +1394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               activeApp.processIdentifier == result.app.processIdentifier else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
 
@@ -1653,7 +1637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ? "Shown: preserving current suggestion"
                     : "Waiting: Codex prompt refresh"
             )
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             DiagnosticsLog.shared.record(
                 "codex-prompt-target-refresh-deferred",
                 metadata: [
@@ -1680,7 +1664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 source: "prompt-validation"
             )
             setSuggestionDecision("Waiting: Codex prompt refresh")
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
         guard promptMatch.canSuggest else {
@@ -2732,7 +2716,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source: String,
         preservePendingRequest: Bool = false
     ) {
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         if !preservePendingRequest {
             invalidatePendingSuggestionRequest()
         }
@@ -7855,7 +7839,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let panelRect: CGRect
         let deliveredPlacement: PlacementHealthPresentation
-        switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {
+        switch suggestionChromeHost.presentationDelivery.deliver(presentationDeliveryRequest) {
         case let .success(delivery):
             panelRect = delivery.panelRect
             deliveredPlacement = delivery.placement
@@ -7984,7 +7968,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: profile.bundleIdentifier,
             reason: "suggestion-presented"
         )
-        let presentationTracePayload = suggestionPresentationDelivery.tracePayload(
+        let presentationTracePayload = suggestionChromeHost.presentationDelivery.tracePayload(
             for: presentationDeliveryRequest,
             placement: deliveredPlacement,
             panelRect: panelRect,
@@ -8047,7 +8031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         codexPromptPresentationRetryTask?.cancel()
         setSuggestionDecision("Waiting: Codex prompt refresh")
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
             "codex-prompt-target-refresh-retry-scheduled",
             metadata: [
@@ -8102,7 +8086,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         codexPromptPresentationRetryTask?.cancel()
         setSuggestionDecision("Waiting: Codex AX cooldown")
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
             "codex-prompt-presentation-deferred-for-ax-cooldown",
             metadata: [
@@ -16623,7 +16607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             initialPlacement: initialPlacement,
             fallbackRenderMode: fallbackRenderMode
         ) { placement in
-            suggestionPanel.show(
+            suggestionChromeHost.showSuggestion(
                 text: suggestion.visibleText,
                 near: placement.anchorRect,
                 alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
@@ -17268,7 +17252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRenderMode = nil
         lastCompatibilityLearningTrustContext = nil
         lastVisibleSuggestionGeometrySnapshot = nil
-        suggestionPanel.hide()
+        suggestionChromeHost.hideSuggestion()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
     }
@@ -17277,19 +17261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ state: FieldStatusIndicatorState,
         context: FocusedTextContext
     ) {
-        guard let anchorRect = context.caretRect
-            ?? context.textLineRect
-            ?? context.elementRect
-            ?? context.windowRect else {
-            fieldStatusIndicator.hide()
-            return
-        }
-
-        fieldStatusIndicator.show(
-            state: state,
-            near: anchorRect,
-            fieldRect: context.elementRect
-        )
+        suggestionChromeHost.showFieldStatusIndicator(state, context: context)
     }
 
     private func updateStatusMenu(
@@ -17810,7 +17782,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
         suggestionIdleRetryState.cancel()
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()
         }
