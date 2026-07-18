@@ -822,6 +822,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionPresentationDeliveryHost = SuggestionPresentationDeliveryHost(
+        dependencies: SuggestionPresentationDeliveryHostDependencies(
+            presentationDelivery: suggestionChromeHost.presentationDelivery,
+            suppressionTraceHost: suggestionPresentationSuppressionTraceHost,
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -7425,46 +7433,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayScoreMetadata: displayScoreMetadata,
             replacementMetadata: replacementMetadata
         )
-        let panelRect: CGRect
-        let deliveredPlacement: PlacementHealthPresentation
-        switch suggestionChromeHost.presentationDelivery.deliver(presentationDeliveryRequest) {
-        case let .success(delivery):
-            panelRect = delivery.panelRect
-            deliveredPlacement = delivery.placement
-        case let .failure(failure):
-            let reason = failure.reason
-            setSuggestionDecision("Blocked: \(reason)")
-            let suppressionMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                .merging(replacementMetadata) { current, _ in current }
-            suggestionPresentationSuppressionTraceHost.record(
-                input: SuggestionPresentationSuppressionTraceInput(
-                    suggestion: suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
+        guard let delivery = suggestionPresentationDeliveryHost.deliver(
+            input: SuggestionPresentationDeliveryHostInput(
+                presentationDeliveryRequest: presentationDeliveryRequest,
+                triggerReason: triggerReason,
+                traceGeometryMetadata: traceGeometryMetadata(
                     context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    reason: reason,
-                    traceMetadata: suppressionMetadata,
-                    eventMetadata: ["reason": reason]
-                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                        .merging(learningAdjustment.metadata) { current, _ in current }
-                        .merging(placement.metadata) { current, _ in current }
-                        .merging(candidateSelectionMetadata) { current, _ in current }
-                        .merging(displayScoreMetadata) { current, _ in current }
-                        .merging(replacementMetadata) { current, _ in current }
-                )
+                    renderMode: placement.renderMode
+                ),
+                traceRequestMetadata: traceRequestMetadata(request: request, context: context)
             )
-            hideSuggestion(reason: reason)
+        ) else {
             return
         }
+        let panelRect = delivery.panelRect
+        let deliveredPlacement = delivery.placement
 
         let presentationCommitInput = SuggestionPresentationCommitInput(
             suggestion: suggestion,
