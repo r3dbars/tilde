@@ -935,7 +935,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 900,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
@@ -991,30 +991,39 @@ struct SuggestionOrchestratorTests {
             )
         }
 
-        // First-visible with no scheduling pause: 600ms of model compute exceeds the tight 450ms
-        // ceiling, so the result is suppressed before it can paint cold and late.
-        let firstVisible = decide(latency: 600, firstVisible: true)
-        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "450")
+        // First-visible under the 1200ms ceiling is allowed to paint cold.
+        let firstVisible = decide(latency: 1_199, firstVisible: true)
+        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "1200")
         #expect(firstVisible.metadata["modelIsFirstVisibleSuggestion"] == "true")
-        #expect(firstVisible.metadata["modelLatencyForBudgetMilliseconds"] == "600")
-        #expect(!firstVisible.decision.shouldDisplay)
-        #expect(firstVisible.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(firstVisible.metadata["modelLatencyForBudgetMilliseconds"] == "1199")
+        #expect(firstVisible.decision.shouldDisplay)
+        #expect(firstVisible.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+
+        // One millisecond over the first-visible ceiling is suppressed.
+        let lateFirstVisible = decide(latency: 1_201, firstVisible: true)
+        #expect(!lateFirstVisible.decision.shouldDisplay)
+        #expect(lateFirstVisible.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
 
         // First-visible but the latency is high ONLY because of the deliberate pre-model
-        // scheduling pause: model compute (600 - 240 = 360ms) is under the 450ms ceiling, so the
+        // scheduling pause: model compute (600 - 240 = 360ms) is under the 1200ms ceiling, so the
         // healthy result must NOT be suppressed. (Regression guard: the ceiling bounds model
         // compute, not the intentional pause baked into `latencyMilliseconds`.)
         let firstVisibleAfterPause = decide(latency: 600, firstVisible: true, scheduledDelay: 240)
         #expect(firstVisibleAfterPause.metadata["modelLatencyForBudgetMilliseconds"] == "360")
         #expect(firstVisibleAfterPause.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
 
-        // Refinement (a suggestion is already visible): the same 600ms stays within the looser
-        // 750ms budget on its original delay-inclusive basis, so the too-slow gate does not fire
-        // and the model can replace in place.
-        let refinement = decide(latency: 600, firstVisible: false)
-        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "750")
+        // Refinement (a suggestion is already visible): a result under the 2000ms budget can
+        // replace the existing suggestion in place.
+        let refinement = decide(latency: 1_999, firstVisible: false)
+        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "2000")
         #expect(refinement.metadata["modelIsFirstVisibleSuggestion"] == "false")
+        #expect(refinement.decision.shouldDisplay)
         #expect(refinement.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+
+        // One millisecond over the refinement ceiling is suppressed.
+        let lateRefinement = decide(latency: 2_001, firstVisible: false)
+        #expect(!lateRefinement.decision.shouldDisplay)
+        #expect(lateRefinement.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
     }
 
     @MainActor
@@ -1034,8 +1043,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Max tuning still respects low-confidence thin-context suppression")
-    func maxTuningStillRespectsLowConfidenceThinContextSuppression() throws {
+    @Test("Thin context penalizes but does not veto a clean suggestion")
+    func thinContextPenalizesButDoesNotVetoCleanSuggestion() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
@@ -1089,11 +1098,11 @@ struct SuggestionOrchestratorTests {
             suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
         )
 
-        #expect(!conservativeDisplay.decision.shouldDisplay)
-        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
-        #expect(!maxDisplay.decision.shouldDisplay)
-        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
-        #expect(maxDisplay.metadata["completionConfidenceBucket"] == "low")
+        #expect(conservativeDisplay.decision.shouldDisplay)
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == nil)
+        #expect(maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == nil)
+        #expect(maxDisplay.metadata["completionConfidenceBucket"] == "medium")
         #expect(maxDisplay.metadata["completionConfidenceReasons"]?.contains("thin-context") == true)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveLowConfidenceBypass"] == nil)
@@ -1136,7 +1145,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 1_018,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
@@ -1149,7 +1158,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 1_018,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
@@ -1300,7 +1309,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 1_600,
+            latencyMilliseconds: 2_600,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
@@ -1524,7 +1533,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 900,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()

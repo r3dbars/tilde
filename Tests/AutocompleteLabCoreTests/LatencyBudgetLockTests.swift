@@ -7,7 +7,7 @@ import Testing
 /// from several places that cannot all see each other at compile time:
 ///
 ///   - `SuggestionOrchestrator` (app target) caps a *cold, first-visible* model paint at
-///     450ms and a *refinement of an already-visible* suggestion at 750ms. Those ceilings
+///     1200ms and a *refinement of an already-visible* suggestion at 2000ms. Those ceilings
 ///     are deliberately tied to the core scheduling budgets locked below; if the core
 ///     budgets move, the orchestrator comment and the latency proof docs must move with
 ///     them. This suite makes a silent drift fail loudly.
@@ -19,21 +19,21 @@ import Testing
 /// matching proof docs in the same change — do not weaken the assertion to make it pass.
 @Suite("Latency budget + default model lock")
 struct LatencyBudgetLockTests {
-    @Test("Default scheduling budgets match the first-visible (450ms) / refine (750ms) contract")
+    @Test("Default scheduling budgets match the first-visible (1200ms) / refine (2000ms) contract")
     func defaultSchedulingBudgetsAreLocked() {
         let policy = SuggestionRequestSchedulingPolicy()
 
         // Cold first-visible model paint ceiling (mirrors
         // SuggestionOrchestrator.maximumFirstVisibleModelDisplayLatencyMilliseconds).
-        #expect(policy.instantWordResultBudgetMilliseconds == 450)
+        #expect(policy.instantWordResultBudgetMilliseconds == 1_200)
         // Refinement-of-visible ceiling (mirrors
         // SuggestionOrchestrator.maximumFinalModelDisplayLatencyMilliseconds).
-        #expect(policy.continuationResultBudgetMilliseconds == 750)
+        #expect(policy.continuationResultBudgetMilliseconds == 2_000)
         // Floating-overlay stability floor.
         #expect(policy.floatingOverlayMinimumDelayMilliseconds == 60)
     }
 
-    @Test("Keystroke lane carries the 450ms budget and suppresses only when over it")
+    @Test("Keystroke lane carries the 1200ms budget and suppresses only when over it")
     func keystrokeLaneBudgetIsEnforcedAtTheBoundary() {
         let policy = SuggestionRequestSchedulingPolicy()
         let schedule = policy.schedule(
@@ -43,11 +43,11 @@ struct LatencyBudgetLockTests {
             renderMode: .inlineAdjacent
         )
 
-        #expect(schedule.resultLatencyBudgetMilliseconds == 450)
+        #expect(schedule.resultLatencyBudgetMilliseconds == 1_200)
         // Exactly at budget still shows; one millisecond over is dropped rather than
         // painted as a stale, late ghost flash after the caret has moved on.
-        #expect(policy.shouldSuppressResult(latencyMilliseconds: 450, schedule: schedule) == false)
-        #expect(policy.shouldSuppressResult(latencyMilliseconds: 451, schedule: schedule) == true)
+        #expect(policy.shouldSuppressResult(latencyMilliseconds: 1_200, schedule: schedule) == false)
+        #expect(policy.shouldSuppressResult(latencyMilliseconds: 1_201, schedule: schedule) == true)
     }
 
     @Test("Default completion policy keeps the verified Qwen low-latency target shape")
