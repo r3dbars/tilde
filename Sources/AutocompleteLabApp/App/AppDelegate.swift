@@ -310,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private lazy var workspaceObserverHost = WorkspaceObserverHost(handler: self)
     private let resourceDiagnosticsHost = ResourceDiagnosticsHost()
+    private lazy var appLifecycleHost = AppLifecycleHost(handler: self)
 
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
     private lazy var suggestionSummonHotKey = SuggestionSummonHotKey { [weak self] in
@@ -378,8 +379,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private var hasSurfacedModelSetupUI = false
-    private var automaticTerminationActivity: NSObjectProtocol?
-    private var didDisableAutomaticTermination = false
     private var modelInstallStatusText: String?
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
@@ -398,8 +397,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var visiblePageContextEnabled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        keepProcessResident()
-        NSApp.setActivationPolicy(.accessory)
+        appLifecycleHost.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        appLifecycleHost.stop()
+    }
+
+    private func prepareForAppLaunch() {
         loadPauseState()
         loadDisabledApps()
         loadKeyboardShortcutConfiguration()
@@ -409,34 +414,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadAcceptedTextStyleMemory()
         personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         loadProofModeOverrides()
-        startProofOnlyAcceptCommandObserver()
-        statusMenuHost.start(pauseSuggestionsTitle: pauseSuggestionsTitle)
+    }
+
+    private func recordAppLaunchDiagnostics() {
         DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
+    }
+
+    private func requestAccessibilityPermissionIfNeededAtLaunch() {
         if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
             isTrusted: accessibilityClient.isTrusted
         ) {
             accessibilityClient.requestPermissionIfNeeded()
         }
-        warmModelRuntime()
-        startSuggestionSummonHotKey()
+    }
+
+    private func showSettingsIfNeededAtLaunch() {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
-        workspaceObserverHost.start()
-        suggestionPipeline.startPolling()
-        resourceDiagnosticsHost.start()
-        DispatchQueue.main.async { [weak self] in
-            self?.keepProcessResident()
-        }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    private func stopForAppTermination() {
         DiagnosticsLog.shared.record("terminate")
-        if let automaticTerminationActivity {
-            ProcessInfo.processInfo.endActivity(automaticTerminationActivity)
-            self.automaticTerminationActivity = nil
-        }
         debounceTask?.cancel()
         pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
@@ -457,20 +457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldStatusIndicator.hide()
     }
 
-    private func keepProcessResident() {
-        if !didDisableAutomaticTermination {
-            ProcessInfo.processInfo.disableAutomaticTermination(AppResidencyPolicy.automaticTerminationReason)
-            didDisableAutomaticTermination = true
-        }
-        if automaticTerminationActivity == nil {
-            automaticTerminationActivity = ProcessInfo.processInfo.beginActivity(
-                options: AppResidencyPolicy.activityOptions,
-                reason: AppResidencyPolicy.automaticTerminationReason
-            )
-        }
-    }
-
-    private func startProofOnlyAcceptCommandObserver() {
+    func startProofOnlyAcceptCommandObserver() {
         guard ProofOnlyAcceptCommand.isEnabled(),
               proofOnlyAcceptCommandObserver == nil else {
             return
@@ -804,7 +791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func startSuggestionSummonHotKey() {
+    func startSuggestionSummonHotKey() {
         let didStart = suggestionSummonHotKey.start()
         DiagnosticsLog.shared.record(
             didStart ? "suggestion-summon-hotkey-started" : "suggestion-summon-hotkey-start-failed",
@@ -815,7 +802,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func warmModelRuntime() {
+    func warmModelRuntime() {
         let candidate = modelRuntimeBundle.activeCandidate
         modelRuntimeWarmHost.start(
             runtime: modelRuntime,
@@ -19894,6 +19881,46 @@ private extension CompletionActivationDecision {
         case let .block(reason):
             return reason.rawValue
         }
+    }
+}
+
+// MARK: - Application lifecycle wiring
+
+extension AppDelegate: AppLifecycleHandling {
+    func prepareForLaunch() {
+        prepareForAppLaunch()
+    }
+
+    func startStatusMenu() {
+        statusMenuHost.start(pauseSuggestionsTitle: pauseSuggestionsTitle)
+    }
+
+    func recordLaunchDiagnostics() {
+        recordAppLaunchDiagnostics()
+    }
+
+    func requestAccessibilityPermissionIfNeeded() {
+        requestAccessibilityPermissionIfNeededAtLaunch()
+    }
+
+    func showSettingsIfNeeded() {
+        showSettingsIfNeededAtLaunch()
+    }
+
+    func startWorkspaceObserver() {
+        workspaceObserverHost.start()
+    }
+
+    func startSuggestionPipeline() {
+        suggestionPipeline.startPolling()
+    }
+
+    func startResourceDiagnostics() {
+        resourceDiagnosticsHost.start()
+    }
+
+    func stopForTermination() {
+        stopForAppTermination()
     }
 }
 
