@@ -75,13 +75,55 @@ struct SuggestionPresentationRefreshHostTests {
         #expect(stale.reason == "stale-text")
     }
 
+    @Test("Accepts compatible forward typing while a result is running")
+    func acceptsForwardTyping() throws {
+        let fixtures = Fixtures()
+        fixtures.context = makeContext(textBeforeCursor: "drafting")
+        fixtures.adjustedContext = fixtures.context
+
+        let result = makeHost(fixtures).refresh(
+            for: fixtures.request,
+            requestContext: fixtures.context,
+            profile: fixtures.profile,
+            fieldIdentity: fixtures.fieldIdentity
+        )
+
+        #expect(result.context?.textBeforeCursor == "drafting")
+        #expect(result.reason == nil)
+    }
+
+    @Test("Native Codex uses its prompt safety checks instead of terminal-host proof")
+    func nativeCodexSkipsTerminalHostProof() throws {
+        let fixtures = Fixtures()
+        fixtures.profile = CompatibilityProfileStore.mvp.profile(for: "com.openai.codex")!
+        fixtures.request = CompletionRequest(
+            textBeforeCursor: "draft",
+            textAfterCursor: "",
+            appBundleIdentifier: "com.openai.codex",
+            maxVisibleWords: 5,
+            mode: .phraseContinuation,
+            suggestionID: "codex-refresh"
+        )
+        fixtures.terminalHostProofBlockReason = "terminal-proof-not-applicable"
+
+        let result = makeHost(fixtures).refresh(
+            for: fixtures.request,
+            requestContext: fixtures.context,
+            profile: fixtures.profile,
+            fieldIdentity: fixtures.fieldIdentity
+        )
+
+        #expect(result.context != nil)
+        #expect(result.reason == nil)
+    }
+
     private func makeHost(_ fixtures: Fixtures) -> SuggestionPresentationRefreshHost {
         SuggestionPresentationRefreshHost(
             dependencies: SuggestionPresentationRefreshHostDependencies(
                 frontmostApplication: { fixtures.frontmostApplication },
                 focusedTextContext: { _, _ in fixtures.context },
                 frontmostAppMatchesSuggestion: { _, _, _ in true },
-                terminalHostProofBlockReason: { _, _, _ in nil },
+                terminalHostProofBlockReason: { _, _, _ in fixtures.terminalHostProofBlockReason },
                 promptTextAreaMatch: { _, _ in fixtures.promptMatch },
                 continuityHost: CodexPromptTargetContinuityHost(),
                 currentFieldIdentity: { fixtures.fieldIdentity },
@@ -98,13 +140,13 @@ struct SuggestionPresentationRefreshHostTests {
 
 @MainActor
 private final class Fixtures {
-    let profile = CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!
+    var profile = CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!
     let fieldIdentity = FocusedFieldIdentity(
         bundleIdentifier: "com.apple.TextEdit",
         processIdentifier: 42,
         elementIdentifier: 7
     )
-    let request = CompletionRequest(
+    var request = CompletionRequest(
         textBeforeCursor: "draft",
         textAfterCursor: "",
         appBundleIdentifier: "com.apple.TextEdit",
@@ -122,6 +164,7 @@ private final class Fixtures {
     var context: FocusedTextContext
     var adjustedContext: FocusedTextContext
     var promptMatch = SuggestionPresentationPromptMatch(canSuggest: true, reason: "text-area")
+    var terminalHostProofBlockReason: String?
 
     init() {
         context = makeContext()

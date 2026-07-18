@@ -72,7 +72,8 @@ final class SuggestionPresentationRefreshHost {
             return (nil, "stale-focused-context")
         }
 
-        guard dependencies.terminalHostProofBlockReason(frontmostApp, rawContext, profile) == nil else {
+        if expectedBundleIdentifier != "com.openai.codex",
+           dependencies.terminalHostProofBlockReason(frontmostApp, rawContext, profile) != nil {
             return (nil, "stale-terminal-host-proof")
         }
 
@@ -134,7 +135,7 @@ final class SuggestionPresentationRefreshHost {
         ) else {
             return (nil, "stale-focused-context")
         }
-        guard context.textBeforeCursor == request.textBeforeCursor,
+        guard context.textBeforeCursor.hasPrefix(request.textBeforeCursor),
               context.textAfterCursor == request.textAfterCursor else {
             return (nil, "stale-text")
         }
