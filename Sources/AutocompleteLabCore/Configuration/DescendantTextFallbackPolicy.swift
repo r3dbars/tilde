@@ -18,6 +18,9 @@ public struct DescendantTextFallbackPolicy: Equatable, Sendable {
         case "md.obsidian":
             return true
 
+        case "com.openai.codex":
+            return true
+
         case "com.apple.mail":
             return windowTitle == "New Message"
 

@@ -47,6 +47,28 @@ struct DescendantTextFallbackPolicyTests {
         ))
     }
 
+    @Test("Allows Codex to recover its editor from an empty web area")
+    func codexWebAreaCanRecoverEditorDescendant() {
+        #expect(policy.allowsFallback(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXWebArea",
+            directText: nil,
+            windowTitle: "Codex"
+        ))
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            directText: nil,
+            windowTitle: "Codex"
+        ))
+        #expect(!policy.allowsFallback(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXWebArea",
+            directText: "already readable",
+            windowTitle: "Codex"
+        ))
+    }
+
     @Test("Blocks broad Chrome production pages")
     func broadChromePagesStayBlocked() {
         #expect(!policy.allowsFallback(

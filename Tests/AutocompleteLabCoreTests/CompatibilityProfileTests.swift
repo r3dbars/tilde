@@ -99,6 +99,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.requiresNoSubmitAcceptanceProof == false)
         #expect(store.profile(for: "com.openai.codex")?.canPresentSuggestions == true)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
+        #expect(store.profile(for: "com.openai.codex")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.openai.codex")?.isSensitive == false)
         #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
