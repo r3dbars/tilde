@@ -251,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
         wordCompletionRanker: wordCompletionRanker,
-        prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()
+        suggestionAnnoyanceBackoffPolicy: makeSuggestionAnnoyanceBackoffPolicy()
     )
     private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
@@ -359,7 +359,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
-    private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private let typingBurstPolicy = TypingBurstPolicy()
     private var typingBurstState = TypingBurstState()
     private var suggestionIdleRetryState = SuggestionIdleRetryState()
@@ -4115,7 +4114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             armObsidianPostAcceptanceSuppressionIfNeeded()
-            suggestionRepetitionSuppressor.recordAcceptance(
+            suggestionOrchestrator.recordRepetitionAcceptance(
                 acceptedText,
                 mode: currentSuggestionState.requestMode,
                 scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -5015,7 +5014,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recordAcceptedText(acceptedText)
         armObsidianPostAcceptanceSuppressionIfNeeded()
         advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
-        suggestionRepetitionSuppressor.recordAcceptance(
+        suggestionOrchestrator.recordRepetitionAcceptance(
             acceptedText,
             mode: currentSuggestionState.requestMode,
             scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -6304,7 +6303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }
             if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionRepetitionSuppressor.shouldSuppress(
+                guard !suggestionOrchestrator.shouldSuppressRepetition(
                     fastSuggestion.visibleText,
                     mode: request.mode,
                     scope: appBundleIdentifier
@@ -6503,7 +6502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }
             if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionRepetitionSuppressor.shouldSuppress(
+                guard !suggestionOrchestrator.shouldSuppressRepetition(
                     fastSuggestion.visibleText,
                     mode: request.mode,
                     scope: appBundleIdentifier
@@ -6769,7 +6768,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             }
 
                             guard !partialSuggestion.isEmpty,
-                                  !self.suggestionRepetitionSuppressor.shouldSuppress(
+                                  !self.suggestionOrchestrator.shouldSuppressRepetition(
                                       partialSuggestion.visibleText,
                                       mode: request.mode,
                                       scope: appBundleIdentifier
@@ -6963,7 +6962,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         metadata: requestMetadata
                             .merging(appModelResultMetadata) { current, _ in current }
                     )
-                    guard !self.suggestionRepetitionSuppressor.shouldSuppress(
+                    guard !self.suggestionOrchestrator.shouldSuppressRepetition(
                         suggestion.visibleText,
                         mode: request.mode,
                         scope: appBundleIdentifier
@@ -7337,7 +7336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: displayFieldClassification,
             profile: profile
         )
-        let isRepeatedMiss = suggestionRepetitionSuppressor.shouldSuppress(
+        let isRepeatedMiss = suggestionOrchestrator.shouldSuppressRepetition(
             suggestion.visibleText,
             mode: request.mode,
             scope: request.appBundleIdentifier ?? profile.bundleIdentifier
@@ -9506,7 +9505,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: previousSnapshot.textBeforeCursor + acceptedText,
             textAfterCursor: previousSnapshot.textAfterCursor
         )
-        suggestionRepetitionSuppressor.recordAcceptance(
+        suggestionOrchestrator.recordRepetitionAcceptance(
             acceptedText,
             mode: currentSuggestionState.requestMode,
             scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -16838,7 +16837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
-            suggestionRepetitionSuppressor.recordMiss(
+            suggestionOrchestrator.recordRepetitionMiss(
                 displayedText,
                 mode: currentSuggestionState.requestMode,
                 scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -16889,7 +16888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var metadata = currentSuggestionLifetimeMetadata(lifetimeMilliseconds: lifetimeMilliseconds)
 
             if outcome == "ignored" {
-                let missRecord = suggestionRepetitionSuppressor.recordIgnored(
+                let missRecord = suggestionOrchestrator.recordIgnoredRepetition(
                     displayedText,
                     mode: currentSuggestionState.requestMode,
                     scope: appBundleIdentifier,
@@ -18017,8 +18016,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
         acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
         recentWordMemory = ScopedRecentWordMemory()
-        suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-        suggestionOrchestrator.resetPrefixFamilyCooldownPolicy(makePrefixFamilyCooldownPolicy())
+        suggestionOrchestrator.resetSuggestionAnnoyanceBackoffPolicy(
+            makeSuggestionAnnoyanceBackoffPolicy()
+        )
         appPreferencePersistenceHost.clearLearningData()
         DiagnosticsLog.shared.record(
             "learning-data-cleared",
@@ -18031,8 +18031,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setAcceptAllShortcut(keyboardShortcutConfiguration.acceptAllShortcut.next)
     }
 
-    private func makePrefixFamilyCooldownPolicy() -> PrefixFamilyCooldownPolicy {
-        PrefixFamilyCooldownPolicy(traceFingerprintSecret: tracePrivacySecretStore.secret())
+    private func makeSuggestionAnnoyanceBackoffPolicy() -> SuggestionAnnoyanceBackoffPolicy {
+        SuggestionAnnoyanceBackoffPolicy(
+            prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy(
+                traceFingerprintSecret: tracePrivacySecretStore.secret()
+            )
+        )
     }
 
     private func effectiveSuggestionPace(for profile: CompatibilityProfile) -> SuggestionPace {
