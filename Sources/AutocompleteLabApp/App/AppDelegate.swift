@@ -2516,12 +2516,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: repairPreviousSnapshot
         )
-        let fieldIdentity = fieldIdentity(
+        let observedFieldIdentity = fieldIdentity(
             app: frontmostApp,
             context: context,
             profile: profile
         )
-        if profile.bundleIdentifier == "com.openai.codex" {
+        let fieldIdentity: FocusedFieldIdentity
+        if profile.bundleIdentifier == "com.openai.codex",
+           promptTextAreaMatch(
+               for: frontmostApp.bundleIdentifier,
+               context: context
+           ).canSuggest,
+           let currentFieldIdentity,
+           canTrustPromptProofFieldIdentityRefresh(
+               requestFieldIdentity: currentFieldIdentity,
+               refreshedFieldIdentity: observedFieldIdentity,
+               profile: profile
+           ) {
+            fieldIdentity = currentFieldIdentity
+            DiagnosticsLog.shared.record(
+                "codex-editor-identity-preserved",
+                metadata: ["reason": "same-process-prompt-editor"]
+            )
+        } else {
+            fieldIdentity = observedFieldIdentity
             transitionToField(fieldIdentity)
         }
         let fieldClassification = fieldClassification(for: context)
