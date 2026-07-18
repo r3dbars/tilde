@@ -31,6 +31,18 @@ struct KeyboardEventCaptureHostTests {
         ))
     }
 
+    @Test("Presentation activation keeps the capture gate fail-closed")
+    func presentationActivationFailsClosedThroughCaptureGate() {
+        let host = makeHost()
+
+        #expect(!host.activateForSuggestionPresentation(
+            isTrustedForAccessibility: false,
+            hasVisibleSuggestion: true,
+            controlState: .running,
+            snapshot: KeyboardEventTapSnapshot(hasVisibleSuggestion: true)
+        ))
+    }
+
     @Test("AppDelegate delegates native tap lifecycle to the host")
     func appDelegateDelegatesNativeTapLifecycle() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -41,6 +53,7 @@ struct KeyboardEventCaptureHostTests {
 
         #expect(appDelegate.contains("KeyboardEventCaptureHost("))
         #expect(appDelegate.contains("keyboardEventCaptureHost.startIfPossible("))
+        #expect(appDelegate.contains("keyboardEventCaptureHost.activateForSuggestionPresentation("))
         #expect(appDelegate.contains("keyboardEventCaptureHost.scheduleStopIfIdle("))
         #expect(appDelegate.contains("keyboardEventCaptureHost.stopNow(reason: reason)"))
         #expect(!appDelegate.contains("let eventTap = KeyboardEventTap("))
