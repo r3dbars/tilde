@@ -32,7 +32,7 @@ final class SuggestionOrchestrator {
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
-    private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
+    private var suggestionAnnoyanceBackoffPolicy: SuggestionAnnoyanceBackoffPolicy
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var docLocalCorpusByField: [FocusedFieldIdentity: DocLocalNGramFieldCorpus] = [:]
 
@@ -45,7 +45,7 @@ final class SuggestionOrchestrator {
         goodAndFastEnoughPolicy: GoodAndFastEnoughPolicy = GoodAndFastEnoughPolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
-        prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
+        suggestionAnnoyanceBackoffPolicy: SuggestionAnnoyanceBackoffPolicy = SuggestionAnnoyanceBackoffPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
@@ -55,7 +55,7 @@ final class SuggestionOrchestrator {
         self.goodAndFastEnoughPolicy = goodAndFastEnoughPolicy
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
-        self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
+        self.suggestionAnnoyanceBackoffPolicy = suggestionAnnoyanceBackoffPolicy
     }
 
     var currentRequest: CompletionRequest? {
@@ -370,7 +370,7 @@ final class SuggestionOrchestrator {
         for input: PrefixFamilyCooldownInput,
         now: Date = Date()
     ) -> PrefixFamilyCooldownDecision {
-        prefixFamilyCooldownPolicy.decision(for: input, now: now)
+        suggestionAnnoyanceBackoffPolicy.prefixCooldownDecision(for: input, now: now)
     }
 
     func recordPrefixFamilyCooldown(
@@ -378,11 +378,69 @@ final class SuggestionOrchestrator {
         input: PrefixFamilyCooldownInput,
         now: Date = Date()
     ) -> PrefixFamilyCooldown? {
-        prefixFamilyCooldownPolicy.record(reason, input: input, now: now)
+        suggestionAnnoyanceBackoffPolicy.recordPrefixCooldown(reason, input: input, now: now)
     }
 
-    func resetPrefixFamilyCooldownPolicy(_ policy: PrefixFamilyCooldownPolicy) {
-        prefixFamilyCooldownPolicy = policy
+    func shouldSuppressRepetition(
+        _ text: String,
+        mode: CompletionRequestMode,
+        scope: String = "",
+        now: Date = Date()
+    ) -> Bool {
+        suggestionAnnoyanceBackoffPolicy.shouldSuppressRepetition(
+            text,
+            mode: mode,
+            scope: scope,
+            now: now
+        )
+    }
+
+    @discardableResult
+    func recordRepetitionMiss(
+        _ text: String,
+        mode: CompletionRequestMode?,
+        scope: String = "",
+        now: Date = Date()
+    ) -> SuggestionRepetitionMissRecord? {
+        suggestionAnnoyanceBackoffPolicy.recordRepetitionMiss(
+            text,
+            mode: mode,
+            scope: scope,
+            now: now
+        )
+    }
+
+    @discardableResult
+    func recordIgnoredRepetition(
+        _ text: String,
+        mode: CompletionRequestMode?,
+        scope: String = "",
+        lifetimeMilliseconds: Int? = nil,
+        now: Date = Date()
+    ) -> SuggestionRepetitionMissRecord? {
+        suggestionAnnoyanceBackoffPolicy.recordIgnoredRepetition(
+            text,
+            mode: mode,
+            scope: scope,
+            lifetimeMilliseconds: lifetimeMilliseconds,
+            now: now
+        )
+    }
+
+    func recordRepetitionAcceptance(
+        _ text: String,
+        mode: CompletionRequestMode?,
+        scope: String = ""
+    ) {
+        suggestionAnnoyanceBackoffPolicy.recordRepetitionAcceptance(
+            text,
+            mode: mode,
+            scope: scope
+        )
+    }
+
+    func resetSuggestionAnnoyanceBackoffPolicy(_ policy: SuggestionAnnoyanceBackoffPolicy) {
+        suggestionAnnoyanceBackoffPolicy = policy
     }
 
     func startStreamingPresentation(suggestionID: String) {
@@ -782,7 +840,7 @@ final class SuggestionOrchestrator {
         now: Date = Date()
     ) -> SuggestionDisplayScoreDecision {
         _ = suggestionTuning
-        let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
+        let prefixEagernessAdjustment = suggestionAnnoyanceBackoffPolicy.prefixEagernessAdjustment(
             for: PrefixFamilyCooldownInput(
                 appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
                 fieldIdentifier: fieldIdentity.traceDescription,
