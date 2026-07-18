@@ -208,9 +208,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
     private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let personalizationCoordinator = PersonalizationCoordinator()
-    private let suggestionControlPolicy = SuggestionControlPolicy()
+    private let suggestionSessionBehaviors = SuggestionSessionBehaviors()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
-    private let suggestionTriggerTimingPolicy = SuggestionTriggerTimingPolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
@@ -227,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
     private lazy var appTargetStateHost = AppTargetStateHost(profileStore: profileStore)
     private lazy var suggestionPauseStateHost = SuggestionPauseStateHost(
-        controlPolicy: suggestionControlPolicy,
+        controlPolicy: suggestionSessionBehaviors.control,
         schedulePolicy: suggestionPauseSchedulePolicy,
         onTimedPauseEnded: { [weak self] in
             self?.setSuggestionDecision("Ready: timed pause ended")
@@ -246,7 +245,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerification = InsertionVerification()
     private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
-    private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let proofOnlyAcceptRecentSuggestionPolicy = ProofOnlyAcceptRecentSuggestionPolicy()
@@ -1186,7 +1184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
-        if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
+        if case let .blocked(reason) = suggestionSessionBehaviors.control.suggestionAvailability(for: suggestionControlState) {
             if appSettings.personalCaptureEnabled,
                pollPersonalCaptureOnly(startedAt: startedAt, completesAsync: &completesAsync, reason: reason.hideReason) {
                 setSuggestionDecision("Capture: suggestions paused")
@@ -2238,7 +2236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKind: suggestionFieldClassification.kind,
             currentLineStructure: currentLineStructure
         ))
-        let triggerDecision = suggestionTriggerTimingPolicy.decision(
+        let triggerDecision = suggestionSessionBehaviors.triggerTiming.decision(
             using: triggerPolicy(for: profile),
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor,
@@ -4189,7 +4187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .block(blockReason ?? .missingCurrentSnapshot)
         }
 
-        return suggestionAcceptanceGuard.decision(
+        return suggestionSessionBehaviors.acceptanceGuard.decision(
             shown: shownSnapshot,
             current: currentSnapshot
         )
@@ -6154,7 +6152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
-        let requestSchedule = suggestionTriggerTimingPolicy.schedule(
+        let requestSchedule = suggestionSessionBehaviors.triggerTiming.schedule(
             policyDelayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
             requestMode: request.mode,
@@ -6757,7 +6755,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    if self.suggestionTriggerTimingPolicy.shouldSuppressResult(
+                    if self.suggestionSessionBehaviors.triggerTiming.shouldSuppressResult(
                         latencyMilliseconds: latencyMilliseconds,
                         schedule: requestSchedule
                     ) {
