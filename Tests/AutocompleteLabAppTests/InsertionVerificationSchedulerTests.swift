@@ -37,4 +37,19 @@ struct InsertionVerificationSchedulerTests {
 
         #expect(!didRun)
     }
+
+    @Test("Uses the per-verification delay without changing the default")
+    func usesPerVerificationDelay() async throws {
+        let scheduler = InsertionVerificationScheduler(delay: .seconds(1))
+        var didRun = false
+
+        await withCheckedContinuation { continuation in
+            scheduler.schedule(after: .milliseconds(10)) {
+                didRun = true
+                continuation.resume()
+            }
+        }
+
+        #expect(didRun)
+    }
 }

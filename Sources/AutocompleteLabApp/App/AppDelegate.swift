@@ -527,7 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var debounceTaskSuggestionID: String?
     private var codexPromptPresentationRetryTask: Task<Void, Never>?
-    private var insertionVerificationTask: Task<Void, Never>?
+    private let insertionVerificationScheduler = InsertionVerificationScheduler()
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
@@ -622,7 +622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
-        insertionVerificationTask?.cancel()
+        insertionVerificationScheduler.cancel()
         deferredTerminalHostAcceptanceTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
         modelRuntimeWarmHost.cancel()
@@ -5731,18 +5731,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        insertionVerificationTask?.cancel()
-        insertionVerificationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(
+        insertionVerificationScheduler.scheduleAsync(
+            after: .milliseconds(
                 insertionVerificationTimingPolicy.delayMilliseconds(
                     for: baseline.profile,
                     retryCount: baseline.retryCount
                 )
-            ))
-            guard !Task.isCancelled else {
+            )
+        ) { [weak self, acceptedText, baseline] in
+            guard let self else {
                 return
             }
-
             let verificationContextRead = focusedInsertionVerificationContext(
                 for: baseline,
                 acceptedText: acceptedText
