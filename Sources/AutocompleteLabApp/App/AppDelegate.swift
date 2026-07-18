@@ -235,9 +235,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
-    private let obsidianInsertionVerificationFastPathPolicy = ObsidianInsertionVerificationFastPathPolicy()
-    private let insertionRetryPolicy = InsertionRetryPolicy()
-    private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
     private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
@@ -352,7 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var debounceTaskSuggestionID: String?
     private var codexPromptPresentationRetryTask: Task<Void, Never>?
-    private let insertionVerificationScheduler = InsertionVerificationScheduler()
+    private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
@@ -460,7 +457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debounceTask?.cancel()
         pauseExpirationTask?.cancel()
         keyboardEventCaptureHost.cancelIdleStop()
-        insertionVerificationScheduler.cancel()
+        insertionVerificationHost.cancel()
         deferredTerminalHostAcceptanceTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
         modelRuntimeWarmHost.cancel()
@@ -5239,306 +5236,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedText: String,
         baseline: InsertionVerificationBaseline?
     ) {
-        guard let baseline else {
-            return
-        }
-
-        insertionVerificationScheduler.scheduleAsync(
-            after: .milliseconds(
-                insertionVerificationTimingPolicy.delayMilliseconds(
-                    for: baseline.profile,
-                    retryCount: baseline.retryCount
-                )
-            )
-        ) { [weak self, acceptedText, baseline] in
-            guard let self else {
-                return
-            }
-            let verificationContextRead = focusedInsertionVerificationContext(
-                for: baseline,
-                acceptedText: acceptedText
-            )
-            guard case let .ready(context: verificationContext) = verificationContextRead else {
-                recordInsertionVerificationContextFailure(
-                    verificationContextRead,
-                    acceptedText: acceptedText,
-                    baseline: baseline
-                )
-                return
-            }
-
-            var context = verificationContext
-            var result = insertionVerification.verify(
-                previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                acceptedText: acceptedText,
-                currentTextBeforeCursor: context.textBeforeCursor,
-                previousTextAfterCursor: baseline.previousTextAfterCursor,
-                currentTextAfterCursor: context.textAfterCursor
-            )
-
-            DiagnosticsLog.shared.record(
-                "insert-verification",
-                metadata: [
-                    "app": baseline.profile.bundleIdentifier,
-                    "result": String(describing: result),
-                    "acceptedChars": String(acceptedText.count),
-                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                    "currentBeforeChars": String(context.textBeforeCursor.count),
-                    "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                    "currentAfterChars": String(context.textAfterCursor.count)
-                ]
-            )
-
-            if baseline.profile.bundleIdentifier == "md.obsidian",
-               obsidianInsertionVerificationFastPathPolicy.canVerifyLengthMatchedSuffix(
-                   previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                   acceptedText: acceptedText,
-                   currentTextBeforeCursor: context.textBeforeCursor,
-                   previousTextAfterCursor: baseline.previousTextAfterCursor,
-                   currentTextAfterCursor: context.textAfterCursor,
-                   verificationResult: result
-               ) {
-                result = .verified
-                DiagnosticsLog.shared.record(
-                    "obsidian-length-matched-insert-verification-fast-path",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "acceptedChars": String(acceptedText.count),
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count),
-                        "reason": "length-matched-suffix"
-                    ]
-                )
-                DiagnosticsLog.shared.record(
-                    "insert-verification",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": String(describing: result),
-                        "acceptedChars": String(acceptedText.count),
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count),
-                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                        "currentAfterChars": String(context.textAfterCursor.count),
-                        "source": "obsidian-length-matched-suffix"
-                    ]
-                )
-            }
-
-            if !result.isVerified,
-               let recheckDelayMilliseconds = insertionVerificationTimingPolicy.readOnlyRecheckDelayMilliseconds(
-                   for: baseline.profile,
-                   result: result,
-                   retryCount: baseline.retryCount
-               ) {
-                try? await Task.sleep(for: .milliseconds(recheckDelayMilliseconds))
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(
-                    for: baseline,
-                    acceptedText: acceptedText
-                ) {
-                    context = recheckContext
-                    result = insertionVerification.verify(
-                        previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                        acceptedText: acceptedText,
-                        currentTextBeforeCursor: context.textBeforeCursor,
-                        previousTextAfterCursor: baseline.previousTextAfterCursor,
-                        currentTextAfterCursor: context.textAfterCursor
-                    )
-                    DiagnosticsLog.shared.record(
-                        "insert-verification",
-                        metadata: [
-                            "app": baseline.profile.bundleIdentifier,
-                            "result": String(describing: result),
-                            "acceptedChars": String(acceptedText.count),
-                            "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                            "currentBeforeChars": String(context.textBeforeCursor.count),
-                            "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                            "currentAfterChars": String(context.textAfterCursor.count),
-                            "source": "read-only-recheck",
-                            "recheckDelayMilliseconds": String(recheckDelayMilliseconds)
-                        ]
-                    )
-                }
-            }
-
-            guard result.isVerified else {
-                if insertionRetryPolicy.shouldRetry(
-                    result: result,
-                    insertionMode: baseline.profile.insertionMode,
-                    retryCount: baseline.retryCount
-                ) {
-                    DiagnosticsLog.shared.record(
-                        "insert-verification-retry",
-                        metadata: [
-                            "app": baseline.profile.bundleIdentifier,
-                            "acceptedChars": String(acceptedText.count),
-                            "retryCount": String(baseline.retryCount + 1),
-                            "result": String(describing: result)
-                        ]
-                    )
-
-                    let skippedModes = insertionRetrySkippedModes(
-                        result: result,
-                        profile: baseline.profile,
-                        retryCount: baseline.retryCount
-                    )
-                    if insertAcceptedText(
-                        acceptedText,
-                        skippingInsertionModes: skippedModes,
-                        action: baseline.action
-                    ) {
-                        let retryBaseline = InsertionVerificationBaseline(
-                            fieldIdentity: baseline.fieldIdentity,
-                            targetFingerprint: baseline.targetFingerprint,
-                            previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                            previousTextAfterCursor: baseline.previousTextAfterCursor,
-                            profile: baseline.profile,
-                            suggestionID: baseline.suggestionID,
-                            requestMode: baseline.requestMode,
-                            acceptanceID: baseline.acceptanceID,
-                            acceptedAt: baseline.acceptedAt,
-                            action: baseline.action,
-                            acceptMode: baseline.acceptMode,
-                            fieldKind: baseline.fieldKind,
-                            fieldKindReason: baseline.fieldKindReason,
-                            behaviorProfileID: baseline.behaviorProfileID,
-                            retryCount: baseline.retryCount + 1
-                        )
-                        scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
-                        return
-                    }
-                }
-
-                DiagnosticsLog.shared.record(
-                    "insert-verification-final-failure",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": String(describing: result),
-                        "acceptedChars": String(acceptedText.count),
-                        "retryCount": String(baseline.retryCount)
-                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
-                )
-                RawAutocompleteTraceLog.shared.record(
-                    type: .insertionFailed,
-                    suggestionID: baseline.suggestionID ?? "",
-                    appBundleIdentifier: baseline.profile.bundleIdentifier,
-                    fieldIdentity: baseline.fieldIdentity.traceDescription,
-                    requestMode: baseline.requestMode?.rawValue ?? "",
-                    acceptedText: acceptedText,
-                    outcome: String(describing: result),
-                    reason: "insert-verification-failed",
-                    metadata: [
-                        "acceptanceID": baseline.acceptanceID,
-                        "acceptMode": baseline.acceptMode,
-                        "fieldKind": baseline.fieldKind.rawValue,
-                        "fieldKindReason": baseline.fieldKindReason,
-                        "behaviorProfile": baseline.behaviorProfileID.rawValue,
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count),
-                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                        "currentAfterChars": String(context.textAfterCursor.count)
-                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
-                )
-                recordPersonalCaptureSuggestionEpisodeInsertionFailed(
-                    baseline: baseline,
-                    outcome: String(describing: result),
-                    reason: "insert-verification-failed"
-                )
-                recordAnnoyanceSignal(
-                    .wrongInsertion,
-                    context: annoyanceContext(
-                        appBundleIdentifier: baseline.profile.bundleIdentifier,
-                        fieldIdentity: baseline.fieldIdentity,
-                        requestMode: baseline.requestMode,
-                        fieldKind: baseline.fieldKind
-                    ),
-                    suggestionID: baseline.suggestionID ?? "",
-                    reason: "insert-verification-failed",
-                    metadata: [
-                        "acceptanceID": baseline.acceptanceID,
-                        "acceptMode": baseline.acceptMode,
-                        "insertionResult": String(describing: result)
-                    ]
-                )
-                if baseline.profile.suppressesAfterInsertionFailure {
-                    suppressField(
-                        baseline.fieldIdentity,
-                        profile: baseline.profile,
-                        reason: "insert-verification-failed"
-                    )
-                }
-                hideSuggestion(reason: "insert-verification-failed")
-                return
-            }
-
-            if baseline.retryCount > 0 {
-                DiagnosticsLog.shared.record(
-                    "insert-verification-recovered",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "acceptedChars": String(acceptedText.count),
-                        "retryCount": String(baseline.retryCount)
-                    ]
-                )
-            }
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionVerified,
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity.traceDescription,
-                requestMode: baseline.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                outcome: "verified",
-                metadata: [
-                    "acceptanceID": baseline.acceptanceID,
-                    "acceptMode": baseline.acceptMode,
-                    "fieldKind": baseline.fieldKind.rawValue,
-                    "fieldKindReason": baseline.fieldKindReason,
-                    "behaviorProfile": baseline.behaviorProfileID.rawValue
-                ]
-            )
-            recordPersonalCaptureSuggestionEpisodeAction(
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                outcome: .accepted,
-                reason: "insertion-verified",
-                acceptedText: acceptedText,
-                metadata: [
-                    "acceptanceID": baseline.acceptanceID,
-                    "acceptMode": baseline.acceptMode,
-                    "fieldKind": baseline.fieldKind.rawValue,
-                    "fieldKindReason": baseline.fieldKindReason,
-                    "behaviorProfile": baseline.behaviorProfileID.rawValue
-                ]
-            )
-            recordPersonalCaptureAcceptedSuggestion(
-                acceptedText: acceptedText,
-                baseline: baseline
-            )
-            let tracker = AcceptanceSurvivalTracker(
-                acceptanceID: baseline.acceptanceID,
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity,
-                requestMode: baseline.requestMode?.rawValue ?? "",
-                acceptMode: baseline.acceptMode,
-                acceptedText: acceptedText,
-                textBeforeCursorAtAccept: baseline.previousTextBeforeCursor,
-                expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
-                acceptedAt: baseline.acceptedAt,
-                profile: baseline.profile,
-                fieldKind: baseline.fieldKind,
-                fieldKindReason: baseline.fieldKindReason,
-                behaviorProfileID: baseline.behaviorProfileID
-            )
-            startAcceptanceSurvivalTracking(tracker)
-        }
+        guard let baseline else { return }
+        insertionVerificationHost.schedule(acceptedText: acceptedText, baseline: baseline)
     }
 
-    private func recordInsertionVerificationContextFailure(
+    func handleInsertionVerificationContextFailure(
         _ contextRead: FocusedInsertionVerificationContext,
         acceptedText: String,
         baseline: InsertionVerificationBaseline
@@ -8942,7 +8644,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "x=\(rect.x),y=\(rect.y),w=\(rect.width),h=\(rect.height)"
     }
 
-    private func insertionRetrySkippedModes(
+    func insertionRetrySkippedModes(
         result: InsertionVerificationResult,
         profile: CompatibilityProfile,
         retryCount: Int
@@ -19409,7 +19111,7 @@ private extension AppDelegate {
 
 }
 
-private struct InsertionVerificationBaseline: Equatable {
+struct InsertionVerificationBaseline: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let targetFingerprint: FocusedTargetFingerprint
     let previousTextBeforeCursor: String
@@ -19424,10 +19126,10 @@ private struct InsertionVerificationBaseline: Equatable {
     let fieldKind: AXFieldKind
     let fieldKindReason: String
     let behaviorProfileID: AutocompleteBehaviorProfileID
-    let retryCount: Int
+    var retryCount: Int
 }
 
-private enum FocusedInsertionVerificationContext {
+enum FocusedInsertionVerificationContext {
     case ready(context: FocusedTextContext)
     case missingContext
     case fieldChanged
@@ -19734,6 +19436,164 @@ extension AppDelegate: DiagnosticsWindowActionHandling {
     func deleteDiagnosticsTraces() {
         deleteLocalPrivacyLogs(refreshSettings: false)
         showDiagnostics()
+    }
+}
+
+// MARK: - Insertion verification host
+
+extension AppDelegate: InsertionVerificationHandling {
+    func insertionVerificationContext(
+        for baseline: InsertionVerificationBaseline,
+        acceptedText: String
+    ) -> FocusedInsertionVerificationContext {
+        focusedInsertionVerificationContext(for: baseline, acceptedText: acceptedText)
+    }
+
+    func retryAcceptedInsertion(
+        _ acceptedText: String,
+        skippingInsertionModes: Set<InsertionMode>,
+        action: KeyboardAction?
+    ) -> Bool {
+        insertAcceptedText(
+            acceptedText,
+            skippingInsertionModes: skippingInsertionModes,
+            action: action
+        )
+    }
+
+    func handleInsertionVerificationFailure(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline,
+        context: FocusedTextContext,
+        result: InsertionVerificationResult
+    ) {
+        let resultDescription = String(describing: result)
+        DiagnosticsLog.shared.record(
+            "insert-verification-final-failure",
+            metadata: [
+                "app": baseline.profile.bundleIdentifier,
+                "result": resultDescription,
+                "acceptedChars": String(acceptedText.count),
+                "retryCount": String(baseline.retryCount)
+            ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .insertionFailed,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity.traceDescription,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            outcome: resultDescription,
+            reason: "insert-verification-failed",
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "fieldKind": baseline.fieldKind.rawValue,
+                "fieldKindReason": baseline.fieldKindReason,
+                "behaviorProfile": baseline.behaviorProfileID.rawValue,
+                "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                "currentBeforeChars": String(context.textBeforeCursor.count),
+                "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                "currentAfterChars": String(context.textAfterCursor.count)
+            ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
+        )
+        recordPersonalCaptureSuggestionEpisodeInsertionFailed(
+            baseline: baseline,
+            outcome: resultDescription,
+            reason: "insert-verification-failed"
+        )
+        recordAnnoyanceSignal(
+            .wrongInsertion,
+            context: annoyanceContext(
+                appBundleIdentifier: baseline.profile.bundleIdentifier,
+                fieldIdentity: baseline.fieldIdentity,
+                requestMode: baseline.requestMode,
+                fieldKind: baseline.fieldKind
+            ),
+            suggestionID: baseline.suggestionID ?? "",
+            reason: "insert-verification-failed",
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "insertionResult": resultDescription
+            ]
+        )
+        if baseline.profile.suppressesAfterInsertionFailure {
+            suppressField(
+                baseline.fieldIdentity,
+                profile: baseline.profile,
+                reason: "insert-verification-failed"
+            )
+        }
+        hideSuggestion(reason: "insert-verification-failed")
+    }
+
+    func handleInsertionVerificationSuccess(
+        acceptedText: String,
+        baseline: InsertionVerificationBaseline
+    ) {
+        if baseline.retryCount > 0 {
+            DiagnosticsLog.shared.record(
+                "insert-verification-recovered",
+                metadata: [
+                    "app": baseline.profile.bundleIdentifier,
+                    "acceptedChars": String(acceptedText.count),
+                    "retryCount": String(baseline.retryCount)
+                ]
+            )
+        }
+        RawAutocompleteTraceLog.shared.record(
+            type: .insertionVerified,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity.traceDescription,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptedText: acceptedText,
+            outcome: "verified",
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "fieldKind": baseline.fieldKind.rawValue,
+                "fieldKindReason": baseline.fieldKindReason,
+                "behaviorProfile": baseline.behaviorProfileID.rawValue
+            ]
+        )
+        recordPersonalCaptureSuggestionEpisodeAction(
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            outcome: .accepted,
+            reason: "insertion-verified",
+            acceptedText: acceptedText,
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "fieldKind": baseline.fieldKind.rawValue,
+                "fieldKindReason": baseline.fieldKindReason,
+                "behaviorProfile": baseline.behaviorProfileID.rawValue
+            ]
+        )
+        recordPersonalCaptureAcceptedSuggestion(
+            acceptedText: acceptedText,
+            baseline: baseline
+        )
+        let tracker = AcceptanceSurvivalTracker(
+            acceptanceID: baseline.acceptanceID,
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            fieldIdentity: baseline.fieldIdentity,
+            requestMode: baseline.requestMode?.rawValue ?? "",
+            acceptMode: baseline.acceptMode,
+            acceptedText: acceptedText,
+            textBeforeCursorAtAccept: baseline.previousTextBeforeCursor,
+            expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
+            acceptedAt: baseline.acceptedAt,
+            profile: baseline.profile,
+            fieldKind: baseline.fieldKind,
+            fieldKindReason: baseline.fieldKindReason,
+            behaviorProfileID: baseline.behaviorProfileID
+        )
+        startAcceptanceSurvivalTracking(tracker)
     }
 }
 
