@@ -1126,6 +1126,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cancelKeyboardEventTapIdleStop: { [weak self] in self?.cancelKeyboardEventTapIdleStop() }
         )
     )
+    private(set) lazy var suggestionInsertionHost = SuggestionInsertionHost(
+        dependencies: SuggestionInsertionHostDependencies(
+            currentProfile: { [unowned self] in self.currentProfile },
+            currentSuggestionState: currentSuggestionState,
+            currentFieldIdentity: { [unowned self] in self.currentFieldIdentity },
+            acceptedTextSafetyPolicy: acceptedTextSafetyPolicy,
+            setSuggestionDecision: { [unowned self] decision in self.setSuggestionDecision(decision) },
+            hideSuggestion: { [unowned self] reason in self.hideSuggestion(reason: reason) },
+            suppressPassthroughObservation: { [weak self] until in
+                self?.keyboardEventTap?.suppressPassthroughObservation(until: until)
+            },
+            shouldUseClaudeCodeTerminalHostProofDirectInsertion: { [unowned self] profile, action in
+                self.shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action)
+            },
+            shouldUseCodexProofDirectInsertion: { [unowned self] profile in
+                self.shouldUseCodexProofDirectInsertion(profile: profile)
+            },
+            shouldUseClaudeDesktopProofDirectInsertion: { [unowned self] profile in
+                self.shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
+            },
+            shouldUseObsidianDirectValueInsertion: { [unowned self] profile, action in
+                self.shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
+            },
+            shouldUseObsidianSystemEventsInsertion: { [unowned self] profile in
+                self.shouldUseObsidianSystemEventsInsertion(profile: profile)
+            },
+            insertCodexProofText: { [unowned self] acceptedText in self.insertCodexProofText(acceptedText) },
+            insertClaudeCodeTerminalHostProofText: { [unowned self] acceptedText in
+                self.insertClaudeCodeTerminalHostProofText(acceptedText)
+            },
+            insertClaudeDesktopProofText: { [unowned self] acceptedText in
+                self.insertClaudeDesktopProofText(acceptedText)
+            },
+            insertObsidianDirectValueText: { [unowned self] acceptedText, profile in
+                self.insertObsidianDirectValueText(acceptedText, profile: profile)
+            },
+            insertObsidianSystemEventsPasteText: { [unowned self] acceptedText in
+                self.insertObsidianSystemEventsPasteText(acceptedText)
+            },
+            repairObsidianFullAcceptCaret: { [unowned self] profile, action in
+                self.repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
+            },
+            defaultInsertion: { [unowned self] acceptedText, profile, expectedFieldIdentity, skippedModes in
+                self.insertionEngine.insert(
+                    acceptedText,
+                    profile: profile,
+                    expectedFieldIdentity: expectedFieldIdentity,
+                    skipping: skippedModes
+                )
+            },
+            pausePolling: { [unowned self] durationMilliseconds in
+                self.suggestionPipeline.pausePolling(now: Date(), durationMilliseconds: durationMilliseconds)
+            },
+            postInsertionPollPauseMilliseconds: postInsertionPollPauseMilliseconds
+        )
+    )
     private lazy var suggestionAcceptanceHost = SuggestionAcceptanceHost(
         dependencies: SuggestionAcceptanceHostDependencies(
             keyboardShortcutConfiguration: { [unowned self] in self.keyboardShortcutConfiguration },
@@ -1205,7 +1261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ) ?? false
             },
             insertAcceptedText: { [weak self] acceptedText, action in
-                self?.insertAcceptedText(acceptedText, action: action) ?? false
+                self?.suggestionInsertionHost.insertAcceptedText(acceptedText, action: action) ?? false
             },
             suppressCurrentFieldAfterInsertionFailure: { [weak self] reason in
                 self?.suppressCurrentFieldAfterInsertionFailure(reason: reason)
@@ -5298,7 +5354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "suggestionID": scheduledSuggestionID ?? ""
                 ]
             )
-            guard self.insertAcceptedText(acceptedText, action: action) else {
+            guard self.suggestionInsertionHost.insertAcceptedText(acceptedText, action: action) else {
                 self.suppressCurrentFieldAfterInsertionFailure(reason: "ghostty-deferred-insert-failed")
                 self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
                     stage: "insert-failed",
@@ -7200,241 +7256,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return [profile.insertionMode]
-    }
-
-    func insertAcceptedText(
-        _ acceptedText: String,
-        skippingInsertionModes skippedModes: Set<InsertionMode> = [],
-        action: KeyboardAction? = nil
-    ) -> Bool {
-        guard let profile = currentProfile else {
-            setSuggestionDecision("Blocked: missing compatibility profile")
-            DiagnosticsLog.shared.record(
-                "insert-blocked",
-                metadata: [
-                    "reason": "missing-compatibility-profile",
-                    "acceptedChars": String(acceptedText.count)
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionFailed,
-                suggestionID: currentSuggestionState.id ?? "",
-                appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? "",
-                fieldIdentity: currentSuggestionState.fieldIdentity?.traceDescription
-                    ?? currentFieldIdentity?.traceDescription
-                    ?? "",
-                requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                reason: "missing-compatibility-profile",
-                metadata: [
-                    "safetyGate": "compatibilityProfile"
-                ]
-            )
-            hideSuggestion(reason: "insert-missing-compatibility-profile")
-            return false
-        }
-
-        let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
-            acceptedText: acceptedText,
-            profile: profile,
-            allowsPromptActionWords: shouldUseClaudeCodeTerminalHostProofDirectInsertion(
-                profile: profile,
-                action: action
-            )
-        )
-        if let blockReason = acceptedTextDecision.blockReason {
-            setSuggestionDecision("Blocked: unsafe accepted text")
-            DiagnosticsLog.shared.record(
-                "insert-blocked",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "reason": blockReason,
-                    "acceptedChars": String(acceptedText.count),
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionFailed,
-                suggestionID: currentSuggestionState.id ?? "",
-                appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: currentSuggestionState.fieldIdentity?.traceDescription
-                    ?? currentFieldIdentity?.traceDescription
-                    ?? "",
-                requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                reason: blockReason,
-                metadata: [
-                    "safetyGate": "acceptedText",
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
-                ]
-            )
-            hideSuggestion(reason: "insert-unsafe-accepted-text")
-            return false
-        }
-
-        keyboardEventTap?.suppressPassthroughObservation(
-            until: Date().addingTimeInterval(
-                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action)
-                    || shouldUseCodexProofDirectInsertion(profile: profile)
-                    || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
-                    || shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
-                    || shouldUseObsidianSystemEventsInsertion(profile: profile) ? 0.75 : 0.25
-            )
-        )
-
-        if shouldUseCodexProofDirectInsertion(profile: profile) {
-            let succeeded = insertCodexProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action) {
-            let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseClaudeDesktopProofDirectInsertion(profile: profile) {
-            let succeeded = insertClaudeDesktopProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseObsidianDirectValueInsertion(profile: profile, action: action) {
-            let succeeded = insertObsidianDirectValueText(acceptedText, profile: profile)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseObsidianSystemEventsInsertion(profile: profile) {
-            let succeeded = insertObsidianSystemEventsPasteText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
-
-        // Bind the Accessibility write to the field the suggestion was shown for, so focus
-        // stolen between the acceptance guard and the write cannot redirect the user's accepted
-        // text into another app/field. See docs/security/threat-model.md (F1).
-        let result = insertionEngine.insert(
-            acceptedText,
-            profile: profile,
-            expectedFieldIdentity: currentSuggestionState.fieldIdentity,
-            skipping: skippedModes
-        )
-        DiagnosticsLog.shared.record(
-            "insert",
-            metadata: [
-                "app": profile.bundleIdentifier,
-                "mode": result.mode.rawValue,
-                "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                "success": String(result.succeeded),
-                "skippedModes": skippedModes
-                    .map(\.rawValue)
-                    .sorted()
-                    .joined(separator: ",")
-            ]
-        )
-
-        if result.succeeded {
-            suggestionPipeline.pausePolling(
-                now: Date(),
-                durationMilliseconds: postInsertionPollPauseMilliseconds
-            )
-        }
-
-        return result.succeeded
     }
 
     private func repairObsidianFullAcceptCaretIfNeeded(
