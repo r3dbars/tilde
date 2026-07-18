@@ -34,9 +34,16 @@ a change adds process instead of product, don't.
 ## Keeping main green
 
 - Pre-merge gate: `./script/proof.sh fast` — whitespace, python byte-compile,
-  harness self-tests, core `swift test`. CI runs exactly this
+  complexity budgets, harness self-tests, core `swift test`. CI runs exactly this
   (`.github/workflows/fast-proof.yml`); enable locally on push with
   `git config core.hookspath .githooks`.
+- `script/check_complexity_budget.sh` reports production Swift LOC,
+  `AppDelegate.swift` LOC, largest production files, scripts, and docs. For a
+  structural/refactor PR, run
+  `PROOF_STRUCTURAL_CHANGE=1 PROOF_DIFF_BASE=origin/main ./script/proof.sh fast`;
+  production Swift LOC must be net-negative. A justified exception requires
+  `PROOF_STRUCTURAL_LOC_EXCEPTION=1` and the same explanation in the PR
+  description.
 - Release gate (macOS, manual): `./script/release_check.sh` — bundle checks,
   model asset, and the live network-egress privacy proof. All lanes blocking.
 - No new scripts without a consumer; no docs nothing reads; no per-folder
