@@ -205,9 +205,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
     private let personalCapturePolicy = PersonalCapturePolicy()
-    private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
-    private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let personalizationCoordinator = PersonalizationCoordinator()
+    private lazy var personalCaptureHost = PersonalCaptureHost(
+        dependencies: PersonalCaptureHostDependencies(
+            isEnabled: { [weak self] in self?.appSettings.personalCaptureEnabled ?? false },
+            runtimeDiagnosticsMetadata: { [weak self] in self?.modelRuntimeBundle.diagnosticsMetadata ?? [:] },
+            fingerprintSecret: { [weak self] in self?.tracePrivacySecretStore.secret() },
+            compactRect: { [weak self] rect in
+                guard let rect else { return "none" }
+                return self?.compactRectDescription(rect) ?? "none"
+            }
+        )
+    )
     private let suggestionSessionBehaviors = SuggestionSessionBehaviors()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
@@ -441,10 +450,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot? {
         get { focusedTextSessionStateHost.lastTrustedObsidianEndOfDocumentSnapshot }
         set { focusedTextSessionStateHost.lastTrustedObsidianEndOfDocumentSnapshot = newValue }
-    }
-    private var personalCaptureLastSnapshot: FocusedTextSnapshot? {
-        get { focusedTextSessionStateHost.personalCaptureLastSnapshot }
-        set { focusedTextSessionStateHost.personalCaptureLastSnapshot = newValue }
     }
     var lastFocusedTextChangeAt: Date? {
         get { focusedTextSessionStateHost.lastFocusedTextChangeAt }
@@ -1469,12 +1474,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let activeApp = accessibilityClient.frontmostApplication(),
               activeApp.bundleIdentifier == result.app.bundleIdentifier,
               activeApp.processIdentifier == result.app.processIdentifier else {
-            personalCaptureLastSnapshot = nil
+            personalCaptureHost.resetSnapshot()
             return
         }
 
         guard let context = result.context, !context.isSecure else {
-            personalCaptureLastSnapshot = nil
+            personalCaptureHost.resetSnapshot()
             return
         }
 
@@ -8154,59 +8159,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         snapshot: FocusedTextSnapshot,
         source: String
     ) {
-        guard appSettings.personalCaptureEnabled else {
-            personalCaptureLastSnapshot = nil
-            return
-        }
-
-        let decision = personalCapturePolicy.decision(for: PersonalCaptureInput(
-            bundleIdentifier: app.bundleIdentifier,
-            role: context.role,
-            subrole: context.subrole,
-            fingerprint: context.fingerprint,
-            isSecure: context.isSecure,
-            fieldClassification: fieldClassification
-        ))
-
-        guard decision.canCapture else {
-            personalCaptureLastSnapshot = nil
-            DiagnosticsLog.shared.record(
-                "personal-capture-blocked",
-                metadata: decision.metadata.merging([
-                    "app": app.bundleIdentifier,
-                    "source": source,
-                    "textBeforeCursorChars": String(context.textBeforeCursor.count),
-                    "textAfterCursorChars": String(context.textAfterCursor.count)
-                ]) { current, _ in current }
-            )
-            return
-        }
-
-        personalCaptureJournal.recordSnapshotChange(
-            previous: personalCaptureLastSnapshot,
-            current: snapshot,
-            context: personalCaptureContext(
-                app: app,
-                fieldIdentity: fieldIdentity,
-                fieldClassification: fieldClassification,
-                source: source
-            )
-        )
-        personalCaptureLastSnapshot = snapshot
-    }
-
-    private func personalCaptureContext(
-        app: RunningApplicationInfo,
-        fieldIdentity: FocusedFieldIdentity,
-        fieldClassification: AXFieldClassification,
-        source: String
-    ) -> PersonalCaptureJournalContext {
-        PersonalCaptureJournalContext(
-            appDisplayName: app.localizedName,
-            appBundleIdentifier: app.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            fieldKind: fieldClassification.kind,
-            fieldKindReason: fieldClassification.reason,
+        personalCaptureHost.recordSnapshot(
+            context: context,
+            app: app,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
+            snapshot: snapshot,
             source: source
         )
     }
@@ -8226,76 +8184,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenshotPath: String,
         metadata: [String: String]
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !suggestionID.isEmpty else {
-            return
-        }
-
-        let decision = personalCapturePolicy.decision(for: PersonalCaptureInput(
-            bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            role: context.role,
-            subrole: context.subrole,
-            fingerprint: context.fingerprint,
-            isSecure: context.isSecure,
-            fieldClassification: fieldClassification
-        ))
-        guard decision.canCapture else {
-            DiagnosticsLog.shared.record(
-                "personal-capture-episode-blocked",
-                metadata: decision.metadata.merging([
-                    "app": request.appBundleIdentifier ?? profile.bundleIdentifier,
-                    "source": "suggestion-presented"
-                ]) { current, _ in current }
-            )
-            return
-        }
-
-        let runtimeMetadata = modelRuntimeBundle.diagnosticsMetadata
-        let candidateSource = metadata["candidateSelectionSource"] ?? triggerReason
-        let replyContext = request.visiblePageContext.flatMap(SuggestionEpisodeReplyContext.init(visiblePageContext:))
-        let record = SuggestionEpisodeRecord(
-            id: suggestionID,
-            createdAt: PersonalCaptureEpisodeStore.timestampString(from: Date()),
-            appDisplayName: profile.displayName,
-            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            fieldKind: fieldClassification.kind.rawValue,
-            fieldKindReason: fieldClassification.reason,
-            requestMode: request.mode.rawValue,
-            userTypedContext: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor,
-            replyContext: replyContext,
-            replayContext: request.visiblePageContext.map { SuggestionEpisodeReplayContext(visiblePageContext: $0, fingerprintSecret: tracePrivacySecretStore.secret(), includeText: true) },
-            suggestedText: suggestion.visibleText,
-            model: SuggestionEpisodeModelContext(
-                modelName: runtimeMetadata["model"] ?? CompletionModelPolicy.mvp.model.rawValue,
-                runtime: runtimeMetadata["activeCandidate"] ?? "unknown",
-                asset: runtimeMetadata["asset"] ?? "unknown",
-                promptVersion: runtimeMetadata["promptStyle"] ?? CompletionPromptBuilder.promptStyleIdentifier,
-                experimentArm: runtimeMetadata["experimentArm"] ?? "",
-                triggerReason: triggerReason,
-                candidateSource: candidateSource,
-                latencyMilliseconds: latencyMilliseconds,
-                firstTokenLatencyMilliseconds: Int(metadata["firstTokenLatencyMilliseconds"] ?? "")
-            ),
-            placement: SuggestionEpisodePlacementContext(
-                renderMode: placement.renderMode.rawValue,
-                anchorRect: compactRectDescription(placement.anchorRect),
-                textLineRect: placement.textLineRect.map(compactRectDescription) ?? "none",
-                panelRect: compactRectDescription(panelRect),
-                confidenceBand: metadata["placementConfidenceBand"] ?? "",
-                screenshotCaptured: !screenshotPath.isEmpty
-            ),
-            metadata: [
-                "candidateSource": candidateSource,
-                "triggerReason": triggerReason,
-                "visibleChars": String(suggestion.visibleText.count),
-                "visibleWords": String(suggestion.visibleWordCount)
-            ]
-            .merging(metadata) { current, _ in current }
+        personalCaptureHost.recordSuggestionEpisodePresented(
+            suggestionID: suggestionID,
+            request: request,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
+            suggestion: suggestion,
+            latencyMilliseconds: latencyMilliseconds,
+            triggerReason: triggerReason,
+            placement: placement,
+            panelRect: panelRect,
+            screenshotPath: screenshotPath,
+            metadata: metadata
         )
-
-        personalCaptureEpisodes.recordPresented(record)
     }
 
     func recordPersonalCaptureSuggestionEpisodeAction(
@@ -8306,12 +8209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedText: String = "",
         metadata: [String: String] = [:]
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !suggestionID.isEmpty else {
-            return
-        }
-
-        personalCaptureEpisodes.recordAction(
+        personalCaptureHost.recordEpisodeAction(
             suggestionID: suggestionID,
             appBundleIdentifier: appBundleIdentifier,
             outcome: outcome,
@@ -8326,19 +8224,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outcome: String,
         reason: String
     ) {
-        recordPersonalCaptureSuggestionEpisodeAction(
-            suggestionID: baseline.suggestionID ?? "",
-            appBundleIdentifier: baseline.profile.bundleIdentifier,
-            outcome: .insertionFailed,
-            reason: reason,
-            metadata: [
-                "acceptanceID": baseline.acceptanceID,
-                "acceptMode": baseline.acceptMode,
-                "fieldKind": baseline.fieldKind.rawValue,
-                "fieldKindReason": baseline.fieldKindReason,
-                "behaviorProfile": baseline.behaviorProfileID.rawValue,
-                "insertionResult": outcome
-            ]
+        personalCaptureHost.recordEpisodeInsertionFailed(
+            baseline: baseline,
+            outcome: outcome,
+            reason: reason
         )
     }
 
@@ -8346,100 +8235,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ result: AcceptanceSurvivalCheckResult,
         metadata: [String: String]
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !result.tracker.suggestionID.isEmpty else {
-            return
-        }
-
-        personalCaptureEpisodes.recordSurvival(
-            suggestionID: result.tracker.suggestionID,
-            appBundleIdentifier: result.tracker.appBundleIdentifier,
-            acceptedText: result.tracker.acceptedText,
-            checkpoint: result.measurement.checkpoint.rawValue,
-            survivalClass: result.measurement.survivalClass.rawValue,
-            tokenRecall: result.measurement.tokenRecall,
-            normalizedEditDistance: result.measurement.normalizedEditDistance,
-            metadata: metadata
-        )
+        personalCaptureHost.recordEpisodeSurvival(result, metadata: metadata)
     }
 
     private func personalCaptureEpisodeOutcome(
         hiddenOutcome outcome: String,
         reason: String
     ) -> SuggestionEpisodeOutcome {
-        if reason == "escape" {
-            return .dismissed
-        }
-        if outcome == "accepted" {
-            return .unknown
-        }
-        if outcome == "typed-over" || reason == "typed-over" {
-            return .typedPast
-        }
-        if outcome == "typed-through" {
-            return .typedPast
-        }
-        if reason.contains("failed") || reason.contains("unsafe") {
-            return .insertionFailed
-        }
-        if outcome == "ignored" {
-            return .ignored
-        }
-        return .unknown
+        personalCaptureHost.episodeOutcome(hiddenOutcome: outcome, reason: reason)
     }
 
     func recordPersonalCaptureAcceptedSuggestion(
         acceptedText: String,
         baseline: InsertionVerificationBaseline
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !acceptedText.isEmpty,
-              !baseline.fieldKind.suppressesSuggestionsByDefault else {
-            return
-        }
-
-        personalCaptureJournal.recordAcceptedSuggestion(
+        personalCaptureHost.recordAcceptedSuggestion(
             acceptedText: acceptedText,
-            context: PersonalCaptureJournalContext(
-                appDisplayName: baseline.profile.displayName,
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity.traceDescription,
-                fieldKind: baseline.fieldKind,
-                fieldKindReason: baseline.fieldKindReason,
-                source: "insertion-verified"
-            ),
-            suggestionID: baseline.suggestionID ?? "",
-            acceptanceID: baseline.acceptanceID,
-            acceptMode: baseline.acceptMode
+            baseline: baseline
         )
     }
 
     private func recordPersonalCaptureAcceptanceSurvival(_ result: AcceptanceSurvivalCheckResult) {
-        guard appSettings.personalCaptureEnabled,
-              result.shouldRecordAcceptedAndKept || result.shouldRecordAcceptedThenDeleted,
-              !result.tracker.acceptedText.isEmpty,
-              !result.tracker.fieldKind.suppressesSuggestionsByDefault else {
-            return
-        }
-
-        personalCaptureJournal.recordAcceptanceSurvival(
-            acceptedText: result.tracker.acceptedText,
-            context: PersonalCaptureJournalContext(
-                appDisplayName: result.tracker.profile.displayName,
-                appBundleIdentifier: result.tracker.appBundleIdentifier,
-                fieldIdentity: result.tracker.fieldIdentity.traceDescription,
-                fieldKind: result.tracker.fieldKind,
-                fieldKindReason: result.tracker.fieldKindReason,
-                source: "acceptance-survival"
-            ),
-            suggestionID: result.tracker.suggestionID,
-            acceptanceID: result.tracker.acceptanceID,
-            acceptMode: result.tracker.acceptMode,
-            checkpoint: result.measurement.checkpoint.rawValue,
-            survivalClass: result.measurement.survivalClass.rawValue,
-            isStrongPositive: result.measurement.isStrongAcceptedAndKept
-                || result.measurement.isFinalAcceptedAndKept
-        )
+        personalCaptureHost.recordAcceptanceSurvival(result)
     }
 
     private func observeTypingBurst(
@@ -17743,7 +17560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
             personalCaptureScorecard: appSettings.personalCaptureEnabled
-                ? personalCaptureEpisodes.currentScorecard()
+                ? personalCaptureHost.currentScorecard()
                 : nil,
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
@@ -17830,7 +17647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func togglePersonalCapture() {
         appSettings.togglePersonalCapture()
         if !appSettings.personalCaptureEnabled {
-            personalCaptureLastSnapshot = nil
+            personalCaptureHost.resetSnapshot()
         }
         personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         DiagnosticsLog.shared.record(
@@ -17847,11 +17664,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func revealPersonalCaptureFolder() {
         do {
             try FileManager.default.createDirectory(
-                at: URL(fileURLWithPath: personalCaptureJournal.folderPath),
+                at: URL(fileURLWithPath: personalCaptureHost.folderPath),
                 withIntermediateDirectories: true
             )
             NSWorkspace.shared.activateFileViewerSelecting([
-                URL(fileURLWithPath: personalCaptureJournal.folderPath)
+                URL(fileURLWithPath: personalCaptureHost.folderPath)
             ])
         } catch {
             DiagnosticsLog.shared.record(
@@ -17863,9 +17680,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func deletePersonalCapture() {
         appSettings.personalCaptureEnabled = false
-        personalCaptureLastSnapshot = nil
-        personalCaptureJournal.deleteAll()
-        personalCaptureEpisodes.deleteAll()
+        personalCaptureHost.resetSnapshot()
+        personalCaptureHost.deleteAll()
         personalizationCoordinator.deleteAll()
         DiagnosticsLog.shared.record(
             "personal-capture-deleted",
