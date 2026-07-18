@@ -17752,7 +17752,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
-    private func toggleTracing() {
+    func toggleTracing() {
         let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
         RawAutocompleteTraceLog.shared.setPaused(nextPaused)
         DiagnosticsLog.shared.record(
@@ -17871,7 +17871,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
+    func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
         RawAutocompleteTraceLog.shared.deleteAll()
         compatibilityLearningStore.deleteAll()
         DiagnosticsLog.shared.deleteAll()
@@ -18161,7 +18161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setSuggestionDecision("Ready: \(suggestionTuning.displayName.lowercased()) suggestions")
     }
 
-    private func toggleScreenshotTracing(for bundleIdentifier: String) {
+    func toggleScreenshotTracing(for bundleIdentifier: String) {
         guard !bundleIdentifier.isEmpty else {
             RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(!RawAutocompleteTraceLog.shared.screenshotTracingEnabled)
             showDiagnostics()
@@ -18267,7 +18267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func openTraceFolder() {
+    func openTraceFolder() {
         do {
             try FileManager.default.createDirectory(
                 at: RawAutocompleteTraceLog.shared.folderURL,
@@ -18282,7 +18282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func exportTraceReport() {
+    func exportTraceReport() {
         guard let bundleURL = RawAutocompleteTraceLog.shared.exportPrivacyBundle() else {
             DiagnosticsLog.shared.record("trace-privacy-bundle-export-failed")
             showDiagnostics()
@@ -19121,35 +19121,6 @@ extension AppDelegate: ModelInstallLifecycleHandling {
 
     func showModelInstallSettings() {
         showSettings()
-    }
-}
-
-// MARK: - Diagnostics window wiring
-
-extension AppDelegate: DiagnosticsWindowActionHandling {
-    func refreshDiagnostics() {
-        showDiagnostics()
-    }
-
-    func toggleDiagnosticsTracing() {
-        toggleTracing()
-    }
-
-    func toggleDiagnosticsScreenshotTracing(for bundleIdentifier: String) {
-        toggleScreenshotTracing(for: bundleIdentifier)
-    }
-
-    func openDiagnosticsTraceFolder() {
-        openTraceFolder()
-    }
-
-    func exportDiagnosticsTraceReport() {
-        exportTraceReport()
-    }
-
-    func deleteDiagnosticsTraces() {
-        deleteLocalPrivacyLogs(refreshSettings: false)
-        showDiagnostics()
     }
 }
 
