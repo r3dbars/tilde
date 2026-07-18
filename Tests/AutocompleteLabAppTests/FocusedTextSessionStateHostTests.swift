@@ -23,13 +23,11 @@ struct FocusedTextSessionStateHostTests {
 
         host.currentFieldIdentity = field
         host.lastTextSnapshot = snapshot
-        host.personalCaptureLastSnapshot = snapshot
         host.lastFocusedTextChangeAt = changeDate
         host.lastRequestedTextBeforeCursor = "This is "
 
         #expect(host.currentFieldIdentity == field)
         #expect(host.lastTextSnapshot == snapshot)
-        #expect(host.personalCaptureLastSnapshot == snapshot)
         #expect(host.lastFocusedTextChangeAt == changeDate)
         #expect(host.lastRequestedTextBeforeCursor == "This is ")
     }
