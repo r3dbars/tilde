@@ -356,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { appEnablementHost.disabledBundleIdentifiers = newValue }
     }
     private let suggestionRequestScheduler = SuggestionRequestScheduler()
-    private var codexPromptPresentationRetryTask: Task<Void, Never>?
+    private let codexPromptPresentationRetryHost = CodexPromptPresentationRetryHost()
     private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
@@ -2514,7 +2514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         case let .coolingDown(cooldown):
             let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
-                || codexPromptPresentationRetryTask != nil
+                || codexPromptPresentationRetryHost.hasScheduledRetry
                 || suggestionSession.hasVisibleSuggestion
                 || suggestionIdleRetryState.hasPendingRetry
                 || manualSuggestionRequestHost.isPending
@@ -2563,7 +2563,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
-            || codexPromptPresentationRetryTask != nil
+            || codexPromptPresentationRetryHost.hasScheduledRetry
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
             || manualSuggestionRequestHost.isPending
@@ -3235,7 +3235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         promptBlockReason: String
     ) -> CodexPromptTargetInvalidationResolution {
         let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
-            || codexPromptPresentationRetryTask != nil
+            || codexPromptPresentationRetryHost.hasScheduledRetry
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
             || manualSuggestionRequestHost.isPending
@@ -3266,7 +3266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let shouldArmRetry = suggestionRequestScheduler.hasPendingRequest
-            || codexPromptPresentationRetryTask != nil
+            || codexPromptPresentationRetryHost.hasScheduledRetry
             || suggestionSession.hasVisibleSuggestion
             || manualSuggestionRequestHost.isPending
         let cancelledPendingRequest = invalidatePendingSuggestionRequest()
@@ -7647,7 +7647,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduledDelayMilliseconds: Int,
         retry: CodexPromptPresentationRefreshRetry
     ) {
-        codexPromptPresentationRetryTask?.cancel()
         setSuggestionDecision("Waiting: Codex prompt refresh")
         suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
@@ -7660,13 +7659,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "afterChars": String(request.textAfterCursor.count)
             ]
         )
-        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(retry.delayMilliseconds))
-            guard !Task.isCancelled, let self else {
+        codexPromptPresentationRetryHost.schedule(afterMilliseconds: retry.delayMilliseconds) { [weak self] in
+            guard let self else {
                 return
             }
 
-            self.codexPromptPresentationRetryTask = nil
             self.presentSuggestion(
                 suggestion,
                 suggestionID: suggestionID,
@@ -7702,7 +7699,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         presentationRefreshAttempt: Int,
         delayMilliseconds: Int
     ) {
-        codexPromptPresentationRetryTask?.cancel()
         setSuggestionDecision("Waiting: Codex AX cooldown")
         suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
@@ -7714,13 +7710,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "afterChars": String(request.textAfterCursor.count)
             ]
         )
-        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            guard !Task.isCancelled, let self else {
+        codexPromptPresentationRetryHost.schedule(afterMilliseconds: delayMilliseconds) { [weak self] in
+            guard let self else {
                 return
             }
 
-            self.codexPromptPresentationRetryTask = nil
             self.presentSuggestion(
                 suggestion,
                 suggestionID: suggestionID,
@@ -17404,9 +17398,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func cancelPendingSuggestionTask(reason: String) -> Bool {
         codexPromptTargetContinuityHost.clearCooldownPreservation()
-        let cancelledPresentationRefreshRetry = codexPromptPresentationRetryTask != nil
-        codexPromptPresentationRetryTask?.cancel()
-        codexPromptPresentationRetryTask = nil
+        let cancelledPresentationRefreshRetry = codexPromptPresentationRetryHost.hasScheduledRetry
+        codexPromptPresentationRetryHost.cancel()
         if cancelledPresentationRefreshRetry {
             DiagnosticsLog.shared.record(
                 "codex-prompt-target-refresh-retry-cancelled",
