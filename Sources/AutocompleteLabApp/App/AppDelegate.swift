@@ -193,10 +193,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let geometrySnapshot: SuggestionGeometrySnapshot?
     }
 
-    private let accessibilityClient = AccessibilityClient()
+    let accessibilityClient = AccessibilityClient()
     private lazy var accessibilityPermissionHost = AccessibilityPermissionHost(client: accessibilityClient)
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
-    private let appSettings = AppSettings()
+    let appSettings = AppSettings()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
@@ -334,7 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.requestSuggestionNow(source: "hotkey")
     }
     private let prefixCooldownRetryHost = PrefixCooldownRetryHost()
-    private let suggestionSession = SuggestionSessionHost()
+    let suggestionSession = SuggestionSessionHost()
     private let focusedTextSessionStateHost = FocusedTextSessionStateHost()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
@@ -363,7 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         get { focusedTextSessionStateHost.personalCaptureLastSnapshot }
         set { focusedTextSessionStateHost.personalCaptureLastSnapshot = newValue }
     }
-    private var lastFocusedTextChangeAt: Date? {
+    var lastFocusedTextChangeAt: Date? {
         get { focusedTextSessionStateHost.lastFocusedTextChangeAt }
         set { focusedTextSessionStateHost.lastFocusedTextChangeAt = newValue }
     }
@@ -1067,7 +1067,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionPauseStateHost.controlState
     }
 
-    private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
+    func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
         if let terminalProofProfile = claudeCodeTerminalHostProofProfile(for: app) {
             return terminalProofProfile
         }
@@ -1115,7 +1115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
     }
 
-    private func isSuggestionEnabled(
+    func isSuggestionEnabled(
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> Bool {
@@ -1155,7 +1155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
     }
 
-    private func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
+    func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
         if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
             if appSettings.personalCaptureEnabled,
                pollPersonalCaptureOnly(startedAt: startedAt, completesAsync: &completesAsync, reason: reason.hideReason) {
@@ -2694,7 +2694,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @discardableResult
-    private func applyFocusedTextPollingThrottleIfNeeded(
+    func applyFocusedTextPollingThrottleIfNeeded(
         _ recommendation: FocusedTextPollingThrottleRecommendation
     ) -> Bool {
         guard recommendation.shouldThrottle,
@@ -19035,44 +19035,5 @@ extension AppDelegate: SettingsWindowActionHandling {
         case .resetSuggestionTuning:
             resetSuggestionTuning()
         }
-    }
-}
-
-// MARK: - SuggestionPipelineHost
-
-extension AppDelegate: SuggestionPipelineHost {
-    /// App-computed cadence inputs for the polling driver (relocated from the former
-    /// `shouldRunFocusedTextPoll`); the pure cadence policy lives in `SuggestionPipelineController`.
-    func focusedTextPollCadenceSignals() -> FocusPollingCadenceSignals {
-        let activeApp = accessibilityClient.frontmostApplication()
-        let hasSupportedProfile = activeApp.flatMap { app -> Bool? in
-            guard let profile = effectiveProfile(for: app) else {
-                return false
-            }
-
-            return profile.canPresentSuggestions
-                && !profile.isSensitive
-                && isSuggestionEnabled(for: app, profile: profile)
-        } ?? false
-        return FocusPollingCadenceSignals(
-            isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasSupportedProfile: hasSupportedProfile,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasPersonalCapture: appSettings.personalCaptureEnabled,
-            lastFocusedTextChangeAt: lastFocusedTextChangeAt
-        )
-    }
-
-    /// Run one focused-text poll (Accessibility read + dispatch). Returns whether the read
-    /// completes asynchronously, in which case the controller defers `finishPoll` to the
-    /// async completion handler (`completeFocusedTextPoll`).
-    func executeFocusedTextPoll(startedAt: UInt64) -> Bool {
-        var completesAsync = false
-        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
-        return completesAsync
-    }
-
-    func applyFocusedTextPollingThrottle(_ recommendation: FocusedTextPollingThrottleRecommendation) {
-        applyFocusedTextPollingThrottleIfNeeded(recommendation)
     }
 }
