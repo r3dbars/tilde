@@ -813,7 +813,7 @@ struct CodexPromptTargetContinuityPolicyTests {
         ))
     }
 
-    @Test("Accepts the same Codex prompt when its live text-area identity churns")
+    @Test("Accepts the same Codex prompt after normal model and reaction latency")
     func acceptsStablePromptAcrossIdentityChurn() throws {
         let fieldIdentity = identity()
         let trustedContext = context()
@@ -841,7 +841,7 @@ struct CodexPromptTargetContinuityPolicyTests {
                 elementIdentifier: 99,
                 elementRect: CGRect(x: 102, y: 619, width: 702, height: 82)
             ),
-            nowMilliseconds: 1_000
+            nowMilliseconds: 3_500
         ))
         #expect(!policy.canAcceptStablePrompt(
             appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
@@ -851,7 +851,7 @@ struct CodexPromptTargetContinuityPolicyTests {
             shownSnapshot: shownSnapshot,
             trustedAnchor: anchor,
             observedContext: context(),
-            nowMilliseconds: 1_101
+            nowMilliseconds: 15_101
         ))
     }
 
