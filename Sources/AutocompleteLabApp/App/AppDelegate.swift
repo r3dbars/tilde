@@ -665,6 +665,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionPresentationRefreshHost = SuggestionPresentationRefreshHost(
+        dependencies: SuggestionPresentationRefreshHostDependencies(
+            frontmostApplication: { [weak self] in self?.accessibilityClient.frontmostApplication() },
+            focusedTextContext: { [weak self] app, profile in
+                self?.accessibilityClient.focusedTextContext(
+                    for: app,
+                    allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+                    options: FocusedTextReadOptionsPolicy.options(for: app, profile: profile)
+                )
+            },
+            frontmostAppMatchesSuggestion: { [weak self] app, expectedBundleIdentifier, profile in
+                self?.frontmostAppMatchesSuggestion(
+                    app,
+                    expectedBundleIdentifier: expectedBundleIdentifier,
+                    profile: profile
+                ) ?? false
+            },
+            terminalHostProofBlockReason: { [weak self] app, context, profile in
+                self?.claudeCodeTerminalHostProofBlockReason(
+                    app: app,
+                    context: context,
+                    profile: profile
+                ) ?? "missing-app"
+            },
+            promptTextAreaMatch: { [weak self] bundleIdentifier, context in
+                guard let self else {
+                    return SuggestionPresentationPromptMatch(canSuggest: false, reason: "missing-app")
+                }
+                let match = self.promptTextAreaMatch(for: bundleIdentifier, context: context)
+                return SuggestionPresentationPromptMatch(canSuggest: match.canSuggest, reason: match.reason)
+            },
+            continuityHost: codexPromptTargetContinuityHost,
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            lastTextSnapshot: { [weak self] in self?.lastTextSnapshot },
+            cancelAndRearmCodexPromptTargetWork: { [weak self] app, context, profile, reason, source in
+                self?.cancelAndRearmCodexPromptTargetWork(
+                    app: app,
+                    context: context,
+                    profile: profile,
+                    promptBlockReason: reason,
+                    source: source
+                )
+            },
+            presentationAdjustedContext: { [weak self] context, app, profile, previousSnapshot in
+                self?.presentationAdjustedContext(
+                    context,
+                    app: app,
+                    profile: profile,
+                    previousSnapshot: previousSnapshot
+                )
+            },
+            fieldIdentity: { [weak self] app, context, profile in
+                self?.fieldIdentity(app: app, context: context, profile: profile)
+            },
+            canTrustPromptProofFieldIdentityRefresh: { [weak self] requestFieldIdentity, refreshedFieldIdentity, profile in
+                self?.canTrustPromptProofFieldIdentityRefresh(
+                    requestFieldIdentity: requestFieldIdentity,
+                    refreshedFieldIdentity: refreshedFieldIdentity,
+                    profile: profile
+                ) ?? false
+            },
+            recordDiagnostic: { name, metadata in
+                DiagnosticsLog.shared.record(name, metadata: metadata)
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -7609,117 +7675,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         fieldIdentity: FocusedFieldIdentity
     ) -> (context: FocusedTextContext?, reason: String?) {
-        let expectedBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostAppMatchesSuggestion(
-                  frontmostApp,
-                  expectedBundleIdentifier: expectedBundleIdentifier,
-                  profile: profile
-              ) else {
-            return (nil, "stale-app")
-        }
-
-        guard let rawContext = accessibilityClient.focusedTextContext(
-            for: frontmostApp,
-            allowDescendantTextFallback: profile.allowsDescendantTextFallback,
-            options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
-        ), !rawContext.isSecure,
-           rawContext.selectedTextLength == 0 else {
-            return (nil, "stale-focused-context")
-        }
-
-        guard claudeCodeTerminalHostProofBlockReason(
-            app: frontmostApp,
-            context: rawContext,
-            profile: profile
-        ) == nil else {
-            return (nil, "stale-terminal-host-proof")
-        }
-
-        let promptMatch = promptTextAreaMatch(
-            for: frontmostApp.bundleIdentifier,
-            context: rawContext
-        )
-        if !promptMatch.canSuggest {
-            let requestMatchesCurrentSnapshot = lastTextSnapshot?.fieldIdentity == fieldIdentity
-                && lastTextSnapshot?.textBeforeCursor == request.textBeforeCursor
-                && lastTextSnapshot?.textAfterCursor == request.textAfterCursor
-            let resolution = requestMatchesCurrentSnapshot
-                ? codexPromptTargetContinuityHost.presentationRefreshResolution(
-                    app: frontmostApp,
-                    promptBlockReason: promptMatch.reason,
-                    currentFieldIdentity: currentFieldIdentity,
-                    currentSnapshot: lastTextSnapshot,
-                    observedContext: rawContext,
-                    trustedContext: requestContext
-                )
-                : .reject
-            guard resolution != .reject else {
-                return (nil, "stale-prompt-target")
-            }
-            if resolution == .cancelAndRetry {
-                cancelAndRearmCodexPromptTargetWork(
-                    app: frontmostApp,
-                    context: rawContext,
-                    profile: profile,
-                    promptBlockReason: promptMatch.reason,
-                    source: "presentation-refresh"
-                )
-                return (nil, "quarantined-codex-prompt-target")
-            }
-
-            DiagnosticsLog.shared.record(
-                resolution == .reuseTrustedTextAreaContext
-                    ? "codex-prompt-target-bounds-reused"
-                    : "codex-prompt-target-refresh-retry-needed",
-                metadata: [
-                    "app": frontmostApp.bundleIdentifier,
-                    "reason": promptMatch.reason,
-                    "role": rawContext.role ?? "unknown",
-                    "beforeChars": String(rawContext.textBeforeCursor.count),
-                    "afterChars": String(rawContext.textAfterCursor.count)
-                ]
-            )
-            return resolution == .reuseTrustedTextAreaContext
-                ? (requestContext, nil)
-                : (nil, "transient-codex-prompt-target")
-        }
-
-        let context = presentationAdjustedContext(
-            rawContext,
-            app: frontmostApp,
+        suggestionPresentationRefreshHost.refresh(
+            for: request,
+            requestContext: requestContext,
             profile: profile,
-            previousSnapshot: lastTextSnapshot
+            fieldIdentity: fieldIdentity
         )
-        guard context.textBeforeCursor == request.textBeforeCursor,
-              context.textAfterCursor == request.textAfterCursor else {
-            return (nil, "stale-text")
-        }
-
-        let refreshedFieldIdentity = self.fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: profile
-        )
-        if refreshedFieldIdentity != fieldIdentity {
-            if !canTrustPromptProofFieldIdentityRefresh(
-                requestFieldIdentity: fieldIdentity,
-                refreshedFieldIdentity: refreshedFieldIdentity,
-                profile: profile
-            ) {
-                return (nil, "stale-field")
-            }
-            DiagnosticsLog.shared.record(
-                "prompt-proof-field-identity-refresh-relaxed",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "requestFieldIdentity": fieldIdentity.traceDescription,
-                    "refreshedFieldIdentity": refreshedFieldIdentity.traceDescription
-                ]
-            )
-        }
-
-        return (context, nil)
     }
 
     private func canTrustPromptProofFieldIdentityRefresh(
