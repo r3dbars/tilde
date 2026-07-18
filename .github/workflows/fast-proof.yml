@@ -1,16 +1,18 @@
-name: Fast proof gate
+name: Fast proof gate (manual hosted)
 
-# Single fast pre-merge tier: script/proof.sh fast — whitespace, python
-# byte-compile, the latency/quality harness self-tests, and the core Swift test
-# suite. The Swift + MLX package graph needs macOS + Apple Silicon, so the Linux
-# job sets PROOF_SKIP_SWIFT=1 and the macOS job requires Swift. One gate, one
-# source of truth: developers run the same script locally (pre-push hook).
+# The authoritative Fast Proof is local: ./script/proof.sh fast. This hosted
+# copy is manual-only so runner availability, billing, and spending limits
+# cannot turn an otherwise locally proven PR into a branch or PR gate.
+# Deterministic local proof and manual app proof remain separate from this
+# optional hosted observation lane.
+#
+# The byte-compile and self-test steps live inside proof.sh, so developers have
+# the same local source of truth before pushing.
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  # Intentionally no pull_request or push trigger. A manual run is useful when
+  # hosted runners are available, but it is never a required PR check.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,12 +22,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fast-proof:
+  manual-fast-proof:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so a PR can diff against its base for git diff --check.
+          # Full history keeps the manual run's checkout suitable for diff checks.
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -40,18 +42,21 @@ jobs:
           # skip it on the Linux runner (it has a swift toolchain, but can't run
           # this package). Swift still runs locally and in the pre-push hook.
           PROOF_SKIP_SWIFT: "1"
-          # On a PR, also flag whitespace / conflict markers the PR introduces.
-          # Empty on push events -> proof.sh checks the working tree instead.
-          PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+          # Compare every manual run with the current default branch.
+          PROOF_DIFF_BASE: origin/main
 
-  fast-proof-macos:
+  manual-fast-proof-macos:
     runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so a PR can diff against its base for git diff --check.
+          # Full history keeps the manual run's checkout suitable for diff checks.
           fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Select newest Xcode
         run: |
@@ -80,6 +85,5 @@ jobs:
           # This lane exists to exercise Swift. Never allow proof.sh's generic
           # no-toolchain fallback to turn the Swift test into a successful skip.
           PROOF_REQUIRE_SWIFT: "1"
-          # On a PR, also flag whitespace / conflict markers the PR introduces.
-          # Empty on push events -> proof.sh checks the working tree instead.
-          PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+          # Compare every manual run with the current default branch.
+          PROOF_DIFF_BASE: origin/main

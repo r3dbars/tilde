@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pre-push hook: run the fast proof tier before pushing, so a red main is hard to
-# create from a developer machine too (the GitHub gate is the backstop).
+# Pre-push hook: run the local-first fast proof tier before pushing, so a red
+# main is hard to create from a developer machine too.
 #
 # Enable once:   git config core.hookspath .githooks
 # Bypass once:   git push --no-verify        (or: PROOF_SKIP_PREPUSH=1 git push)
@@ -13,5 +13,5 @@ if [ "${PROOF_SKIP_PREPUSH:-}" = "1" ]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-echo "pre-push: running script/proof.sh fast (bypass with 'git push --no-verify')…" >&2
-exec "$ROOT_DIR/script/proof.sh" fast
+echo "pre-push: running PROOF_DIFF_BASE=origin/main script/proof.sh fast (bypass with 'git push --no-verify')…" >&2
+exec env PROOF_DIFF_BASE="${PROOF_DIFF_BASE:-origin/main}" "$ROOT_DIR/script/proof.sh" fast
