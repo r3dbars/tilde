@@ -10,7 +10,6 @@ struct SuggestionRequestPreparationHostTests {
     @Test("Assembles a request and keeps the instant-word latency contract")
     func assemblesInstantWordRequest() throws {
         let host = makeHost()
-        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
             bundleIdentifier: "com.apple.TextEdit",
             processIdentifier: 42,
@@ -19,7 +18,6 @@ struct SuggestionRequestPreparationHostTests {
 
         let preparation = host.prepare(
             context: makeContext(),
-            profile: profile,
             appBundleIdentifier: "com.apple.TextEdit",
             fieldIdentity: field,
             fieldClassification: AXFieldClassification(kind: .singlelineCompose, reason: "test"),
@@ -43,7 +41,6 @@ struct SuggestionRequestPreparationHostTests {
     @Test("Uses the floating presentation floor for delayed continuation requests")
     func assemblesFloatingContinuationRequest() throws {
         let host = makeHost()
-        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
             bundleIdentifier: "com.apple.TextEdit",
             processIdentifier: 42,
@@ -52,7 +49,6 @@ struct SuggestionRequestPreparationHostTests {
 
         let preparation = host.prepare(
             context: makeContext(),
-            profile: profile,
             appBundleIdentifier: "com.apple.TextEdit",
             fieldIdentity: field,
             fieldClassification: AXFieldClassification(kind: .multilineCompose, reason: "test"),
@@ -67,6 +63,7 @@ struct SuggestionRequestPreparationHostTests {
 
         #expect(preparation.requestSchedule.scheduledDelayMilliseconds == 60)
         #expect(preparation.requestSchedule.resultLatencyBudgetMilliseconds == 2_000)
+        #expect(preparation.orchestration.request.maxVisibleWords == 3)
         #expect(preparation.requestMetadata["suggestionTimingLane"] == "pausePhrase")
     }
 
@@ -96,11 +93,8 @@ struct SuggestionRequestPreparationHostTests {
                 acceptedTextStyleSketch: { _ in nil },
                 personalizationCoordinator: PersonalizationCoordinator(),
                 isPersonalCaptureEnabled: { false },
-                maxVisibleWords: { requestMode, _ in
-                    requestMode == .wordCompletion ? 3 : 5
-                },
-                suggestionTuning: { SuggestionTuning() },
-                triggerTiming: SuggestionTriggerTimingPolicy()
+                suggestionTuning: { SuggestionTuning(maxVisibleWords: 3) },
+                requestSchedulingPolicy: SuggestionRequestSchedulingPolicy()
             )
         )
     }

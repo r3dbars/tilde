@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The underlying policies remain individually testable while callers get one
 /// dependency that describes the session-level contract: control, safety activation,
-/// trigger timing, annoyance/backoff, and acceptance guarding.
+/// request scheduling, annoyance/backoff, and acceptance guarding.
 public struct SuggestionSafetyActivationPolicy: Equatable, Sendable {
     public let sensitiveTextFieldPolicy: SensitiveTextFieldPolicy
     public let proofActivationModePolicy: ProofActivationModePolicy
@@ -61,20 +61,20 @@ public struct SuggestionSafetyActivationPolicy: Equatable, Sendable {
 public struct SuggestionSessionBehaviors: Equatable, Sendable {
     public let control: SuggestionControlPolicy
     public let safetyActivation: SuggestionSafetyActivationPolicy
-    public let triggerTiming: SuggestionTriggerTimingPolicy
+    public let requestSchedulingPolicy: SuggestionRequestSchedulingPolicy
     public let annoyanceBackoff: SuggestionAnnoyanceBackoffPolicy
     public let acceptanceGuard: SuggestionAcceptanceGuard
 
     public init(
         control: SuggestionControlPolicy = SuggestionControlPolicy(),
         safetyActivation: SuggestionSafetyActivationPolicy = SuggestionSafetyActivationPolicy(),
-        triggerTiming: SuggestionTriggerTimingPolicy = SuggestionTriggerTimingPolicy(),
+        requestSchedulingPolicy: SuggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy(),
         annoyanceBackoff: SuggestionAnnoyanceBackoffPolicy = SuggestionAnnoyanceBackoffPolicy(),
         acceptanceGuard: SuggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     ) {
         self.control = control
         self.safetyActivation = safetyActivation
-        self.triggerTiming = triggerTiming
+        self.requestSchedulingPolicy = requestSchedulingPolicy
         self.annoyanceBackoff = annoyanceBackoff
         self.acceptanceGuard = acceptanceGuard
     }
