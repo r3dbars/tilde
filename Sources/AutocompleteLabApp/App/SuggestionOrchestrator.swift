@@ -9,6 +9,14 @@ struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
 
 @MainActor
 final class SuggestionOrchestrator {
+    private static let maximumFinalModelDisplayLatencyMilliseconds = 2_000
+    /// Ceiling applied when a model result would be the *first* thing the user sees
+    /// (no instant local phrase or streamed partial already on screen). Staleness is
+    /// separately guarded by presentationSuppressionReason (any typing after the
+    /// request cancels the paint), so this only needs to drop pathologically late
+    /// results — a local model regularly needs more than a second for its first
+    /// good completion, and dropping those made the app feel dead.
+    private static let maximumFirstVisibleModelDisplayLatencyMilliseconds = 1_200
     private static let maximumDocLocalFields = 24
     private static let maximumDocLocalSnapshotsPerField = 4
     private static let maximumDocLocalSnapshotCharacters = 12_000
@@ -828,14 +836,50 @@ final class SuggestionOrchestrator {
         if claudeCodeTerminalHostProofLatencyBypass {
             confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
         }
+        let modelDisplayLatencyBudgetMilliseconds = Self.maximumFinalModelDisplayLatencyMilliseconds(
+            for: request,
+            suggestion: suggestion,
+            firstVisible: modelIsFirstVisibleSuggestion
+        )
+        // The first-visible ceiling bounds the model's contribution to first paint, so remove
+        // the deliberate pre-model scheduling pause before comparing it. Refinement keeps its
+        // existing delay-inclusive basis.
         let modelLatencyForBudget = modelIsFirstVisibleSuggestion
             ? max(0, latencyMilliseconds - max(0, scheduledDelayMilliseconds))
             : latencyMilliseconds
-        confidenceMetadata["modelDisplayLatencyBudgetMilliseconds"] = "context-validated"
+        confidenceMetadata["modelDisplayLatencyBudgetMilliseconds"] = String(modelDisplayLatencyBudgetMilliseconds)
         confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
         confidenceMetadata["modelLatencyForBudgetMilliseconds"] = String(modelLatencyForBudget)
+        let shouldSuppressFinalLatency = triggerReason != "model-stream"
+            && !proofLatencyBypass
+            && modelLatencyForBudget > modelDisplayLatencyBudgetMilliseconds
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
             && (!proofLatencyBypass || !confidenceDecision.reasons.contains("late-context-validation-required"))
+
+        if shouldSuppressFinalLatency {
+            let trace = DisplayScoreTrace(
+                score: score,
+                mode: request.mode,
+                behaviorProfileID: request.behaviorProfile.id,
+                threshold: adjustedPolicy.threshold(for: request.mode),
+                effectiveFinalScore: adjustedPolicy.effectiveFinalScore(for: score),
+                learningRestraintScoreScale: adjustedPolicy.learningRestraintScoreScale,
+                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
+                    for: request.mode,
+                    behaviorProfileID: request.behaviorProfile.id
+                )
+            )
+            let suppression = DisplayScoreSuppression(
+                reason: .tooSlowToDisplay,
+                trace: trace
+            )
+            return SuggestionDisplayScoreDecision(
+                decision: .suppress(suppression),
+                metadata: suppression.metadata
+                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
+                    .merging(confidenceMetadata) { current, _ in current }
+            )
+        }
 
         if shouldSuppressLowConfidence {
             let trace = DisplayScoreTrace(
@@ -1020,6 +1064,27 @@ final class SuggestionOrchestrator {
             score += 0.05
         }
         return displayComponent(score)
+    }
+
+    private static func maximumFinalModelDisplayLatencyMilliseconds(
+        for request: CompletionRequest,
+        suggestion: CompletionSuggestion,
+        firstVisible: Bool
+    ) -> Int {
+        if firstVisible {
+            return maximumFirstVisibleModelDisplayLatencyMilliseconds
+        }
+
+        guard request.mode == .phraseContinuation,
+              suggestion.maxVisibleWords >= 8,
+              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
+                  forVisibleWords: suggestion.maxVisibleWords
+              )
+        else {
+            return maximumFinalModelDisplayLatencyMilliseconds
+        }
+
+        return 1_000
     }
 
     nonisolated private static func displayComponent(_ value: Double) -> Double {

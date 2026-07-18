@@ -49,8 +49,11 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
     private static let thresholdTolerance = 0.002
     private var missCounts: [String: SuggestionRepetitionMissBucket] = [:]
 
+    // Three decayed misses before a phrase is muted: two was aggressive enough
+    // that ordinary hesitation (typing through a good suggestion twice) silenced
+    // it for the rest of the session.
     public init(
-        missThreshold: Int = 2,
+        missThreshold: Int = 3,
         missHalfLifeSeconds: TimeInterval = 20 * 60
     ) {
         self.missThreshold = max(1, missThreshold)

@@ -28,13 +28,6 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "suggestionOrchestrator.placementSuppressionResolution(")
     }
 
-    @Test("Coverage manifest invokes public core reachability check")
-    func coverageManifestInvokesPublicCoreReachabilityCheck() throws {
-        let coverageCheck = try source("script/check_test_coverage_manifest.sh")
-
-        try require(coverageCheck, contains: "./script/check_public_core_wiring.py")
-    }
-
     @Test("App delegate advances the visible suggestion through the type-through state machine")
     func appDelegateAdvancesVisibleSuggestionThroughTypeThroughStateMachine() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")

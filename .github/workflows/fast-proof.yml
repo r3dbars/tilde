@@ -1,15 +1,10 @@
 name: Fast proof gate
 
-# Single fast pre-merge tier: script/proof.sh fast. These are the cheap proof
-# checks that must stay green on main (the kind of red that has been landing
-# unguarded: a stale coverage manifest, broken scripts, whitespace). The Swift +
-# MLX suite needs macOS + Apple Silicon, so this job sets PROOF_SKIP_SWIFT=1; the
-# Linux-friendly checks (coverage manifest, byte-compile, harness self-tests,
-# whitespace, and the report-only proof manifest) run on every PR to main.
-#
-# This replaces the old "Script self-tests" workflow: its byte-compile and
-# self-test steps now live inside proof.sh, so the gate has a single source of
-# truth that developers run locally too (script/proof.sh fast, pre-push hook).
+# Single fast pre-merge tier: script/proof.sh fast — whitespace, python
+# byte-compile, the latency/quality harness self-tests, and the core Swift test
+# suite. The Swift + MLX package graph needs macOS + Apple Silicon, so the Linux
+# job sets PROOF_SKIP_SWIFT=1 and the macOS job requires Swift. One gate, one
+# source of truth: developers run the same script locally (pre-push hook).
 
 on:
   pull_request:

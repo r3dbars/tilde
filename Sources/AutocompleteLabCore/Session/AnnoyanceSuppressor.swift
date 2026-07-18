@@ -135,11 +135,14 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
     private var globalQuietMode: QuietMode = .normal
     private var severeEventCountsByAppDay: [String: Int] = [:]
 
+    // Quiet windows are short enough to recover within a writing session: the
+    // old 15/30-minute windows compounded with the other gates into an app
+    // that never suggested anything again after one mistake.
     public init(
         halfLifeSeconds: TimeInterval = 20 * 60,
-        fieldQuietDurationSeconds: TimeInterval = 15 * 60,
-        appQuietDurationSeconds: TimeInterval = 30 * 60,
-        globalQuietDurationSeconds: TimeInterval = 5 * 60,
+        fieldQuietDurationSeconds: TimeInterval = 3 * 60,
+        appQuietDurationSeconds: TimeInterval = 10 * 60,
+        globalQuietDurationSeconds: TimeInterval = 2 * 60,
         fieldQuietThreshold: Double = 0.5,
         appQuietThreshold: Double = 1.5,
         globalQuietThreshold: Double = 2.5
