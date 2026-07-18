@@ -385,23 +385,4 @@ struct SuggestionAggressivenessTests {
         #expect(SuggestionAggressiveness.eager.traceMetadata["suggestionAggressivenessDisplayName"] == "Proactive")
     }
 
-    @Test("pace leaves visible word count to tuning")
-    func paceLeavesVisibleWordCountToTuning() {
-        #expect(SuggestionPace.eager.maxVisibleWords(
-            defaultMaxVisibleWords: 6,
-            requestMode: .phraseContinuation
-        ) == 6)
-        #expect(SuggestionPace.eager.maxVisibleWords(
-            defaultMaxVisibleWords: 3,
-            requestMode: .phraseContinuation
-        ) == 3)
-        #expect(SuggestionPace.eager.maxVisibleWords(
-            defaultMaxVisibleWords: 6,
-            requestMode: .wordCompletion
-        ) == 6)
-        #expect(SuggestionPace.normal.maxVisibleWords(
-            defaultMaxVisibleWords: 6,
-            requestMode: .phraseContinuation
-        ) == 6)
-    }
 }

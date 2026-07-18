@@ -14,12 +14,10 @@ struct SuggestionInsertionHostDependencies {
     let shouldUseCodexProofDirectInsertion: (CompatibilityProfile) -> Bool
     let shouldUseClaudeDesktopProofDirectInsertion: (CompatibilityProfile) -> Bool
     let shouldUseObsidianDirectValueInsertion: (CompatibilityProfile, KeyboardAction?) -> Bool
-    let shouldUseObsidianSystemEventsInsertion: (CompatibilityProfile) -> Bool
     let insertCodexProofText: (String) -> Bool
     let insertClaudeCodeTerminalHostProofText: (String) -> Bool
     let insertClaudeDesktopProofText: (String) -> Bool
     let insertObsidianDirectValueText: (String, CompatibilityProfile) -> Bool
-    let insertObsidianSystemEventsPasteText: (String) -> Bool
     let repairObsidianFullAcceptCaret: (CompatibilityProfile, KeyboardAction?) -> Void
     let defaultInsertion: (String, CompatibilityProfile, FocusedFieldIdentity?, Set<InsertionMode>) -> InsertionResult
     let pausePolling: (Int) -> Void
@@ -156,8 +154,7 @@ final class SuggestionInsertionHost {
             for: dependencies.shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile, action)
                 || dependencies.shouldUseCodexProofDirectInsertion(profile)
                 || dependencies.shouldUseClaudeDesktopProofDirectInsertion(profile)
-                || dependencies.shouldUseObsidianDirectValueInsertion(profile, action)
-                || dependencies.shouldUseObsidianSystemEventsInsertion(profile) ? 0.75 : 0.25
+                || dependencies.shouldUseObsidianDirectValueInsertion(profile, action) ? 0.75 : 0.25
         )
 
         if dependencies.shouldUseCodexProofDirectInsertion(profile) {
@@ -230,27 +227,6 @@ final class SuggestionInsertionHost {
                 metadata: [
                     "app": profile.bundleIdentifier,
                     "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                pausePolling()
-            }
-            return succeeded
-        }
-
-        if dependencies.shouldUseObsidianSystemEventsInsertion(profile) {
-            let succeeded = dependencies.insertObsidianSystemEventsPasteText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
                     "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                     "success": String(succeeded),
                     "skippedModes": skippedModes

@@ -60,6 +60,17 @@ struct SuggestionInsertionHostTests {
         #expect(spy.pauseDurations == [220])
     }
 
+    @Test("Routes the shipped Obsidian profile through generic insertion")
+    func shippedObsidianProfileUsesGenericInsertion() throws {
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
+        let spy = SuggestionInsertionHostSpy()
+        let host = makeHost(profile: profile, spy: spy)
+
+        #expect(host.insertAcceptedText("safe"))
+        #expect(spy.insertions == ["default"])
+        #expect(spy.pauseDurations == [220])
+    }
+
     private func makeHost(
         profile: CompatibilityProfile?,
         state: CurrentSuggestionStateHost = CurrentSuggestionStateHost(),
@@ -78,7 +89,6 @@ struct SuggestionInsertionHostTests {
                 shouldUseCodexProofDirectInsertion: { _ in spy.codexRoute },
                 shouldUseClaudeDesktopProofDirectInsertion: { _ in spy.claudeDesktopRoute },
                 shouldUseObsidianDirectValueInsertion: { _, _ in spy.obsidianDirectRoute },
-                shouldUseObsidianSystemEventsInsertion: { _ in spy.obsidianSystemEventsRoute },
                 insertCodexProofText: { _ in spy.insertions.append("codex"); return spy.routeSucceeded },
                 insertClaudeCodeTerminalHostProofText: { _ in
                     spy.insertions.append("terminal")
@@ -90,10 +100,6 @@ struct SuggestionInsertionHostTests {
                 },
                 insertObsidianDirectValueText: { _, _ in
                     spy.insertions.append("obsidian-direct")
-                    return spy.routeSucceeded
-                },
-                insertObsidianSystemEventsPasteText: { _ in
-                    spy.insertions.append("obsidian-system-events")
                     return spy.routeSucceeded
                 },
                 repairObsidianFullAcceptCaret: { _, _ in spy.repairCount += 1 },
@@ -126,7 +132,6 @@ private final class SuggestionInsertionHostSpy {
     var terminalRoute = false
     var claudeDesktopRoute = false
     var obsidianDirectRoute = false
-    var obsidianSystemEventsRoute = false
     var routeSucceeded = true
     var defaultSucceeded = true
 }

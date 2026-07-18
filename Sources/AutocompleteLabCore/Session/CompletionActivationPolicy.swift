@@ -67,9 +67,6 @@ public enum SuggestionPace: String, CaseIterable, Codable, Equatable, Sendable {
         }
     }
 
-    public func maxVisibleWords(defaultMaxVisibleWords: Int, requestMode: CompletionRequestMode) -> Int {
-        defaultMaxVisibleWords
-    }
 }
 
 public struct SuggestionAggressivenessPolicy: Equatable, Sendable {
