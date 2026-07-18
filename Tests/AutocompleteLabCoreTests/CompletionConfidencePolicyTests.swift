@@ -33,8 +33,8 @@ struct CompletionConfidencePolicyTests {
         #expect(decision.bucket == .high)
     }
 
-    @Test("Blocks one and two word nubs in daily-driver phrase mode")
-    func blocksShortNubsInDailyDriverPhraseMode() {
+    @Test("Short nubs in daily-driver phrase mode are penalized but still display")
+    func shortNubsInDailyDriverPhraseModeArePenalizedButStillDisplay() {
         let oneWordDecision = policy.decision(
             suggestion: CompletionSuggestion(text: " ready", maxVisibleWords: 8),
             mode: .phraseContinuation,
@@ -50,10 +50,12 @@ struct CompletionConfidencePolicyTests {
             supportLevel: .green
         )
 
-        #expect(!oneWordDecision.canDisplay)
-        #expect(!twoWordDecision.canDisplay)
-        #expect(oneWordDecision.bucket == .low)
-        #expect(twoWordDecision.bucket == .low)
+        // A short-but-correct continuation beats an empty slot: the nub is scored
+        // down, not vetoed.
+        #expect(oneWordDecision.canDisplay)
+        #expect(twoWordDecision.canDisplay)
+        #expect(oneWordDecision.bucket == .medium)
+        #expect(twoWordDecision.bucket == .medium)
         #expect(oneWordDecision.reasons.contains("too-short-daily-driver-phrase"))
         #expect(twoWordDecision.reasons.contains("too-short-daily-driver-phrase"))
     }
@@ -73,8 +75,8 @@ struct CompletionConfidencePolicyTests {
         #expect(!decision.reasons.contains("too-short-daily-driver-phrase"))
     }
 
-    @Test("Blocks thin-context phrase continuations")
-    func blocksThinContextPhraseContinuations() {
+    @Test("Thin context lowers confidence without vetoing the suggestion")
+    func thinContextLowersConfidenceWithoutVetoingTheSuggestion() {
         let decision = policy.decision(
             suggestion: CompletionSuggestion(text: " the next step", maxVisibleWords: 4),
             mode: .phraseContinuation,
@@ -83,8 +85,10 @@ struct CompletionConfidencePolicyTests {
             supportLevel: .green
         )
 
-        #expect(!decision.canDisplay)
-        #expect(decision.bucket == .low)
+        // Most real typing starts from one or two words; thin context alone must
+        // not make the app suggestion-free.
+        #expect(decision.canDisplay)
+        #expect(decision.bucket == .medium)
         #expect(decision.reasons.contains("thin-context"))
     }
 
@@ -121,7 +125,7 @@ struct CompletionConfidencePolicyTests {
 
     @Test("Latency below the context-validation ceiling does not lower confidence")
     func latencyBelowContextValidationCeilingDoesNotLowerConfidence() {
-        #expect(policy.maximumDisplayLatencyMilliseconds == 1_300)
+        #expect(policy.maximumDisplayLatencyMilliseconds == 2_000)
 
         let fast = policy.decision(
             suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
@@ -168,7 +172,7 @@ struct CompletionConfidencePolicyTests {
             suggestion: CompletionSuggestion(text: " Let me know if you need anything else", maxVisibleWords: 7),
             mode: .phraseContinuation,
             textBeforeCursor: "Ok sounds",
-            latencyMilliseconds: 1_400,
+            latencyMilliseconds: 2_100,
             supportLevel: .yellow
         )
 
@@ -198,7 +202,7 @@ struct CompletionConfidencePolicyTests {
             suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
             mode: .phraseContinuation,
             textBeforeCursor: "Can you send the notes",
-            latencyMilliseconds: 1_301,
+            latencyMilliseconds: 2_001,
             supportLevel: .green
         )
 

@@ -944,8 +944,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Late final model results remain eligible after context validation")
-    func lateFinalModelResultsRemainEligibleAfterContextValidation() throws {
+    @Test("Late final model results are suppressed after the final display ceiling")
+    func lateFinalModelResultsAreSuppressedAfterTheFinalDisplayCeiling() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
@@ -979,20 +979,20 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 900,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
-        #expect(display.metadata["modelDisplayLatencyBudgetMilliseconds"] == "context-validated")
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(display.metadata["modelDisplayLatencyBudgetMilliseconds"] == "2000")
     }
 
     @MainActor
-    @Test("First-visible and refinement results use live context instead of latency ceilings")
-    func modelResultsUseLiveContextInsteadOfLatencyCeilings() throws {
+    @Test("First-visible and refinement results honor their display ceilings")
+    func modelResultsHonorTheirDisplayCeilings() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
@@ -1036,21 +1036,39 @@ struct SuggestionOrchestratorTests {
             )
         }
 
-        let firstVisible = decide(latency: 600, firstVisible: true)
-        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "context-validated")
+        // First-visible under the 1200ms ceiling is allowed to paint cold.
+        let firstVisible = decide(latency: 1_199, firstVisible: true)
+        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "1200")
         #expect(firstVisible.metadata["modelIsFirstVisibleSuggestion"] == "true")
-        #expect(firstVisible.metadata["modelLatencyForBudgetMilliseconds"] == "600")
+        #expect(firstVisible.metadata["modelLatencyForBudgetMilliseconds"] == "1199")
         #expect(firstVisible.decision.shouldDisplay)
         #expect(firstVisible.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
 
+        // One millisecond over the first-visible ceiling is suppressed.
+        let lateFirstVisible = decide(latency: 1_201, firstVisible: true)
+        #expect(!lateFirstVisible.decision.shouldDisplay)
+        #expect(lateFirstVisible.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+
+        // First-visible but the latency is high ONLY because of the deliberate pre-model
+        // scheduling pause: model compute (600 - 240 = 360ms) is under the 1200ms ceiling, so the
+        // healthy result must NOT be suppressed. (Regression guard: the ceiling bounds model
+        // compute, not the intentional pause baked into `latencyMilliseconds`.)
         let firstVisibleAfterPause = decide(latency: 600, firstVisible: true, scheduledDelay: 240)
         #expect(firstVisibleAfterPause.metadata["modelLatencyForBudgetMilliseconds"] == "360")
         #expect(firstVisibleAfterPause.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
 
-        let refinement = decide(latency: 600, firstVisible: false)
-        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "context-validated")
+        // Refinement (a suggestion is already visible): a result under the 2000ms budget can
+        // replace the existing suggestion in place.
+        let refinement = decide(latency: 1_999, firstVisible: false)
+        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "2000")
         #expect(refinement.metadata["modelIsFirstVisibleSuggestion"] == "false")
+        #expect(refinement.decision.shouldDisplay)
         #expect(refinement.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+
+        // One millisecond over the refinement ceiling is suppressed.
+        let lateRefinement = decide(latency: 2_001, firstVisible: false)
+        #expect(!lateRefinement.decision.shouldDisplay)
+        #expect(lateRefinement.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
     }
 
     @MainActor
@@ -1070,8 +1088,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Max tuning still respects low-confidence thin-context suppression")
-    func maxTuningStillRespectsLowConfidenceThinContextSuppression() throws {
+    @Test("Thin context penalizes but does not veto a clean suggestion")
+    func thinContextPenalizesButDoesNotVetoCleanSuggestion() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let field = FocusedFieldIdentity(
@@ -1125,11 +1143,11 @@ struct SuggestionOrchestratorTests {
             suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
         )
 
-        #expect(!conservativeDisplay.decision.shouldDisplay)
-        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
-        #expect(!maxDisplay.decision.shouldDisplay)
-        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
-        #expect(maxDisplay.metadata["completionConfidenceBucket"] == "low")
+        #expect(conservativeDisplay.decision.shouldDisplay)
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == nil)
+        #expect(maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == nil)
+        #expect(maxDisplay.metadata["completionConfidenceBucket"] == "medium")
         #expect(maxDisplay.metadata["completionConfidenceReasons"]?.contains("thin-context") == true)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveLowConfidenceBypass"] == nil)
@@ -1172,7 +1190,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 1_018,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
@@ -1185,7 +1203,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 1_018,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
@@ -1193,9 +1211,9 @@ struct SuggestionOrchestratorTests {
         )
 
         #expect(!conservativeDisplay.decision.shouldDisplay)
-        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
         #expect(!maxDisplay.decision.shouldDisplay)
-        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == nil)
     }
@@ -1336,7 +1354,7 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 1_600,
+            latencyMilliseconds: 2_600,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
@@ -1524,8 +1542,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Display decision does not suppress a valid result solely for latency")
-    func displayDecisionDoesNotSuppressSolelyForLatency() throws {
+    @Test("Display decision suppresses a valid result beyond the final latency ceiling")
+    func displayDecisionSuppressesBeyondFinalLatencyCeiling() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
@@ -1560,15 +1578,15 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             fieldIdentity: field,
             triggerReason: "model-result",
-            latencyMilliseconds: 900,
+            latencyMilliseconds: 2_001,
             acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
-        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") != true)
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(display.metadata["modelDisplayLatencyBudgetMilliseconds"] == "2000")
     }
 
     @MainActor

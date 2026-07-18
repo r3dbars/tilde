@@ -99,7 +99,9 @@ public struct SuggestionControlPolicy: Equatable, Sendable {
     }
 
     public func startupState(persistedIsPaused: Bool?) -> SuggestionControlState {
-        SuggestionControlState(isPaused: persistedIsPaused ?? true)
+        // A fresh install starts running: the product is useless if the first
+        // experience is a menu bar icon that silently does nothing.
+        SuggestionControlState(isPaused: persistedIsPaused ?? false)
     }
 
     public func suggestionAvailability(for state: SuggestionControlState) -> SuggestionControlDecision {

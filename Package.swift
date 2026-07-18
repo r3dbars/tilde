@@ -37,33 +37,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "AutocompleteLabCore",
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md",
-                "Compatibility/AGENTS.md",
-                "Compatibility/CLAUDE.md",
-                "Configuration/AGENTS.md",
-                "Configuration/CLAUDE.md",
-                "Engine/AGENTS.md",
-                "Engine/CLAUDE.md",
-                "Experiments/AGENTS.md",
-                "Experiments/CLAUDE.md",
-                "Geometry/AGENTS.md",
-                "Geometry/CLAUDE.md",
-                "Personalization/AGENTS.md",
-                "Personalization/CLAUDE.md",
-                "Runtime/AGENTS.md",
-                "Runtime/CLAUDE.md",
-                "Session/AGENTS.md",
-                "Session/CLAUDE.md",
-                "Suggestions/AGENTS.md",
-                "Suggestions/CLAUDE.md",
-                "Text/AGENTS.md",
-                "Text/CLAUDE.md",
-                "Tracing/AGENTS.md",
-                "Tracing/CLAUDE.md"
-            ]
+            name: "AutocompleteLabCore"
         ),
         .executableTarget(
             name: "AutocompleteLabApp",
@@ -76,58 +50,26 @@ let package = Package(
                 .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
                 .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "Tokenizers", package: "swift-transformers")
-            ],
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md",
-                "App/AGENTS.md",
-                "App/CLAUDE.md",
-                "Mac/AGENTS.md",
-                "Mac/CLAUDE.md",
-                "Runtime/AGENTS.md",
-                "Runtime/CLAUDE.md",
-                "UI/AGENTS.md",
-                "UI/CLAUDE.md"
             ]
         ),
         .executableTarget(
             name: "AutocompleteTraceReplay",
-            dependencies: ["AutocompleteLabCore"],
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md"
-            ]
+            dependencies: ["AutocompleteLabCore"]
         ),
         .executableTarget(
             name: "SteadyTypeReplayEval",
-            dependencies: ["AutocompleteLabCore"],
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md"
-            ]
+            dependencies: ["AutocompleteLabCore"]
         ),
         .executableTarget(
-            name: "SteadyTypeTextEventHelper",
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md"
-            ]
+            name: "SteadyTypeTextEventHelper"
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
-            dependencies: ["AutocompleteLabCore"],
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md"
-            ]
+            dependencies: ["AutocompleteLabCore"]
         ),
         .testTarget(
             name: "AutocompleteLabAppTests",
-            dependencies: ["AutocompleteLabApp"],
-            exclude: [
-                "AGENTS.md",
-                "CLAUDE.md"
-            ]
+            dependencies: ["AutocompleteLabApp"]
         )
     ]
 )

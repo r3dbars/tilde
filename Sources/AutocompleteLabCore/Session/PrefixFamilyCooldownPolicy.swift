@@ -119,14 +119,17 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
     private var acceptedThenDeletedEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
 
+    // Cooldowns back off briefly after a rejection signal without silencing the
+    // prefix family for minutes at a time — the old 3–10 minute accepted-then-
+    // deleted windows were a major reason the app felt dead.
     public init(
         typedOverCooldownMilliseconds: Int = 2_500,
-        repeatedTypedOverCooldownMilliseconds: Int = 15_000,
-        escapeCooldownMilliseconds: Int = 15_000,
-        repeatedEscapeCooldownMilliseconds: Int = 60_000,
+        repeatedTypedOverCooldownMilliseconds: Int = 10_000,
+        escapeCooldownMilliseconds: Int = 8_000,
+        repeatedEscapeCooldownMilliseconds: Int = 30_000,
         deletionCooldownMilliseconds: Int = 250,
-        acceptedThenDeletedCooldownMilliseconds: Int = 180_000,
-        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 600_000,
+        acceptedThenDeletedCooldownMilliseconds: Int = 30_000,
+        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 90_000,
         prefixFamilyTokenLimit: Int = 3,
         typedOverEagernessThreshold: Double = 1.5,
         typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60,
