@@ -308,6 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
     private let modelInstallHost = ModelInstallHost()
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
+    private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -422,7 +423,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var manualSuggestionRequestPending = false
     private var manualSuggestionRetryTask: Task<Void, Never>?
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
-    private var disabledBundleIdentifiers: Set<String> = []
+    private var disabledBundleIdentifiers: Set<String> {
+        get { appEnablementHost.disabledBundleIdentifiers }
+        set { appEnablementHost.disabledBundleIdentifiers = newValue }
+    }
     private var debounceTask: Task<Void, Never>?
     private var debounceTaskSuggestionID: String?
     private var codexPromptPresentationRetryTask: Task<Void, Never>?
@@ -472,7 +476,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds = 5_000
     private var suggestionsPaused = false
     private var suggestionsPausedUntil: Date?
-    private var appEnablementSetupCompleted = true
+    private var appEnablementSetupCompleted: Bool {
+        get { appEnablementHost.setupCompleted }
+        set { appEnablementHost.setupCompleted = newValue }
+    }
     private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
     private var suggestionTuning = SuggestionTuning()
     private var visiblePageContextEnabled = false
@@ -19461,20 +19468,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 private extension AppDelegate {
-    static var disabledAppsDefaultsKey: String {
-        "DisabledBundleIdentifiers"
-    }
-
     static var suggestionsPausedDefaultsKey: String {
         "SuggestionsPaused"
     }
 
     static var suggestionsPausedUntilDefaultsKey: String {
         "SuggestionsPausedUntil"
-    }
-
-    static var appEnablementSetupCompletedDefaultsKey: String {
-        "AppEnablementSetupCompleted"
     }
 
     static var acceptAllShortcutDefaultsKey: String {
@@ -19527,10 +19526,6 @@ private extension AppDelegate {
 
     static var visiblePageContextEnabledDefaultsKey: String {
         "VisiblePageContextEnabled"
-    }
-
-    static var temporarilyEnabledBundleIDsEnvironmentKey: String {
-        "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
     }
 
     static var proofModeBundleIDsEnvironmentKey: String {
@@ -19668,37 +19663,7 @@ private extension AppDelegate {
     }
 
     func loadDisabledApps() {
-        let defaults = UserDefaults.standard
-        let disabledAppsKeyExists = defaults.object(forKey: Self.disabledAppsDefaultsKey) != nil
-        let setupKeyExists = defaults.object(forKey: Self.appEnablementSetupCompletedDefaultsKey) != nil
-        let temporarilyEnabledBundleIDs = ProcessInfo.processInfo.environment[
-            Self.temporarilyEnabledBundleIDsEnvironmentKey
-        ]
-
-        if disabledAppsKeyExists {
-            let persisted = defaults.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
-            var selection = DisabledAppSelection(
-                persistedBundleIdentifiers: persisted
-            )
-            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-            disabledBundleIdentifiers = selection.bundleIdentifiers
-            appEnablementSetupCompleted = setupKeyExists
-                ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
-                : true
-            defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-            return
-        }
-
-        var defaultOffSelection = DisabledAppSelection(
-            defaultOffProfileStore: profileStore
-        )
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
-        appEnablementSetupCompleted = false
-        defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-        persistDisabledApps()
-
-        defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+        appEnablementHost.load()
     }
 
     func loadProofModeOverrides() {
@@ -19706,20 +19671,11 @@ private extension AppDelegate {
     }
 
     func persistDisabledApps() {
-        let selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
-        UserDefaults.standard.set(
-            selection.persistedBundleIdentifiers,
-            forKey: Self.disabledAppsDefaultsKey
-        )
+        appEnablementHost.persist()
     }
 
     func markAppEnablementSetupCompleted() {
-        guard !appEnablementSetupCompleted else {
-            return
-        }
-
-        appEnablementSetupCompleted = true
-        UserDefaults.standard.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+        appEnablementHost.markSetupCompleted()
     }
 
     func loadKeyboardShortcutConfiguration() {
