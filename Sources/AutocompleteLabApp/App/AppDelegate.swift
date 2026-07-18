@@ -1170,10 +1170,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
             },
             defaultInsertion: { [unowned self] acceptedText, profile, expectedFieldIdentity, skippedModes in
-                self.insertionEngine.insert(
+                let insertionTarget = self.currentSuggestionState.acceptanceSnapshot.flatMap {
+                    self.codexPromptAcceptanceContinuityInsertionTarget($0)
+                } ?? expectedFieldIdentity
+                return self.insertionEngine.insert(
                     acceptedText,
                     profile: profile,
-                    expectedFieldIdentity: expectedFieldIdentity,
+                    expectedFieldIdentity: insertionTarget,
                     skipping: skippedModes
                 )
             },
@@ -4596,7 +4599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .allow
         }
         if allowCodexProofSnapshotFastPath,
-           codexPromptAcceptanceContinuityMatchesShown(shownSnapshot) {
+           codexPromptAcceptanceContinuityInsertionTarget(shownSnapshot) != nil {
             recordCodexProofSnapshotFastPath(stage: "acceptance-continuity")
             return .allow
         }
@@ -4775,7 +4778,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if allowCodexProofSnapshotFastPath,
            let shownSnapshot = currentSuggestionState.acceptanceSnapshot,
-           codexPromptAcceptanceContinuityMatchesShown(shownSnapshot) {
+           codexPromptAcceptanceContinuityInsertionTarget(shownSnapshot) != nil {
             recordCodexProofSnapshotFastPath(stage: "focus-continuity")
             return true
         }
@@ -5143,15 +5146,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    private func codexPromptAcceptanceContinuityMatchesShown(
+    private func codexPromptAcceptanceContinuityInsertionTarget(
         _ shownSnapshot: SuggestionAcceptanceSnapshot
-    ) -> Bool {
+    ) -> FocusedFieldIdentity? {
         let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
         guard currentSuggestionState.appBundleIdentifier == bundleIdentifier,
               let currentProfile,
               currentProfile.bundleIdentifier == bundleIdentifier,
               currentProfile.insertionMode == .axValueReplacement,
               currentProfile.fallbackInsertionMode == nil,
+              !currentProfile.allowsDescendantTextFallback,
               let currentSuggestionFieldIdentity = currentSuggestionState.fieldIdentity,
               let lastTextSnapshot,
               let frontmostApp = accessibilityClient.frontmostApplication(),
@@ -5176,7 +5180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   bundleIdentifier: frontmostApp.bundleIdentifier,
                   fingerprint: rawContext.fingerprint
               ).canSuggest else {
-            return false
+            return nil
         }
 
         let context = presentationAdjustedContext(
@@ -5193,10 +5197,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             raw: rawFieldClassification
         )
         guard !acceptanceFieldClassification.suppressesSuggestionsByDefault else {
-            return false
+            return nil
         }
 
-        return codexPromptTargetContinuityHost.canAcceptStablePrompt(
+        return codexPromptTargetContinuityHost.stablePromptInsertionTarget(
             app: frontmostApp,
             currentFieldIdentity: currentSuggestionFieldIdentity,
             currentSnapshot: lastTextSnapshot,

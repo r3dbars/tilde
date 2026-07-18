@@ -151,14 +151,14 @@ final class CodexPromptTargetContinuityHost {
         )
     }
 
-    func canAcceptStablePrompt(
+    func stablePromptInsertionTarget(
         app: RunningApplicationInfo,
         currentFieldIdentity: FocusedFieldIdentity?,
         currentSnapshot: FocusedTextSnapshot?,
         shownSnapshot: SuggestionAcceptanceSnapshot,
         observedContext: FocusedTextContext
-    ) -> Bool {
-        targetPolicy.canAcceptStablePrompt(
+    ) -> FocusedFieldIdentity? {
+        guard targetPolicy.canAcceptStablePrompt(
             appBundleIdentifier: app.bundleIdentifier,
             processIdentifier: app.processIdentifier,
             currentFieldIdentity: currentFieldIdentity,
@@ -166,6 +166,14 @@ final class CodexPromptTargetContinuityHost {
             shownSnapshot: shownSnapshot,
             trustedAnchor: trustedAnchor,
             observedContext: observedContext
+        ) else {
+            return nil
+        }
+
+        return FocusedFieldIdentity(
+            bundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            elementIdentifier: observedContext.elementIdentifier
         )
     }
 
