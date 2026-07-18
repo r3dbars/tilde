@@ -12,7 +12,11 @@ struct LiveSuggestionWiringTests {
         let streamingPartialHost = try source(
             "Sources/AutocompleteLabApp/App/SuggestionStreamingPartialHost.swift"
         )
-        let suggestionWiring = appDelegate + preparationHost + streamingPartialHost
+        let requestExecutionHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionRequestExecutionHost.swift"
+        )
+        let suggestionWiring =
+            appDelegate + preparationHost + streamingPartialHost + requestExecutionHost
 
         try require(suggestionWiring, contains: "private lazy var suggestionOrchestrator = SuggestionOrchestrator(")
         try require(suggestionWiring, contains: "wordCompletionRanker: wordCompletionRanker")
