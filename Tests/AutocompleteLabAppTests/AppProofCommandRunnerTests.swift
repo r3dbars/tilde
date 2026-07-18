@@ -4,6 +4,98 @@ import Testing
 
 @Suite("App proof command runner")
 struct AppProofCommandRunnerTests {
+    @Test("Live automatic proof entry point exists and is executable")
+    func liveAutomaticProofEntryPointExistsAndIsExecutable() {
+        let repositoryRootURL = repositoryRootURL()
+        let entryPointURL = AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL)
+
+        #expect(AppProofCommandPlan.proofEntryPointRelativePath == "script/real_app_smoke.sh")
+        #expect(FileManager.default.fileExists(atPath: entryPointURL.path))
+        #expect(FileManager.default.isExecutableFile(atPath: entryPointURL.path))
+    }
+
+    @Test("Automatic proof entry point preserves parser output and exit contracts")
+    func automaticProofEntryPointPreservesParserOutputAndExitContracts() throws {
+        let textEdit = try runProofEntryPoint(["textedit", "--skip-build", "--dry-run"])
+        #expect(textEdit.status == 0)
+        #expect(textEdit.standardOutput == "real_app_smoke: DRY RUN app=textedit fixture=textarea skipBuild=1\n")
+        #expect(textEdit.standardError.isEmpty)
+
+        let chrome = try runProofEntryPoint([
+            "chrome", "--fixture", "contenteditable", "--skip-build", "--dry-run"
+        ])
+        #expect(chrome.status == 0)
+        #expect(chrome.standardOutput == "real_app_smoke: DRY RUN app=chrome fixture=contenteditable skipBuild=1\n")
+        #expect(chrome.standardError.isEmpty)
+
+        let unsupported = try runProofEntryPoint(["chrome", "--fixture", "unsupported", "--dry-run"])
+        #expect(unsupported.status == 2)
+        #expect(unsupported.standardOutput.isEmpty)
+        #expect(unsupported.standardError == "real_app_smoke: unsupported Chrome fixture 'unsupported'\n")
+
+        let missingApp = try runProofEntryPoint([])
+        #expect(missingApp.status == 2)
+        #expect(missingApp.standardOutput.isEmpty)
+        #expect(missingApp.standardError.hasPrefix("Usage: script/real_app_smoke.sh"))
+    }
+
+    @Test("Cleanup bounds hanging child processes without signaling unrelated work")
+    func cleanupBoundsHangingChildProcessesWithoutSignalingUnrelatedWork() throws {
+        let scriptURL = AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL())
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let cleanupStart = try #require(
+            script.range(of: "wait_for_cleanup_process() {")?.lowerBound
+        )
+        let cleanupEnd = try #require(
+            script.range(of: "\ntrap cleanup", range: cleanupStart..<script.endIndex)?.lowerBound
+        )
+        let cleanupFunctions = String(script[cleanupStart..<cleanupEnd])
+        #expect(
+            cleanupFunctions.contains(
+                "osascript - \"$TEXTEDIT_WINDOW_TITLE\" <<'APPLESCRIPT' >/dev/null 2>&1 &"
+            )
+        )
+
+        let fixture = """
+        set -euo pipefail
+        osascript() { sleep 5; }
+        TEXTEDIT_WINDOW_TITLE="steadytype-cleanup-fixture"
+        TEMP_DIR=""
+        LOCK_DIR=""
+        LOCK_HELD=0
+        \(cleanupFunctions)
+        sleep 20 &
+        unrelated_pid=$!
+        CHROME_PID=""
+        started_at=$SECONDS
+        cleanup
+        elapsed=$((SECONDS - started_at))
+        kill -0 "$unrelated_pid"
+        ((elapsed <= 4))
+        TEXTEDIT_WINDOW_TITLE=""
+        python3 -c 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(5)' &
+        CHROME_PID=$!
+        sleep 0.2
+        started_at=$SECONDS
+        cleanup
+        elapsed=$((SECONDS - started_at))
+        kill -0 "$unrelated_pid"
+        kill "$unrelated_pid"
+        wait "$unrelated_pid" >/dev/null 2>&1 || true
+        ((elapsed <= 4))
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", fixture]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        process.waitUntilExit()
+
+        #expect(process.terminationStatus == 0)
+    }
+
     @Test("TextEdit proof plan runs the safe skip-build smoke lane")
     func textEditProofPlanRunsTheSafeSkipBuildSmokeLane() throws {
         let sourceRootURL = URL(fileURLWithPath: "/tmp/autocomplete-lab", isDirectory: true)
@@ -174,8 +266,8 @@ struct AppProofCommandRunnerTests {
         )
     }
 
-    @Test("Source root resolver finds the smoke script from an app bundle path")
-    func sourceRootResolverFindsTheSmokeScriptFromAnAppBundlePath() throws {
+    @Test("Source root resolver requires an executable proof entry point")
+    func sourceRootResolverRequiresAnExecutableProofEntryPoint() throws {
         let tempRootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("autocomplete-lab-proof-root-\(UUID().uuidString)", isDirectory: true)
         let sourceRootURL = tempRootURL.appendingPathComponent("repo", isDirectory: true)
@@ -186,12 +278,29 @@ struct AppProofCommandRunnerTests {
         }
 
         try FileManager.default.createDirectory(at: scriptDirectoryURL, withIntermediateDirectories: true)
-        try "#!/usr/bin/env bash\n".write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-
         let bundleURL = sourceRootURL
             .appendingPathComponent("dist", isDirectory: true)
             .appendingPathComponent("SteadyType.app", isDirectory: true)
+
+        #expect(
+            AppProofCommandPlan.sourceRootURL(
+                environment: [:],
+                bundleURL: bundleURL,
+                currentDirectoryPath: tempRootURL.path
+            ) == nil
+        )
+
+        try "#!/usr/bin/env bash\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: scriptURL.path)
+        #expect(
+            AppProofCommandPlan.sourceRootURL(
+                environment: [:],
+                bundleURL: bundleURL,
+                currentDirectoryPath: tempRootURL.path
+            ) == nil
+        )
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         let resolvedURL = AppProofCommandPlan.sourceRootURL(
             environment: [:],
             bundleURL: bundleURL,
@@ -200,6 +309,47 @@ struct AppProofCommandRunnerTests {
 
         #expect(resolvedURL?.standardizedFileURL == sourceRootURL.standardizedFileURL)
     }
+
+    private func repositoryRootURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func runProofEntryPoint(_ arguments: [String]) throws -> ProofEntryPointResult {
+        let process = Process()
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [
+            "bash",
+            AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL()).path
+        ] + arguments
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        try process.run()
+        process.waitUntilExit()
+
+        return ProofEntryPointResult(
+            status: process.terminationStatus,
+            standardOutput: String(
+                data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? "",
+            standardError: String(
+                data: standardError.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+        )
+    }
+}
+
+private struct ProofEntryPointResult {
+    let status: Int32
+    let standardOutput: String
+    let standardError: String
 }
 
 @MainActor
