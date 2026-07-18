@@ -385,107 +385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
-    private lazy var settingsWindow = SettingsWindowController(
-        requestPermission: { [weak self] in
-            self?.requestAccessibilityPermission()
-        },
-        openAccessibilitySettings: { [weak self] in
-            self?.openAccessibilitySettings()
-        },
-        toggleSuggestionsPaused: { [weak self] in
-            self?.togglePauseSuggestions()
-        },
-        pauseSuggestionsFor15Minutes: { [weak self] in
-            self?.pauseSuggestionsFor15Minutes()
-        },
-        pauseSuggestionsFor1Hour: { [weak self] in
-            self?.pauseSuggestionsFor1Hour()
-        },
-        pauseSuggestionsUntilTomorrow: { [weak self] in
-            self?.pauseSuggestionsUntilTomorrowFromControl()
-        },
-        silenceCurrentField: { [weak self] in
-            self?.silenceCurrentField()
-        },
-        performRuntimeAction: { [weak self] action in
-            self?.performRuntimeAction(action)
-        },
-        toggleCurrentApp: { [weak self] in
-            self?.toggleCurrentApp()
-        },
-        toggleCurrentAppMirrorMode: { [weak self] in
-            self?.toggleCurrentAppMirrorMode()
-        },
-        startCurrentAppProof: { [weak self] in
-            self?.startCurrentAppProof()
-        },
-        startTextEditPractice: { [weak self] in
-            self?.startTextEditPractice()
-        },
-        enableAllApps: { [weak self] in
-            self?.enableAllDisabledApps()
-        },
-        toggleTracingPaused: { [weak self] in
-            self?.toggleSettingsTracingPaused()
-        },
-        toggleRawContentTracing: { [weak self] in
-            self?.toggleRawContentTracing()
-        },
-        toggleScreenshotTracing: { [weak self] in
-            self?.toggleGlobalScreenshotTracing()
-        },
-        toggleVisiblePageContext: { [weak self] in
-            self?.toggleVisiblePageContext()
-        },
-        togglePersonalCapture: { [weak self] in
-            self?.togglePersonalCapture()
-        },
-        revealPersonalCaptureFolder: { [weak self] in
-            self?.revealPersonalCaptureFolder()
-        },
-        deletePersonalCapture: { [weak self] in
-            self?.deletePersonalCapture()
-        },
-        deleteLocalLogs: { [weak self] in
-            self?.deleteLocalPrivacyLogs()
-        },
-        clearLearningData: { [weak self] in
-            self?.clearLearningData()
-        },
-        exportPrivacyBundle: { [weak self] in
-            self?.exportTraceReport()
-        },
-        cycleAcceptAllShortcut: { [weak self] in
-            self?.cycleAcceptAllShortcut()
-        },
-        setAcceptAllShortcut: { [weak self] shortcut in
-            self?.setAcceptAllShortcut(shortcut)
-        },
-        setSuggestionAggressivenessLevel: { [weak self] level in
-            self?.setSuggestionAggressivenessLevel(level)
-        },
-        setSuggestionMaxVisibleWords: { [weak self] words in
-            self?.setSuggestionMaxVisibleWords(words)
-        },
-        setSuggestionWordStartCharacters: { [weak self] characters in
-            self?.setSuggestionWordStartCharacters(characters)
-        },
-        setSuggestionPhraseStartWords: { [weak self] words in
-            self?.setSuggestionPhraseStartWords(words)
-        },
-        setSuggestionResponseSpeedLevel: { [weak self] level in
-            self?.setSuggestionResponseSpeedLevel(level)
-        },
-        setSuggestionConfidenceLevel: { [weak self] level in
-            self?.setSuggestionConfidenceLevel(level)
-        },
-        setSuggestionLearningRestraintLevel: { [weak self] level in
-            self?.setSuggestionLearningRestraintLevel(level)
-        },
-        resetSuggestionTuning: { [weak self] in
-            self?.resetSuggestionTuning()
-        }
-    )
+    private lazy var settingsWindowHost = SettingsWindowHost(handler: self)
+    private var settingsWindow: SettingsWindowController {
+        settingsWindowHost.controller
+    }
 
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
@@ -20364,6 +20267,81 @@ private extension CompletionActivationDecision {
             return "allowed"
         case let .block(reason):
             return reason.rawValue
+        }
+    }
+}
+
+// MARK: - Settings window wiring
+
+extension AppDelegate: SettingsWindowActionHandling {
+    func handleSettingsWindowAction(_ action: SettingsWindowAction) {
+        switch action {
+        case .requestPermission:
+            requestAccessibilityPermission()
+        case .openAccessibilitySettings:
+            openAccessibilitySettings()
+        case .toggleSuggestionsPaused:
+            togglePauseSuggestions()
+        case .pauseSuggestionsFor15Minutes:
+            pauseSuggestionsFor15Minutes()
+        case .pauseSuggestionsFor1Hour:
+            pauseSuggestionsFor1Hour()
+        case .pauseSuggestionsUntilTomorrow:
+            pauseSuggestionsUntilTomorrowFromControl()
+        case .silenceCurrentField:
+            silenceCurrentField()
+        case let .performRuntimeAction(action):
+            performRuntimeAction(action)
+        case .toggleCurrentApp:
+            toggleCurrentApp()
+        case .toggleCurrentAppMirrorMode:
+            toggleCurrentAppMirrorMode()
+        case .startCurrentAppProof:
+            startCurrentAppProof()
+        case .startTextEditPractice:
+            startTextEditPractice()
+        case .enableAllApps:
+            enableAllDisabledApps()
+        case .toggleTracingPaused:
+            toggleSettingsTracingPaused()
+        case .toggleRawContentTracing:
+            toggleRawContentTracing()
+        case .toggleScreenshotTracing:
+            toggleGlobalScreenshotTracing()
+        case .toggleVisiblePageContext:
+            toggleVisiblePageContext()
+        case .togglePersonalCapture:
+            togglePersonalCapture()
+        case .revealPersonalCaptureFolder:
+            revealPersonalCaptureFolder()
+        case .deletePersonalCapture:
+            deletePersonalCapture()
+        case .deleteLocalLogs:
+            deleteLocalPrivacyLogs()
+        case .clearLearningData:
+            clearLearningData()
+        case .exportPrivacyBundle:
+            exportTraceReport()
+        case .cycleAcceptAllShortcut:
+            cycleAcceptAllShortcut()
+        case let .setAcceptAllShortcut(shortcut):
+            setAcceptAllShortcut(shortcut)
+        case let .setSuggestionAggressivenessLevel(level):
+            setSuggestionAggressivenessLevel(level)
+        case let .setSuggestionMaxVisibleWords(words):
+            setSuggestionMaxVisibleWords(words)
+        case let .setSuggestionWordStartCharacters(characters):
+            setSuggestionWordStartCharacters(characters)
+        case let .setSuggestionPhraseStartWords(words):
+            setSuggestionPhraseStartWords(words)
+        case let .setSuggestionResponseSpeedLevel(level):
+            setSuggestionResponseSpeedLevel(level)
+        case let .setSuggestionConfidenceLevel(level):
+            setSuggestionConfidenceLevel(level)
+        case let .setSuggestionLearningRestraintLevel(level):
+            setSuggestionLearningRestraintLevel(level)
+        case .resetSuggestionTuning:
+            resetSuggestionTuning()
         }
     }
 }
