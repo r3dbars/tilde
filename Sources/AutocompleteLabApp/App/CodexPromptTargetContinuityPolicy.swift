@@ -359,12 +359,10 @@ struct CodexPromptTargetContinuityPolicy {
         let trustedTarget = trustedAnchor.targetFingerprint
         guard shownTarget.role == trustedTarget.role,
               shownTarget.subrole == trustedTarget.subrole,
-              let shownWindowIdentifier = shownTarget.windowIdentifier,
-              let trustedWindowIdentifier = trustedTarget.windowIdentifier,
-              shownWindowIdentifier == trustedWindowIdentifier,
-              let shownWindowBounds = shownTarget.windowBounds,
-              let trustedWindowBounds = trustedTarget.windowBounds,
-              shownWindowBounds == trustedWindowBounds,
+              hasAffirmativeSameWindowEvidence(
+                  shownTarget,
+                  trustedTarget
+              ),
               let shownElementBounds = shownTarget.elementBounds,
               let trustedElementBounds = trustedTarget.elementBounds else {
             return false
@@ -378,6 +376,21 @@ struct CodexPromptTargetContinuityPolicy {
             && shownElementBounds.height > 0
             && trustedElementBounds.width > 0
             && trustedElementBounds.height > 0
+    }
+
+    private func hasAffirmativeSameWindowEvidence(
+        _ shownTarget: FocusedTargetFingerprint,
+        _ trustedTarget: FocusedTargetFingerprint
+    ) -> Bool {
+        if shownTarget.windowIdentifier != nil
+            || trustedTarget.windowIdentifier != nil {
+            return shownTarget.windowIdentifier == trustedTarget.windowIdentifier
+        }
+
+        return shownTarget.windowBounds != nil
+            && shownTarget.windowBounds == trustedTarget.windowBounds
+            && shownTarget.elementFingerprint.windowTitle != nil
+            && shownTarget.elementFingerprint.windowTitle == trustedTarget.elementFingerprint.windowTitle
     }
 
     func remainingAXCooldownMilliseconds(
