@@ -360,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
-    private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
+    private let acceptanceSurvivalTaskHost = AcceptanceSurvivalTaskHost()
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -5081,8 +5081,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func clearAcceptanceSurvivalForAcceptedInsertionUndo(_ undo: AcceptedInsertionUndo) {
-        acceptanceSurvivalTasks[undo.acceptanceID]?.cancel()
-        acceptanceSurvivalTasks[undo.acceptanceID] = nil
+        acceptanceSurvivalTaskHost.cancel(acceptanceID: undo.acceptanceID)
 
         Task { @MainActor [weak self] in
             guard let self,
@@ -5674,33 +5673,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
-        acceptanceSurvivalTasks[tracker.acceptanceID]?.cancel()
-        acceptanceSurvivalTasks[tracker.acceptanceID] = Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-
-            await self.acceptanceSurvivalChecker.beginTracking(tracker)
-            let checkpoints: [(AcceptanceSurvivalCheckpoint, Duration)] = [
-                (.twoSeconds, .seconds(2)),
-                (.tenSeconds, .seconds(8)),
-                (.thirtySeconds, .seconds(20)),
-                (.oneMinute, .seconds(30)),
-                (.fiveMinutes, .seconds(240))
-            ]
-
-            for (checkpoint, delay) in checkpoints {
-                try? await Task.sleep(for: delay)
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                await self.measureAcceptanceSurvival(
+        acceptanceSurvivalTaskHost.schedule(
+            acceptanceID: tracker.acceptanceID,
+            start: { [weak self] in
+                await self?.acceptanceSurvivalChecker.beginTracking(tracker)
+            },
+            measure: { [weak self] checkpoint in
+                await self?.measureAcceptanceSurvival(
                     acceptanceID: tracker.acceptanceID,
                     checkpoint: checkpoint
                 )
             }
-        }
+        )
     }
 
     private func measureAcceptanceSurvival(
@@ -5713,7 +5697,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let currentTextWindow = currentTextWindow(for: tracker) else {
             if checkpoint.isTerminalMetricCheckpoint {
-                acceptanceSurvivalTasks[acceptanceID] = nil
+                acceptanceSurvivalTaskHost.finish(acceptanceID: acceptanceID)
                 _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
             }
             return
@@ -5729,7 +5713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         recordAcceptanceSurvivalResult(result)
         if result.shouldFinish {
-            acceptanceSurvivalTasks[acceptanceID] = nil
+            acceptanceSurvivalTaskHost.finish(acceptanceID: acceptanceID)
             _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
         }
     }
@@ -5763,8 +5747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for result in results {
                 self.recordAcceptanceSurvivalResult(result)
                 if result.shouldFinish {
-                    self.acceptanceSurvivalTasks[result.tracker.acceptanceID]?.cancel()
-                    self.acceptanceSurvivalTasks[result.tracker.acceptanceID] = nil
+                    self.acceptanceSurvivalTaskHost.cancel(acceptanceID: result.tracker.acceptanceID)
                     _ = await self.acceptanceSurvivalChecker.finishTracking(
                         acceptanceID: result.tracker.acceptanceID
                     )
