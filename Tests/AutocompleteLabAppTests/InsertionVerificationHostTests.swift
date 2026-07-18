@@ -14,9 +14,13 @@ struct InsertionVerificationHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/InsertionVerificationHost.swift"),
             encoding: .utf8
         )
+        let wiring = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/InsertionVerificationWiring.swift"),
+            encoding: .utf8
+        )
 
         #expect(appDelegate.contains("InsertionVerificationHost(handler: self)"))
-        #expect(appDelegate.contains("extension AppDelegate: InsertionVerificationHandling"))
+        #expect(wiring.contains("extension AppDelegate: InsertionVerificationHandling"))
         #expect(appDelegate.contains("insertionVerificationHost.cancel()"))
         #expect(!appDelegate.contains("insertionVerificationScheduler.scheduleAsync"))
         #expect(host.contains("InsertionVerificationTimingPolicy"))
