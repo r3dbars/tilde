@@ -366,7 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private let typingBurstStateHost = TypingBurstStateHost()
-    private var suggestionIdleRetryState = SuggestionIdleRetryState()
+    private let suggestionIdleRetryState = SuggestionIdleRetryStateHost()
     private var currentSuggestionState = CurrentSuggestionState()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
     private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
