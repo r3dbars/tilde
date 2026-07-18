@@ -504,10 +504,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isPersonalCaptureEnabled: { [weak self] in
                 self?.appSettings.personalCaptureEnabled ?? false
             },
-            maxVisibleWords: { [weak self] requestMode, profile in
-                self?.maxVisibleWords(for: requestMode, profile: profile)
-                    ?? CompletionModelPolicy.mvp.maxVisibleWords
-            },
             suggestionTuning: { [weak self] in
                 self?.suggestionTuning ?? SuggestionTuning()
             },
@@ -1329,7 +1325,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
-    private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private let typingBurstStateHost = TypingBurstStateHost()
@@ -6352,120 +6347,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appPreferencePersistenceHost.persistAcceptedAndKeptLearning()
         var metadata = signal.traceMetadata
         metadata["typeThroughConfidenceCredited"] = "true"
-        return metadata
-    }
-
-    private func recordInsertionVerificationFailure(
-        acceptedText: String,
-        baseline: InsertionVerificationBaseline,
-        outcome: String,
-        reason: String,
-        metadata: [String: String]
-    ) {
-        RawAutocompleteTraceLog.shared.record(
-            type: .insertionFailed,
-            suggestionID: baseline.suggestionID ?? "",
-            appBundleIdentifier: baseline.profile.bundleIdentifier,
-            fieldIdentity: baseline.fieldIdentity.traceDescription,
-            requestMode: baseline.requestMode?.rawValue ?? "",
-            acceptedText: acceptedText,
-            outcome: outcome,
-            reason: reason,
-            metadata: metadata
-                .merging([
-                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                    "previousAfterChars": String(baseline.previousTextAfterCursor.count)
-                ]) { current, _ in current }
-                .merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
-        )
-    }
-
-    private func recordInsertionVerificationPreflightFailure(
-        acceptedText: String,
-        baseline: InsertionVerificationBaseline,
-        currentContext: InsertionVerificationPreflightContext
-    ) {
-        let decision = insertionVerificationPreflightPolicy.decision(
-            expectedFieldIdentity: baseline.fieldIdentity,
-            currentContext: currentContext
-        )
-        guard let reason = decision.failureReason else {
-            return
-        }
-
-        var metadata = insertionVerificationPreflightMetadata(
-            baseline: baseline,
-            currentContext: currentContext
-        )
-        metadata["acceptedChars"] = String(acceptedText.count)
-        metadata["retryCount"] = String(baseline.retryCount)
-        metadata["result"] = reason.rawValue
-        metadata.merge(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
-
-        DiagnosticsLog.shared.record(
-            "insert-verification-final-failure",
-            metadata: metadata
-        )
-        RawAutocompleteTraceLog.shared.record(
-            type: .insertionFailed,
-            suggestionID: baseline.suggestionID ?? "",
-            appBundleIdentifier: baseline.profile.bundleIdentifier,
-            fieldIdentity: baseline.fieldIdentity.traceDescription,
-            requestMode: baseline.requestMode?.rawValue ?? "",
-            acceptedText: acceptedText,
-            outcome: reason.rawValue,
-            reason: reason.rawValue,
-            metadata: metadata
-        )
-        recordPersonalCaptureSuggestionEpisodeInsertionFailed(
-            baseline: baseline,
-            outcome: reason.rawValue,
-            reason: "insert-verification-failed"
-        )
-        recordAnnoyanceSignal(
-            .wrongInsertion,
-            context: annoyanceContext(
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity,
-                requestMode: baseline.requestMode,
-                fieldKind: baseline.fieldKind
-            ),
-            suggestionID: baseline.suggestionID ?? "",
-            reason: reason.rawValue,
-            metadata: metadata
-        )
-
-        if baseline.profile.suppressesAfterInsertionFailure {
-            suppressField(
-                baseline.fieldIdentity,
-                profile: baseline.profile,
-                reason: reason.rawValue
-            )
-        }
-        hideSuggestion(
-            reason: "insert-verification-failed",
-            metadata: ["insertionFailureReason": reason.rawValue]
-        )
-    }
-
-    private func insertionVerificationPreflightMetadata(
-        baseline: InsertionVerificationBaseline,
-        currentContext: InsertionVerificationPreflightContext
-    ) -> [String: String] {
-        var metadata = [
-            "app": baseline.profile.bundleIdentifier,
-            "expectedFieldIdentity": baseline.fieldIdentity.traceDescription
-        ]
-
-        switch currentContext {
-        case .missingFrontmostApplication:
-            metadata["currentApp"] = "missing"
-            metadata["currentFieldIdentity"] = "missing"
-        case let .frontmostApplication(bundleIdentifier, fieldIdentity):
-            metadata["currentApp"] = bundleIdentifier
-            metadata["currentFieldIdentity"] = fieldIdentity?.traceDescription ?? "missing"
-        }
-
         return metadata
     }
 
@@ -16351,16 +16232,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile),
             allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile),
             allowsListLabelPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
-        )
-    }
-
-    private func maxVisibleWords(
-        for requestMode: CompletionRequestMode,
-        profile: CompatibilityProfile
-    ) -> Int {
-        effectiveSuggestionPace(for: profile).maxVisibleWords(
-            defaultMaxVisibleWords: suggestionTuning.maxVisibleWords,
-            requestMode: requestMode
         )
     }
 
