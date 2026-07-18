@@ -17,9 +17,16 @@ struct SuggestionPresentationSuppressionTraceHostTests {
             ),
             encoding: .utf8
         )
+        let orchestrationHost = try String(
+            contentsOf: root.appendingPathComponent(
+                "Sources/AutocompleteLabApp/App/SuggestionPresentationOrchestrationHost.swift"
+            ),
+            encoding: .utf8
+        )
+        let presentationWiring = appDelegate + orchestrationHost
 
         #expect(appDelegate.contains("private lazy var suggestionPresentationSuppressionTraceHost"))
-        #expect(appDelegate.contains("suggestionPresentationSuppressionTraceHost.record(\n"))
+        #expect(presentationWiring.contains("suggestionPresentationSuppressionTraceHost.record(\n"))
         #expect(host.contains("type: .suggestionSuppressed"))
         #expect(host.contains("suggestion-blocked"))
     }
