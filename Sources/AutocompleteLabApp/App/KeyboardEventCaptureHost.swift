@@ -14,8 +14,7 @@ struct KeyboardEventCaptureIdleState: Sendable {
 /// of the suggestion coordinator.
 @MainActor
 final class KeyboardEventCaptureHost {
-    private let keyboardCapturePolicy = KeyboardCapturePolicy()
-    private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
+    private let keyboardEventTapPolicy = KeyboardEventTapConsumptionPolicy()
     private let keyboardEventTapIdleStopDelayMilliseconds: Int
     private let handler: KeyboardEventTap.Handler
     private let passthroughKeyDownObserver: KeyboardEventTap.PassthroughKeyDownObserver
@@ -55,7 +54,7 @@ final class KeyboardEventCaptureHost {
             return true
         }
 
-        guard keyboardCapturePolicy.shouldCaptureKeys(
+        guard keyboardEventTapPolicy.shouldCaptureKeys(
             isTrustedForAccessibility: isTrustedForAccessibility,
             hasVisibleSuggestion: hasVisibleSuggestion,
             controlState: controlState
@@ -145,7 +144,7 @@ final class KeyboardEventCaptureHost {
             }
 
             let idleState = self.idleStateProvider()
-            guard self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
+            guard self.keyboardEventTapPolicy.shouldStopKeyboardCapture(
                 hasVisibleSuggestion: idleState.hasVisibleSuggestion,
                 isSuggestionPanelVisible: idleState.isSuggestionPanelVisible,
                 hasPendingAcceptedInsertionUndo: idleState.hasPendingAcceptedInsertionUndo
