@@ -534,6 +534,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionContinuationFailureHost = SuggestionContinuationFailureHost(
+        dependencies: SuggestionContinuationFailureHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
+            hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6948,29 +6962,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             } catch {
                 await MainActor.run {
-                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
-                    if self.suggestionOrchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+                    self.suggestionContinuationFailureHost.handle(
                         suggestionID: suggestionID,
-                        currentSuggestionID: self.currentSuggestionState.id,
-                        ticket: requestTicket,
+                        requestTicket: requestTicket,
                         fieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity,
-                        hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
-                    ) {
-                        self.setSuggestionDecision("Shown: kept instant phrase after model error")
-                        self.repositionVisibleSuggestion(context: context, profile: profile)
-                        self.updateKeyboardEventTapSnapshot()
-                        return
-                    }
-                    guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
-                        ticket: requestTicket,
-                        failedRequestFieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity
-                    ) else {
-                        return
-                    }
-                    self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "engine-error"))
-                    self.hideSuggestion(reason: "engine-error")
+                        context: context,
+                        profile: profile
+                    )
                 }
             }
         }
