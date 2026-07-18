@@ -10,13 +10,17 @@ struct RuntimeStatusHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let wiring = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/RuntimeStatusWiring.swift"),
+            encoding: .utf8
+        )
         let host = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/RuntimeStatusHost.swift"),
             encoding: .utf8
         )
 
         #expect(appDelegate.contains("RuntimeStatusHost(handler: self)"))
-        #expect(appDelegate.contains("extension AppDelegate: RuntimeStatusHandling"))
+        #expect(wiring.contains("extension AppDelegate: RuntimeStatusHandling"))
         #expect(!appDelegate.contains("private var currentRuntimeState: LocalRuntimeState"))
         #expect(host.contains("hasSurfacedModelSetupUI"))
         #expect(host.contains("Model install: ready"))

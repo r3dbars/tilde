@@ -219,10 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let proofActivationModePolicy = ProofActivationModePolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
-    private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
     private lazy var runtimeStatusHost = RuntimeStatusHost(handler: self)
-    private lazy var modelInstallLifecycleHost = ModelInstallLifecycleHost(handler: self)
+    lazy var modelInstallLifecycleHost = ModelInstallLifecycleHost(handler: self)
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
     private lazy var appTargetStateHost = AppTargetStateHost(profileStore: profileStore)
@@ -234,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshRuntimeChrome()
         }
     )
-    private var completionLengthConfiguration: CompletionLengthConfiguration {
+    var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
     private var modelRuntime: any ModelRuntime {
@@ -885,7 +885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func rearmFocusedTextAfterRuntimeReady() {
+    func rearmFocusedTextAfterRuntimeReady() {
         guard currentFieldIdentity != nil else {
             return
         }
@@ -906,7 +906,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func refreshRuntimeChrome() {
+    func refreshRuntimeChrome() {
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -19035,34 +19035,6 @@ extension AppDelegate: SettingsWindowActionHandling {
         case .resetSuggestionTuning:
             resetSuggestionTuning()
         }
-    }
-}
-
-// MARK: - Model install lifecycle wiring
-
-extension AppDelegate: RuntimeStatusHandling {
-    var modelRuntimeBundleForStatus: AppModelRuntimeBundle {
-        modelRuntimeBundle
-    }
-
-    var isModelInstallInProgressForStatus: Bool {
-        modelInstallLifecycleHost.isInstalling
-    }
-
-    var completionLengthDisplaySummaryForStatus: String {
-        completionLengthConfiguration.displaySummary
-    }
-
-    func refreshRuntimeStatusChrome() {
-        refreshRuntimeChrome()
-    }
-
-    func rearmFocusedTextAfterRuntimeReadyForStatus() {
-        rearmFocusedTextAfterRuntimeReady()
-    }
-
-    func showRuntimeSettings() {
-        showSettings()
     }
 }
 
