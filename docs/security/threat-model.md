@@ -3,7 +3,7 @@
 Status: first adversarial security pass (2026-06-13). Scope: the standalone macOS
 autocomplete app (`Sources/AutocompleteLabApp`) and the pure policy core
 (`Sources/AutocompleteLabCore`). This complements — it does not replace — the privacy
-no-leak sentinel tests and `docs/product/proof-manifest.json`.
+no-leak sentinel tests and the local privacy export proof.
 
 This document is the source of truth for SteadyType's *security* posture (distinct from the
 *privacy/no-leak* proofs). Keep it short and decision-oriented. When you change insertion,

@@ -37,7 +37,7 @@ The disabled-app branch could call `pollPersonalCaptureOnly` before the later `p
 
 ## Reviewed control observations
 
-Canonical privacy and no-leak guarantees live in the [proof manifest](../product/proof-manifest.json) and the sentinel suites for [trace redaction](../../Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift), [report export](../../Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift), and [owner-only storage](../../Tests/AutocompleteLabAppTests/SecureLocalStorageTests.swift). The bullets below are point-in-time source observations from the pinned audit baseline, not a second guarantee registry.
+Canonical privacy and no-leak guarantees live in the sentinel suites for [trace redaction](../../Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift), [report export](../../Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift), and [owner-only storage](../../Tests/AutocompleteLabAppTests/SecureLocalStorageTests.swift). The bullets below are point-in-time source observations from the pinned audit baseline, not a second guarantee registry.
 
 - Personal Capture is off by default (`Sources/AutocompleteLabApp/App/AppSettings.swift:125-135`) and local-only. Policy rejects secure fields, sensitive text patterns, browser-hosted editors, and suppressed field kinds (`Sources/AutocompleteLabCore/Session/PersonalCapturePolicy.swift:81-127`).
 - Default raw traces redact all text-bearing event fields and metadata before persistence (`Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift:399-442`).

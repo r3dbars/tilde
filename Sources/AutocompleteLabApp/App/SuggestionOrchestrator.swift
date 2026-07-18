@@ -341,19 +341,15 @@ final class SuggestionOrchestrator {
             return .staleField
         }
 
-        if invalidatedByUserTyping {
-            return .staleAfterKeydown
-        }
-
         guard let currentSnapshot else {
-            return nil
+            return invalidatedByUserTyping ? .staleAfterKeydown : nil
         }
 
         guard currentSnapshot.fieldIdentity == fieldIdentity else {
             return .staleField
         }
 
-        guard currentSnapshot.textBeforeCursor == request.textBeforeCursor,
+        guard currentSnapshot.textBeforeCursor.hasPrefix(request.textBeforeCursor),
               currentSnapshot.textAfterCursor == request.textAfterCursor else {
             return .staleText
         }
@@ -845,10 +841,9 @@ final class SuggestionOrchestrator {
             suggestion: suggestion,
             firstVisible: modelIsFirstVisibleSuggestion
         )
-        // The first-visible ceiling bounds the MODEL's contribution to first paint, so it is
-        // compared against latency with the deliberate pre-model scheduling pause removed
-        // (`latencyMilliseconds` is measured from before that pause). The refinement budget keeps
-        // its original delay-inclusive basis so existing behavior is unchanged.
+        // The first-visible ceiling bounds the model's contribution to first paint, so remove
+        // the deliberate pre-model scheduling pause before comparing it. Refinement keeps its
+        // existing delay-inclusive basis.
         let modelLatencyForBudget = modelIsFirstVisibleSuggestion
             ? max(0, latencyMilliseconds - max(0, scheduledDelayMilliseconds))
             : latencyMilliseconds
@@ -858,12 +853,10 @@ final class SuggestionOrchestrator {
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
             && modelLatencyForBudget > modelDisplayLatencyBudgetMilliseconds
-        let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
-            && !proofLatencyBypass
-            && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
-        if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
+            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("late-context-validation-required"))
+
+        if shouldSuppressFinalLatency {
             let trace = DisplayScoreTrace(
                 score: score,
                 mode: request.mode,
@@ -1065,10 +1058,10 @@ final class SuggestionOrchestrator {
         if context.caretIsSynthetic {
             score += 0.12
         }
+        // Latency stays observable, but live context validity decides freshness.
+        // Keep only a small instability signal for extreme delays.
         if latencyMilliseconds >= 1_500 {
-            score += 0.30
-        } else if latencyMilliseconds >= 800 {
-            score += 0.15
+            score += 0.05
         }
         return displayComponent(score)
     }
@@ -1078,9 +1071,6 @@ final class SuggestionOrchestrator {
         suggestion: CompletionSuggestion,
         firstVisible: Bool
     ) -> Int {
-        // When the model result would be the first thing shown, cap hard regardless of length:
-        // a late cold paint is worse than no paint, and the instant local lane (or nothing)
-        // should own the first-visible slot.
         if firstVisible {
             return maximumFirstVisibleModelDisplayLatencyMilliseconds
         }
@@ -1088,7 +1078,7 @@ final class SuggestionOrchestrator {
         guard request.mode == .phraseContinuation,
               suggestion.maxVisibleWords >= 8,
               suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
-                forVisibleWords: suggestion.maxVisibleWords
+                  forVisibleWords: suggestion.maxVisibleWords
               )
         else {
             return maximumFinalModelDisplayLatencyMilliseconds

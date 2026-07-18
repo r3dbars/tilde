@@ -41,6 +41,10 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "\"Shown: typing through suggestion\"")
         try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
         try require(appDelegate, contains: "reason: \"survived_typethrough\"")
+        try require(appDelegate, contains: "passthroughTypingMatchObserver:")
+        try require(appDelegate, contains: "observeOptimisticTypeThrough(transition)")
+        try require(appDelegate, contains: "currentSuggestionState.invalidatedByUserKeyDown = false")
+        try require(appDelegate, contains: "LateResultContextValidator().trimmedSuggestion(")
     }
 
     @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")

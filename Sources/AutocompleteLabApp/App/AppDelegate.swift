@@ -4108,6 +4108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             passthroughKeyDownObserver: { [weak self] in
                 self?.observePassthroughTypingKeyDown()
             },
+            passthroughTypingMatchObserver: { [weak self] transition in
+                self?.observeOptimisticTypeThrough(transition)
+            },
             disabledObserver: { [weak self] reason in
                 self?.handleKeyboardEventTapDisabled(reason: reason)
             }
@@ -4154,7 +4157,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allowsAutocompleteKeyAfterPassthroughObservation: isClaudeCodeTerminalHostProofSuggestion,
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
-            visibleSuggestionID: currentSuggestionState.id
+            visibleSuggestionID: currentSuggestionState.id,
+            visibleSuggestionRemainingText: suggestionSession.visibleSuggestion?.visibleText,
+            visibleSuggestionOriginalText: currentSuggestionState.optimisticOriginalDisplayedText
+                ?? suggestionSession.visibleSuggestion?.visibleText,
+            optimisticTypedPrefix: currentSuggestionState.optimisticTypedPrefix,
+            allowsOptimisticTypeThrough: currentKeyboardInputSourceAllowsOptimisticTypeThrough()
         )
     }
 
@@ -4243,6 +4251,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionState.invalidatedByUserKeyDown = true
         invalidatePendingSuggestionRequest()
         setSuggestionDecision("Shown: tracking typing")
+        updateKeyboardEventTapSnapshot()
+    }
+
+    private func observeOptimisticTypeThrough(_ transition: KeyboardOptimisticTypeThroughTransition) {
+        suggestionPipeline.pausePolling(
+            now: Date(),
+            durationMilliseconds: visibleSuggestionTypingPollPauseMilliseconds
+        )
+        clearPendingAcceptedInsertionUndo(reason: "typing")
+        guard suggestionSession.hasVisibleSuggestion,
+              currentSuggestionState.applyOptimisticTypeThrough(transition) else {
+            return
+        }
+
+        if transition.remainingText.isEmpty {
+            currentSuggestionState.invalidatedByUserKeyDown = false
+            setSuggestionDecision("Queued: refreshing after typed suggestion")
+            hideSuggestion(reason: "typed-through-visible-prefix")
+            return
+        }
+
+        guard let currentSuggestion = suggestionSession.visibleSuggestion else { return }
+        suggestionSession.present(CompletionSuggestion(
+            text: transition.remainingText,
+            maxVisibleWords: currentSuggestion.maxVisibleWords,
+            maxVisibleCharacters: currentSuggestion.maxVisibleCharacters
+        ))
+        currentSuggestionState.displayedText = transition.remainingText
+        currentSuggestionState.invalidatedByUserKeyDown = false
+        setSuggestionDecision("Shown: typing through suggestion")
+        _ = refreshVisibleSuggestion()
         updateKeyboardEventTapSnapshot()
     }
 
@@ -7957,6 +7996,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let requestSnapshot = FocusedTextSnapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: request.textBeforeCursor,
+            textAfterCursor: request.textAfterCursor
+        )
+        let currentSnapshot = FocusedTextSnapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+        let typedSinceRequest: String
+        switch LateResultContextValidator().validate(
+            requestSnapshot: requestSnapshot,
+            currentSnapshot: currentSnapshot,
+            latencyMilliseconds: latencyMilliseconds
+        ) {
+        case let .stillValid(typedDelta):
+            typedSinceRequest = typedDelta
+        case let .invalid(reason):
+            hideSuggestion(reason: "late-result-\(reason.rawValue)")
+            return
+        }
+        guard let suggestion = LateResultContextValidator().trimmedSuggestion(
+            suggestion,
+            typedSinceRequest: typedSinceRequest
+        ) else {
+            hideSuggestion(reason: "typed-through-visible-prefix")
+            return
+        }
+
         let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
             for: profile.bundleIdentifier,
             profileRenderMode: renderMode
@@ -8330,6 +8399,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionState.acceptanceSnapshot = acceptanceSnapshot
         let presentedAt = Date()
         currentSuggestionState.displayedText = suggestion.visibleText
+        currentSuggestionState.optimisticOriginalDisplayedText = suggestion.visibleText
+        currentSuggestionState.optimisticTypedPrefix = ""
         currentSuggestionState.fieldClassification = displayFieldClassification
         currentSuggestionState.presentedAt = presentedAt
         currentSuggestionState.displayScoreFinal = displayScoreTrace.score.finalScore
@@ -17488,7 +17559,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let survivalMetadata = survival.traceMetadata
                 .merging(learningMetadata) { current, _ in current }
             lastTextSnapshot = snapshot
-            invalidatePendingSuggestionRequest()
             currentSuggestionState.textBeforeCursor = context.textBeforeCursor
             currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText
             if let currentSuggestionAcceptanceSnapshot = currentSuggestionState.acceptanceSnapshot {
@@ -17583,16 +17653,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let fieldIdentityDescription = currentSuggestionState.fieldIdentity?.traceDescription
                 ?? currentFieldIdentity?.traceDescription
                 ?? ""
-            let outcome: String
-            if reason.hasPrefix("accepted") {
-                outcome = "accepted"
-            } else if reason == "typed-through-visible-prefix" {
-                outcome = "typed-through"
-            } else if reason == "typed-over" {
-                outcome = "typed-over"
-            } else {
-                outcome = "ignored"
-            }
+            let outcome = suggestionHiddenOutcome(for: reason)
             let displayedText = currentSuggestionState.displayedText ?? suggestionSession.visibleSuggestion?.visibleText ?? ""
             let lifetimeMilliseconds = currentSuggestionLifetimeMilliseconds()
             var metadata = currentSuggestionLifetimeMetadata(lifetimeMilliseconds: lifetimeMilliseconds)
@@ -17649,6 +17710,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionState.textBeforeCursor = nil
         currentSuggestionState.acceptanceSnapshot = nil
         currentSuggestionState.displayedText = nil
+        currentSuggestionState.optimisticOriginalDisplayedText = nil
+        currentSuggestionState.optimisticTypedPrefix = ""
         currentSuggestionState.fieldClassification = nil
         currentSuggestionState.presentedAt = nil
         currentSuggestionState.displayScoreFinal = nil

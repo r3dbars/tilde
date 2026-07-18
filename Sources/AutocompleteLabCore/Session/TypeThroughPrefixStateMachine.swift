@@ -171,6 +171,20 @@ public struct TypeThroughPrefixStateMachine: Equatable, Sendable {
 }
 
 enum TypeThroughPrefixMatcher {
+    static func remainingText(
+        afterMatching typedPrefix: String,
+        in suggestionText: String
+    ) -> Substring? {
+        guard let endIndex = matchedPrefixEndIndex(
+            typedPrefix: typedPrefix,
+            suggestionText: suggestionText
+        ) else {
+            return nil
+        }
+
+        return suggestionText[endIndex...]
+    }
+
     static func matchedPrefixEndIndex(
         typedPrefix: String,
         suggestionText: String
@@ -242,13 +256,9 @@ enum TypeThroughPrefixMatcher {
 
 extension CompletionSuggestion {
     func remainingTextAfterTypeThroughPrefix(_ typedPrefix: String) -> Substring? {
-        guard let endIndex = TypeThroughPrefixMatcher.matchedPrefixEndIndex(
-            typedPrefix: typedPrefix,
-            suggestionText: text
-        ) else {
-            return nil
-        }
-
-        return text[endIndex...]
+        TypeThroughPrefixMatcher.remainingText(
+            afterMatching: typedPrefix,
+            in: text
+        )
     }
 }
