@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT_DIR/script/check_complexity_budget.sh"
+PROOF="$ROOT_DIR/script/proof.sh"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-complexity-budget-test.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -27,6 +28,22 @@ new_fixture() {
   git -C "$fixture" commit -qm baseline
   echo "$fixture"
 }
+
+proof_functions="$(sed -n '/^is_truthy()/,/^}/p; /^run_complexity_budget()/,/^}/p' "$PROOF")"
+if ! (
+  cd "$ROOT_DIR"
+  PROOF_STRUCTURAL_CHANGE= PROOF_DIFF_BASE= PROOF_STRUCTURAL_LOC_EXCEPTION= \
+    /bin/bash -u -c "$proof_functions"$'\nrun_complexity_budget' >/dev/null
+); then
+  fail "normal proof integration failed under macOS Bash"
+fi
+if ! (
+  cd "$ROOT_DIR"
+  PROOF_STRUCTURAL_CHANGE=1 PROOF_DIFF_BASE=HEAD PROOF_STRUCTURAL_LOC_EXCEPTION=1 \
+    /bin/bash -u -c "$proof_functions"$'\nrun_complexity_budget' >/dev/null
+); then
+  fail "structural proof integration failed under macOS Bash"
+fi
 
 pass_fixture="$(new_fixture pass)"
 pass_output="$(cd "$pass_fixture" && script/check_complexity_budget.sh)"

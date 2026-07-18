@@ -105,15 +105,17 @@ check_diff() {
 }
 
 run_complexity_budget() {
-  local args=()
-  if is_truthy "${PROOF_STRUCTURAL_CHANGE:-}"; then
-    args+=(--structural)
-    if [ -n "${PROOF_DIFF_BASE:-}" ]; then
-      args+=(--base "$PROOF_DIFF_BASE")
-    fi
-    if is_truthy "${PROOF_STRUCTURAL_LOC_EXCEPTION:-}"; then
-      args+=(--structural-exception)
-    fi
+  if ! is_truthy "${PROOF_STRUCTURAL_CHANGE:-}"; then
+    bash script/check_complexity_budget.sh
+    return
+  fi
+
+  local args=(--structural)
+  if [ -n "${PROOF_DIFF_BASE:-}" ]; then
+    args+=(--base "$PROOF_DIFF_BASE")
+  fi
+  if is_truthy "${PROOF_STRUCTURAL_LOC_EXCEPTION:-}"; then
+    args+=(--structural-exception)
   fi
   bash script/check_complexity_budget.sh "${args[@]}"
 }
