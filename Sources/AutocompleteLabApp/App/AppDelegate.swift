@@ -1126,6 +1126,141 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cancelKeyboardEventTapIdleStop: { [weak self] in self?.cancelKeyboardEventTapIdleStop() }
         )
     )
+    private lazy var suggestionAcceptanceHost = SuggestionAcceptanceHost(
+        dependencies: SuggestionAcceptanceHostDependencies(
+            keyboardShortcutConfiguration: { [unowned self] in self.keyboardShortcutConfiguration },
+            suggestionSession: suggestionSession,
+            currentSuggestionState: currentSuggestionState,
+            currentProfile: { [weak self] in self?.currentProfile },
+            keyboardCaptureSafetyPolicy: keyboardCaptureSafetyPolicy,
+            suggestionOrchestrator: suggestionOrchestrator,
+            requestSuggestionNow: { [weak self] source in self?.requestSuggestionNow(source: source) },
+            undoAcceptedInsertion: { [weak self] in self?.undoAcceptedInsertion() == true },
+            acceptedInsertionUndoIsActive: { [weak self] in self?.acceptedInsertionUndoIsActive() == true },
+            clearPendingAcceptedInsertionUndo: { [weak self] reason in
+                self?.clearPendingAcceptedInsertionUndo(reason: reason)
+            },
+            preserveClaudeCodeTerminalHostProofSuggestionAfterPassthrough: { [unowned self] source in
+                self.preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: source)
+            },
+            suppressKey: { [weak self] key in self?.suppressKey(key) },
+            clearKeySuppression: { [weak self] key in self?.suppressKeyUntil[key] = nil },
+            setPreservesResidualSuggestionAfterNextWordAccept: { [weak self] value in
+                self?.preservesResidualSuggestionAfterNextWordAccept = value
+            },
+            shouldSuppressKey: { [unowned self] key, isAutorepeat in
+                self.shouldSuppressKey(key, isAutorepeat: isAutorepeat)
+            },
+            focusedFieldMatchesCurrentSuggestion: { [unowned self] terminalFastPath, codexFastPath, obsidianFastPath in
+                self.focusedFieldMatchesCurrentSuggestion(
+                    allowTerminalHostProofSnapshotFastPath: terminalFastPath,
+                    allowCodexProofSnapshotFastPath: codexFastPath,
+                    allowObsidianSnapshotFastPath: obsidianFastPath
+                )
+            },
+            recordClaudeCodeTerminalHostProofKeyboardProgress: { [unowned self] stage, key, action, metadata in
+                self.recordClaudeCodeTerminalHostProofKeyboardProgress(
+                    stage: stage,
+                    key: key,
+                    action: action,
+                    metadata: metadata
+                )
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason, metadata in
+                self?.hideSuggestion(reason: reason, metadata: metadata)
+            },
+            recordKeyboardAction: { [unowned self] key, action, handled, reason in
+                self.recordKeyboardAction(key: key, action: action, handled: handled, reason: reason)
+            },
+            currentSuggestionAcceptanceDecision: { [unowned self] codexFastPath, obsidianFastPath in
+                self.currentSuggestionAcceptanceDecision(
+                    allowCodexProofSnapshotFastPath: codexFastPath,
+                    allowObsidianSnapshotFastPath: obsidianFastPath
+                )
+            },
+            recordAcceptanceGuardBlock: { [unowned self] reason in self.recordAcceptanceGuardBlock(reason: reason) },
+            insertionVerificationBaseline: { [unowned self] acceptanceID, acceptedAt, action, acceptMode in
+                self.insertionVerificationBaseline(
+                    acceptanceID: acceptanceID,
+                    acceptedAt: acceptedAt,
+                    action: action,
+                    acceptMode: acceptMode
+                )
+            },
+            acceptedTextForCurrentAcceptance: { [unowned self] acceptedText, action in
+                self.acceptedTextForCurrentAcceptance(acceptedText, action: action)
+            },
+            suggestionAcceptanceProof: { [unowned self] action, acceptedText in
+                self.suggestionAcceptanceProof(action: action, acceptedText: acceptedText)
+            },
+            scheduleDeferredAcceptance: { [weak self] input in
+                self?.scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
+                    acceptedText: input.acceptedText,
+                    acceptanceID: input.acceptanceID,
+                    acceptedAt: input.acceptedAt,
+                    action: input.action,
+                    acceptanceProof: input.acceptanceProof,
+                    verificationBaseline: input.verificationBaseline
+                ) ?? false
+            },
+            insertAcceptedText: { [weak self] acceptedText, action in
+                self?.insertAcceptedText(acceptedText, action: action) ?? false
+            },
+            suppressCurrentFieldAfterInsertionFailure: { [weak self] reason in
+                self?.suppressCurrentFieldAfterInsertionFailure(reason: reason)
+            },
+            completeNextWordAcceptance: { [unowned self] input in
+                self.completeNextWordAcceptance(
+                    acceptedText: input.acceptedText,
+                    acceptanceID: input.acceptanceID,
+                    acceptedAt: input.acceptedAt,
+                    action: input.action,
+                    acceptanceProof: input.acceptanceProof,
+                    verificationBaseline: input.verificationBaseline
+                )
+            },
+            armAcceptedInsertionUndo: { [unowned self] acceptedText, acceptanceID, acceptedAt, acceptMode in
+                self.armAcceptedInsertionUndo(
+                    acceptedText: acceptedText,
+                    acceptanceID: acceptanceID,
+                    acceptedAt: acceptedAt,
+                    acceptMode: acceptMode
+                )
+            },
+            recordAcceptedText: { [unowned self] acceptedText in self.recordAcceptedText(acceptedText) },
+            armObsidianPostAcceptanceSuppressionIfNeeded: { [unowned self] in
+                self.armObsidianPostAcceptanceSuppressionIfNeeded()
+            },
+            recordRawAcceptance: { [unowned self] action, acceptedText, acceptanceID, acceptanceProof in
+                self.recordRawAcceptance(
+                    action: action,
+                    acceptedText: acceptedText,
+                    acceptanceID: acceptanceID,
+                    acceptanceProof: acceptanceProof
+                )
+            },
+            currentAnnoyanceContext: { [weak self] in self?.currentAnnoyanceContext() },
+            recordAnnoyanceSignal: { [unowned self] signal, context, suggestionID, reason, metadata in
+                self.recordAnnoyanceSignal(
+                    signal,
+                    context: context,
+                    suggestionID: suggestionID,
+                    reason: reason,
+                    metadata: metadata
+                )
+            },
+            scheduleInsertionVerification: { [unowned self] acceptedText, baseline in
+                self.scheduleInsertionVerification(acceptedText: acceptedText, baseline: baseline)
+            },
+            currentSuggestionLifetimeMetadata: { [unowned self] in self.currentSuggestionLifetimeMetadata() },
+            currentPrefixFamilyCooldownInput: { [unowned self] in self.currentPrefixFamilyCooldownInput() },
+            recordPrefixFamilyCooldown: { [unowned self] reason, input in
+                self.recordPrefixFamilyCooldown(reason, input: input)
+            },
+            suppressCurrentField: { [unowned self] reason in self.suppressCurrentField(reason: reason) }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -4398,319 +4533,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isAutorepeat: Bool = false,
         didObservePassthroughKeyDown: Bool = false
     ) -> KeyboardEventTapHandlingResult {
-        if didObservePassthroughKeyDown {
-            if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
-                preservesResidualSuggestionAfterNextWordAccept = false
-            } else {
-                currentSuggestionState.invalidatedByUserKeyDown = true
-                preservesResidualSuggestionAfterNextWordAccept = false
-                clearPendingAcceptedInsertionUndo(reason: "typing")
-            }
-        }
-
-        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
-            for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
+        suggestionAcceptanceHost.handleAutocompleteKey(
+            key,
+            isAutorepeat: isAutorepeat,
+            didObservePassthroughKeyDown: didObservePassthroughKeyDown
         )
-
-        if action == .requestSuggestionNow {
-            requestSuggestionNow(source: "key-tap")
-            suppressKey(key)
-            recordKeyboardAction(
-                key: key,
-                action: action,
-                handled: true,
-                reason: "requested"
-            )
-            return .handled
-        }
-
-        if action == .undoAcceptedInsertion {
-            let handled = undoAcceptedInsertion()
-            if handled {
-                suppressKey(key)
-            }
-            recordKeyboardAction(
-                key: key,
-                action: action,
-                handled: handled,
-                reason: handled ? "accepted-insertion-undone" : "undo-unavailable"
-            )
-            return handled ? .handled : .replayOriginalKey(.undoUnavailable)
-        }
-
-        guard suggestionSession.hasVisibleSuggestion else {
-            suppressKeyUntil[key] = nil
-            return .replayOriginalKey(.noVisibleSuggestion)
-        }
-
-        recordClaudeCodeTerminalHostProofKeyboardProgress(
-            stage: "focus-check-start",
-            key: key,
-            action: action
-        )
-        guard focusedFieldMatchesCurrentSuggestion(
-            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action.insertsSuggestionText,
-            allowObsidianSnapshotFastPath: action.insertsSuggestionText
-        ) else {
-            setSuggestionDecision("Blocked: focus changed")
-            hideSuggestion(reason: "focus-changed")
-            recordKeyboardAction(
-                key: key,
-                action: .passThrough,
-                handled: false,
-                reason: "focus-changed"
-            )
-            return keyboardCaptureSafetyPolicy.handlingResultForFocusMismatch(key: key)
-        }
-        recordClaudeCodeTerminalHostProofKeyboardProgress(
-            stage: "focus-check-passed",
-            key: key,
-            action: action
-        )
-
-        if currentSuggestionState.invalidatedByUserKeyDown {
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "blocked-stale-after-keydown",
-                key: key,
-                action: action
-            )
-            setSuggestionDecision("Blocked: stale suggestion passed through")
-            hideSuggestion(reason: "stale-after-keydown")
-            recordKeyboardAction(
-                key: key,
-                action: .passThrough,
-                handled: false,
-                reason: "stale-after-keydown"
-            )
-            return .replayOriginalKey(.staleAfterTyping)
-        }
-
-        if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "suppressed-autorepeat",
-                key: key,
-                action: action
-            )
-            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
-            return .handled
-        }
-
-        switch action {
-        case .requestSuggestionNow:
-            return .replayOriginalKey(.passThroughAction)
-
-        case .undoAcceptedInsertion:
-            return .replayOriginalKey(.undoUnavailable)
-
-        case .acceptNextWord:
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-entered",
-                key: key,
-                action: action
-            )
-            guard currentProfile?.supportsOneWordAcceptance == true else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
-                return .replayOriginalKey(.unsupportedAction)
-            }
-            if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true,
-                allowObsidianSnapshotFastPath: true
-            ).blockReason {
-                recordAcceptanceGuardBlock(reason: blockReason)
-                setSuggestionDecision("Blocked: \(blockReason.rawValue)")
-                hideSuggestion(reason: blockReason.rawValue)
-                recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason, key: key)
-            }
-
-            let acceptanceID = UUID().uuidString
-            let acceptedAt = Date()
-            let verificationBaseline = insertionVerificationBaseline(
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptMode: action.diagnosticName
-            )
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-baseline-ready",
-                key: key,
-                action: action,
-                metadata: [
-                    "hasBaseline": String(verificationBaseline != nil)
-                ]
-            )
-            guard let rawAcceptedText = suggestionSession.nextWordAcceptance() else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
-            }
-            let acceptedText = acceptedTextForCurrentAcceptance(rawAcceptedText, action: action)
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-text-ready",
-                key: key,
-                action: action,
-                metadata: [
-                    "acceptedChars": String(acceptedText.count),
-                    "rawAcceptedChars": String(rawAcceptedText.count)
-                ]
-            )
-            guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
-            }
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-proof-ready",
-                key: key,
-                action: action,
-                metadata: acceptanceProof.traceMetadata
-            )
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-insert-start",
-                key: key,
-                action: action
-            )
-            if scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptanceProof: acceptanceProof,
-                verificationBaseline: verificationBaseline
-            ) {
-                suppressKey(key)
-                recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted-deferred-insert-scheduled")
-                return .handled
-            }
-            guard insertAcceptedText(acceptedText, action: action) else {
-                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
-            }
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-insert-succeeded",
-                key: key,
-                action: action
-            )
-
-            completeNextWordAcceptance(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptanceProof: acceptanceProof,
-                verificationBaseline: verificationBaseline
-            )
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return .handled
-
-        case .acceptAllVisible:
-            guard currentProfile?.supportsFullAcceptance == true else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
-                return .replayOriginalKey(.unsupportedAction)
-            }
-            if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true,
-                allowObsidianSnapshotFastPath: true
-            ).blockReason {
-                recordAcceptanceGuardBlock(reason: blockReason)
-                setSuggestionDecision("Blocked: \(blockReason.rawValue)")
-                hideSuggestion(reason: blockReason.rawValue)
-                recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason, key: key)
-            }
-
-            let acceptanceID = UUID().uuidString
-            let acceptedAt = Date()
-            let verificationBaseline = insertionVerificationBaseline(
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptMode: action.diagnosticName
-            )
-            guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
-            }
-            guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
-            }
-            guard insertAcceptedText(acceptedText, action: action) else {
-                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
-            }
-
-            armAcceptedInsertionUndo(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                acceptMode: action.diagnosticName
-            )
-            suggestionSession.commitAllVisibleAcceptance(acceptedText)
-            recordAcceptedText(acceptedText)
-            armObsidianPostAcceptanceSuppressionIfNeeded()
-            suggestionOrchestrator.recordRepetitionAcceptance(
-                acceptedText,
-                mode: currentSuggestionState.requestMode,
-                scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
-            )
-            recordRawAcceptance(
-                action: action,
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptanceProof: acceptanceProof
-            )
-            recordAnnoyanceSignal(
-                .accepted,
-                context: currentAnnoyanceContext(),
-                suggestionID: currentSuggestionState.id ?? "",
-                reason: action.diagnosticName
-            )
-            setSuggestionDecision("Accepted: full suggestion")
-            hideSuggestion(reason: "accepted-all")
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return .handled
-
-        case .dismiss:
-            var metadata = currentSuggestionLifetimeMetadata()
-            metadata["escapeDismissalInsertedText"] = String(action.insertsSuggestionText)
-            metadata["escapeDismissalInsertedTextChars"] = "0"
-            if let input = currentPrefixFamilyCooldownInput() {
-                metadata.merge(recordPrefixFamilyCooldown(.escapeDismissal, input: input)) { current, _ in current }
-            }
-            recordAnnoyanceSignal(
-                .rapidEscDismissal,
-                context: currentAnnoyanceContext(),
-                suggestionID: currentSuggestionState.id ?? "",
-                reason: "escape",
-                metadata: metadata
-            )
-            suppressCurrentField(reason: "escape")
-            hideSuggestion(
-                reason: "escape",
-                metadata: [
-                    "escapeDismissalInsertedText": String(action.insertsSuggestionText),
-                    "escapeDismissalInsertedTextChars": "0"
-                ]
-            )
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
-            return .handled
-
-        case .passThrough:
-            if key != .other {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
-            }
-            return .replayOriginalKey(.passThroughAction)
-        }
     }
-
     private func acceptedTextForCurrentAcceptance(
         _ acceptedText: String,
         action: KeyboardAction
