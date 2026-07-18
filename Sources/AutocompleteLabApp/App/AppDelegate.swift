@@ -471,6 +471,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let deferredTerminalHostAcceptanceHost = DeferredTerminalHostAcceptanceHost()
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private let acceptanceSurvivalTaskHost = AcceptanceSurvivalTaskHost()
+    private lazy var suggestionRequestCancellationHost = SuggestionRequestCancellationHost(
+        dependencies: SuggestionRequestCancellationHostDependencies(
+            clearCooldownPreservation: { [weak self] in
+                self?.codexPromptTargetContinuityHost.clearCooldownPreservation()
+            },
+            hasScheduledPresentationRetry: { [weak self] in
+                self?.codexPromptPresentationRetryHost.hasScheduledRetry == true
+            },
+            cancelPresentationRetry: { [weak self] in
+                self?.codexPromptPresentationRetryHost.cancel()
+            },
+            cancelPendingRequest: { [weak self] in
+                self?.suggestionRequestScheduler.cancelPendingRequest() ?? false
+            },
+            clearStreamingPresentations: { [weak self] in
+                self?.suggestionOrchestrator.clearStreamingPresentations()
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -17209,29 +17228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func cancelPendingSuggestionTask(reason: String) -> Bool {
-        codexPromptTargetContinuityHost.clearCooldownPreservation()
-        let cancelledPresentationRefreshRetry = codexPromptPresentationRetryHost.hasScheduledRetry
-        codexPromptPresentationRetryHost.cancel()
-        if cancelledPresentationRefreshRetry {
-            DiagnosticsLog.shared.record(
-                "codex-prompt-target-refresh-retry-cancelled",
-                metadata: ["reason": reason]
-            )
-        }
-
-        let cancelledPendingRequest = suggestionRequestScheduler.cancelPendingRequest()
-        guard cancelledPendingRequest else {
-            return cancelledPresentationRefreshRetry
-        }
-
-        suggestionOrchestrator.clearStreamingPresentations()
-        DiagnosticsLog.shared.record(
-            "suggestion-request-cancelled",
-            metadata: [
-                "reason": reason
-            ]
-        )
-        return true
+        suggestionRequestCancellationHost.cancelPendingRequest(reason: reason)
     }
 
     @objc
