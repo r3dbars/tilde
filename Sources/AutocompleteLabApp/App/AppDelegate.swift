@@ -279,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (timer, cadence, in-flight guard, throttle/pause, latency/skip stats). AppDelegate holds
     /// it and delegates timing concerns to it via `SuggestionPipelineHost` (see extension below).
     private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
-    private let diagnosticsWindow = DiagnosticsWindowController()
+    private lazy var diagnosticsWindowHost = DiagnosticsWindowHost(handler: self)
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var appPreferencePersistenceHost = AppPreferencePersistenceHost()
     private lazy var keyboardEventCaptureHost = KeyboardEventCaptureHost(
@@ -18217,7 +18217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         let bundleIdentifier = app?.bundleIdentifier ?? ""
 
-        diagnosticsWindow.show(
+        diagnosticsWindowHost.show(DiagnosticsWindowPresentation(
+            bundleIdentifier: bundleIdentifier,
             diagnostics: app.flatMap {
                 accessibilityClient.focusedTextDiagnostics(
                     for: $0,
@@ -18244,27 +18245,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
                 || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true,
             compatibilityLearningPath: compatibilityLearningStore.path,
-            compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier),
-            refreshAction: { [weak self] in
-                self?.showDiagnostics()
-            },
-            toggleTracingAction: { [weak self] in
-                self?.toggleTracing()
-            },
-            toggleScreenshotTracingAction: { [weak self] in
-                self?.toggleScreenshotTracing(for: bundleIdentifier)
-            },
-            openTraceFolderAction: {
-                self.openTraceFolder()
-            },
-            exportReportAction: {
-                self.exportTraceReport()
-            },
-            deleteTracesAction: { [weak self] in
-                self?.deleteLocalPrivacyLogs(refreshSettings: false)
-                self?.showDiagnostics()
-            }
-        )
+            compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier)
+        ))
     }
 
     private func toggleTracing() {
@@ -19723,6 +19705,35 @@ extension AppDelegate: StatusMenuActionHandling {
         case .quit:
             quit()
         }
+    }
+}
+
+// MARK: - Diagnostics window wiring
+
+extension AppDelegate: DiagnosticsWindowActionHandling {
+    func refreshDiagnostics() {
+        showDiagnostics()
+    }
+
+    func toggleDiagnosticsTracing() {
+        toggleTracing()
+    }
+
+    func toggleDiagnosticsScreenshotTracing(for bundleIdentifier: String) {
+        toggleScreenshotTracing(for: bundleIdentifier)
+    }
+
+    func openDiagnosticsTraceFolder() {
+        openTraceFolder()
+    }
+
+    func exportDiagnosticsTraceReport() {
+        exportTraceReport()
+    }
+
+    func deleteDiagnosticsTraces() {
+        deleteLocalPrivacyLogs(refreshSettings: false)
+        showDiagnostics()
     }
 }
 
