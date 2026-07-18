@@ -73,10 +73,15 @@ struct SuggestionRequestPreparationHostTests {
     @Test("AppDelegate delegates request preparation and retains only downstream setup")
     func appDelegateUsesPreparationHost() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
+        let appDelegate = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let schedulingHost = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/SuggestionSchedulingHost.swift"),
+            encoding: .utf8
+        )
+        let source = appDelegate + schedulingHost
 
         #expect(source.contains("private lazy var suggestionRequestPreparationHost"))
         #expect(source.contains("suggestionRequestPreparationHost.prepare("))
