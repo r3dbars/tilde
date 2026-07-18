@@ -289,6 +289,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var diagnosticsWindowHost = DiagnosticsWindowHost(handler: self)
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var appPreferencePersistenceHost = AppPreferencePersistenceHost()
+    private lazy var suggestionTuningHost = SuggestionTuningHost(
+        currentTuning: { [weak self] in
+            self?.appPreferencePersistenceHost.suggestionTuning ?? SuggestionTuning()
+        },
+        updateTuning: { [weak self] tuning in
+            self?.appPreferencePersistenceHost.suggestionTuning = tuning
+        },
+        persistTuning: { [weak self] in
+            self?.appPreferencePersistenceHost.persistSuggestionTuning()
+        },
+        clearPendingRequest: { [weak self] in
+            self?.lastRequestedTextBeforeCursor = nil
+            _ = self?.invalidatePendingSuggestionRequest()
+        },
+        hasVisibleSuggestion: { [weak self] in
+            self?.suggestionSession.hasVisibleSuggestion == true
+        },
+        hideSuggestion: { [weak self] reason in
+            self?.hideSuggestion(reason: reason)
+        },
+        setSuggestionDecision: { [weak self] decision in
+            self?.setSuggestionDecision(decision)
+        },
+        refreshRuntimeChrome: { [weak self] in
+            self?.refreshRuntimeChrome()
+        }
+    )
     private lazy var keyboardEventCaptureHost = KeyboardEventCaptureHost(
         handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
             self?.handleAutocompleteKey(
@@ -18053,112 +18080,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func setSuggestionAggressivenessLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(aggressivenessLevel: level),
-            reason: "aggressiveness-changed"
-        )
+        suggestionTuningHost.setAggressivenessLevel(level)
     }
 
     func setSuggestionMaxVisibleWords(_ words: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(maxVisibleWords: words),
-            reason: "max-visible-words-changed"
-        )
+        suggestionTuningHost.setMaxVisibleWords(words)
     }
 
     func setSuggestionWordStartCharacters(_ characters: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(wordStartCharacters: characters),
-            reason: "word-start-characters-changed"
-        )
+        suggestionTuningHost.setWordStartCharacters(characters)
     }
 
     func setSuggestionPhraseStartWords(_ words: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(phraseStartWords: words),
-            reason: "phrase-start-words-changed"
-        )
+        suggestionTuningHost.setPhraseStartWords(words)
     }
 
     func setSuggestionResponseSpeedLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(responseSpeedLevel: level),
-            reason: "response-speed-changed"
-        )
+        suggestionTuningHost.setResponseSpeedLevel(level)
     }
 
     func setSuggestionConfidenceLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(confidenceLevel: level),
-            reason: "confidence-changed"
-        )
+        suggestionTuningHost.setConfidenceLevel(level)
     }
 
     func setSuggestionLearningRestraintLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(learningRestraintLevel: level),
-            reason: "learning-restraint-changed"
-        )
+        suggestionTuningHost.setLearningRestraintLevel(level)
     }
 
     func resetSuggestionTuning() {
-        setSuggestionTuning(SuggestionTuning(), reason: "reset-tuning")
-    }
-
-    private func updatedSuggestionTuning(
-        aggressivenessLevel: Int? = nil,
-        maxVisibleWords: Int? = nil,
-        wordStartCharacters: Int? = nil,
-        phraseStartWords: Int? = nil,
-        responseSpeedLevel: Int? = nil,
-        confidenceLevel: Int? = nil,
-        learningRestraintLevel: Int? = nil
-    ) -> SuggestionTuning {
-        SuggestionTuning(
-            aggressivenessLevel: aggressivenessLevel ?? suggestionTuning.aggressivenessLevel,
-            maxVisibleWords: maxVisibleWords ?? suggestionTuning.maxVisibleWords,
-            wordStartCharacters: wordStartCharacters ?? suggestionTuning.wordStartCharacters,
-            phraseStartWords: phraseStartWords ?? suggestionTuning.phraseStartWords,
-            responseSpeedLevel: responseSpeedLevel ?? suggestionTuning.responseSpeedLevel,
-            confidenceLevel: confidenceLevel ?? suggestionTuning.confidenceLevel,
-            learningRestraintLevel: learningRestraintLevel ?? suggestionTuning.learningRestraintLevel
-        )
-    }
-
-    private func setSuggestionTuning(_ next: SuggestionTuning, reason: String) {
-        guard next != suggestionTuning else {
-            refreshRuntimeChrome()
-            return
-        }
-
-        suggestionTuning = next
-        appPreferencePersistenceHost.persistSuggestionTuning()
-        applySuggestionTuningChange(reason: reason)
-        DiagnosticsLog.shared.record(
-            "suggestion-tuning-control",
-            metadata: [
-                "surface": "settings",
-                "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
-                "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
-                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords),
-                "suggestionWordStartCharacters": String(suggestionTuning.wordStartCharacters),
-                "suggestionPhraseStartWords": String(suggestionTuning.phraseStartWords),
-                "suggestionResponseSpeedLevel": String(suggestionTuning.responseSpeedLevel),
-                "suggestionConfidenceLevel": String(suggestionTuning.confidenceLevel),
-                "suggestionLearningRestraintLevel": String(suggestionTuning.learningRestraintLevel),
-                "reason": reason
-            ]
-        )
-        refreshRuntimeChrome()
-    }
-
-    private func applySuggestionTuningChange(reason: String) {
-        lastRequestedTextBeforeCursor = nil
-        invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: reason)
-        }
-        setSuggestionDecision("Ready: \(suggestionTuning.displayName.lowercased()) suggestions")
+        suggestionTuningHost.reset()
     }
 
     func toggleScreenshotTracing(for bundleIdentifier: String) {
