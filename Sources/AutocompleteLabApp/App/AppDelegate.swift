@@ -507,7 +507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionTuning: { [weak self] in
                 self?.suggestionTuning ?? SuggestionTuning()
             },
-            triggerTiming: suggestionSessionBehaviors.triggerTiming
+            requestSchedulingPolicy: suggestionSessionBehaviors.requestSchedulingPolicy
         )
     )
     private lazy var suggestionStreamingPartialHost = SuggestionStreamingPartialHost(
@@ -548,7 +548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionModelResultHost = SuggestionModelResultHost(
         dependencies: SuggestionModelResultHostDependencies(
             suggestionOrchestrator: suggestionOrchestrator,
-            triggerTiming: suggestionSessionBehaviors.triggerTiming,
+            requestSchedulingPolicy: suggestionSessionBehaviors.requestSchedulingPolicy,
             currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
             currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
             hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
@@ -874,7 +874,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private lazy var suggestionTriggerTimingHost = SuggestionTriggerTimingHost(
         dependencies: SuggestionTriggerTimingHostDependencies(
-            triggerTiming: suggestionSessionBehaviors.triggerTiming,
             triggerPolicy: { [weak self] profile in
                 self?.triggerPolicy(for: profile) ?? SuggestionTriggerPolicy()
             },

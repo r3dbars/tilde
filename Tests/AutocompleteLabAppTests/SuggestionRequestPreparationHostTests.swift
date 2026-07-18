@@ -94,7 +94,7 @@ struct SuggestionRequestPreparationHostTests {
                 personalizationCoordinator: PersonalizationCoordinator(),
                 isPersonalCaptureEnabled: { false },
                 suggestionTuning: { SuggestionTuning(maxVisibleWords: 3) },
-                triggerTiming: SuggestionTriggerTimingPolicy()
+                requestSchedulingPolicy: SuggestionRequestSchedulingPolicy()
             )
         )
     }
