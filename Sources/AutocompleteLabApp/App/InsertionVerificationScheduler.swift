@@ -10,6 +10,13 @@ final class InsertionVerificationScheduler {
     }
 
     func schedule(_ operation: @escaping @MainActor () -> Void) {
+        schedule(after: delay, operation: operation)
+    }
+
+    func schedule(
+        after delay: Duration,
+        operation: @escaping @MainActor () -> Void
+    ) {
         task?.cancel()
         task = Task { @MainActor in
             try? await Task.sleep(for: delay)
@@ -18,6 +25,21 @@ final class InsertionVerificationScheduler {
             }
 
             operation()
+        }
+    }
+
+    func scheduleAsync(
+        after delay: Duration,
+        operation: @escaping @MainActor () async -> Void
+    ) {
+        task?.cancel()
+        task = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await operation()
         }
     }
 
