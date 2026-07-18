@@ -339,7 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var appLifecycleHost = AppLifecycleHost(handler: self)
 
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
-    private lazy var suggestionSummonHotKey = SuggestionSummonHotKey { [weak self] in
+    private lazy var suggestionSummonHotKeyHost = SuggestionSummonHotKeyHost { [weak self] in
         self?.requestSuggestionNow(source: "hotkey")
     }
     private var prefixCooldownRetryTask: Task<Void, Never>?
@@ -485,7 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionPipeline.stopPolling()
         resourceDiagnosticsHost.stop()
         personalizationCoordinator.stop()
-        suggestionSummonHotKey.stop()
+        suggestionSummonHotKeyHost.stop()
         manualSuggestionRetryTask?.cancel()
         workspaceObserverHost.stop()
         stopProofOnlyAcceptCommandObserver()
@@ -828,11 +828,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func startSuggestionSummonHotKey() {
-        let didStart = suggestionSummonHotKey.start()
+        let didStart = suggestionSummonHotKeyHost.start()
         DiagnosticsLog.shared.record(
             didStart ? "suggestion-summon-hotkey-started" : "suggestion-summon-hotkey-start-failed",
             metadata: [
-                "shortcut": suggestionSummonHotKey.descriptor.diagnosticName,
+                "shortcut": suggestionSummonHotKeyHost.descriptor.diagnosticName,
                 "safetyFailure": String(!didStart)
             ]
         )
@@ -17920,7 +17920,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "suggestion-summon-requested",
             metadata: [
                 "source": source,
-                "shortcut": suggestionSummonHotKey.descriptor.diagnosticName
+                "shortcut": suggestionSummonHotKeyHost.descriptor.diagnosticName
             ]
         )
         pollFocusedTextForManualSuggestion()
