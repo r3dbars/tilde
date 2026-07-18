@@ -17437,7 +17437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record("request-accessibility")
     }
 
-    private func requestSuggestionNow(source: String) {
+    func requestSuggestionNow(source: String) {
         guard accessibilityClient.isTrusted else {
             setSuggestionDecision("Blocked: Accessibility permission missing")
             showSettings()
@@ -17608,7 +17608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func showSettings() {
+    func showSettings() {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -17629,7 +17629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func openFeedbackForm() {
+    func openFeedbackForm() {
         let link = BetaFeedbackLink()
         if NSWorkspace.shared.open(link.url) {
             DiagnosticsLog.shared.record(
@@ -17645,7 +17645,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func revealModelFolder() {
+    func revealModelFolder() {
         do {
             try FileManager.default.createDirectory(
                 at: modelRuntimeBundle.modelDirectoryURL,
@@ -17711,7 +17711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func showDiagnostics() {
+    func showDiagnostics() {
         let app = targetAppForControls()
         let compatibilityStatus = app
             .map { profileStore.supportStatus(for: $0.bundleIdentifier) }
@@ -17841,7 +17841,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func revealPersonalCaptureFolder() {
+    func revealPersonalCaptureFolder() {
         do {
             try FileManager.default.createDirectory(
                 at: URL(fileURLWithPath: personalCaptureJournal.folderPath),
@@ -18181,22 +18181,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionUp() {
+    func nudgeCurrentAppSuggestionUp() {
         nudgeCurrentAppSuggestion(dx: 0, dy: -2)
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionDown() {
+    func nudgeCurrentAppSuggestionDown() {
         nudgeCurrentAppSuggestion(dx: 0, dy: 2)
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionLeft() {
+    func nudgeCurrentAppSuggestionLeft() {
         nudgeCurrentAppSuggestion(dx: -2, dy: 0)
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionRight() {
+    func nudgeCurrentAppSuggestionRight() {
         nudgeCurrentAppSuggestion(dx: 2, dy: 0)
     }
 
@@ -18254,7 +18254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func resetCurrentAppLearning() {
+    func resetCurrentAppLearning() {
         guard let bundleIdentifier = visibleSuggestionBundleIdentifier
                 ?? targetAppForControls()?.bundleIdentifier else {
             return
@@ -18298,7 +18298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func toggleCurrentApp() {
+    func toggleCurrentApp() {
         guard let app = targetAppForControls(),
               profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
             return
@@ -18561,7 +18561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func silenceCurrentField() {
+    func silenceCurrentField() {
         guard let target = fieldControlTarget else {
             setSuggestionDecision("Blocked: no current field")
             refreshRuntimeChrome()
@@ -18627,7 +18627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func togglePauseSuggestions() {
+    func togglePauseSuggestions() {
         let transition = suggestionPauseStateHost.toggle()
 
         setSuggestionDecision(transition.decisionText)
@@ -18674,17 +18674,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func pauseSuggestionsFor15Minutes() {
+    func pauseSuggestionsFor15Minutes() {
         pauseSuggestions(for: 15 * 60, label: "15 minutes")
     }
 
     @objc
-    private func pauseSuggestionsFor1Hour() {
+    func pauseSuggestionsFor1Hour() {
         pauseSuggestions(for: 60 * 60, label: "1 hour")
     }
 
     @objc
-    private func pauseSuggestionsUntilTomorrowFromControl() {
+    func pauseSuggestionsUntilTomorrowFromControl() {
         let state = suggestionPauseSchedulePolicy.pauseUntilTomorrow(now: Date())
         applyScheduledPause(
             state: state,
@@ -18751,7 +18751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func quit() {
+    func quit() {
         NSApp.terminate(nil)
     }
 }
@@ -19074,51 +19074,6 @@ extension AppDelegate: SettingsWindowActionHandling {
             setSuggestionLearningRestraintLevel(level)
         case .resetSuggestionTuning:
             resetSuggestionTuning()
-        }
-    }
-}
-
-// MARK: - Status menu wiring
-
-extension AppDelegate: StatusMenuActionHandling {
-    func handleStatusMenuAction(_ action: StatusMenuAction) {
-        switch action {
-        case .suggestNow:
-            requestSuggestionNow(source: "menu")
-        case .togglePauseSuggestions:
-            togglePauseSuggestions()
-        case .pauseSuggestionsFor15Minutes:
-            pauseSuggestionsFor15Minutes()
-        case .pauseSuggestionsFor1Hour:
-            pauseSuggestionsFor1Hour()
-        case .pauseSuggestionsUntilTomorrow:
-            pauseSuggestionsUntilTomorrowFromControl()
-        case .toggleCurrentApp:
-            toggleCurrentApp()
-        case .silenceCurrentField:
-            silenceCurrentField()
-        case .showSettings:
-            showSettings()
-        case .openFeedbackForm:
-            openFeedbackForm()
-        case .showDiagnostics:
-            showDiagnostics()
-        case .revealModelFolder:
-            revealModelFolder()
-        case .revealPersonalCaptureFolder:
-            revealPersonalCaptureFolder()
-        case .nudgeSuggestionUp:
-            nudgeCurrentAppSuggestionUp()
-        case .nudgeSuggestionDown:
-            nudgeCurrentAppSuggestionDown()
-        case .nudgeSuggestionLeft:
-            nudgeCurrentAppSuggestionLeft()
-        case .nudgeSuggestionRight:
-            nudgeCurrentAppSuggestionRight()
-        case .resetCurrentAppLearning:
-            resetCurrentAppLearning()
-        case .quit:
-            quit()
         }
     }
 }
