@@ -14,9 +14,13 @@ struct DiagnosticsWindowHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/DiagnosticsWindowHost.swift"),
             encoding: .utf8
         )
+        let wiring = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/DiagnosticsWindowWiring.swift"),
+            encoding: .utf8
+        )
 
         #expect(appDelegate.contains("DiagnosticsWindowHost(handler: self)"))
-        #expect(appDelegate.contains("extension AppDelegate: DiagnosticsWindowActionHandling"))
+        #expect(wiring.contains("extension AppDelegate: DiagnosticsWindowActionHandling"))
         #expect(!appDelegate.contains("private let diagnosticsWindow = DiagnosticsWindowController()"))
         #expect(host.contains("struct DiagnosticsWindowPresentation"))
         #expect(host.contains("func show(_ presentation: DiagnosticsWindowPresentation)"))
