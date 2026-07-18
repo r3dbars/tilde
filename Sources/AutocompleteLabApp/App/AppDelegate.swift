@@ -365,8 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
-    private let typingBurstPolicy = TypingBurstPolicy()
-    private var typingBurstState = TypingBurstState()
+    private let typingBurstStateHost = TypingBurstStateHost()
     private var suggestionIdleRetryState = SuggestionIdleRetryState()
     private var currentSuggestionState = CurrentSuggestionState()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
@@ -1812,7 +1811,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancelPrefixCooldownRetry()
         let typingBurstDecision: TypingBurstDecision
         if let idleRetryReason {
-            typingBurstState.reset()
+            typingBurstStateHost.reset()
             typingBurstDecision = .idle
             suggestionBlockLogGate.reset()
             DiagnosticsLog.shared.record(
@@ -8413,15 +8412,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> TypingBurstDecision {
         guard let previousSnapshot,
               previousSnapshot.fieldIdentity == currentSnapshot.fieldIdentity else {
-            typingBurstState.reset()
+            typingBurstStateHost.reset()
             return .idle
         }
 
-        return typingBurstPolicy.observe(
+        return typingBurstStateHost.observe(
             previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
             currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
-            nowMilliseconds: Int(Date().timeIntervalSince1970 * 1_000),
-            state: &typingBurstState
+            nowMilliseconds: Int(Date().timeIntervalSince1970 * 1_000)
         )
     }
 
@@ -17323,7 +17321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
-        typingBurstState.reset()
+        typingBurstStateHost.reset()
         suggestionIdleRetryState.cancel()
         suggestionBlockLogGate.reset()
     }
@@ -17351,7 +17349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
-        typingBurstState.reset()
+        typingBurstStateHost.reset()
         suggestionIdleRetryState.cancel()
         suggestionChromeHost.hideFieldStatusIndicator()
         if resetBlockLogGate {
