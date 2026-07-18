@@ -4202,7 +4202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier) {
             return SyntheticTextAreaTuning(
-                font: NSFont.systemFont(ofSize: 15),
+                font: nil,
                 horizontalPadding: 0,
                 verticalPadding: 4,
                 inlineGap: 8,
