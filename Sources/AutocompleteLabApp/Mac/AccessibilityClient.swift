@@ -173,7 +173,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         // expensive window-title/bounds path on every Codex poll.
         windowReadMode: .identifierOnly,
         assumedCanSetSelectedText: true,
-        manualAccessibilityWakeAppFamily: nil
+        manualAccessibilityWakeAppFamily: .customCanvas
     )
 
     let preferDirectTextSnapshot: Bool
