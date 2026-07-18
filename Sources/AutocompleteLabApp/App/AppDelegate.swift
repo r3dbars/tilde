@@ -285,7 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// First extracted slice of the suggestion pipeline: owns the focused-text polling driver
     /// (timer, cadence, in-flight guard, throttle/pause, latency/skip stats). AppDelegate holds
     /// it and delegates timing concerns to it via `SuggestionPipelineHost` (see extension below).
-    private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
+    lazy var suggestionPipeline = SuggestionPipelineController(host: self)
     private lazy var diagnosticsWindowHost = DiagnosticsWindowHost(handler: self)
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var appPreferencePersistenceHost = AppPreferencePersistenceHost()
@@ -321,12 +321,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController {
         settingsWindowHost.controller
     }
-    private lazy var statusMenuHost = StatusMenuHost(
+    lazy var statusMenuHost = StatusMenuHost(
         handler: self,
         developerMenuEnabled: developerMenuEnabled
     )
-    private lazy var workspaceObserverHost = WorkspaceObserverHost(handler: self)
-    private let resourceDiagnosticsHost = ResourceDiagnosticsHost()
+    lazy var workspaceObserverHost = WorkspaceObserverHost(handler: self)
+    let resourceDiagnosticsHost = ResourceDiagnosticsHost()
     private lazy var appLifecycleHost = AppLifecycleHost(handler: self)
 
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
@@ -449,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appLifecycleHost.stop()
     }
 
-    private func prepareForAppLaunch() {
+    func prepareForAppLaunch() {
         suggestionPauseStateHost.load()
         loadDisabledApps()
         appPreferencePersistenceHost.load()
@@ -457,12 +457,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadProofModeOverrides()
     }
 
-    private func recordAppLaunchDiagnostics() {
+    func recordAppLaunchDiagnostics() {
         DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
     }
 
-    private func requestAccessibilityPermissionIfNeededAtLaunch() {
+    func requestAccessibilityPermissionIfNeededAtLaunch() {
         if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
             isTrusted: accessibilityPermissionHost.isTrusted
         ) {
@@ -470,13 +470,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showSettingsIfNeededAtLaunch() {
+    func showSettingsIfNeededAtLaunch() {
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
     }
 
-    private func stopForAppTermination() {
+    func stopForAppTermination() {
         DiagnosticsLog.shared.record("terminate")
         cancelPendingSuggestionTask(reason: "terminate")
         suggestionPauseStateHost.stop()
@@ -1041,7 +1041,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private var pauseSuggestionsTitle: String {
+    var pauseSuggestionsTitle: String {
         pauseControlState.toggleTitle
     }
 
@@ -18960,46 +18960,6 @@ private extension CompletionActivationDecision {
         case let .block(reason):
             return reason.rawValue
         }
-    }
-}
-
-// MARK: - Application lifecycle wiring
-
-extension AppDelegate: AppLifecycleHandling {
-    func prepareForLaunch() {
-        prepareForAppLaunch()
-    }
-
-    func startStatusMenu() {
-        statusMenuHost.start(pauseSuggestionsTitle: pauseSuggestionsTitle)
-    }
-
-    func recordLaunchDiagnostics() {
-        recordAppLaunchDiagnostics()
-    }
-
-    func requestAccessibilityPermissionIfNeeded() {
-        requestAccessibilityPermissionIfNeededAtLaunch()
-    }
-
-    func showSettingsIfNeeded() {
-        showSettingsIfNeededAtLaunch()
-    }
-
-    func startWorkspaceObserver() {
-        workspaceObserverHost.start()
-    }
-
-    func startSuggestionPipeline() {
-        suggestionPipeline.startPolling()
-    }
-
-    func startResourceDiagnostics() {
-        resourceDiagnosticsHost.start()
-    }
-
-    func stopForTermination() {
-        stopForAppTermination()
     }
 }
 

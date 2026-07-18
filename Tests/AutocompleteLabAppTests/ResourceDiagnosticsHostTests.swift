@@ -10,13 +10,17 @@ struct ResourceDiagnosticsHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let lifecycleWiring = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppLifecycleWiring.swift"),
+            encoding: .utf8
+        )
         let host = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/ResourceDiagnosticsHost.swift"),
             encoding: .utf8
         )
 
-        #expect(appDelegate.contains("private let resourceDiagnosticsHost = ResourceDiagnosticsHost()"))
-        #expect(appDelegate.contains("resourceDiagnosticsHost.start()"))
+        #expect(appDelegate.contains("let resourceDiagnosticsHost = ResourceDiagnosticsHost()"))
+        #expect(lifecycleWiring.contains("resourceDiagnosticsHost.start()"))
         #expect(appDelegate.contains("resourceDiagnosticsHost.stop()"))
         #expect(!appDelegate.contains("ProcessResourceDiagnosticsSampler"))
         #expect(!appDelegate.contains("private func startResourceDiagnostics()"))
