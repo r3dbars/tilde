@@ -232,9 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
-    private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
-    private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
     private let obsidianInsertionVerificationFastPathPolicy = ObsidianInsertionVerificationFastPathPolicy()
@@ -300,6 +298,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var appPreferencePersistenceHost = AppPreferencePersistenceHost()
+    private lazy var keyboardEventCaptureHost = KeyboardEventCaptureHost(
+        handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
+            self?.handleAutocompleteKey(
+                key,
+                isAutorepeat: isAutorepeat,
+                didObservePassthroughKeyDown: didObservePassthroughKeyDown
+            ) ?? .replayOriginalKey(.noVisibleSuggestion)
+        },
+        passthroughKeyDownObserver: { [weak self] in
+            self?.observePassthroughTypingKeyDown()
+        },
+        passthroughTypingMatchObserver: { [weak self] transition in
+            self?.observeOptimisticTypeThrough(transition)
+        },
+        disabledObserver: { [weak self] reason in
+            self?.handleKeyboardEventTapDisabled(reason: reason)
+        }
+    )
+    private var keyboardEventTap: KeyboardEventCaptureHost? {
+        keyboardEventCaptureHost
+    }
     private lazy var settingsWindowHost = SettingsWindowHost(handler: self)
     private var settingsWindow: SettingsWindowController {
         settingsWindowHost.controller
@@ -316,8 +335,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionSummonHotKey = SuggestionSummonHotKey { [weak self] in
         self?.requestSuggestionNow(source: "hotkey")
     }
-    private var keyboardEventTap: KeyboardEventTap?
-    private var keyboardEventTapStopTask: Task<Void, Never>?
     private var prefixCooldownRetryTask: Task<Void, Never>?
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
@@ -380,7 +397,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private var hasSurfacedModelSetupUI = false
     private var modelInstallStatusText: String?
-    private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
@@ -452,7 +468,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record("terminate")
         debounceTask?.cancel()
         pauseExpirationTask?.cancel()
-        keyboardEventTapStopTask?.cancel()
+        keyboardEventCaptureHost.cancelIdleStop()
         insertionVerificationScheduler.cancel()
         deferredTerminalHostAcceptanceTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
@@ -570,7 +586,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = recentSuggestion.textStyle
         lastRenderMode = recentSuggestion.renderMode
         lastVisibleSuggestionGeometrySnapshot = recentSuggestion.geometrySnapshot
-        cancelKeyboardEventTapIdleStop()
+        keyboardEventCaptureHost.cancelIdleStop()
         updateKeyboardEventTapSnapshot()
 
         DiagnosticsLog.shared.record(
@@ -3677,60 +3693,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func startKeyboardEventTapIfPossible() -> Bool {
-        cancelKeyboardEventTapIdleStop()
-
-        guard keyboardEventTap == nil else {
-            return true
-        }
-
-        guard keyboardCapturePolicy.shouldCaptureKeys(
+        keyboardEventCaptureHost.startIfPossible(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            controlState: suggestionControlState
-        ) else {
-            return false
-        }
-
-        let eventTap = KeyboardEventTap(
-            handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
-                self?.handleAutocompleteKey(
-                    key,
-                    isAutorepeat: isAutorepeat,
-                    didObservePassthroughKeyDown: didObservePassthroughKeyDown
-                ) ?? .replayOriginalKey(.noVisibleSuggestion)
-            },
-            passthroughKeyDownObserver: { [weak self] in
-                self?.observePassthroughTypingKeyDown()
-            },
-            passthroughTypingMatchObserver: { [weak self] transition in
-                self?.observeOptimisticTypeThrough(transition)
-            },
-            disabledObserver: { [weak self] reason in
-                self?.handleKeyboardEventTapDisabled(reason: reason)
-            }
+            controlState: suggestionControlState,
+            snapshot: keyboardEventTapSnapshot()
         )
-        eventTap.updateSnapshot(keyboardEventTapSnapshot())
-
-        if eventTap.start() {
-            keyboardEventTap = eventTap
-            DiagnosticsLog.shared.record(
-                "keyboard-event-tap-started",
-                metadata: [
-                    "diagnosticLayer": "keyCapture",
-                    "tapLocation": eventTap.tapPlacement.rawValue
-                ]
-            )
-            return true
-        }
-
-        DiagnosticsLog.shared.record(
-            "keyboard-event-tap-start-failed",
-            metadata: [
-                "diagnosticLayer": "keyCapture",
-                "safetyFailure": "true"
-            ]
-        )
-        return false
     }
 
     private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
@@ -3761,7 +3729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateKeyboardEventTapSnapshot() {
-        keyboardEventTap?.updateSnapshot(keyboardEventTapSnapshot())
+        keyboardEventCaptureHost.updateSnapshot(keyboardEventTapSnapshot())
     }
 
     private func handleKeyboardEventTapDisabled(reason: String) {
@@ -3781,48 +3749,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleKeyboardEventTapStopIfIdle() {
-        guard keyboardEventTap != nil else {
-            return
-        }
-
-        keyboardEventTapStopTask?.cancel()
-        let idleStopDelayMilliseconds = keyboardEventTapIdleStopDelayMilliseconds
-        keyboardEventTapStopTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
-            guard !Task.isCancelled,
-                  let self,
-                  self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
-                      hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
-                      isSuggestionPanelVisible: self.suggestionPanel.isVisible,
-                      hasPendingAcceptedInsertionUndo: self.acceptedInsertionUndoIsActive()
-                  ) else {
-                return
-            }
-
-            self.stopKeyboardEventTapNow(reason: "idle")
-        }
+        keyboardEventCaptureHost.scheduleStopIfIdle(
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            isSuggestionPanelVisible: suggestionPanel.isVisible,
+            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
+        )
     }
 
     private func cancelKeyboardEventTapIdleStop() {
-        keyboardEventTapStopTask?.cancel()
-        keyboardEventTapStopTask = nil
+        keyboardEventCaptureHost.cancelIdleStop()
     }
 
     private func stopKeyboardEventTapNow(reason: String) {
-        cancelKeyboardEventTapIdleStop()
-
-        guard let keyboardEventTap else {
-            return
-        }
-
-        keyboardEventTap.stop(reason: reason)
-        self.keyboardEventTap = nil
-        DiagnosticsLog.shared.record(
-            "keyboard-event-tap-stopped",
-            metadata: [
-                "reason": reason
-            ]
-        )
+        keyboardEventCaptureHost.stopNow(reason: reason)
     }
 
     private func observePassthroughTypingKeyDown() {
