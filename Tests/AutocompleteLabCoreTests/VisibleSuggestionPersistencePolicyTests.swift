@@ -171,6 +171,56 @@ struct VisibleSuggestionPersistencePolicyTests {
         ))
     }
 
+    @Test("preserves unchanged text during fresh caret geometry churn")
+    func preservesUnchangedTextDuringFreshCaretGeometryChurn() {
+        let policy = VisibleSuggestionPersistencePolicy()
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: "com.openai.codex",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+        let text = "I want this suggestion to remain visible"
+
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.openai.codex",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.openai.codex",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: text,
+            currentSuggestionAgeMilliseconds: 350,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: text,
+            textAfterCursor: ""
+        ))
+
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.openai.codex",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.openai.codex",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: text,
+            currentSuggestionAgeMilliseconds: 5_001,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: text,
+            textAfterCursor: ""
+        ))
+
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.openai.codex",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.openai.codex",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: text,
+            currentSuggestionAgeMilliseconds: 350,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "The text changed",
+            textAfterCursor: ""
+        ))
+    }
+
     @Test("preserves active Codex proof suggestions through AX target churn")
     func preservesActiveCodexProofSuggestionsThroughAXTargetChurn() {
         let policy = VisibleSuggestionPersistencePolicy()
