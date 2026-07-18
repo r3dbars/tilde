@@ -467,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { appEnablementHost.disabledBundleIdentifiers = newValue }
     }
     private let suggestionRequestScheduler = SuggestionRequestScheduler()
+    private let pendingSuggestionRequestContinuityPolicy = PendingSuggestionRequestContinuityPolicy()
     private let codexPromptPresentationRetryHost = CodexPromptPresentationRetryHost()
     private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
     private let deferredTerminalHostAcceptanceHost = DeferredTerminalHostAcceptanceHost()
@@ -2655,7 +2656,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastTextSnapshot = snapshot
-        let cancelledPendingRequest = invalidatePendingSuggestionRequest()
+        let currentRequest = suggestionOrchestrator.currentRequest
+        let preservesPendingRequest = pendingSuggestionRequestContinuityPolicy.shouldPreserve(
+            hasPendingRequest: suggestionRequestScheduler.hasPendingRequest,
+            requestTextBeforeCursor: currentRequest?.textBeforeCursor,
+            requestTextAfterCursor: currentRequest?.textAfterCursor,
+            requestFieldIdentityDescription: currentRequest?.fieldIdentityDescription,
+            currentTextBeforeCursor: context.textBeforeCursor,
+            currentTextAfterCursor: context.textAfterCursor,
+            currentFieldIdentityDescription: fieldIdentity.traceDescription
+        )
+        let cancelledPendingRequest = preservesPendingRequest
+            ? false
+            : invalidatePendingSuggestionRequest()
         if idleRetryReason == nil {
             suggestionIdleRetryState.noteTextChange(
                 snapshot: snapshot,
@@ -2663,6 +2676,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
                 settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
             )
+        }
+        if preservesPendingRequest {
+            DiagnosticsLog.shared.record(
+                "suggestion-request-preserved",
+                metadata: ["reason": "compatible-forward-typing"]
+            )
+            return
         }
         if suggestionCadenceResetPolicy.shouldResetLastRequestedText(
             previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
