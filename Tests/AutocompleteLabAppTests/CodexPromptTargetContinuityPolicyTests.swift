@@ -672,6 +672,85 @@ struct CodexPromptTargetContinuityPolicyTests {
         ))
     }
 
+    @Test("Accepts the same Codex prompt when its live text-area identity churns")
+    func acceptsStablePromptAcrossIdentityChurn() throws {
+        let fieldIdentity = identity()
+        let trustedContext = context()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: trustedContext,
+            nowMilliseconds: 100
+        ))
+        let currentSnapshot = snapshot(fieldIdentity: fieldIdentity)
+        let shownSnapshot = SuggestionAcceptanceSnapshot(
+            snapshot: currentSnapshot,
+            targetFingerprint: anchor.targetFingerprint,
+            selectedTextLength: 0
+        )
+
+        #expect(policy.canAcceptStablePrompt(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            shownSnapshot: shownSnapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementIdentifier: 99,
+                elementRect: CGRect(x: 102, y: 619, width: 702, height: 82)
+            ),
+            nowMilliseconds: 1_000
+        ))
+        #expect(!policy.canAcceptStablePrompt(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            shownSnapshot: shownSnapshot,
+            trustedAnchor: anchor,
+            observedContext: context(),
+            nowMilliseconds: 1_101
+        ))
+    }
+
+    @Test("Stable prompt acceptance rejects changed sensitive or moved targets")
+    func stablePromptAcceptanceRejectsUnsafeTargets() throws {
+        let fieldIdentity = identity()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: context(),
+            nowMilliseconds: 100
+        ))
+        let currentSnapshot = snapshot(fieldIdentity: fieldIdentity)
+        let shownSnapshot = SuggestionAcceptanceSnapshot(
+            snapshot: currentSnapshot,
+            targetFingerprint: anchor.targetFingerprint,
+            selectedTextLength: 0
+        )
+        let unsafeContexts = [
+            context(textBeforeCursor: "synthetic prompt changed"),
+            context(selectedTextLength: 1),
+            context(elementRect: CGRect(x: 100, y: 500, width: 700, height: 80)),
+            context(isSecure: true),
+            context(role: "AXButton")
+        ]
+
+        for observedContext in unsafeContexts {
+            #expect(!policy.canAcceptStablePrompt(
+                appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+                processIdentifier: 42,
+                currentFieldIdentity: fieldIdentity,
+                currentSnapshot: currentSnapshot,
+                shownSnapshot: shownSnapshot,
+                trustedAnchor: anchor,
+                observedContext: observedContext,
+                nowMilliseconds: 1_000
+            ))
+        }
+    }
+
     private func identity() -> FocusedFieldIdentity {
         FocusedFieldIdentity(
             bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
