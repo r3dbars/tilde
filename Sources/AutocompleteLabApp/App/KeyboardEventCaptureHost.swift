@@ -1,6 +1,12 @@
 import AutocompleteLabCore
 import Foundation
 
+struct KeyboardEventCaptureIdleState: Sendable {
+    let hasVisibleSuggestion: Bool
+    let isSuggestionPanelVisible: Bool
+    let hasPendingAcceptedInsertionUndo: Bool
+}
+
 /// Owns the native keyboard event-tap lifecycle.
 ///
 /// AppDelegate supplies the current snapshot and behavior callbacks; this
@@ -15,6 +21,7 @@ final class KeyboardEventCaptureHost {
     private let passthroughKeyDownObserver: KeyboardEventTap.PassthroughKeyDownObserver
     private let passthroughTypingMatchObserver: KeyboardEventTap.PassthroughTypingMatchObserver
     private let disabledObserver: KeyboardEventTap.DisabledObserver
+    private let idleStateProvider: @MainActor @Sendable () -> KeyboardEventCaptureIdleState
 
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
@@ -24,13 +31,15 @@ final class KeyboardEventCaptureHost {
         handler: @escaping KeyboardEventTap.Handler,
         passthroughKeyDownObserver: @escaping KeyboardEventTap.PassthroughKeyDownObserver,
         passthroughTypingMatchObserver: @escaping KeyboardEventTap.PassthroughTypingMatchObserver,
-        disabledObserver: @escaping KeyboardEventTap.DisabledObserver
+        disabledObserver: @escaping KeyboardEventTap.DisabledObserver,
+        idleStateProvider: @escaping @MainActor @Sendable () -> KeyboardEventCaptureIdleState
     ) {
         self.keyboardEventTapIdleStopDelayMilliseconds = keyboardEventTapIdleStopDelayMilliseconds
         self.handler = handler
         self.passthroughKeyDownObserver = passthroughKeyDownObserver
         self.passthroughTypingMatchObserver = passthroughTypingMatchObserver
         self.disabledObserver = disabledObserver
+        self.idleStateProvider = idleStateProvider
     }
 
     @discardableResult
@@ -100,11 +109,7 @@ final class KeyboardEventCaptureHost {
         keyboardEventTap?.suppressPassthroughObservation(until: date)
     }
 
-    func scheduleStopIfIdle(
-        hasVisibleSuggestion: Bool,
-        isSuggestionPanelVisible: Bool,
-        hasPendingAcceptedInsertionUndo: Bool
-    ) {
+    func scheduleStopIfIdle() {
         guard keyboardEventTap != nil else {
             return
         }
@@ -113,13 +118,16 @@ final class KeyboardEventCaptureHost {
         let idleStopDelayMilliseconds = keyboardEventTapIdleStopDelayMilliseconds
         keyboardEventTapStopTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
-            guard !Task.isCancelled,
-                  let self,
-                  self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
-                      hasVisibleSuggestion: hasVisibleSuggestion,
-                      isSuggestionPanelVisible: isSuggestionPanelVisible,
-                      hasPendingAcceptedInsertionUndo: hasPendingAcceptedInsertionUndo
-                  ) else {
+            guard !Task.isCancelled, let self else {
+                return
+            }
+
+            let idleState = self.idleStateProvider()
+            guard self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
+                hasVisibleSuggestion: idleState.hasVisibleSuggestion,
+                isSuggestionPanelVisible: idleState.isSuggestionPanelVisible,
+                hasPendingAcceptedInsertionUndo: idleState.hasPendingAcceptedInsertionUndo
+            ) else {
                 return
             }
 
