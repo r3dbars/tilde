@@ -343,7 +343,7 @@ struct CodexPromptTargetContinuityPolicy {
             observedContext: observedContext,
             nowMilliseconds: nowMilliseconds,
             maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
-        ) != nil
+        )?.resolution == .preserveWork
     }
 
     func remainingAXCooldownMilliseconds(

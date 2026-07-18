@@ -872,6 +872,7 @@ struct CodexPromptTargetContinuityPolicyTests {
         )
         let unsafeContexts = [
             context(textBeforeCursor: "synthetic prompt changed"),
+            context(textBeforeCursor: "", textAfterCursor: "synthetic prompt"),
             context(selectedTextLength: 1),
             context(elementRect: CGRect(x: 100, y: 500, width: 700, height: 80)),
             context(isSecure: true),
