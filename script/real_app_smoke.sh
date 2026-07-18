@@ -48,16 +48,18 @@ cleanup() {
     osascript - "$TEXTEDIT_WINDOW_TITLE" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
   set smokeWindowTitle to item 1 of argv
-  tell application "TextEdit"
-    repeat with documentRef in documents
-      try
-        if name of documentRef is smokeWindowTitle then
-          close documentRef saving no
-          exit repeat
-        end if
-      end try
-    end repeat
-  end tell
+  with timeout of 3 seconds
+    tell application "TextEdit"
+      repeat with documentRef in documents
+        try
+          if name of documentRef is smokeWindowTitle then
+            close documentRef saving no
+            exit repeat
+          end if
+        end try
+      end repeat
+    end tell
+  end timeout
 end run
 APPLESCRIPT
   fi
