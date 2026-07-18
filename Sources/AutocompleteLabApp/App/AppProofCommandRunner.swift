@@ -1,6 +1,8 @@
 import Foundation
 
 struct AppProofCommandPlan: Equatable {
+    static let proofEntryPointRelativePath = "script/real_app_smoke.sh"
+
     let bundleIdentifier: String
     let proofName: String
     let sourceRootURL: URL
@@ -42,7 +44,7 @@ struct AppProofCommandPlan: Equatable {
                 executableURL: URL(fileURLWithPath: "/usr/bin/env"),
                 arguments: [
                     "bash",
-                    "script/real_app_smoke.sh",
+                    proofEntryPointRelativePath,
                     "textedit",
                     "--skip-build"
                 ],
@@ -58,7 +60,7 @@ struct AppProofCommandPlan: Equatable {
                 arguments: [
                     "bash",
                     "-lc",
-                    "script/real_app_smoke.sh chrome --fixture textarea --skip-build && script/real_app_smoke.sh chrome --fixture contenteditable --skip-build"
+                    "\(proofEntryPointRelativePath) chrome --fixture textarea --skip-build && \(proofEntryPointRelativePath) chrome --fixture contenteditable --skip-build"
                 ],
                 environmentOverrides: proofEnvironment
             )
@@ -72,6 +74,12 @@ struct AppProofCommandPlan: Equatable {
             "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE": "1",
             "AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD": "1"
         ]
+    }
+
+    static func proofEntryPointURL(sourceRootURL: URL) -> URL {
+        sourceRootURL
+            .appendingPathComponent("script", isDirectory: true)
+            .appendingPathComponent("real_app_smoke.sh")
     }
 
     static func sourceRootURL(
@@ -95,10 +103,7 @@ struct AppProofCommandPlan: Equatable {
                 let key = current.path
                 if seen.insert(key).inserted,
                    fileManager.isExecutableFile(
-                       atPath: current
-                           .appendingPathComponent("script")
-                           .appendingPathComponent("real_app_smoke.sh")
-                           .path
+                       atPath: proofEntryPointURL(sourceRootURL: current).path
                    ) {
                     return current
                 }
