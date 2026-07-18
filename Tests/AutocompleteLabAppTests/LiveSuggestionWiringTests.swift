@@ -9,7 +9,7 @@ struct LiveSuggestionWiringTests {
 
         try require(appDelegate, contains: "private lazy var suggestionOrchestrator = SuggestionOrchestrator(")
         try require(appDelegate, contains: "wordCompletionRanker: wordCompletionRanker")
-        try require(appDelegate, contains: "suggestionAnnoyanceBackoffPolicy: makeSuggestionAnnoyanceBackoffPolicy()")
+        try require(appDelegate, contains: "prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()")
         try require(appDelegate, contains: "suggestionOrchestrator.beginRequest(SuggestionRequestInput(")
         try require(appDelegate, contains: "suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)")
         try require(appDelegate, contains: "suggestionOrchestrator.fastWordSelection(")
