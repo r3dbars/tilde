@@ -47,7 +47,7 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
     public let missThreshold: Int
     public let missHalfLifeSeconds: TimeInterval
     private static let thresholdTolerance = 0.002
-    private var missCounts: [String: SuggestionRepetitionMissBucket] = [:]
+    private var missCounts: [String: DecayingScoreBucket] = [:]
 
     // Three decayed misses before a phrase is muted: two was aggressive enough
     // that ordinary hesitation (typing through a good suggestion twice) silenced
@@ -75,7 +75,7 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
             return false
         }
 
-        return reachesThreshold(missCounts[key]?.score(at: now, halfLifeSeconds: missHalfLifeSeconds) ?? 0)
+        return reachesThreshold(missCounts[key]?.decayedScore(at: now, halfLifeSeconds: missHalfLifeSeconds) ?? 0)
     }
 
     @discardableResult
@@ -157,9 +157,12 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
         }
 
         let safeWeight = max(0, weight)
-        let decayedTotal = missCounts[key]?.score(at: now, halfLifeSeconds: missHalfLifeSeconds) ?? 0
+        let decayedTotal = missCounts[key]?.decayedScore(
+            at: now,
+            halfLifeSeconds: missHalfLifeSeconds
+        ) ?? 0
         let total = decayedTotal + safeWeight
-        missCounts[key] = SuggestionRepetitionMissBucket(score: total, updatedAt: now)
+        missCounts[key] = DecayingScoreBucket(score: total, updatedAt: now)
         return SuggestionRepetitionMissRecord(
             kind: kind,
             weight: safeWeight,
@@ -233,15 +236,5 @@ public struct SuggestionRepetitionSuppressor: Equatable, Sendable {
 
     private func reachesThreshold(_ score: Double) -> Bool {
         score + Self.thresholdTolerance >= Double(missThreshold)
-    }
-}
-
-private struct SuggestionRepetitionMissBucket: Equatable, Sendable {
-    let score: Double
-    let updatedAt: Date
-
-    func score(at now: Date, halfLifeSeconds: TimeInterval) -> Double {
-        let elapsedSeconds = max(0, now.timeIntervalSince(updatedAt))
-        return score * pow(0.5, elapsedSeconds / halfLifeSeconds)
     }
 }
