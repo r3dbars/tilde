@@ -349,8 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var personalCaptureLastSnapshot: FocusedTextSnapshot?
     private var lastFocusedTextChangeAt: Date?
     private var lastRequestedTextBeforeCursor: String?
-    private var manualSuggestionRequestPending = false
-    private var manualSuggestionRetryTask: Task<Void, Never>?
+    private let manualSuggestionRequestHost = ManualSuggestionRequestHost()
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> {
         get { appEnablementHost.disabledBundleIdentifiers }
@@ -472,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resourceDiagnosticsHost.stop()
         personalizationCoordinator.stop()
         suggestionSummonHotKeyHost.stop()
-        manualSuggestionRetryTask?.cancel()
+        manualSuggestionRequestHost.cancelRetry()
         workspaceObserverHost.stop()
         stopProofOnlyAcceptCommandObserver()
         stopKeyboardEventTapNow(reason: "terminate")
@@ -1257,11 +1256,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         startedAt: UInt64
     ) async {
-        let pollStartedWithManualSuggestionRequest = manualSuggestionRequestPending
+        let pollStartedWithManualSuggestionRequest = manualSuggestionRequestHost.isPending
         var latencySummarySuppressionReason: String?
         defer {
-            if pollStartedWithManualSuggestionRequest && manualSuggestionRequestPending {
-                manualSuggestionRequestPending = false
+            if pollStartedWithManualSuggestionRequest && manualSuggestionRequestHost.isPending {
+                manualSuggestionRequestHost.clearPendingRequest()
             }
             suggestionPipeline.finishPoll(
                 startedAt: startedAt,
@@ -2200,10 +2199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             behaviorProfileID: triggerBehaviorProfile.id,
             requestMode: requestMode
         )
-        let isManualSuggestionRequest = manualSuggestionRequestPending
-        if isManualSuggestionRequest {
-            manualSuggestionRequestPending = false
-        }
+        let isManualSuggestionRequest = manualSuggestionRequestHost.consumePendingRequest()
 
         let delayMilliseconds: Int
         let timingLane: SuggestionTimingLane
@@ -2521,7 +2517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 || codexPromptPresentationRetryTask != nil
                 || suggestionSession.hasVisibleSuggestion
                 || suggestionIdleRetryState.hasPendingRetry
-                || manualSuggestionRequestPending
+                || manualSuggestionRequestHost.isPending
             let shouldPreservePendingRequest = codexPromptTargetContinuityHost
                 .canPreserveDuringAXCooldown(
                     app: app,
@@ -2570,7 +2566,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
-            || manualSuggestionRequestPending
+            || manualSuggestionRequestHost.isPending
         let promptTargetInvalidationResolution = result.context.map {
             codexPromptTargetContinuityHost.axHealthInvalidationResolution(
                 app: result.app,
@@ -3242,7 +3238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
-            || manualSuggestionRequestPending
+            || manualSuggestionRequestHost.isPending
         guard hasActiveSuggestionWork else {
             return .reject
         }
@@ -3272,7 +3268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let shouldArmRetry = suggestionRequestScheduler.hasPendingRequest
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
-            || manualSuggestionRequestPending
+            || manualSuggestionRequestHost.isPending
         let cancelledPendingRequest = invalidatePendingSuggestionRequest()
         suggestionIdleRetryState.noteTextChange(
             snapshot: snapshot,
@@ -17495,7 +17491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        manualSuggestionRequestPending = true
+        manualSuggestionRequestHost.request()
         lastRequestedTextBeforeCursor = nil
         suggestionPipeline.resetPollingPause()
         setSuggestionDecision("Queued: asked once")
@@ -17524,19 +17520,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var completesAsync = false
         pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
         if !completesAsync {
-            manualSuggestionRequestPending = false
+            manualSuggestionRequestHost.clearPendingRequest()
             suggestionPipeline.finishPoll(startedAt: startedAt)
         }
     }
 
     private func scheduleManualSuggestionRetry() {
-        manualSuggestionRetryTask?.cancel()
-        manualSuggestionRetryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 150_000_000)
-            guard let self, self.manualSuggestionRequestPending else {
-                return
-            }
-            self.pollFocusedTextForManualSuggestion()
+        manualSuggestionRequestHost.scheduleRetry { [weak self] in
+            self?.pollFocusedTextForManualSuggestion()
         }
     }
 
