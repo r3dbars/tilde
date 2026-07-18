@@ -127,9 +127,9 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
     public let appQuietThreshold: Double
     public let globalQuietThreshold: Double
 
-    private var fieldBuckets: [String: ScoreBucket] = [:]
-    private var appBuckets: [String: ScoreBucket] = [:]
-    private var globalBucket = ScoreBucket()
+    private var fieldBuckets: [String: DecayingScoreBucket] = [:]
+    private var appBuckets: [String: DecayingScoreBucket] = [:]
+    private var globalBucket = DecayingScoreBucket()
     private var fieldQuietModes: [String: QuietMode] = [:]
     private var appQuietModes: [String: QuietMode] = [:]
     private var globalQuietMode: QuietMode = .normal
@@ -165,7 +165,7 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
 
         let delta = Self.weight(for: signal)
         let fieldBucket = updatedBucket(
-            fieldBuckets[context.fieldIdentifier] ?? ScoreBucket(),
+            fieldBuckets[context.fieldIdentifier] ?? DecayingScoreBucket(),
             delta: delta,
             multiplier: 1.0,
             now: now
@@ -173,7 +173,7 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         fieldBuckets[context.fieldIdentifier] = fieldBucket
 
         let appBucket = updatedBucket(
-            appBuckets[context.appBundleIdentifier] ?? ScoreBucket(),
+            appBuckets[context.appBundleIdentifier] ?? DecayingScoreBucket(),
             delta: delta,
             multiplier: 0.6,
             now: now
@@ -262,17 +262,24 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         now: Date = Date()
     ) -> Double {
         expireQuietModes(now: now)
-        return fieldBuckets[context.fieldIdentifier]?.score(at: now, halfLifeSeconds: halfLifeSeconds) ?? 0
+        return fieldBuckets[context.fieldIdentifier]?.decayedScore(
+            at: now,
+            halfLifeSeconds: halfLifeSeconds
+        ) ?? 0
     }
 
     private func updatedBucket(
-        _ bucket: ScoreBucket,
+        _ bucket: DecayingScoreBucket,
         delta: Double,
         multiplier: Double,
         now: Date
-    ) -> ScoreBucket {
-        let score = max(0, bucket.score(at: now, halfLifeSeconds: halfLifeSeconds) + delta * multiplier)
-        return ScoreBucket(score: score, updatedAt: now)
+    ) -> DecayingScoreBucket {
+        bucket.adding(
+            delta,
+            multiplier: multiplier,
+            at: now,
+            halfLifeSeconds: halfLifeSeconds
+        )
     }
 
     private mutating func expireQuietModes(now: Date) {
@@ -353,20 +360,6 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
         case .acceptedAndKept:
             -0.6
         }
-    }
-}
-
-private struct ScoreBucket: Equatable, Sendable {
-    var score: Double = 0
-    var updatedAt: Date?
-
-    func score(at now: Date, halfLifeSeconds: TimeInterval) -> Double {
-        guard let updatedAt, halfLifeSeconds > 0 else {
-            return score
-        }
-
-        let elapsedSeconds = max(0, now.timeIntervalSince(updatedAt))
-        return score * pow(0.5, elapsedSeconds / halfLifeSeconds)
     }
 }
 
