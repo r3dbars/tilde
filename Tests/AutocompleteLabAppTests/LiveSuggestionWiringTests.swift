@@ -92,13 +92,17 @@ struct LiveSuggestionWiringTests {
     @Test("App delegate preserves and rechecks transient Codex prompt targets")
     func appDelegatePreservesAndRechecksTransientCodexPromptTargets() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let refreshHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionPresentationRefreshHost.swift"
+        )
+        let suggestionPresentationWiring = appDelegate + refreshHost
 
-        try require(appDelegate, contains: "codexPromptTargetInvalidationResolution(")
-        try require(appDelegate, contains: "promptTargetInvalidationResolution == .cancelAndRetry")
-        try require(appDelegate, contains: "cancelAndRearmCodexPromptTargetWork(")
-        try require(appDelegate, contains: "codex-prompt-target-refresh-quarantined")
-        try require(appDelegate, contains: "source: \"presentation-refresh\"")
-        try require(appDelegate, contains: "return (nil, \"quarantined-codex-prompt-target\")")
+        try require(suggestionPresentationWiring, contains: "codexPromptTargetInvalidationResolution(")
+        try require(suggestionPresentationWiring, contains: "promptTargetInvalidationResolution == .cancelAndRetry")
+        try require(suggestionPresentationWiring, contains: "cancelAndRearmCodexPromptTargetWork(")
+        try require(suggestionPresentationWiring, contains: "codex-prompt-target-refresh-quarantined")
+        try require(suggestionPresentationWiring, contains: "\"presentation-refresh\"")
+        try require(suggestionPresentationWiring, contains: "return (nil, \"quarantined-codex-prompt-target\")")
         try require(appDelegate, contains: "axHealthInvalidationResolution(")
         try require(appDelegate, contains: "rearmedTransientRequest")
         try require(appDelegate, contains: "\"codex-prompt-target-refresh-deferred\"")
