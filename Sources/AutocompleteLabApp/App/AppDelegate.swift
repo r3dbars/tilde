@@ -730,7 +730,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleScreenGeometryChange() {
+    func handleScreenGeometryChange() {
         let currentFingerprint = currentScreenLayoutFingerprint()
         let shouldInvalidate = suggestionGeometryChangePolicy.shouldInvalidateSuggestionState(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
@@ -759,7 +759,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleSuggestionInterruption(_ kind: SuggestionInterruptionKind) {
+    func handleSuggestionInterruption(_ kind: SuggestionInterruptionKind) {
         let decision = suggestionInterruptionPolicy.decision(for: kind)
 
         setSuggestionDecision(decision.decisionText)
@@ -786,7 +786,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleWorkspaceFocusChange(
+    func handleWorkspaceFocusChange(
         reason: String,
         kind: WorkspaceFocusChangePolicy.ChangeKind,
         bundleIdentifier: String?
@@ -19034,25 +19034,6 @@ extension AppDelegate: SettingsWindowActionHandling {
             setSuggestionLearningRestraintLevel(level)
         case .resetSuggestionTuning:
             resetSuggestionTuning()
-        }
-    }
-}
-
-// MARK: - Workspace observer wiring
-
-extension AppDelegate: WorkspaceObserverEventHandling {
-    func handleWorkspaceObserverEvent(_ event: WorkspaceObserverEvent) {
-        switch event {
-        case let .workspaceFocusChanged(reason, kind, bundleIdentifier):
-            handleWorkspaceFocusChange(
-                reason: reason,
-                kind: kind,
-                bundleIdentifier: bundleIdentifier
-            )
-        case let .suggestionInterruption(kind):
-            handleSuggestionInterruption(kind)
-        case .screenGeometryChanged:
-            handleScreenGeometryChange()
         }
     }
 }
