@@ -548,6 +548,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
         )
     )
+    private lazy var suggestionModelResultHost = SuggestionModelResultHost(
+        dependencies: SuggestionModelResultHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            triggerTiming: suggestionSessionBehaviors.triggerTiming,
+            currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            hideSuggestion: { [weak self] reason in
+                if let reason {
+                    self?.hideSuggestion(reason: reason)
+                } else {
+                    self?.hideSuggestion()
+                }
+            },
+            annoyanceContext: { [weak self] appBundleIdentifier, fieldIdentity, requestMode, fieldKind in
+                self?.annoyanceContext(
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentity,
+                    requestMode: requestMode,
+                    fieldKind: fieldKind
+                )
+            },
+            recordAnnoyanceSignal: { [weak self] signal, context, suggestionID, reason in
+                self?.recordAnnoyanceSignal(signal, context: context, suggestionID: suggestionID, reason: reason)
+            },
+            presentSuggestion: { [weak self] suggestion, presentation in
+                self?.presentSuggestion(
+                    suggestion,
+                    suggestionID: presentation.suggestionID,
+                    request: presentation.request,
+                    context: presentation.context,
+                    profile: presentation.profile,
+                    fieldIdentity: presentation.fieldIdentity,
+                    renderMode: presentation.renderMode,
+                    latencyMilliseconds: presentation.latencyMilliseconds,
+                    triggerReason: "model-result",
+                    requestTicket: presentation.requestTicket,
+                    candidateSelectionMetadata: presentation.candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: presentation.scheduledDelayMilliseconds
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6752,212 +6802,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 )
                 await MainActor.run {
-                    let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
-                    guard self.suggestionOrchestrator.allows(
-                        requestTicket,
-                        fieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity
-                    ) else {
-                        return
-                    }
-
-                    if self.suggestionSessionBehaviors.triggerTiming.shouldSuppressResult(
-                        latencyMilliseconds: latencyMilliseconds,
-                        schedule: requestSchedule
-                    ) {
-                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+                    self.suggestionModelResultHost.handle(
+                        suggestion: suggestion,
+                        input: SuggestionModelResultInput(
                             suggestionID: suggestionID,
-                            currentSuggestionID: self.currentSuggestionState.id,
-                            ticket: requestTicket,
+                            request: request,
+                            context: context,
+                            profile: profile,
+                            appBundleIdentifier: appBundleIdentifier,
                             fieldIdentity: fieldIdentity,
-                            currentFieldIdentity: self.currentFieldIdentity,
-                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
+                            fieldClassification: fieldClassification,
+                            fieldIdentityDescription: fieldIdentityDescription,
+                            renderMode: renderMode,
+                            requestMetadata: requestMetadata,
+                            requestSchedule: requestSchedule,
+                            requestTicket: requestTicket,
+                            requestStartedAt: requestStartedAt
                         )
-                        let metadata = requestMetadata
-                            .merging(requestSchedule.traceMetadata) { current, _ in current }
-                            .merging([
-                                "resultLatencyBudgetExceeded": "true",
-                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
-                            ]) { current, _ in current }
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            cleanedVisibleText: suggestion?.visibleText ?? "",
-                            displayedText: suggestion?.visibleText ?? "",
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "latency-budget-exceeded",
-                            metadata: metadata
-                        )
-                        self.recordSuggestionEvent(
-                            "suggestion-blocked",
-                            context: context,
-                            profile: profile,
-                            metadata: [
-                                "reason": "latency-budget-exceeded"
-                            ].merging(metadata) { current, _ in current }
-                        )
-                        if shouldKeepStreamedSuggestion {
-                            self.setSuggestionDecision("Shown: kept streamed suggestion")
-                            self.repositionVisibleSuggestion(context: context, profile: profile)
-                            return
-                        }
-
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "latency-budget-exceeded"))
-                        self.hideSuggestion(reason: "latency-budget-exceeded")
-                        return
-                    }
-
-                    let anchorRect = RenderModePlan.anchorRect(
-                        for: renderMode,
-                        caretRect: context.caretRect,
-                        elementRect: context.elementRect,
-                        windowRect: context.windowRect
-                    )
-                    guard let suggestion, !suggestion.isEmpty else {
-                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
-                            suggestionID: suggestionID,
-                            currentSuggestionID: self.currentSuggestionState.id,
-                            ticket: requestTicket,
-                            fieldIdentity: fieldIdentity,
-                            currentFieldIdentity: self.currentFieldIdentity,
-                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
-                        )
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "empty-suggestion",
-                            metadata: requestMetadata.merging([
-                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
-                            ]) { current, _ in current }
-                        )
-                        self.recordSuggestionEvent(
-                            "suggestion-blocked",
-                            context: context,
-                            profile: profile,
-                            metadata: [
-                                "reason": "empty-suggestion"
-                            ]
-                        )
-                        if shouldKeepStreamedSuggestion {
-                            self.setSuggestionDecision("Shown: kept streamed suggestion")
-                            self.repositionVisibleSuggestion(context: context, profile: profile)
-                            return
-                        }
-
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "empty-suggestion"))
-                        self.hideSuggestion()
-                        return
-                    }
-
-                    guard anchorRect != nil else {
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            cleanedVisibleText: suggestion.visibleText,
-                            displayedText: suggestion.visibleText,
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor",
-                            metadata: requestMetadata
-                        )
-                        self.recordSuggestionEvent(
-                            "suggestion-blocked",
-                            context: context,
-                            profile: profile,
-                            metadata: [
-                                "reason": "missing-anchor"
-                            ]
-                        )
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "missing-anchor"))
-                        self.hideSuggestion()
-                        return
-                    }
-
-                    let appModelResultMetadata = self.suggestionOrchestrator.appModelResultCandidateSelectionMetadata(
-                        for: suggestion
-                    )
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .modelResult,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "model-result",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: suggestion.visibleText,
-                        displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds,
-                        metadata: requestMetadata
-                            .merging(appModelResultMetadata) { current, _ in current }
-                    )
-                    guard !self.suggestionOrchestrator.shouldSuppressRepetition(
-                        suggestion.visibleText,
-                        mode: request.mode,
-                        scope: appBundleIdentifier
-                    ) else {
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            cleanedVisibleText: suggestion.visibleText,
-                            displayedText: suggestion.visibleText,
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "repeated-miss",
-                            metadata: requestMetadata
-                        )
-                        self.recordAnnoyanceSignal(
-                            .repeatedRejection,
-                            context: self.annoyanceContext(
-                                appBundleIdentifier: appBundleIdentifier,
-                                fieldIdentity: fieldIdentity,
-                                requestMode: request.mode,
-                                fieldKind: fieldClassification.kind
-                            ),
-                            suggestionID: suggestionID,
-                            reason: "repeated-miss"
-                        )
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                        self.hideSuggestion()
-                        return
-                    }
-                    self.presentSuggestion(
-                        suggestion,
-                        suggestionID: suggestionID,
-                        request: request,
-                        context: context,
-                        profile: profile,
-                        fieldIdentity: fieldIdentity,
-                        renderMode: renderMode,
-                        latencyMilliseconds: latencyMilliseconds,
-                        triggerReason: "model-result",
-                        requestTicket: requestTicket,
-                        candidateSelectionMetadata: appModelResultMetadata,
-                        scheduledDelayMilliseconds: requestSchedule.scheduledDelayMilliseconds
                     )
                 }
             } catch {
