@@ -102,9 +102,18 @@ struct LiveSuggestionWiringTests {
 
         try require(suggestionTriggerWiring, contains: "suggestionIdleRetryState.consumeRetryIfReady(")
         try require(suggestionTriggerWiring, contains: "suggestionIdleRetryState.noteTextChange(")
-        try require(suggestionTriggerWiring, contains: "suggestionIdleRetryState.noteTypingBurstSuppression(")
         try require(suggestionTriggerWiring, contains: "else if input.idleRetryReason != nil {")
         try require(suggestionTriggerWiring, contains: "? \"idle-retry\"")
+    }
+
+    @Test("Normal typing never enters a burst suppression path")
+    func normalTypingNeverUsesBurstSuppression() throws {
+        let sources = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+            + source("Sources/AutocompleteLabApp/App/SuggestionSchedulingHost.swift")
+            + source("Sources/AutocompleteLabApp/App/SuggestionTriggerTimingHost.swift")
+
+        #expect(!sources.contains("typingBurst"))
+        #expect(!sources.contains("typing-burst"))
     }
 
     @Test("App delegate preserves and rechecks transient Codex prompt targets")

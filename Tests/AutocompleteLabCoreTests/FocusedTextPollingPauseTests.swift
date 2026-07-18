@@ -38,8 +38,8 @@ struct FocusedTextPollingPauseTests {
         #expect(pause.repeatedPauseCount == 0)
     }
 
-    @Test("Second pause during a typing burst backs off the deadline")
-    func secondPauseDuringTypingBurstBacksOffDeadline() throws {
+    @Test("Second pause during rapid typing backs off the deadline")
+    func secondPauseDuringRapidTypingBacksOffDeadline() throws {
         let now = Date(timeIntervalSince1970: 100)
         var pause = FocusedTextPollingPause()
 

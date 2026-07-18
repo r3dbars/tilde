@@ -54,45 +54,6 @@ struct SuggestionIdleRetryStateTests {
         ) == .request(delayMilliseconds: 80))
     }
 
-    @Test("Typing burst retry follows the final character and fires only once after settling")
-    func typingBurstRetryFollowsFinalCharacter() {
-        var state = SuggestionIdleRetryState(settleDelayMilliseconds: 200)
-        let first = snapshot("Burst a")
-        let second = snapshot("Burst ab")
-        let final = snapshot("Burst abc")
-
-        state.noteTextChange(
-            snapshot: first,
-            cancelledPendingRequest: true,
-            nowMilliseconds: 0
-        )
-        state.noteTextChange(
-            snapshot: second,
-            cancelledPendingRequest: false,
-            nowMilliseconds: 50
-        )
-        state.noteTypingBurstSuppression(
-            snapshot: final,
-            nowMilliseconds: 100
-        )
-
-        #expect(state.consumeRetryIfReady(
-            snapshot: final,
-            nowMilliseconds: 299,
-            hasVisibleSuggestion: false
-        ) == nil)
-        #expect(state.consumeRetryIfReady(
-            snapshot: final,
-            nowMilliseconds: 300,
-            hasVisibleSuggestion: false
-        ) == .typingBurstSuppressed)
-        #expect(state.consumeRetryIfReady(
-            snapshot: final,
-            nowMilliseconds: 500,
-            hasVisibleSuggestion: false
-        ) == nil)
-    }
-
     @Test("New snapshot or visible suggestion cancels a stale idle retry")
     func staleRetryIsCancelled() {
         var changedState = SuggestionIdleRetryState(settleDelayMilliseconds: 100)

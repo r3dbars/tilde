@@ -595,41 +595,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
-    private lazy var suggestionTypingBurstSuppressionHost = SuggestionTypingBurstSuppressionHost(
-        dependencies: SuggestionTypingBurstSuppressionHostDependencies(
-            cancelIdleRetry: { [weak self] in self?.suggestionIdleRetryState.cancel() },
-            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
-            showFieldStatusIndicator: { [weak self] state, context in
-                self?.showFieldStatusIndicator(state, context: context)
-            },
-            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
-                self?.recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
-            },
-            recordBlockedSuggestionEvent: { [weak self] event, context, profile, fieldIdentity, metadata in
-                self?.recordBlockedSuggestionEvent(
-                    event,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    metadata: metadata
-                )
-            },
-            repositionVisibleSuggestion: { [weak self] context, profile in
-                self?.repositionVisibleSuggestion(context: context, profile: profile)
-            },
-            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
-            noteTypingBurstSuppression: { [weak self] snapshot, nowMilliseconds, settleDelayMilliseconds in
-                self?.suggestionIdleRetryState.noteTypingBurstSuppression(
-                    snapshot: snapshot,
-                    nowMilliseconds: nowMilliseconds,
-                    settleDelayMilliseconds: settleDelayMilliseconds
-                )
-            },
-            hideSuggestion: { [weak self] reason, metadata in
-                self?.hideSuggestion(reason: reason, metadata: metadata)
-            }
-        )
-    )
     private lazy var suggestionRequestExecutionHost = SuggestionRequestExecutionHost(
         dependencies: SuggestionRequestExecutionHostDependencies(
             scheduler: suggestionRequestScheduler,
@@ -908,7 +873,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     delayMilliseconds: schedule.delayMilliseconds,
                     timingLane: schedule.timingLane,
                     requestMode: schedule.requestMode,
-                    typingBurstDecision: schedule.typingBurstDecision,
                     visiblePageContext: schedule.visiblePageContext,
                     triggerReason: schedule.triggerReason
                 )
@@ -960,7 +924,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             },
             triggerPolicy: { [unowned self] profile in self.triggerPolicy(for: profile) },
-            suggestionTypingBurstSuppressionHost: suggestionTypingBurstSuppressionHost,
             suggestionRequestExecutionHost: suggestionRequestExecutionHost,
             suggestionIdleRetryState: suggestionIdleRetryState,
             recordSuggestionEvent: { [weak self] event, context, profile, metadata in
@@ -1324,7 +1287,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
-    private let typingBurstStateHost = TypingBurstStateHost()
     private let suggestionIdleRetryState = SuggestionIdleRetryStateHost()
     private let currentSuggestionState = CurrentSuggestionStateHost()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
@@ -2658,10 +2620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastFocusedTextChangeAt = Date()
         }
         cancelPrefixCooldownRetry()
-        let typingBurstDecision: TypingBurstDecision
         if let idleRetryReason {
-            typingBurstStateHost.reset()
-            typingBurstDecision = .idle
             suggestionBlockLogGate.reset()
             DiagnosticsLog.shared.record(
                 "suggestion-idle-retry",
@@ -2671,11 +2630,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "beforeChars": String(snapshot.textBeforeCursor.count),
                     "afterChars": String(snapshot.textAfterCursor.count)
                 ]
-            )
-        } else {
-            typingBurstDecision = observeTypingBurst(
-                previousSnapshot: previousSnapshot,
-                currentSnapshot: snapshot
             )
         }
 
@@ -3040,7 +2994,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: requestMode,
                 previousTextBeforeCursor: lastRequestedTextBeforeCursor,
                 idleRetryReason: idleRetryReason,
-                typingBurstDecision: typingBurstDecision,
                 visiblePageContext: cachedVisiblePageContext(
                     context: context,
                     appBundleIdentifier: frontmostApp.bundleIdentifier
@@ -6447,7 +6400,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         delayMilliseconds: Int,
         timingLane: SuggestionTimingLane,
         requestMode: CompletionRequestMode,
-        typingBurstDecision: TypingBurstDecision = .idle,
         visiblePageContext: VisiblePageContext?,
         triggerReason: String = "poll"
     ) {
@@ -6461,7 +6413,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
             requestMode: requestMode,
-            typingBurstDecision: typingBurstDecision,
             visiblePageContext: visiblePageContext,
             triggerReason: triggerReason
         )
@@ -7007,23 +6958,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func recordPersonalCaptureAcceptanceSurvival(_ result: AcceptanceSurvivalCheckResult) {
         personalCaptureHost.recordAcceptanceSurvival(result)
-    }
-
-    private func observeTypingBurst(
-        previousSnapshot: FocusedTextSnapshot?,
-        currentSnapshot: FocusedTextSnapshot
-    ) -> TypingBurstDecision {
-        guard let previousSnapshot,
-              previousSnapshot.fieldIdentity == currentSnapshot.fieldIdentity else {
-            typingBurstStateHost.reset()
-            return .idle
-        }
-
-        return typingBurstStateHost.observe(
-            previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
-            currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
-            nowMilliseconds: Int(Date().timeIntervalSince1970 * 1_000)
-        )
     }
 
     private func recordSuggestionEvent(
@@ -15604,7 +15538,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
-        typingBurstStateHost.reset()
         suggestionIdleRetryState.cancel()
         suggestionBlockLogGate.reset()
     }
@@ -15632,7 +15565,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
-        typingBurstStateHost.reset()
         suggestionIdleRetryState.cancel()
         suggestionChromeHost.hideFieldStatusIndicator()
         if resetBlockLogGate {

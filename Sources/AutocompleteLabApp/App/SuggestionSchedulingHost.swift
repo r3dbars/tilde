@@ -18,7 +18,6 @@ struct SuggestionSchedulingHostDependencies {
     let shouldUsePredictiveWordFallback: (CompatibilityProfile, VisiblePageContext?) -> Bool
     let shouldUsePredictivePhraseFallback: (CompatibilityProfile, AutocompleteBehaviorProfileID?, VisiblePageContext?) -> Bool
     let triggerPolicy: (CompatibilityProfile) -> SuggestionTriggerPolicy
-    let suggestionTypingBurstSuppressionHost: SuggestionTypingBurstSuppressionHost
     let suggestionRequestExecutionHost: SuggestionRequestExecutionHost
     let suggestionIdleRetryState: SuggestionIdleRetryStateHost
     let recordSuggestionEvent: (String, FocusedTextContext, CompatibilityProfile, [String: String]) -> Void
@@ -75,10 +74,6 @@ final class SuggestionSchedulingHost {
 
     private var acceptedAndKeptLearning: AcceptedAndKeptLearningStore {
         dependencies.acceptedAndKeptLearning()
-    }
-
-    private var suggestionTypingBurstSuppressionHost: SuggestionTypingBurstSuppressionHost {
-        dependencies.suggestionTypingBurstSuppressionHost
     }
 
     private var suggestionRequestExecutionHost: SuggestionRequestExecutionHost {
@@ -213,7 +208,6 @@ final class SuggestionSchedulingHost {
         delayMilliseconds: Int,
         timingLane: SuggestionTimingLane,
         requestMode: CompletionRequestMode,
-        typingBurstDecision: TypingBurstDecision = .idle,
         visiblePageContext: VisiblePageContext?,
         triggerReason: String = "poll"
     ) {
@@ -230,7 +224,6 @@ final class SuggestionSchedulingHost {
             delayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
             requestMode: requestMode,
-            typingBurstDecision: typingBurstDecision,
             visiblePageContext: visiblePageContext,
             triggerReason: triggerReason
         )
@@ -242,10 +235,6 @@ final class SuggestionSchedulingHost {
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
         let requestSchedule = preparation.requestSchedule
-        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
-            ? [:]
-            : typingBurstDecision.traceMetadata
-
         let disablesFastWordCompletionForProof = runtimeProofOptions.disablesFastWordCompletion(
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
@@ -663,30 +652,6 @@ final class SuggestionSchedulingHost {
             setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
-        if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
-            suggestionTypingBurstSuppressionHost.handle(
-                input: SuggestionTypingBurstSuppressionInput(
-                    suggestionID: suggestionID,
-                    appBundleIdentifier: appBundleIdentifier,
-                    fieldIdentity: fieldIdentity,
-                    requestMode: request.mode,
-                    requestTextBeforeCursor: request.textBeforeCursor,
-                    requestTextAfterCursor: request.textAfterCursor,
-                    fieldIdentityDescription: fieldIdentityDescription,
-                    context: context,
-                    profile: profile,
-                    fieldClassification: fieldClassification,
-                    renderMode: renderMode,
-                    typingBurstMetadata: typingBurstMetadata,
-                    fastPhraseFallbackMetadata: fastPhraseFallbackMetadata,
-                    requestMetadata: requestMetadata,
-                    settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
-                ),
-                didPresentFastPhraseFallback: didPresentFastPhraseFallback
-            )
-            return
-        }
-
         recordSuggestionEvent(
             "suggestion-request-scheduled",
             context: context,
@@ -697,7 +662,6 @@ final class SuggestionSchedulingHost {
                 "traceID": String(suggestionID.prefix(8)),
                 "suggestionID": suggestionID
             ]
-            .merging(typingBurstMetadata) { current, _ in current }
             .merging(fastPhraseFallbackMetadata) { current, _ in current }
             .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
