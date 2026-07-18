@@ -367,7 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private let typingBurstStateHost = TypingBurstStateHost()
     private let suggestionIdleRetryState = SuggestionIdleRetryStateHost()
-    private var currentSuggestionState = CurrentSuggestionState()
+    private let currentSuggestionState = CurrentSuggestionStateHost()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
     private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
     private var preservesResidualSuggestionAfterNextWordAccept = false
