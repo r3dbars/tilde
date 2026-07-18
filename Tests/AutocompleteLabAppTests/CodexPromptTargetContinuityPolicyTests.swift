@@ -65,6 +65,147 @@ struct CodexPromptTargetContinuityPolicyTests {
         ))
     }
 
+    @Test("Quarantines a request across an empty wrapper and appended cursor split")
+    func quarantinesRequestAcrossTransientCodexTextSplit() throws {
+        let fieldIdentity = identity()
+        let before = String(repeating: "a", count: 15)
+        let trustedContext = context(textBeforeCursor: before)
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: trustedContext
+        ))
+        let currentSnapshot = snapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: before
+        )
+        let emptyWrapper = context(
+            elementIdentifier: 99,
+            role: "AXWebArea",
+            fingerprint: FocusedElementFingerprint(),
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            caretRect: nil,
+            elementRect: CGRect(x: 0, y: 0, width: 900, height: 700),
+            windowRect: nil
+        )
+        let afterOnlyTextArea = context(
+            textBeforeCursor: "",
+            textAfterCursor: before + String(repeating: "b", count: 11),
+            caretRect: nil,
+            windowRect: nil
+        )
+
+        #expect(policy.invalidationResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: emptyWrapper,
+            trustedContext: trustedContext
+        ) == .cancelAndRetry)
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: afterOnlyTextArea,
+            trustedContext: trustedContext
+        ))
+        #expect(policy.axHealthInvalidationResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: afterOnlyTextArea
+        ) == .cancelAndRetry)
+        #expect(policy.invalidationResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: afterOnlyTextArea,
+            trustedContext: trustedContext
+        ) == .cancelAndRetry)
+        let presentationResolution = policy.presentationRefreshResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: afterOnlyTextArea,
+            trustedContext: trustedContext
+        )
+        #expect(presentationResolution == .cancelAndRetry)
+
+        var retryState = SuggestionIdleRetryState(settleDelayMilliseconds: 240)
+        retryState.noteTextChange(
+            snapshot: currentSnapshot,
+            cancelledPendingRequest: true,
+            nowMilliseconds: 0
+        )
+        let recoveredSnapshot = snapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: afterOnlyTextArea.textAfterCursor
+        )
+        retryState.noteTextChange(
+            snapshot: recoveredSnapshot,
+            cancelledPendingRequest: false,
+            nowMilliseconds: 750
+        )
+        #expect(retryState.consumeRetryIfReady(
+            snapshot: recoveredSnapshot,
+            nowMilliseconds: 989,
+            hasVisibleSuggestion: false
+        ) == nil)
+        #expect(retryState.consumeRetryIfReady(
+            snapshot: recoveredSnapshot,
+            nowMilliseconds: 990,
+            hasVisibleSuggestion: false
+        ) == .requestCancelled)
+
+        let changedAfterOnlyTextArea = context(
+            textBeforeCursor: "",
+            textAfterCursor: String(repeating: "c", count: 26),
+            caretRect: nil,
+            windowRect: nil
+        )
+        #expect(policy.invalidationResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: changedAfterOnlyTextArea,
+            trustedContext: trustedContext
+        ) == .reject)
+        #expect(policy.invalidationResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementIdentifier: 99,
+                textBeforeCursor: "",
+                textAfterCursor: before + String(repeating: "b", count: 11),
+                caretRect: nil,
+                windowRect: nil
+            ),
+            trustedContext: trustedContext
+        ) == .reject)
+    }
+
     @Test("Preserves an in-flight request without requiring a visible suggestion")
     func preservesInflightRequestWithoutVisibleSuggestion() throws {
         let fieldIdentity = identity()
@@ -759,11 +900,15 @@ struct CodexPromptTargetContinuityPolicyTests {
         )
     }
 
-    private func snapshot(fieldIdentity: FocusedFieldIdentity) -> FocusedTextSnapshot {
+    private func snapshot(
+        fieldIdentity: FocusedFieldIdentity,
+        textBeforeCursor: String = "synthetic prompt",
+        textAfterCursor: String = ""
+    ) -> FocusedTextSnapshot {
         FocusedTextSnapshot(
             fieldIdentity: fieldIdentity,
-            textBeforeCursor: "synthetic prompt",
-            textAfterCursor: ""
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
         )
     }
 
@@ -777,6 +922,7 @@ struct CodexPromptTargetContinuityPolicyTests {
             windowTitle: "Codex"
         ),
         textBeforeCursor: String = "synthetic prompt",
+        textAfterCursor: String = "",
         selectedTextLength: Int = 0,
         caretRect: CGRect? = CGRect(x: 120, y: 650, width: 1, height: 20),
         elementRect: CGRect? = CGRect(x: 100, y: 620, width: 700, height: 80),
@@ -790,7 +936,7 @@ struct CodexPromptTargetContinuityPolicyTests {
             subrole: nil,
             fingerprint: fingerprint,
             textBeforeCursor: textBeforeCursor,
-            textAfterCursor: "",
+            textAfterCursor: textAfterCursor,
             selectedTextLength: selectedTextLength,
             caretRect: caretRect,
             elementRect: elementRect,

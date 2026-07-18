@@ -27,12 +27,12 @@ final class SuggestionOrchestrator {
     private let personalPhrasePredictor: PersonalNGramContinuationPredictor
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
-    private let completionConfidencePolicy: CompletionConfidencePolicy
+    private let goodAndFastEnoughPolicy: GoodAndFastEnoughPolicy
     private let suggestionPresentationGate: SuggestionPresentationGate
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
     private var requestGate = SuggestionRequestGate()
     private var currentRequestStorage: CompletionRequest?
-    private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
+    private var suggestionAnnoyanceBackoffPolicy: SuggestionAnnoyanceBackoffPolicy
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
     private var docLocalCorpusByField: [FocusedFieldIdentity: DocLocalNGramFieldCorpus] = [:]
 
@@ -42,20 +42,20 @@ final class SuggestionOrchestrator {
         docLocalPhrasePredictor: DocLocalNGramPhrasePredictor = DocLocalNGramPhrasePredictor(),
         personalPhrasePredictor: PersonalNGramContinuationPredictor = PersonalNGramContinuationPredictor(),
         commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
-        completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
+        goodAndFastEnoughPolicy: GoodAndFastEnoughPolicy = GoodAndFastEnoughPolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
-        prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
+        suggestionAnnoyanceBackoffPolicy: SuggestionAnnoyanceBackoffPolicy = SuggestionAnnoyanceBackoffPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
         self.docLocalPhrasePredictor = docLocalPhrasePredictor
         self.personalPhrasePredictor = personalPhrasePredictor
         self.commonPhrasePredictor = commonPhrasePredictor
-        self.completionConfidencePolicy = completionConfidencePolicy
+        self.goodAndFastEnoughPolicy = goodAndFastEnoughPolicy
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
-        self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
+        self.suggestionAnnoyanceBackoffPolicy = suggestionAnnoyanceBackoffPolicy
     }
 
     var currentRequest: CompletionRequest? {
@@ -370,7 +370,7 @@ final class SuggestionOrchestrator {
         for input: PrefixFamilyCooldownInput,
         now: Date = Date()
     ) -> PrefixFamilyCooldownDecision {
-        prefixFamilyCooldownPolicy.decision(for: input, now: now)
+        suggestionAnnoyanceBackoffPolicy.prefixCooldownDecision(for: input, now: now)
     }
 
     func recordPrefixFamilyCooldown(
@@ -378,11 +378,69 @@ final class SuggestionOrchestrator {
         input: PrefixFamilyCooldownInput,
         now: Date = Date()
     ) -> PrefixFamilyCooldown? {
-        prefixFamilyCooldownPolicy.record(reason, input: input, now: now)
+        suggestionAnnoyanceBackoffPolicy.recordPrefixCooldown(reason, input: input, now: now)
     }
 
-    func resetPrefixFamilyCooldownPolicy(_ policy: PrefixFamilyCooldownPolicy) {
-        prefixFamilyCooldownPolicy = policy
+    func shouldSuppressRepetition(
+        _ text: String,
+        mode: CompletionRequestMode,
+        scope: String = "",
+        now: Date = Date()
+    ) -> Bool {
+        suggestionAnnoyanceBackoffPolicy.shouldSuppressRepetition(
+            text,
+            mode: mode,
+            scope: scope,
+            now: now
+        )
+    }
+
+    @discardableResult
+    func recordRepetitionMiss(
+        _ text: String,
+        mode: CompletionRequestMode?,
+        scope: String = "",
+        now: Date = Date()
+    ) -> SuggestionRepetitionMissRecord? {
+        suggestionAnnoyanceBackoffPolicy.recordRepetitionMiss(
+            text,
+            mode: mode,
+            scope: scope,
+            now: now
+        )
+    }
+
+    @discardableResult
+    func recordIgnoredRepetition(
+        _ text: String,
+        mode: CompletionRequestMode?,
+        scope: String = "",
+        lifetimeMilliseconds: Int? = nil,
+        now: Date = Date()
+    ) -> SuggestionRepetitionMissRecord? {
+        suggestionAnnoyanceBackoffPolicy.recordIgnoredRepetition(
+            text,
+            mode: mode,
+            scope: scope,
+            lifetimeMilliseconds: lifetimeMilliseconds,
+            now: now
+        )
+    }
+
+    func recordRepetitionAcceptance(
+        _ text: String,
+        mode: CompletionRequestMode?,
+        scope: String = ""
+    ) {
+        suggestionAnnoyanceBackoffPolicy.recordRepetitionAcceptance(
+            text,
+            mode: mode,
+            scope: scope
+        )
+    }
+
+    func resetSuggestionAnnoyanceBackoffPolicy(_ policy: SuggestionAnnoyanceBackoffPolicy) {
+        suggestionAnnoyanceBackoffPolicy = policy
     }
 
     func startStreamingPresentation(suggestionID: String) {
@@ -479,7 +537,7 @@ final class SuggestionOrchestrator {
                 reason: .missingAnchor
             )
         }
-        let commandFallbackDecision = CommandFallbackPolicy().decision(
+        let commandFallbackDecision = goodAndFastEnoughPolicy.fallbackDecision(
             supportStatus: .supported(profile),
             isEnabled: true,
             fieldKind: fieldKind,
@@ -782,7 +840,7 @@ final class SuggestionOrchestrator {
         now: Date = Date()
     ) -> SuggestionDisplayScoreDecision {
         _ = suggestionTuning
-        let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
+        let prefixEagernessAdjustment = suggestionAnnoyanceBackoffPolicy.prefixEagernessAdjustment(
             for: PrefixFamilyCooldownInput(
                 appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
                 fieldIdentifier: fieldIdentity.traceDescription,
@@ -804,13 +862,6 @@ final class SuggestionOrchestrator {
         )
         let adjustedPolicy = displayScorePolicy
             .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
-        let confidenceDecision = completionConfidencePolicy.decision(
-            suggestion: suggestion,
-            mode: request.mode,
-            textBeforeCursor: request.textBeforeCursor,
-            latencyMilliseconds: latencyMilliseconds,
-            supportLevel: profile.supportLevel
-        )
         let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && (
@@ -825,17 +876,6 @@ final class SuggestionOrchestrator {
                 && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
                 && request.textAfterCursor.isEmpty
         let proofLatencyBypass = promptProofLatencyBypass || claudeCodeTerminalHostProofLatencyBypass
-        var confidenceMetadata = [
-            "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
-            "completionConfidenceScore": String(confidenceDecision.score),
-            "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
-        ]
-        if promptProofLatencyBypass {
-            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
-        }
-        if claudeCodeTerminalHostProofLatencyBypass {
-            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
-        }
         let modelDisplayLatencyBudgetMilliseconds = Self.maximumFinalModelDisplayLatencyMilliseconds(
             for: request,
             suggestion: suggestion,
@@ -847,73 +887,32 @@ final class SuggestionOrchestrator {
         let modelLatencyForBudget = modelIsFirstVisibleSuggestion
             ? max(0, latencyMilliseconds - max(0, scheduledDelayMilliseconds))
             : latencyMilliseconds
-        confidenceMetadata["modelDisplayLatencyBudgetMilliseconds"] = String(modelDisplayLatencyBudgetMilliseconds)
-        confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
-        confidenceMetadata["modelLatencyForBudgetMilliseconds"] = String(modelLatencyForBudget)
-        let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && !proofLatencyBypass
-            && modelLatencyForBudget > modelDisplayLatencyBudgetMilliseconds
-        let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("late-context-validation-required"))
-
-        if shouldSuppressFinalLatency {
-            let trace = DisplayScoreTrace(
-                score: score,
-                mode: request.mode,
-                behaviorProfileID: request.behaviorProfile.id,
-                threshold: adjustedPolicy.threshold(for: request.mode),
-                effectiveFinalScore: adjustedPolicy.effectiveFinalScore(for: score),
-                learningRestraintScoreScale: adjustedPolicy.learningRestraintScoreScale,
-                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
-                    for: request.mode,
-                    behaviorProfileID: request.behaviorProfile.id
-                )
-            )
-            let suppression = DisplayScoreSuppression(
-                reason: .tooSlowToDisplay,
-                trace: trace
-            )
-            return SuggestionDisplayScoreDecision(
-                decision: .suppress(suppression),
-                metadata: suppression.metadata
-                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
-                    .merging(confidenceMetadata) { current, _ in current }
-            )
-        }
-
-        if shouldSuppressLowConfidence {
-            let trace = DisplayScoreTrace(
-                score: score,
-                mode: request.mode,
-                behaviorProfileID: request.behaviorProfile.id,
-                threshold: adjustedPolicy.threshold(for: request.mode),
-                effectiveFinalScore: adjustedPolicy.effectiveFinalScore(for: score),
-                learningRestraintScoreScale: adjustedPolicy.learningRestraintScoreScale,
-                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
-                    for: request.mode,
-                    behaviorProfileID: request.behaviorProfile.id
-                )
-            )
-            let suppression = DisplayScoreSuppression(
-                reason: .lowConfidence,
-                trace: trace
-            )
-            return SuggestionDisplayScoreDecision(
-                decision: .suppress(suppression),
-                metadata: suppression.metadata
-                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
-                    .merging(confidenceMetadata) { current, _ in current }
-            )
-        }
-
-        let decision = adjustedPolicy.decision(
-            for: score,
+        let unifiedDecision = goodAndFastEnoughPolicy.decision(
+            suggestion: suggestion,
             mode: request.mode,
+            textBeforeCursor: request.textBeforeCursor,
+            supportLevel: profile.supportLevel,
+            score: score,
+            displayScorePolicy: adjustedPolicy,
+            latencyMilliseconds: latencyMilliseconds,
+            latencyBudgetMilliseconds: modelDisplayLatencyBudgetMilliseconds,
+            latencyForBudgetMilliseconds: modelLatencyForBudget,
+            enforceLatencyCeiling: triggerReason != "model-stream",
+            allowLatencyBypass: proofLatencyBypass,
             behaviorProfileID: request.behaviorProfile.id
         )
+        var confidenceMetadata = unifiedDecision.metadata
+        confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
+        if promptProofLatencyBypass {
+            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
+        }
+        if claudeCodeTerminalHostProofLatencyBypass {
+            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
+        }
+
         return SuggestionDisplayScoreDecision(
-            decision: decision,
-            metadata: decision.metadata
+            decision: unifiedDecision.decision,
+            metadata: unifiedDecision.metadata
                 .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
                 .merging(confidenceMetadata) { current, _ in current }
         )
