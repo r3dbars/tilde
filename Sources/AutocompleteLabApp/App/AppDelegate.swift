@@ -513,6 +513,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             triggerTiming: suggestionSessionBehaviors.triggerTiming
         )
     )
+    private lazy var suggestionStreamingPartialHost = SuggestionStreamingPartialHost(
+        dependencies: SuggestionStreamingPartialHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            presentSuggestion: { [weak self] suggestion, presentation in
+                self?.presentSuggestion(
+                    suggestion,
+                    suggestionID: presentation.suggestionID,
+                    request: presentation.request,
+                    context: presentation.context,
+                    profile: presentation.profile,
+                    fieldIdentity: presentation.fieldIdentity,
+                    renderMode: presentation.renderMode,
+                    latencyMilliseconds: presentation.latencyMilliseconds,
+                    triggerReason: "model-stream",
+                    requestTicket: presentation.requestTicket,
+                    candidateSelectionMetadata: presentation.candidateSelectionMetadata
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6701,47 +6722,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     for: request,
                     onPartialSuggestion: { partialSuggestion in
                         Task { @MainActor in
-                            let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                            guard self.suggestionOrchestrator.allows(
-                                requestTicket,
-                                fieldIdentity: fieldIdentity,
-                                currentFieldIdentity: self.currentFieldIdentity
-                            ) else {
-                                return
-                            }
-
-                            guard !partialSuggestion.isEmpty,
-                                  !self.suggestionOrchestrator.shouldSuppressRepetition(
-                                      partialSuggestion.visibleText,
-                                      mode: request.mode,
-                                      scope: appBundleIdentifier
-                                  ) else {
-                                return
-                            }
-
-                            guard self.suggestionOrchestrator.shouldPresentStreamingPartial(
-                                partialSuggestion,
-                                suggestionID: suggestionID,
-                                mode: request.mode,
-                                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000),
-                                latencyMilliseconds: latencyMilliseconds
-                            ) else {
-                                return
-                            }
-
-                            self.presentSuggestion(
-                                partialSuggestion,
+                            self.suggestionStreamingPartialHost.handle(
+                                partialSuggestion: partialSuggestion,
                                 suggestionID: suggestionID,
                                 request: request,
                                 context: context,
                                 profile: profile,
+                                appBundleIdentifier: appBundleIdentifier,
                                 fieldIdentity: fieldIdentity,
                                 renderMode: renderMode,
-                                latencyMilliseconds: latencyMilliseconds,
-                                triggerReason: "model-stream",
                                 requestTicket: requestTicket,
-                                candidateSelectionMetadata: self.suggestionOrchestrator
-                                    .streamingPresentationMetadata(suggestionID: suggestionID)
+                                requestStartedAt: requestStartedAt
                             )
                         }
                     }
