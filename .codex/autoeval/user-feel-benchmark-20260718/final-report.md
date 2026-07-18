@@ -32,5 +32,5 @@ blocked by the serialized merger hold before post-change Swift measurement.
 - After release, run focused tests, then the unchanged batch benchmark, repeat noisy baseline/winner runs, and test each remaining knob one at a time.
 
 ## Review
-- Independent static review: `/Users/redbars/.codex/maestro/runs/20260718T115020Z-steadytype-user-feel-static-review-claude`.
+- Independent static review: Maestro proof artifact retained outside the repository (path intentionally omitted).
 - Latest exact-head review found and drove removal of fabricated pause eligibility/latency and one-snapshot stability metrics, plus the undefined suggestion reference. The remaining metrics are aggregate-only and directly observed from replay inputs.
