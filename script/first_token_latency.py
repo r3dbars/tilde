@@ -102,6 +102,11 @@ def measure(
     # equals the quality prompt for this model/template.
     payloads = [audit.row_payload(row, model_alias, template) for row in rows]
     prompts = [batch.build_prompt(payload, tokenizer) for payload in payloads]
+    prompt_char_counts = [len(prompt) for prompt in prompts]
+    prompt_token_counts = [
+        len(tokenizer.encode(prompt, add_special_tokens=False))
+        for prompt in prompts
+    ]
 
     def first_token_ms(prompt: str) -> float:
         started = time.monotonic()
@@ -132,6 +137,10 @@ def measure(
         "warmup": warmup,
         "max_tokens": max_tokens,
         "load_ms": load_ms,
+        "prompt_chars_p50": _round(percentile([float(value) for value in prompt_char_counts], 0.50)),
+        "prompt_chars_p95": _round(percentile([float(value) for value in prompt_char_counts], 0.95)),
+        "prompt_tokens_p50": _round(percentile([float(value) for value in prompt_token_counts], 0.50)),
+        "prompt_tokens_p95": _round(percentile([float(value) for value in prompt_token_counts], 0.95)),
         "first_token_ms_p50": _round(percentile(per_prompt_ms, 0.50)),
         "first_token_ms_p95": _round(percentile(per_prompt_ms, 0.95)),
         "first_token_ms_p99": _round(percentile(per_prompt_ms, 0.99)),
