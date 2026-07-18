@@ -221,6 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
+    private lazy var runtimeStatusHost = RuntimeStatusHost(handler: self)
     private lazy var modelInstallLifecycleHost = ModelInstallLifecycleHost(handler: self)
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
@@ -381,9 +382,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var lastFieldControlTarget: FieldControlTarget?
-    private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
-    private var hasSurfacedModelSetupUI = false
-    private var modelInstallStatusText: String?
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
@@ -827,46 +825,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             unavailableReason: modelRuntimeBundle.bootstrapPlan.unavailableReason,
             modelDirectoryPath: modelRuntimeBundle.modelDirectoryURL.path,
             applyState: { [weak self] state in
-                self?.applyRuntimeState(state)
+                self?.runtimeStatusHost.apply(state)
             }
         )
     }
 
-    private func applyRuntimeState(_ state: LocalRuntimeState) {
-        let wasReadyForSuggestions = runtimeReadinessReport.allowsSuggestions
-        currentRuntimeState = refreshModelAssetStateIfNeeded(for: state)
-        refreshRuntimeChrome()
-        let report = runtimeReadinessReport
-        if report.allowsSuggestions,
-           !modelInstallLifecycleHost.isInstalling,
-           modelInstallStatusText != nil {
-            modelInstallStatusText = "Model install: ready"
-            refreshRuntimeChrome()
-        }
-        if !wasReadyForSuggestions && report.allowsSuggestions {
-            rearmFocusedTextAfterRuntimeReady()
-        }
-        if report.stage == .failed || report.action == .repairModel {
-            showSettings()
-        } else if report.stage == .downloadNeeded, !hasSurfacedModelSetupUI {
-            // A missing model must not be a silent no-op: without this, a first
-            // run with no model asset is a menu bar icon that never suggests
-            // anything and never says why. Surface Settings once per launch.
-            hasSurfacedModelSetupUI = true
-            showSettings()
-        }
-        DiagnosticsLog.shared.record(
-            "runtime",
-            metadata: [
-                "state": state.statusSummary,
-                "completionLength": completionLengthConfiguration.displaySummary,
-                "readinessStage": report.stage.rawValue,
-                "readinessAction": report.action.rawValue
-            ]
-        )
-    }
-
-    private func refreshModelAssetStateIfNeeded(for state: LocalRuntimeState) -> LocalRuntimeState {
+    func refreshModelAssetState(for state: LocalRuntimeState) -> LocalRuntimeState {
         guard case let .failed(candidate, reason) = state,
               RuntimeBootstrapPlan.isRepairableModelAssetFailure(reason) else {
             return state
@@ -924,7 +888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: modelInstallStatusText,
+                modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
                 isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
@@ -938,7 +902,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var runtimeReadinessReport: RuntimeReadinessReport {
-        modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
+        runtimeStatusHost.runtimeReadinessReport
     }
 
     private var modelDirectoryPath: String {
@@ -17033,7 +16997,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeReport: runtimeReadinessReport,
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: modelInstallStatusText,
+                modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
                 isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
@@ -17547,7 +17511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
+            modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
             isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
@@ -17744,7 +17708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
+            modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
             isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
@@ -17804,7 +17768,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
         engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
         suggestionOrchestrator.updateEngine(engine)
-        currentRuntimeState = .unavailable(reason: "model install completed")
+        runtimeStatusHost.markRuntimeUnavailable(reason: "model install completed")
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         refreshRuntimeChrome()
         warmModelRuntime()
@@ -19346,13 +19310,39 @@ extension AppDelegate: StatusMenuActionHandling {
 
 // MARK: - Model install lifecycle wiring
 
+extension AppDelegate: RuntimeStatusHandling {
+    var modelRuntimeBundleForStatus: AppModelRuntimeBundle {
+        modelRuntimeBundle
+    }
+
+    var isModelInstallInProgressForStatus: Bool {
+        modelInstallLifecycleHost.isInstalling
+    }
+
+    var completionLengthDisplaySummaryForStatus: String {
+        completionLengthConfiguration.displaySummary
+    }
+
+    func refreshRuntimeStatusChrome() {
+        refreshRuntimeChrome()
+    }
+
+    func rearmFocusedTextAfterRuntimeReadyForStatus() {
+        rearmFocusedTextAfterRuntimeReady()
+    }
+
+    func showRuntimeSettings() {
+        showSettings()
+    }
+}
+
 extension AppDelegate: ModelInstallLifecycleHandling {
     var modelRuntimeBundleForInstall: AppModelRuntimeBundle {
         modelRuntimeBundle
     }
 
     func setModelInstallStatus(_ statusText: String?) {
-        modelInstallStatusText = statusText
+        runtimeStatusHost.setModelInstallStatus(statusText)
     }
 
     func refreshModelInstallUI() {
