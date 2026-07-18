@@ -18,8 +18,11 @@ struct LiveSuggestionWiringTests {
         let schedulingHost = try source(
             "Sources/AutocompleteLabApp/App/SuggestionSchedulingHost.swift"
         )
+        let presentationOrchestrationHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionPresentationOrchestrationHost.swift"
+        )
         let suggestionWiring =
-            appDelegate + preparationHost + streamingPartialHost + requestExecutionHost + schedulingHost
+            appDelegate + preparationHost + streamingPartialHost + requestExecutionHost + schedulingHost + presentationOrchestrationHost
 
         try require(suggestionWiring, contains: "private lazy var suggestionOrchestrator = SuggestionOrchestrator(")
         try require(suggestionWiring, contains: "wordCompletionRanker: wordCompletionRanker")
@@ -110,7 +113,10 @@ struct LiveSuggestionWiringTests {
         let refreshHost = try source(
             "Sources/AutocompleteLabApp/App/SuggestionPresentationRefreshHost.swift"
         )
-        let suggestionPresentationWiring = appDelegate + refreshHost
+        let orchestrationHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionPresentationOrchestrationHost.swift"
+        )
+        let suggestionPresentationWiring = appDelegate + refreshHost + orchestrationHost
 
         try require(suggestionPresentationWiring, contains: "codexPromptTargetInvalidationResolution(")
         try require(suggestionPresentationWiring, contains: "promptTargetInvalidationResolution == .cancelAndRetry")
@@ -131,9 +137,9 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "codex-prompt-presentation-deferred-for-ax-cooldown")
         try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
         try require(appDelegate, contains: "suggestionChromeHost.hideFieldStatusIndicator()")
-        try require(appDelegate, contains: "switch codexPromptTargetContinuityHost.presentationPreparationPolicy.preparation(")
-        try require(appDelegate, contains: "case let .deferForAXCooldown(delayMilliseconds):")
-        try require(appDelegate, contains: "case .refreshFocusedContext:")
+        try require(suggestionPresentationWiring, contains: "switch codexPromptTargetContinuityHost.presentationPreparationPolicy.preparation(")
+        try require(suggestionPresentationWiring, contains: "case let .deferForAXCooldown(delayMilliseconds):")
+        try require(suggestionPresentationWiring, contains: "case .refreshFocusedContext:")
     }
 }
 

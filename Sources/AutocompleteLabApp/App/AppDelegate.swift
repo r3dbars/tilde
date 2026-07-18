@@ -1015,6 +1015,117 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionPresentationOrchestrationHost = SuggestionPresentationOrchestrationHost(
+        dependencies: SuggestionPresentationOrchestrationHostDependencies(
+            codexPromptTargetContinuityHost: codexPromptTargetContinuityHost,
+            suggestionOrchestrator: suggestionOrchestrator,
+            suggestionSession: suggestionSession,
+            currentSuggestionState: currentSuggestionState,
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            lastTextSnapshot: { [weak self] in self?.lastTextSnapshot },
+            displayScorePolicy: displayScorePolicy,
+            suggestionTuning: { [unowned self] in self.suggestionTuning },
+            suggestionReplacementVisibilityPolicy: suggestionReplacementVisibilityPolicy,
+            maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds,
+            suggestionPresentationPreparationHost: suggestionPresentationPreparationHost,
+            suggestionPresentationSuppressionTraceHost: suggestionPresentationSuppressionTraceHost,
+            suggestionPresentationPlacementHost: suggestionPresentationPlacementHost,
+            suggestionPresentationDeliveryHost: suggestionPresentationDeliveryHost,
+            suggestionPresentationCommitHost: suggestionPresentationCommitHost,
+            codexPromptAXCooldownPresentationDelayMilliseconds: { [unowned self] profile, fieldIdentity in
+                self.codexPromptAXCooldownPresentationDelayMilliseconds(
+                    profile: profile,
+                    fieldIdentity: fieldIdentity
+                )
+            },
+            scheduleCodexPromptPresentationRefreshRetry: { [weak self] input in
+                self?.scheduleCodexPromptPresentationRefreshRetry(
+                    input.suggestion,
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    fieldIdentity: input.fieldIdentity,
+                    renderMode: input.renderMode,
+                    latencyMilliseconds: input.latencyMilliseconds,
+                    triggerReason: input.triggerReason,
+                    requestTicket: input.requestTicket,
+                    candidateSelectionMetadata: input.candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: input.scheduledDelayMilliseconds,
+                    retry: input.retry
+                )
+            },
+            scheduleCodexPromptPresentationAfterAXCooldown: { [weak self] input in
+                self?.scheduleCodexPromptPresentationAfterAXCooldown(
+                    input.suggestion,
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    fieldIdentity: input.fieldIdentity,
+                    renderMode: input.renderMode,
+                    latencyMilliseconds: input.latencyMilliseconds,
+                    triggerReason: input.triggerReason,
+                    requestTicket: input.requestTicket,
+                    candidateSelectionMetadata: input.candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: input.scheduledDelayMilliseconds,
+                    presentationRefreshAttempt: input.presentationRefreshAttempt,
+                    delayMilliseconds: input.delayMilliseconds
+                )
+            },
+            refreshedPresentationContext: { [unowned self] request, requestContext, profile, fieldIdentity in
+                self.refreshedPresentationContext(
+                    for: request,
+                    requestContext: requestContext,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity
+                )
+            },
+            traceGeometryMetadata: { [unowned self] context, renderMode in
+                self.traceGeometryMetadata(context: context, renderMode: renderMode)
+            },
+            traceRequestMetadata: { [unowned self] request, context in
+                self.traceRequestMetadata(request: request, context: context)
+            },
+            traceRequestMetadataForField: { [unowned self] request, fieldClassification in
+                self.traceRequestMetadata(
+                    request: request,
+                    fieldClassification: fieldClassification
+                )
+            },
+            fieldClassification: { [unowned self] context in self.fieldClassification(for: context) },
+            effectiveSuggestionFieldClassification: { [unowned self] context, profile, raw in
+                self.effectiveSuggestionFieldClassificationForCurrentFrontmost(
+                    context: context,
+                    profile: profile,
+                    raw: raw
+                )
+            },
+            acceptedAndKeptSignal: { [unowned self] request, fieldClassification, profile in
+                self.acceptedAndKeptSignal(
+                    request: request,
+                    fieldClassification: fieldClassification,
+                    profile: profile
+                )
+            },
+            currentSuggestionAgeMilliseconds: { [unowned self] in self.currentSuggestionAgeMilliseconds() },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason, metadata in
+                self?.hideSuggestion(reason: reason, metadata: metadata)
+            },
+            showFieldStatusIndicator: { [weak self] state, context in
+                self?.showFieldStatusIndicator(state, context: context)
+            },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
+            setLastCompatibilityLearningTrustContext: { [weak self] context in
+                self?.lastCompatibilityLearningTrustContext = context
+            },
+            cancelKeyboardEventTapIdleStop: { [weak self] in self?.cancelKeyboardEventTapIdleStop() }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6605,461 +6716,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduledDelayMilliseconds: Int = 0,
         presentationRefreshAttempt: Int = 0
     ) {
-        let originalContext = context
-        let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
-            && currentSuggestionState.id == suggestionID
-        let cooldownDelayMilliseconds = refreshBeforePresenting
-            ? codexPromptAXCooldownPresentationDelayMilliseconds(
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-            : 0
-        let refreshedContext: (context: FocusedTextContext?, reason: String?)
-        switch codexPromptTargetContinuityHost.presentationPreparationPolicy.preparation(
-            refreshBeforePresenting: refreshBeforePresenting,
-            cooldownDelayMilliseconds: cooldownDelayMilliseconds
-        ) {
-        case let .deferForAXCooldown(delayMilliseconds):
-            scheduleCodexPromptPresentationAfterAXCooldown(
-                suggestion,
-                suggestionID: suggestionID,
-                request: request,
-                context: originalContext,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds,
-                triggerReason: triggerReason,
-                requestTicket: requestTicket,
-                candidateSelectionMetadata: candidateSelectionMetadata,
-                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                presentationRefreshAttempt: presentationRefreshAttempt,
-                delayMilliseconds: delayMilliseconds
-            )
-            return
-        case .refreshFocusedContext:
-            refreshedContext = refreshedPresentationContext(
-                for: request,
-                requestContext: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-        case .useOriginalContext:
-            refreshedContext = (context: context, reason: nil)
-        }
-        let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
-        let freshnessFieldIdentity = verifiedRefreshContext == nil
-            ? currentFieldIdentity
-            : fieldIdentity
-        let freshnessSnapshot = verifiedRefreshContext.map {
-            FocusedTextSnapshot(
-                fieldIdentity: fieldIdentity,
-                textBeforeCursor: $0.textBeforeCursor,
-                textAfterCursor: $0.textAfterCursor
-            )
-        } ?? lastTextSnapshot
-        if let suppressionReason = suggestionOrchestrator.presentationSuppressionReason(
+        suggestionPresentationOrchestrationHost.presentSuggestion(
+            suggestion,
+            suggestionID: suggestionID,
+            request: request,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            renderMode: renderMode,
+            latencyMilliseconds: latencyMilliseconds,
+            triggerReason: triggerReason,
             requestTicket: requestTicket,
-            request: request,
-            fieldIdentity: fieldIdentity,
-            currentFieldIdentity: freshnessFieldIdentity,
-            currentSnapshot: freshnessSnapshot,
-            invalidatedByUserTyping: invalidatedByVisibleUserTyping
-        ) {
-            let reason = suppressionReason.rawValue
-            let metadata = traceGeometryMetadata(context: originalContext, renderMode: renderMode)
-                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging([
-                    "presentationFreshness": "stale",
-                    "presentationFreshnessReason": reason,
-                    "presentationFreshnessSource": verifiedRefreshContext == nil ? "cached-snapshot" : "live-refresh"
-                ]) { current, _ in current }
-            setSuggestionDecision("Blocked: \(reason)")
-            suggestionPresentationSuppressionTraceHost.record(
-                input: SuggestionPresentationSuppressionTraceInput(
-                    suggestion: suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: originalContext,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    reason: reason,
-                    traceMetadata: metadata,
-                    eventMetadata: ["reason": reason]
-                        .merging(metadata) { current, _ in current }
-                )
-            )
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        guard let context = refreshedContext.context else {
-            let refreshReason = refreshedContext.reason ?? "stale-focused-context"
-            if refreshReason == "transient-codex-prompt-target",
-               let retry = codexPromptTargetContinuityHost.presentationRefreshRetryPolicy.next(
-                after: presentationRefreshAttempt
-               ) {
-                scheduleCodexPromptPresentationRefreshRetry(
-                    suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: originalContext,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: candidateSelectionMetadata,
-                    scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                    retry: retry
-                )
-                return
-            }
-            let reason = refreshReason == "transient-codex-prompt-target"
-                ? "stale-prompt-target"
-                : refreshReason
-            let metadata = traceGeometryMetadata(context: originalContext, renderMode: renderMode)
-                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-            suggestionPresentationSuppressionTraceHost.record(
-                input: SuggestionPresentationSuppressionTraceInput(
-                    suggestion: suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: originalContext,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    reason: reason,
-                    traceMetadata: metadata,
-                    eventMetadata: ["reason": reason]
-                        .merging(metadata) { current, _ in current }
-                )
-            )
-            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        let preparationResult = suggestionPresentationPreparationHost.prepare(
-            input: SuggestionPresentationPreparationInput(
-                suggestion: suggestion,
-                request: request,
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds,
-                screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-            )
-        )
-        let suggestion: CompletionSuggestion
-        let visualTrustContext: CompatibilityLearningVisualTrustContext
-        let learningAdjustment: CompatibilityLearningAdjustment
-        let placementPlan: PlacementHealthPlan
-        switch preparationResult {
-        case let .invalid(reason):
-            hideSuggestion(reason: "late-result-\(reason.rawValue)")
-            return
-        case .typedThroughVisiblePrefix:
-            hideSuggestion(reason: "typed-through-visible-prefix")
-            return
-        case let .ready(prepared):
-            suggestion = prepared.suggestion
-            visualTrustContext = prepared.visualTrustContext
-            learningAdjustment = prepared.learningAdjustment
-            placementPlan = prepared.placementPlan
-        }
-
-        guard case let .present(placement) = placementPlan else {
-            let placementSuppression = suggestionOrchestrator.placementSuppressionResolution(
-                for: placementPlan,
-                requestedRenderMode: learningAdjustment.effectiveRenderMode,
-                profile: profile,
-                fieldKind: request.fieldKind
-            )
-            let suppression = placementSuppression.suppression
-            let commandFallbackMetadata = placementSuppression.metadata
-            let placementMetadata = traceGeometryMetadata(
-                context: context,
-                renderMode: learningAdjustment.effectiveRenderMode
-            )
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(commandFallbackMetadata) { current, _ in current }
-                .merging(suppression.metadata) { current, _ in current }
-            suggestionPresentationPlacementHost.suppress(
-                input: SuggestionPresentationPlacementSuppressionInput(
-                    suggestion: suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    suppression: placementSuppression,
-                    traceMetadata: placementMetadata,
-                    eventMetadata: ["reason": suppression.reason.rawValue]
-                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                        .merging(learningAdjustment.metadata) { current, _ in current }
-                        .merging(commandFallbackMetadata) { current, _ in current }
-                        .merging(suppression.metadata) { current, _ in current }
-                )
-            )
-            return
-        }
-
-        let rawDisplayFieldClassification = fieldClassification(for: context)
-        let displayFieldClassification = effectiveSuggestionFieldClassificationForCurrentFrontmost(
-            context: context,
-            profile: profile,
-            raw: rawDisplayFieldClassification
-        )
-        let displayRequestMetadata = traceRequestMetadata(
-            request: request,
-            fieldClassification: displayFieldClassification
-        )
-        let acceptedAndKeptSignal = acceptedAndKeptSignal(
-            request: request,
-            fieldClassification: displayFieldClassification,
-            profile: profile
-        )
-        let isRepeatedMiss = suggestionOrchestrator.shouldSuppressRepetition(
-            suggestion.visibleText,
-            mode: request.mode,
-            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
-        )
-        // A final model result is "first visible" when nothing is already on screen for the user
-        // to read — no instant local phrase and no streamed partial. In that case a slow result
-        // would paint cold and late, so displayScoreDecision applies a tighter latency ceiling.
-        // When a suggestion is already visible, the model result is a refinement and keeps the
-        // looser budget so good late refinements can still replace the instant phrase in place.
-        let modelIsFirstVisibleSuggestion = triggerReason == "model-result"
-            && !suggestionSession.hasVisibleSuggestion
-        let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
-            suggestion: suggestion,
-            request: request,
-            context: context,
-            fieldClassification: displayFieldClassification,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            triggerReason: triggerReason,
-            latencyMilliseconds: latencyMilliseconds,
-            acceptedAndKeptSignal: acceptedAndKeptSignal,
-            isRepeatedMiss: isRepeatedMiss,
-            displayScorePolicy: displayScorePolicy,
-            suggestionTuning: suggestionTuning,
-            modelIsFirstVisibleSuggestion: modelIsFirstVisibleSuggestion,
-            scheduledDelayMilliseconds: scheduledDelayMilliseconds
-        )
-        let displayScoreDecision = orchestratedDisplayDecision.decision
-        let displayScoreMetadata = orchestratedDisplayDecision.metadata
-        let displayScoreTrace = displayScoreDecision.trace
-        guard displayScoreDecision.shouldDisplay else {
-            let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
-            let displaySuppressionReason = DisplayScoreSuppressionReason(rawValue: reason)
-            let shouldKeepStreamedSuggestion: Bool
-            if displaySuppressionReason == .tooSlowToDisplay,
-               let requestTicket {
-                shouldKeepStreamedSuggestion = suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
-                    suggestionID: suggestionID,
-                    currentSuggestionID: currentSuggestionState.id,
-                    ticket: requestTicket,
-                    fieldIdentity: fieldIdentity,
-                    currentFieldIdentity: currentFieldIdentity,
-                    hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
-                )
-            } else {
-                shouldKeepStreamedSuggestion = false
-            }
-            let visibleSuggestionAction = suggestionReplacementVisibilityPolicy.action(
-                forDisplaySuppressionReason: displaySuppressionReason,
-                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-                currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown,
-                sameFieldAsCurrentSuggestion: currentSuggestionState.appBundleIdentifier == (request.appBundleIdentifier ?? profile.bundleIdentifier)
-                    && currentSuggestionState.fieldIdentity == fieldIdentity,
-                currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
-                maximumPreservedAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds
-            )
-            let shouldKeepCurrentVisibleSuggestion = shouldKeepStreamedSuggestion
-                || visibleSuggestionAction == .keepCurrentVisible
-            var lateSuggestionMetadata: [String: String] = [:]
-            if shouldKeepStreamedSuggestion {
-                lateSuggestionMetadata["keptVisibleStreamingSuggestion"] = "true"
-            }
-            if visibleSuggestionAction == .keepCurrentVisible {
-                lateSuggestionMetadata["keptVisibleSuggestionAfterLateSuppression"] = "true"
-                lateSuggestionMetadata["lateSuppressionPreservedAgeMilliseconds"] =
-                    currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
-            }
-            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-            let suppressionMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                .merging(lateSuggestionMetadata) { current, _ in current }
-            suggestionPresentationSuppressionTraceHost.record(
-                input: SuggestionPresentationSuppressionTraceInput(
-                    suggestion: suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    reason: reason,
-                    traceMetadata: suppressionMetadata,
-                    eventMetadata: ["reason": reason]
-                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                        .merging(learningAdjustment.metadata) { current, _ in current }
-                        .merging(placement.metadata) { current, _ in current }
-                        .merging(candidateSelectionMetadata) { current, _ in current }
-                        .merging(displayScoreMetadata) { current, _ in current }
-                        .merging(lateSuggestionMetadata) { current, _ in current }
-                )
-            )
-            if shouldKeepCurrentVisibleSuggestion {
-                setSuggestionDecision(
-                    shouldKeepStreamedSuggestion
-                        ? "Shown: kept streamed suggestion"
-                        : "Shown: kept visible suggestion after late \(reason)"
-                )
-                showFieldStatusIndicator(.shown, context: context)
-                repositionVisibleSuggestion(context: context, profile: profile)
-                updateKeyboardEventTapSnapshot()
-                return
-            }
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        let replacementDecision = suggestionOrchestrator.replacementDecision(
-            currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
-            proposedVisibleText: suggestion.visibleText,
-            currentSuggestionID: currentSuggestionState.id,
-            proposedSuggestionID: suggestionID,
-            currentPresentedAt: currentSuggestionState.presentedAt,
-            currentScore: currentSuggestionState.displayScoreFinal,
-            proposedScore: displayScoreTrace.score.finalScore,
-            currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
-        )
-        let replacementMetadata = replacementDecision.metadata
-        let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
-            for: replacementDecision,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
-        )
-        guard replacementVisibilityAction == .presentProposed else {
-            let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"
-            setSuggestionDecision("Kept current suggestion: \(reason)")
-            let suppressionMetadata = traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                .merging(replacementMetadata) { current, _ in current }
-            suggestionPresentationSuppressionTraceHost.record(
-                input: SuggestionPresentationSuppressionTraceInput(
-                    suggestion: suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    reason: reason,
-                    traceMetadata: suppressionMetadata,
-                    eventMetadata: ["reason": reason]
-                        .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                        .merging(learningAdjustment.metadata) { current, _ in current }
-                        .merging(placement.metadata) { current, _ in current }
-                        .merging(candidateSelectionMetadata) { current, _ in current }
-                        .merging(displayScoreMetadata) { current, _ in current }
-                        .merging(replacementMetadata) { current, _ in current }
-                )
-            )
-
-            switch replacementVisibilityAction {
-            case .presentProposed:
-                break
-            case .keepCurrentVisible:
-                showFieldStatusIndicator(.shown, context: context)
-                repositionVisibleSuggestion(context: context, profile: profile)
-                updateKeyboardEventTapSnapshot()
-            case .hide:
-                hideSuggestion(reason: reason)
-            }
-            return
-        }
-
-        lastCompatibilityLearningTrustContext = visualTrustContext
-        cancelKeyboardEventTapIdleStop()
-        let presentationDeliveryRequest = SuggestionPresentationDeliveryRequest(
-            suggestion: suggestion,
-            suggestionID: suggestionID,
-            completionRequest: request,
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            placement: placement,
-            latencyMilliseconds: latencyMilliseconds,
-            requestMetadata: displayRequestMetadata,
-            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
-            learningMetadata: learningAdjustment.metadata,
             candidateSelectionMetadata: candidateSelectionMetadata,
-            displayScoreMetadata: displayScoreMetadata,
-            replacementMetadata: replacementMetadata
+            refreshBeforePresenting: refreshBeforePresenting,
+            scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+            presentationRefreshAttempt: presentationRefreshAttempt
         )
-        guard let delivery = suggestionPresentationDeliveryHost.deliver(
-            input: SuggestionPresentationDeliveryHostInput(
-                presentationDeliveryRequest: presentationDeliveryRequest,
-                triggerReason: triggerReason,
-                traceGeometryMetadata: traceGeometryMetadata(
-                    context: context,
-                    renderMode: placement.renderMode
-                ),
-                traceRequestMetadata: traceRequestMetadata(request: request, context: context)
-            )
-        ) else {
-            return
-        }
-        let panelRect = delivery.panelRect
-        let deliveredPlacement = delivery.placement
-
-        let presentationCommitInput = SuggestionPresentationCommitInput(
-            suggestion: suggestion,
-            suggestionID: suggestionID,
-            request: request,
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            rawDisplayFieldClassification: rawDisplayFieldClassification,
-            displayFieldClassification: displayFieldClassification,
-            latencyMilliseconds: latencyMilliseconds,
-            triggerReason: triggerReason,
-            deliveredPlacement: deliveredPlacement,
-            panelRect: panelRect,
-            presentationDeliveryRequest: presentationDeliveryRequest,
-            visualTrustContext: visualTrustContext,
-            learningAdjustment: learningAdjustment,
-            displayScoreFinal: displayScoreTrace.score.finalScore
-        )
-        _ = suggestionPresentationCommitHost.commit(input: presentationCommitInput)
-        return
-
     }
-
     private func scheduleCodexPromptPresentationRefreshRetry(
         _ suggestion: CompletionSuggestion,
         suggestionID: String,
