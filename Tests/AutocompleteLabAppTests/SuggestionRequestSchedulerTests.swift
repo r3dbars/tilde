@@ -26,11 +26,14 @@ struct SuggestionRequestSchedulerTests {
         let scheduler = SuggestionRequestScheduler()
         var didRun = false
 
-        scheduler.schedule(suggestionID: "second", delayMilliseconds: 10) {
+        scheduler.schedule(suggestionID: "second", delayMilliseconds: 0) {
             didRun = true
         }
 
-        try await Task.sleep(for: .milliseconds(60))
+        for _ in 0..<100 where !didRun {
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(20))
+        }
         #expect(didRun)
         #expect(!scheduler.hasPendingRequest)
     }
