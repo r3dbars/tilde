@@ -389,14 +389,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController {
         settingsWindowHost.controller
     }
+    private lazy var statusMenuHost = StatusMenuHost(
+        handler: self,
+        developerMenuEnabled: developerMenuEnabled
+    )
 
-    private var statusItem: NSStatusItem?
-    private var statusMenuItem: NSMenuItem?
-    private var suggestionDecisionMenuItem: NSMenuItem?
-    private var runtimeMenuItem: NSMenuItem?
-    private var pauseSuggestionsMenuItem: NSMenuItem?
-    private var silenceFieldMenuItem: NSMenuItem?
-    private var toggleAppMenuItem: NSMenuItem?
     private var workspaceFocusObservers: [NSObjectProtocol] = []
     private var screenGeometryObserver: NSObjectProtocol?
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
@@ -494,7 +491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         loadProofModeOverrides()
         startProofOnlyAcceptCommandObserver()
-        configureStatusItem()
+        statusMenuHost.start(pauseSuggestionsTitle: pauseSuggestionsTitle)
         DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
@@ -999,109 +996,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func configureStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        configureStatusButton(item.button, configuration: .autocompleteLab)
-
-        let menu = NSMenu()
-
-        // A single, calm status line. The full decision + model detail lives in its tooltip.
-        let statusMenu = NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: "")
-        menu.addItem(statusMenu)
-        menu.addItem(NSMenuItem.separator())
-
-        let suggestNowItem = NSMenuItem(
-            title: "Ask for a Suggestion",
-            action: #selector(suggestNowFromMenu),
-            keyEquivalent: "`"
-        )
-        suggestNowItem.keyEquivalentModifierMask = [.control]
-        suggestNowItem.toolTip = "\(SuggestionSummonHotKeyDescriptor.controlBacktick.displayName) asks for one suggestion without changing Tab."
-        menu.addItem(suggestNowItem)
-
-        // Pause options live in one submenu so the top level stays uncluttered.
-        let pauseParentItem = NSMenuItem(title: "Pause Suggestions", action: nil, keyEquivalent: "")
-        let pauseMenu = NSMenu()
-        let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
-        pauseMenu.addItem(pauseItem)
-        pauseMenu.addItem(NSMenuItem.separator())
-        pauseMenu.addItem(NSMenuItem(title: "For 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: ""))
-        pauseMenu.addItem(NSMenuItem(title: "For 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: ""))
-        pauseMenu.addItem(NSMenuItem(title: "Until Tomorrow", action: #selector(pauseSuggestionsUntilTomorrowFromControl), keyEquivalent: ""))
-        menu.setSubmenu(pauseMenu, for: pauseParentItem)
-        menu.addItem(pauseParentItem)
-
-        let toggleItem = NSMenuItem(title: "Pause Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
-        menu.addItem(toggleItem)
-        let silenceFieldItem = NSMenuItem(
-            title: "Silence This Field",
-            action: #selector(silenceCurrentField),
-            keyEquivalent: "s"
-        )
-        menu.addItem(silenceFieldItem)
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ","))
-        let feedbackItem = NSMenuItem(
-            title: BetaFeedbackLink.menuTitle,
-            action: #selector(openFeedbackForm),
-            keyEquivalent: ""
-        )
-        feedbackItem.toolTip = BetaFeedbackLink.privacyNote
-        menu.addItem(feedbackItem)
-
-        // Developer tools stay hidden unless explicitly enabled, so everyday users never see them.
-        if developerMenuEnabled {
-            let debugMenuItem = NSMenuItem(title: "Developer", action: nil, keyEquivalent: "")
-            let debugMenu = NSMenu()
-            debugMenu.addItem(NSMenuItem(title: "Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
-            debugMenu.addItem(NSMenuItem(title: "Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
-            debugMenu.addItem(NSMenuItem(title: "Writing Journal Folder", action: #selector(revealPersonalCaptureFolder), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem.separator())
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
-            menu.setSubmenu(debugMenu, for: debugMenuItem)
-            menu.addItem(debugMenuItem)
-        }
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit SteadyType", action: #selector(quit), keyEquivalent: "q"))
-
-        item.menu = menu
-        statusItem = item
-        statusMenuItem = statusMenu
-        suggestionDecisionMenuItem = nil
-        runtimeMenuItem = nil
-        pauseSuggestionsMenuItem = pauseItem
-        silenceFieldMenuItem = silenceFieldItem
-        toggleAppMenuItem = toggleItem
-        refreshRuntimeChrome()
-    }
-
-    private func configureStatusButton(
-        _ button: NSStatusBarButton?,
-        configuration: MenuBarStatusItemConfiguration
-    ) {
-        guard let button else {
-            return
-        }
-
-        if let image = NSImage(
-            systemSymbolName: configuration.symbolName,
-            accessibilityDescription: configuration.accessibilityLabel
-        ) {
-            image.isTemplate = true
-            button.image = image
-            button.title = ""
-        } else {
-            button.title = configuration.fallbackTitle
-        }
-        button.toolTip = configuration.accessibilityLabel
-    }
-
     private func startResourceDiagnostics() {
         recordResourceDiagnostics(reason: "launch")
 
@@ -1230,7 +1124,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -17716,17 +17609,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ].joined(separator: "|")
 
         let decisionPresentation = SuggestionDecisionPresentation(lastSuggestionDecision)
-        statusMenuItem?.title = statusLine
-        statusMenuItem?.toolTip = lastSuggestionDecision
-        suggestionDecisionMenuItem?.title = decisionPresentation.menuTitle
-        suggestionDecisionMenuItem?.toolTip = lastSuggestionDecision
-        pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
-        silenceFieldMenuItem?.title = fieldControlState.buttonTitle
-        silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
-        silenceFieldMenuItem?.toolTip = fieldControlState.detailText
-        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Pause Current App"
-        toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
-        toggleAppMenuItem?.toolTip = appControlState?.fallbackText
+        statusMenuHost.update(
+            statusLine: statusLine,
+            statusToolTip: lastSuggestionDecision,
+            pauseSuggestionsTitle: pauseSuggestionsTitle,
+            silenceFieldTitle: fieldControlState.buttonTitle,
+            silenceFieldEnabled: fieldControlState.canSilence,
+            silenceFieldToolTip: fieldControlState.detailText,
+            toggleAppTitle: appControlState?.menuToggleTitle ?? "Pause Current App",
+            toggleAppEnabled: appControlState?.canToggle ?? false,
+            toggleAppToolTip: appControlState?.fallbackText ?? ""
+        )
         if settingsWindow.isShowing {
             settingsWindow.refresh(
                 isTrusted: accessibilityClient.isTrusted,
@@ -18260,11 +18153,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastSuggestionDecision: lastSuggestionDecision
         )
         DiagnosticsLog.shared.record("request-accessibility")
-    }
-
-    @objc
-    private func suggestNowFromMenu() {
-        requestSuggestionNow(source: "menu")
     }
 
     private func requestSuggestionNow(source: String) {
@@ -20342,6 +20230,51 @@ extension AppDelegate: SettingsWindowActionHandling {
             setSuggestionLearningRestraintLevel(level)
         case .resetSuggestionTuning:
             resetSuggestionTuning()
+        }
+    }
+}
+
+// MARK: - Status menu wiring
+
+extension AppDelegate: StatusMenuActionHandling {
+    func handleStatusMenuAction(_ action: StatusMenuAction) {
+        switch action {
+        case .suggestNow:
+            requestSuggestionNow(source: "menu")
+        case .togglePauseSuggestions:
+            togglePauseSuggestions()
+        case .pauseSuggestionsFor15Minutes:
+            pauseSuggestionsFor15Minutes()
+        case .pauseSuggestionsFor1Hour:
+            pauseSuggestionsFor1Hour()
+        case .pauseSuggestionsUntilTomorrow:
+            pauseSuggestionsUntilTomorrowFromControl()
+        case .toggleCurrentApp:
+            toggleCurrentApp()
+        case .silenceCurrentField:
+            silenceCurrentField()
+        case .showSettings:
+            showSettings()
+        case .openFeedbackForm:
+            openFeedbackForm()
+        case .showDiagnostics:
+            showDiagnostics()
+        case .revealModelFolder:
+            revealModelFolder()
+        case .revealPersonalCaptureFolder:
+            revealPersonalCaptureFolder()
+        case .nudgeSuggestionUp:
+            nudgeCurrentAppSuggestionUp()
+        case .nudgeSuggestionDown:
+            nudgeCurrentAppSuggestionDown()
+        case .nudgeSuggestionLeft:
+            nudgeCurrentAppSuggestionLeft()
+        case .nudgeSuggestionRight:
+            nudgeCurrentAppSuggestionRight()
+        case .resetCurrentAppLearning:
+            resetCurrentAppLearning()
+        case .quit:
+            quit()
         }
     }
 }
