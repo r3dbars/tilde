@@ -4,6 +4,19 @@ import Testing
 
 @Suite("App proof command runner")
 struct AppProofCommandRunnerTests {
+    @Test("Live automatic proof entry point exists and is executable")
+    func liveAutomaticProofEntryPointExistsAndIsExecutable() {
+        let repositoryRootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let entryPointURL = AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL)
+
+        #expect(AppProofCommandPlan.proofEntryPointRelativePath == "script/real_app_smoke.sh")
+        #expect(FileManager.default.fileExists(atPath: entryPointURL.path))
+        #expect(FileManager.default.isExecutableFile(atPath: entryPointURL.path))
+    }
+
     @Test("TextEdit proof plan runs the safe skip-build smoke lane")
     func textEditProofPlanRunsTheSafeSkipBuildSmokeLane() throws {
         let sourceRootURL = URL(fileURLWithPath: "/tmp/autocomplete-lab", isDirectory: true)
@@ -174,8 +187,8 @@ struct AppProofCommandRunnerTests {
         )
     }
 
-    @Test("Source root resolver finds the smoke script from an app bundle path")
-    func sourceRootResolverFindsTheSmokeScriptFromAnAppBundlePath() throws {
+    @Test("Source root resolver requires an executable proof entry point")
+    func sourceRootResolverRequiresAnExecutableProofEntryPoint() throws {
         let tempRootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("autocomplete-lab-proof-root-\(UUID().uuidString)", isDirectory: true)
         let sourceRootURL = tempRootURL.appendingPathComponent("repo", isDirectory: true)
@@ -186,12 +199,29 @@ struct AppProofCommandRunnerTests {
         }
 
         try FileManager.default.createDirectory(at: scriptDirectoryURL, withIntermediateDirectories: true)
-        try "#!/usr/bin/env bash\n".write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-
         let bundleURL = sourceRootURL
             .appendingPathComponent("dist", isDirectory: true)
             .appendingPathComponent("SteadyType.app", isDirectory: true)
+
+        #expect(
+            AppProofCommandPlan.sourceRootURL(
+                environment: [:],
+                bundleURL: bundleURL,
+                currentDirectoryPath: tempRootURL.path
+            ) == nil
+        )
+
+        try "#!/usr/bin/env bash\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: scriptURL.path)
+        #expect(
+            AppProofCommandPlan.sourceRootURL(
+                environment: [:],
+                bundleURL: bundleURL,
+                currentDirectoryPath: tempRootURL.path
+            ) == nil
+        )
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         let resolvedURL = AppProofCommandPlan.sourceRootURL(
             environment: [:],
             bundleURL: bundleURL,
