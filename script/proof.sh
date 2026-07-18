@@ -104,22 +104,6 @@ check_diff() {
   fi
 }
 
-run_complexity_budget() {
-  if ! is_truthy "${PROOF_STRUCTURAL_CHANGE:-}"; then
-    bash script/check_complexity_budget.sh
-    return
-  fi
-
-  local args=(--structural)
-  if [ -n "${PROOF_DIFF_BASE:-}" ]; then
-    args+=(--base "$PROOF_DIFF_BASE")
-  fi
-  if is_truthy "${PROOF_STRUCTURAL_LOC_EXCEPTION:-}"; then
-    args+=(--structural-exception)
-  fi
-  bash script/check_complexity_budget.sh "${args[@]}"
-}
-
 run_swift() {
   if is_truthy "${PROOF_SKIP_SWIFT:-}"; then
     skip "swift test" "PROOF_SKIP_SWIFT is set"
@@ -169,7 +153,7 @@ echo "SteadyType fast proof gate (mode: ${MODE})"
 echo "Repo: ${ROOT_DIR}"
 
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff
-run_blocking "complexity budget" run_complexity_budget
+run_blocking "complexity budget" bash script/check_complexity_budget.sh
 run_blocking "complexity budget self-test" bash script/check_complexity_budget_self_test.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "local completion runtime self-test" bash script/local_completion_runtime_self_test.sh
