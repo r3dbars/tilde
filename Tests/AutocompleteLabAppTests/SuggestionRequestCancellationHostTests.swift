@@ -17,7 +17,8 @@ struct SuggestionRequestCancellationHostTests {
                     events.append("cancel-request")
                     return true
                 },
-                clearStreamingPresentations: { events.append("clear-streaming") }
+                clearStreamingPresentations: { events.append("clear-streaming") },
+                invalidateRequest: { events.append("invalidate-request") }
             )
         )
 
@@ -39,7 +40,8 @@ struct SuggestionRequestCancellationHostTests {
                 hasScheduledPresentationRetry: { true },
                 cancelPresentationRetry: {},
                 cancelPendingRequest: { false },
-                clearStreamingPresentations: { clearStreamingCalled = true }
+                clearStreamingPresentations: { clearStreamingCalled = true },
+                invalidateRequest: {}
             )
         )
 
@@ -55,11 +57,35 @@ struct SuggestionRequestCancellationHostTests {
                 hasScheduledPresentationRetry: { false },
                 cancelPresentationRetry: {},
                 cancelPendingRequest: { false },
-                clearStreamingPresentations: {}
+                clearStreamingPresentations: {},
+                invalidateRequest: {}
             )
         )
 
         #expect(!host.cancelPendingRequest(reason: "idle"))
+    }
+
+    @Test("Invalidation always clears streaming state before invalidating the request")
+    func invalidatesInOrder() {
+        var events: [String] = []
+        let host = SuggestionRequestCancellationHost(
+            dependencies: SuggestionRequestCancellationHostDependencies(
+                clearCooldownPreservation: { events.append("clear-cooldown") },
+                hasScheduledPresentationRetry: { false },
+                cancelPresentationRetry: {},
+                cancelPendingRequest: { events.append("cancel-request"); return false },
+                clearStreamingPresentations: { events.append("clear-streaming") },
+                invalidateRequest: { events.append("invalidate-request") }
+            )
+        )
+
+        #expect(!host.invalidatePendingRequest())
+        #expect(events == [
+            "clear-cooldown",
+            "cancel-request",
+            "clear-streaming",
+            "invalidate-request"
+        ])
     }
 
     @Test("AppDelegate delegates request cancellation to the host")
@@ -72,6 +98,7 @@ struct SuggestionRequestCancellationHostTests {
 
         #expect(source.contains("private lazy var suggestionRequestCancellationHost"))
         #expect(source.contains("suggestionRequestCancellationHost.cancelPendingRequest(reason: reason)"))
+        #expect(source.contains("suggestionRequestCancellationHost.invalidatePendingRequest()"))
         #expect(!source.contains("let cancelledPendingRequest = suggestionRequestScheduler.cancelPendingRequest()"))
     }
 }

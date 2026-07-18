@@ -7,6 +7,7 @@ struct SuggestionRequestCancellationHostDependencies {
     let cancelPresentationRetry: () -> Void
     let cancelPendingRequest: () -> Bool
     let clearStreamingPresentations: () -> Void
+    let invalidateRequest: () -> Void
 }
 
 /// Owns the ordering-sensitive cancellation boundary for one suggestion request.
@@ -44,5 +45,13 @@ final class SuggestionRequestCancellationHost {
             metadata: ["reason": reason]
         )
         return true
+    }
+
+    @discardableResult
+    func invalidatePendingRequest() -> Bool {
+        let cancelledPendingRequest = cancelPendingRequest(reason: "invalidate")
+        dependencies.clearStreamingPresentations()
+        dependencies.invalidateRequest()
+        return cancelledPendingRequest
     }
 }

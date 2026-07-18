@@ -487,6 +487,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             clearStreamingPresentations: { [weak self] in
                 self?.suggestionOrchestrator.clearStreamingPresentations()
+            },
+            invalidateRequest: { [weak self] in
+                self?.suggestionOrchestrator.invalidate()
             }
         )
     )
@@ -17220,10 +17223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func invalidatePendingSuggestionRequest() -> Bool {
-        let cancelledPendingRequest = cancelPendingSuggestionTask(reason: "invalidate")
-        suggestionOrchestrator.clearStreamingPresentations()
-        suggestionOrchestrator.invalidate()
-        return cancelledPendingRequest
+        suggestionRequestCancellationHost.invalidatePendingRequest()
     }
 
     @discardableResult
