@@ -61,9 +61,12 @@ struct LiveSuggestionWiringTests {
     @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
     func appDelegateForwardsScreenshotPathAuthorization() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let commitHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionPresentationCommitHost.swift"
+        )
 
         try require(
-            appDelegate,
+            appDelegate + commitHost,
             contains: "screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized"
         )
     }
