@@ -333,7 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionSummonHotKeyHost = SuggestionSummonHotKeyHost { [weak self] in
         self?.requestSuggestionNow(source: "hotkey")
     }
-    private var prefixCooldownRetryTask: Task<Void, Never>?
+    private let prefixCooldownRetryHost = PrefixCooldownRetryHost()
     private var suggestionSession = SuggestionSession()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
@@ -17183,44 +17183,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for snapshot: FocusedTextSnapshot,
         cooldown: PrefixFamilyCooldown
     ) {
-        cancelPrefixCooldownRetry()
-        let delayMilliseconds = max(
-            0,
-            Int(cooldown.until.timeIntervalSinceNow * 1_000) + 25
-        )
         let reason = cooldown.reason.rawValue
-        prefixCooldownRetryTask = Task { [weak self, snapshot, reason, delayMilliseconds] in
-            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            guard !Task.isCancelled else {
+        prefixCooldownRetryHost.schedule(until: cooldown.until) { [weak self, snapshot, reason] in
+            guard let self,
+                  self.lastTextSnapshot == snapshot,
+                  !self.suggestionSession.hasVisibleSuggestion else {
                 return
             }
 
-            await MainActor.run {
-                guard let self,
-                      self.lastTextSnapshot == snapshot,
-                      !self.suggestionSession.hasVisibleSuggestion else {
-                    return
-                }
-
-                self.lastTextSnapshot = nil
-                self.codexPromptTargetContinuityHost.reset()
-                self.lastRequestedTextBeforeCursor = nil
-                self.suggestionBlockLogGate.reset()
-                self.setSuggestionDecision("Ready: prefix \(reason) expired")
-                DiagnosticsLog.shared.record(
-                    "prefix-family-cooldown-expired",
-                    metadata: [
-                        "reason": reason,
-                        "fieldIdentity": snapshot.fieldIdentity.traceDescription
-                    ]
-                )
-            }
+            self.lastTextSnapshot = nil
+            self.codexPromptTargetContinuityHost.reset()
+            self.lastRequestedTextBeforeCursor = nil
+            self.suggestionBlockLogGate.reset()
+            self.setSuggestionDecision("Ready: prefix \(reason) expired")
+            DiagnosticsLog.shared.record(
+                "prefix-family-cooldown-expired",
+                metadata: [
+                    "reason": reason,
+                    "fieldIdentity": snapshot.fieldIdentity.traceDescription
+                ]
+            )
         }
     }
 
     private func cancelPrefixCooldownRetry() {
-        prefixCooldownRetryTask?.cancel()
-        prefixCooldownRetryTask = nil
+        prefixCooldownRetryHost.cancel()
     }
 
     private func recordPlacementUncertainty(
