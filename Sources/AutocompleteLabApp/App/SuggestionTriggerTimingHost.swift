@@ -31,7 +31,6 @@ struct SuggestionTriggerTimingSchedule {
 
 @MainActor
 struct SuggestionTriggerTimingHostDependencies {
-    let triggerTiming: SuggestionTriggerTimingPolicy
     let triggerPolicy: (CompatibilityProfile) -> SuggestionTriggerPolicy
     let consumeManualSuggestionRequest: () -> Bool
     let hasVisibleSuggestion: () -> Bool
@@ -68,8 +67,7 @@ final class SuggestionTriggerTimingHost {
                 currentLineStructure: currentLineStructure
             )
         )
-        let triggerDecision = dependencies.triggerTiming.decision(
-            using: dependencies.triggerPolicy(input.profile),
+        let triggerDecision = dependencies.triggerPolicy(input.profile).decision(
             previousTextBeforeCursor: input.previousTextBeforeCursor,
             currentTextBeforeCursor: input.context.textBeforeCursor,
             lineStartBehavior: SuggestionLineStartBehavior.behavior(

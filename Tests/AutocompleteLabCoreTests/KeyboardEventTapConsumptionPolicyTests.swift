@@ -5,6 +5,51 @@ import Testing
 struct KeyboardEventTapConsumptionPolicyTests {
     private let policy = KeyboardEventTapConsumptionPolicy()
 
+    @Test("Captures keys only for trusted, visible, running suggestions")
+    func capturesKeysOnlyForTrustedVisibleRunningSuggestions() {
+        #expect(policy.shouldCaptureKeys(
+            isTrustedForAccessibility: true,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!policy.shouldCaptureKeys(
+            isTrustedForAccessibility: false,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!policy.shouldCaptureKeys(
+            isTrustedForAccessibility: true,
+            hasVisibleSuggestion: false
+        ))
+        #expect(!policy.shouldCaptureKeys(
+            isTrustedForAccessibility: true,
+            hasVisibleSuggestion: true,
+            controlState: .paused
+        ))
+    }
+
+    @Test("Stops capture only after suggestion UI and undo are idle")
+    func stopsCaptureOnlyAfterSuggestionUIAndUndoAreIdle() {
+        #expect(!policy.shouldStopKeyboardCapture(
+            hasVisibleSuggestion: true,
+            isSuggestionPanelVisible: false,
+            hasPendingAcceptedInsertionUndo: false
+        ))
+        #expect(!policy.shouldStopKeyboardCapture(
+            hasVisibleSuggestion: false,
+            isSuggestionPanelVisible: true,
+            hasPendingAcceptedInsertionUndo: false
+        ))
+        #expect(!policy.shouldStopKeyboardCapture(
+            hasVisibleSuggestion: false,
+            isSuggestionPanelVisible: false,
+            hasPendingAcceptedInsertionUndo: true
+        ))
+        #expect(policy.shouldStopKeyboardCapture(
+            hasVisibleSuggestion: false,
+            isSuggestionPanelVisible: false,
+            hasPendingAcceptedInsertionUndo: false
+        ))
+    }
+
     @Test("Passes through all keys when no suggestion is visible")
     func passesThroughWithoutVisibleSuggestion() {
         for key in [AutocompleteKey.tab, .shiftTab, .backtick, .optionTab, .escape, .commandZ, .other] {
