@@ -857,6 +857,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionPresentationPlacementHost = SuggestionPresentationPlacementHost(
+        dependencies: SuggestionPresentationPlacementHostDependencies(
+            suppressionTraceHost: suggestionPresentationSuppressionTraceHost,
+            recordPlacementUncertainty: { [weak self] input, reason, metadata in
+                self?.recordPlacementUncertainty(
+                    suggestionID: input.suggestionID,
+                    appBundleIdentifier: input.request.appBundleIdentifier ?? input.profile.bundleIdentifier,
+                    fieldIdentity: input.fieldIdentity,
+                    requestMode: input.request.mode,
+                    context: input.context,
+                    reason: reason,
+                    metadata: metadata
+                )
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -7205,8 +7223,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(learningAdjustment.metadata) { current, _ in current }
                 .merging(commandFallbackMetadata) { current, _ in current }
                 .merging(suppression.metadata) { current, _ in current }
-            suggestionPresentationSuppressionTraceHost.record(
-                input: SuggestionPresentationSuppressionTraceInput(
+            suggestionPresentationPlacementHost.suppress(
+                input: SuggestionPresentationPlacementSuppressionInput(
                     suggestion: suggestion,
                     suggestionID: suggestionID,
                     request: request,
@@ -7215,7 +7233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     fieldIdentity: fieldIdentity,
                     latencyMilliseconds: latencyMilliseconds,
                     triggerReason: triggerReason,
-                    reason: suppression.reason.rawValue,
+                    suppression: placementSuppression,
                     traceMetadata: placementMetadata,
                     eventMetadata: ["reason": suppression.reason.rawValue]
                         .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
@@ -7224,17 +7242,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         .merging(suppression.metadata) { current, _ in current }
                 )
             )
-            recordPlacementUncertainty(
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity,
-                requestMode: request.mode,
-                context: context,
-                reason: suppression.reason.rawValue,
-                metadata: placementMetadata
-            )
-            setSuggestionDecision("Blocked: placement \(suppression.reason.rawValue)\(placementSuppression.fallbackSuffix)")
-            hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
             return
         }
 
