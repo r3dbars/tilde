@@ -173,7 +173,8 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         // expensive window-title/bounds path on every Codex poll.
         windowReadMode: .identifierOnly,
         assumedCanSetSelectedText: true,
-        manualAccessibilityWakeAppFamily: .customCanvas
+        manualAccessibilityWakeAppFamily: nil,
+        maximumEditableDescendantDepth: 32
     )
 
     let preferDirectTextSnapshot: Bool
@@ -183,6 +184,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
     let windowReadMode: FocusedTextWindowReadMode
     let assumedCanSetSelectedText: Bool?
     let manualAccessibilityWakeAppFamily: CompatibilityAppFamily?
+    let maximumEditableDescendantDepth: Int
 
     init(
         preferDirectTextSnapshot: Bool = false,
@@ -191,7 +193,8 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         useMinimalFingerprint: Bool = false,
         windowReadMode: FocusedTextWindowReadMode = .full,
         assumedCanSetSelectedText: Bool? = nil,
-        manualAccessibilityWakeAppFamily: CompatibilityAppFamily? = nil
+        manualAccessibilityWakeAppFamily: CompatibilityAppFamily? = nil,
+        maximumEditableDescendantDepth: Int = 24
     ) {
         self.preferDirectTextSnapshot = preferDirectTextSnapshot
         self.skipParameterizedTextGeometry = skipParameterizedTextGeometry
@@ -200,6 +203,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         self.windowReadMode = windowReadMode
         self.assumedCanSetSelectedText = assumedCanSetSelectedText
         self.manualAccessibilityWakeAppFamily = manualAccessibilityWakeAppFamily
+        self.maximumEditableDescendantDepth = maximumEditableDescendantDepth
     }
 }
 
@@ -415,7 +419,8 @@ final class AccessibilityClient: @unchecked Sendable {
     ) -> FocusedTextContext? {
         guard let focusedElement = focusedElement(
             for: app,
-            allowWindowDescendantFallback: allowDescendantTextFallback
+            allowWindowDescendantFallback: allowDescendantTextFallback,
+            maximumDescendantDepth: options.maximumEditableDescendantDepth
         ) else {
             return nil
         }
@@ -902,7 +907,8 @@ final class AccessibilityClient: @unchecked Sendable {
 
     private func focusedElement(
         for app: RunningApplicationInfo,
-        allowWindowDescendantFallback: Bool
+        allowWindowDescendantFallback: Bool,
+        maximumDescendantDepth: Int = 24
     ) -> AXUIElement? {
         if let focusedElement = focusedElement(for: app.processIdentifier) {
             return focusedElement
@@ -920,7 +926,7 @@ final class AccessibilityClient: @unchecked Sendable {
             return nil
         }
 
-        return bestEditableDescendant(in: focusedWindow)
+        return bestEditableDescendant(in: focusedWindow, maximumDepth: maximumDescendantDepth)
     }
 
     private func focusedWindow(for processIdentifier: pid_t) -> AXUIElement? {
@@ -1003,21 +1009,22 @@ final class AccessibilityClient: @unchecked Sendable {
         }
     }
 
-    private func bestEditableDescendant(in element: AXUIElement) -> AXUIElement? {
-        let result = editableDescendantSearchResult(in: element)
+    private func bestEditableDescendant(in element: AXUIElement, maximumDepth: Int) -> AXUIElement? {
+        let result = editableDescendantSearchResult(in: element, maximumDepth: maximumDepth)
         return result.focusedTextEntry ?? result.firstTextEntry ?? result.focusedWebArea ?? result.firstWebArea
     }
 
     private func editableDescendantSearchResult(
         in element: AXUIElement,
-        depth: Int = 0
+        depth: Int = 0,
+        maximumDepth: Int
     ) -> (
         focusedTextEntry: AXUIElement?,
         firstTextEntry: AXUIElement?,
         focusedWebArea: AXUIElement?,
         firstWebArea: AXUIElement?
     ) {
-        guard depth < 24 else {
+        guard depth < maximumDepth else {
             return (
                 focusedTextEntry: nil,
                 firstTextEntry: nil,
@@ -1039,7 +1046,11 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         if role == "AXWebArea" {
-            var result = editableDescendantChildrenSearchResult(in: element, depth: depth)
+            var result = editableDescendantChildrenSearchResult(
+                in: element,
+                depth: depth,
+                maximumDepth: maximumDepth
+            )
             if result.focusedWebArea == nil, isFocused {
                 result.focusedWebArea = element
             }
@@ -1049,12 +1060,17 @@ final class AccessibilityClient: @unchecked Sendable {
             return result
         }
 
-        return editableDescendantChildrenSearchResult(in: element, depth: depth)
+        return editableDescendantChildrenSearchResult(
+            in: element,
+            depth: depth,
+            maximumDepth: maximumDepth
+        )
     }
 
     private func editableDescendantChildrenSearchResult(
         in element: AXUIElement,
-        depth: Int
+        depth: Int,
+        maximumDepth: Int
     ) -> (
         focusedTextEntry: AXUIElement?,
         firstTextEntry: AXUIElement?,
@@ -1066,7 +1082,11 @@ final class AccessibilityClient: @unchecked Sendable {
         var focusedWebArea: AXUIElement?
         var firstWebArea: AXUIElement?
         for child in children {
-            let result = editableDescendantSearchResult(in: child, depth: depth + 1)
+            let result = editableDescendantSearchResult(
+                in: child,
+                depth: depth + 1,
+                maximumDepth: maximumDepth
+            )
             if let focusedTextEntry = result.focusedTextEntry {
                 return (
                     focusedTextEntry: focusedTextEntry,
