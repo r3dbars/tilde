@@ -119,6 +119,12 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         }
 
         if currentSuggestionAgeMilliseconds <= maximumSameTextMiddleSplitAgeMilliseconds,
+           currentSuggestionTextBeforeCursor == textBeforeCursor,
+           textAfterCursor.isEmpty {
+            return true
+        }
+
+        if currentSuggestionAgeMilliseconds <= maximumSameTextMiddleSplitAgeMilliseconds,
            isSameTextMiddleSplit(
             currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
             textBeforeCursor: textBeforeCursor,
