@@ -7,6 +7,11 @@ import Testing
 struct CodexPromptTargetContinuityPolicyTests {
     private let policy = CodexPromptTargetContinuityPolicy()
 
+    @Test("Stable prompt acceptance uses a short bounded trust window")
+    func stablePromptAcceptanceTrustWindowIsBounded() {
+        #expect(CodexPromptTargetContinuityPolicy.maximumStablePromptAcceptanceAgeMilliseconds == 5_000)
+    }
+
     @Test("Presentation preparation defers before any focused-context refresh")
     func presentationPreparationDefersBeforeAnyFocusedContextRefresh() {
         let preparationPolicy = CodexPromptPresentationPreparationPolicy()

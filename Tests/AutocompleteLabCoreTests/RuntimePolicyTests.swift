@@ -82,10 +82,15 @@ struct RuntimePolicyTests {
             previous: previous,
             current: cacheRequest(text: "Can we make", mode: .phraseContinuation)
         ) == .reset(.textDidNotGrow))
-        #expect(policy.decision(
+        #expect(RuntimeSessionCachePolicy(includesTextAfterCursor: true).decision(
             previous: previous,
             current: cacheRequest(text: "Can we make this feel", after: " existing")
         ) == .reset(.textAfterCursorChanged))
+
+        #expect(policy.decision(
+            previous: previous,
+            current: cacheRequest(text: "Can we make this feel", after: " existing")
+        ).canReuse)
 
         let reset = policy.decision(previous: previous, current: cacheRequest(text: "Can we make"))
         #expect(reset.traceMetadata["runtimeSessionCacheEligible"] == "false")

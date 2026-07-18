@@ -20,6 +20,7 @@ struct SuggestionPresentationOrchestrationHostTests {
         #expect(appDelegate.contains("suggestionPresentationOrchestrationHost.presentSuggestion("))
         #expect(host.contains("suggestionOrchestrator.displayScoreDecision("))
         #expect(host.contains("suggestionOrchestrator.replacementDecision("))
+        #expect(!host.contains("rawEvaluationModeEnabled\n            ? SuggestionReplacementDecision"))
         #expect(host.contains("suggestionPresentationCommitHost.commit("))
     }
 }

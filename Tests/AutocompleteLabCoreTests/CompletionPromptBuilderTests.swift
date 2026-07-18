@@ -3,6 +3,37 @@ import Testing
 
 @Suite("Completion prompt builder")
 struct CompletionPromptBuilderTests {
+    @Test("Compact phrase prompt stays small and preserves autocomplete safety")
+    func compactPhrasePromptStaysSmallAndSafe() {
+        let prompt = CompletionPromptBuilder(
+            maxVisibleWords: 4,
+            usesCompactPhrasePrompt: true
+        ).prompt(for: CompletionRequest(
+            textBeforeCursor: "The next product update should",
+            behaviorProfileID: .docsProse,
+            mode: .phraseContinuation
+        ))
+
+        #expect(prompt.system.count < 900)
+        #expect(prompt.system.contains("Return only the next 4 words or fewer"))
+        #expect(prompt.system.contains("Do not answer the user"))
+        #expect(prompt.system.contains(CompletionPromptBuilder.noSuggestionToken))
+    }
+
+    @Test("Compact prompt keeps its prior sentence prefix while the sentence grows")
+    func compactPromptKeepsPriorSentencePrefix() {
+        let builder = CompletionPromptBuilder(usesCompactPhrasePrompt: true)
+        let short = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "The first sentence gives context. The next"
+        ))
+        let longer = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "The first sentence gives context. The next product update should"
+        ))
+
+        #expect(short.user.contains("The first sentence gives context. The next"))
+        #expect(longer.user.contains("The first sentence gives context. The next product update should"))
+    }
+
     @Test("Continuation prompt includes bounded personal guidance and snippets")
     func continuationPromptIncludesPersonalContext() {
         let context = PersonalContext(

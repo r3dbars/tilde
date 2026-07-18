@@ -75,7 +75,7 @@ struct CodexPromptPresentationRefreshRetryPolicy {
 }
 
 struct CodexPromptTargetContinuityPolicy {
-    static let maximumStablePromptAcceptanceAgeMilliseconds = 15_000
+    static let maximumStablePromptAcceptanceAgeMilliseconds = 5_000
 
     private static let transientPromptBlockReasons: Set<String> = [
         "missing-prompt-bounds",

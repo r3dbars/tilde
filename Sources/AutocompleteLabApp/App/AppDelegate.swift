@@ -938,6 +938,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     visiblePageContext: visiblePageContext
                 )
             },
+            rawEvaluationModeEnabled: { [unowned self] in
+                self.rawSuggestionEvaluationMode.isEnabled
+            },
             triggerPolicy: { [unowned self] profile in self.triggerPolicy(for: profile) },
             suggestionRequestExecutionHost: suggestionRequestExecutionHost,
             suggestionIdleRetryState: suggestionIdleRetryState,
