@@ -8,7 +8,6 @@ final class FocusedTextSessionStateHost {
     var currentProfile: CompatibilityProfile?
     var lastTextSnapshot: FocusedTextSnapshot?
     var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
-    var personalCaptureLastSnapshot: FocusedTextSnapshot?
     var lastFocusedTextChangeAt: Date?
     var lastRequestedTextBeforeCursor: String?
 }

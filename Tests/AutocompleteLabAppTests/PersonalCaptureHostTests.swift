@@ -1,4 +1,6 @@
 import Foundation
+import CoreGraphics
+import AutocompleteLabCore
 import Testing
 @testable import AutocompleteLabApp
 
@@ -21,7 +23,41 @@ struct PersonalCaptureHostTests {
         let host = makeHost(enabled: false)
 
         #expect(host.currentScorecard().total == 0)
+        host.recordSnapshot(
+            context: makeContext(isSecure: false),
+            app: makeApp(),
+            fieldIdentity: makeField(),
+            fieldClassification: AXFieldClassification(kind: .singlelineCompose, reason: "test"),
+            snapshot: FocusedTextSnapshot(
+                fieldIdentity: makeField(),
+                textBeforeCursor: "private",
+                textAfterCursor: ""
+            ),
+            source: "test"
+        )
+        #expect(!FileManager.default.fileExists(atPath: host.folderPath))
         host.resetSnapshot()
+        host.deleteAll()
+    }
+
+    @Test("Blocked secure contexts never write a personal capture journal")
+    func blockedContextDoesNotWrite() {
+        let host = makeHost()
+
+        host.recordSnapshot(
+            context: makeContext(isSecure: true),
+            app: makeApp(),
+            fieldIdentity: makeField(),
+            fieldClassification: AXFieldClassification(kind: .secure, reason: "secure"),
+            snapshot: FocusedTextSnapshot(
+                fieldIdentity: makeField(),
+                textBeforeCursor: "secret",
+                textAfterCursor: ""
+            ),
+            source: "test"
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: host.folderPath))
         host.deleteAll()
     }
 
@@ -60,5 +96,48 @@ private func makeHost(enabled: Bool = true) -> PersonalCaptureHost {
         ),
         journal: journal,
         episodes: episodes
+    )
+}
+
+private func makeApp() -> RunningApplicationInfo {
+    RunningApplicationInfo(
+        bundleIdentifier: "com.apple.TextEdit",
+        localizedName: "TextEdit",
+        processIdentifier: 42
+    )
+}
+
+private func makeField() -> FocusedFieldIdentity {
+    FocusedFieldIdentity(
+        bundleIdentifier: "com.apple.TextEdit",
+        processIdentifier: 42,
+        elementIdentifier: 7
+    )
+}
+
+private func makeContext(isSecure: Bool) -> FocusedTextContext {
+    FocusedTextContext(
+        elementIdentifier: 7,
+        role: "AXTextArea",
+        subrole: nil,
+        fingerprint: FocusedElementFingerprint(windowTitle: "Test"),
+        textBeforeCursor: "test",
+        textAfterCursor: "",
+        selectedTextLength: 0,
+        caretRect: CGRect(x: 10, y: 10, width: 1, height: 18),
+        elementRect: CGRect(x: 0, y: 0, width: 500, height: 300),
+        windowRect: CGRect(x: 0, y: 0, width: 600, height: 400),
+        windowIdentifier: 42,
+        textLineRect: CGRect(x: 10, y: 10, width: 140, height: 18),
+        textStyle: nil,
+        isSecure: isSecure,
+        caretIsSynthetic: false,
+        capabilities: FocusedTextCapabilities(
+            canReadValue: true,
+            canReadSelectedTextRange: true,
+            canReadBoundsForRange: true,
+            canReadAttributedText: false,
+            canSetSelectedText: true
+        )
     )
 }
