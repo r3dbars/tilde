@@ -16672,8 +16672,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: originalTextBeforeCursor,
                 textAfterCursor: context.textAfterCursor
             )
-        let transition = typeThroughPrefixStateMachine.apply(
-            to: &suggestionSession,
+        let transition = suggestionSession.applyTypeThrough(
+            using: typeThroughPrefixStateMachine,
             input: TypeThroughPrefixInput(
                 baselineSnapshot: baselineSnapshot,
                 currentSnapshot: snapshot
