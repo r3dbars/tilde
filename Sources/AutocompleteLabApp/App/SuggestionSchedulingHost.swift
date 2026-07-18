@@ -223,7 +223,6 @@ final class SuggestionSchedulingHost {
 
         let preparation = suggestionRequestPreparationHost.prepare(
             context: context,
-            profile: profile,
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,

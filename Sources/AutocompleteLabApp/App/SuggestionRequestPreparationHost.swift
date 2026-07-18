@@ -7,9 +7,8 @@ struct SuggestionRequestPreparationHostDependencies {
     let acceptedTextStyleSketch: (AcceptedTextStyleMemoryKey) -> AcceptedTextStyleSketch?
     let personalizationCoordinator: PersonalizationCoordinator
     let isPersonalCaptureEnabled: () -> Bool
-    let maxVisibleWords: (CompletionRequestMode, CompatibilityProfile) -> Int
     let suggestionTuning: () -> SuggestionTuning
-    let triggerTiming: SuggestionTriggerTimingPolicy
+    let requestSchedulingPolicy: SuggestionRequestSchedulingPolicy
 }
 
 struct SuggestionRequestPreparation: Sendable {
@@ -31,7 +30,6 @@ final class SuggestionRequestPreparationHost {
 
     func prepare(
         context: FocusedTextContext,
-        profile: CompatibilityProfile,
         appBundleIdentifier: String,
         fieldIdentity: FocusedFieldIdentity,
         fieldClassification: AXFieldClassification,
@@ -65,11 +63,11 @@ final class SuggestionRequestPreparationHost {
             personalContext: personalization.context,
             personalWritingMemory: personalization.memory,
             visiblePageContext: visiblePageContext,
-            maxVisibleWords: dependencies.maxVisibleWords(requestMode, profile),
+            maxVisibleWords: dependencies.suggestionTuning().maxVisibleWords,
             requestMode: requestMode,
             suggestionTuning: dependencies.suggestionTuning()
         ))
-        let requestSchedule = dependencies.triggerTiming.schedule(
+        let requestSchedule = dependencies.requestSchedulingPolicy.schedule(
             policyDelayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
             requestMode: orchestration.request.mode,
