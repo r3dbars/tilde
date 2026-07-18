@@ -100,7 +100,7 @@ struct SuggestionRequestPreparationHostTests {
                     requestMode == .wordCompletion ? 3 : 5
                 },
                 suggestionTuning: { SuggestionTuning() },
-                triggerTiming: SuggestionTriggerTimingPolicy()
+                requestSchedulingPolicy: SuggestionRequestSchedulingPolicy()
             )
         )
     }

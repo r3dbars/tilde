@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 struct SuggestionModelResultHostDependencies {
     let suggestionOrchestrator: SuggestionOrchestrator
-    let triggerTiming: SuggestionTriggerTimingPolicy
+    let requestSchedulingPolicy: SuggestionRequestSchedulingPolicy
     let currentSuggestionID: () -> String?
     let currentFieldIdentity: () -> FocusedFieldIdentity?
     let hasVisibleSuggestion: () -> Bool
@@ -69,7 +69,7 @@ final class SuggestionModelResultHost {
             return
         }
 
-        if dependencies.triggerTiming.shouldSuppressResult(
+        if dependencies.requestSchedulingPolicy.shouldSuppressResult(
             latencyMilliseconds: latencyMilliseconds,
             schedule: input.requestSchedule
         ) {
