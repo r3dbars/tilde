@@ -345,6 +345,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController {
         settingsWindowHost.controller
     }
+    private lazy var settingsStateHost = SettingsStateHost(
+        dependencies: SettingsStateHostDependencies(
+            appForSettingsState: { [weak self] in self?.appForSettingsState },
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            profileSupportStatus: { [weak self] bundleIdentifier in
+                self?.profileStore.supportStatus(for: bundleIdentifier) ?? .unsupported
+            },
+            disabledBundleIdentifiers: { [weak self] in self?.disabledBundleIdentifiers ?? [] },
+            renderModeOverride: { [weak self] bundleIdentifier in
+                self?.compatibilityLearningStore.profile(for: bundleIdentifier)?.renderModeOverride
+            },
+            fieldControlTarget: { [weak self] in
+                guard let self else { return nil }
+                return self.appTargetStateHost.fieldControlTarget(currentFieldIdentity: self.currentFieldIdentity)
+            },
+            isFieldSilenced: { [weak self] fieldIdentity in
+                self?.suppressedFieldIdentities.contains(fieldIdentity) == true
+            },
+            isTrusted: { [weak self] in self?.accessibilityClient.isTrusted ?? false },
+            suggestionsPaused: { [weak self] in self?.suggestionsPaused ?? false },
+            suggestionsPausedUntil: { [weak self] in self?.suggestionsPausedUntil },
+            runtimeReadinessReport: { [weak self] in
+                self?.runtimeReadinessReport ?? RuntimeReadinessReport(
+                    stage: .runtimeUnavailable,
+                    summary: "runtime unavailable",
+                    action: .retry
+                )
+            },
+            modelDirectoryPath: { [weak self] in self?.modelDirectoryPath ?? "" },
+            modelInstallStatusText: { [weak self] in self?.runtimeStatusHost.modelInstallStatus ?? "" },
+            modelInstallInProgress: { [weak self] in self?.modelInstallLifecycleHost.isInstalling ?? false },
+            isTextEditEnabled: { [weak self] in
+                guard let self else { return false }
+                return !self.disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
+            },
+            acceptAllShortcut: { [weak self] in
+                self?.keyboardShortcutConfiguration.acceptAllShortcut ?? .disabled
+            },
+            tracingPaused: { RawAutocompleteTraceLog.shared.isPaused },
+            rawContentTracingEnabled: { RawAutocompleteTraceLog.shared.rawContentTracingEnabled },
+            rawContentTracingExpiresAt: { RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt },
+            screenshotTracingEnabled: { RawAutocompleteTraceLog.shared.screenshotTracingEnabled },
+            screenshotTracingExpiresAt: { RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt },
+            visiblePageContextEnabled: { [weak self] in self?.visiblePageContextEnabled ?? false },
+            personalCaptureEnabled: { [weak self] in self?.appSettings.personalCaptureEnabled ?? false },
+            diagnosticsPath: { DiagnosticsLog.shared.path },
+            tracePath: { RawAutocompleteTraceLog.shared.path },
+            personalCapturePath: { PersonalCaptureJournalWriter.shared.folderPath },
+            suggestionTuning: { [weak self] in self?.suggestionTuning ?? SuggestionTuning() },
+            modelName: { [weak self] in
+                self?.modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue ?? "unknown"
+            },
+            completionLengthSummary: { [weak self] in self?.completionLengthConfiguration.displaySummary ?? "default" }
+        )
+    )
     lazy var statusMenuHost = StatusMenuHost(
         handler: self,
         developerMenuEnabled: developerMenuEnabled
@@ -934,25 +989,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func refreshRuntimeChrome() {
-        if settingsWindow.isShowing {
-            settingsWindow.refresh(
-                isTrusted: accessibilityClient.isTrusted,
-                suggestionsPaused: suggestionsPaused,
-                suggestionsPausedUntil: suggestionsPausedUntil,
-                runtimeReport: runtimeReadinessReport,
-                runtimeTargetSummary: runtimeTargetSummary,
-                modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
-                isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
-                currentApp: settingsCurrentAppState,
-                fieldControl: settingsFieldControlState,
-                practice: settingsPracticeState,
-                privacy: settingsPrivacyState,
-                keyboardShortcuts: settingsKeyboardShortcutState,
-                suggestionAggressiveness: settingsSuggestionAggressivenessState,
-                lastSuggestionDecision: lastSuggestionDecision
-            )
-        }
+        settingsStateHost.refreshIfShowing(
+            settingsWindow: settingsWindow,
+            lastSuggestionDecision: lastSuggestionDecision
+        )
     }
 
     private var runtimeReadinessReport: RuntimeReadinessReport {
@@ -964,53 +1004,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsCurrentAppState: SettingsCurrentAppState {
-        guard let app = appForSettingsState else {
-            return SettingsCurrentAppState(
-                displayName: "None",
-                bundleIdentifier: nil,
-                supportStatus: .unsupported,
-                isEnabled: false,
-                disabledAppCount: disabledBundleIdentifiers.count,
-                renderModeOverride: nil
-            )
-        }
-
-        return SettingsCurrentAppState(
-            displayName: app.localizedName,
-            bundleIdentifier: app.bundleIdentifier,
-            supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
-            isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
-            disabledAppCount: disabledBundleIdentifiers.count,
-            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
-        )
+        settingsStateHost.currentAppState
     }
 
     private var settingsFieldControlState: SettingsFieldControlState {
-        guard let target = fieldControlTarget else {
-            return SettingsFieldControlState(
-                appDisplayName: nil,
-                hasFieldTarget: false,
-                isCurrentField: false,
-                isSilenced: false
-            )
-        }
-
-        return SettingsFieldControlState(
-            appDisplayName: target.appDisplayName,
-            hasFieldTarget: true,
-            isCurrentField: target.fieldIdentity == currentFieldIdentity,
-            isSilenced: suppressedFieldIdentities.contains(target.fieldIdentity)
-        )
+        settingsStateHost.fieldControlState
     }
 
     private var settingsPracticeState: SettingsPracticeState {
-        SettingsPracticeState(
-            isTrusted: accessibilityClient.isTrusted,
-            suggestionsPaused: suggestionsPaused,
-            runtimeReport: runtimeReadinessReport,
-            isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
-            isTextEditEnabled: !disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
-        )
+        settingsStateHost.practiceState
     }
 
     private var fieldControlTarget: FieldControlTarget? {
@@ -1030,34 +1032,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsPrivacyState: SettingsPrivacyState {
-        SettingsPrivacyState(
-            tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
-            rawContentTracingEnabled: RawAutocompleteTraceLog.shared.rawContentTracingEnabled,
-            rawContentTracingExpiresAt: RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
-            screenshotTracingExpiresAt: RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt,
-            visiblePageContextEnabled: visiblePageContextEnabled,
-            personalCaptureEnabled: appSettings.personalCaptureEnabled,
-            screenCaptureAccessGranted: CGPreflightScreenCaptureAccess(),
-            diagnosticsPath: DiagnosticsLog.shared.path,
-            tracePath: RawAutocompleteTraceLog.shared.path,
-            personalCapturePath: personalCaptureJournal.folderPath
-        )
+        settingsStateHost.privacyState
     }
 
     private var settingsKeyboardShortcutState: SettingsKeyboardShortcutState {
-        SettingsKeyboardShortcutState(
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
-            currentApp: settingsCurrentAppState
-        )
+        settingsStateHost.keyboardShortcutState
     }
 
     private var settingsSuggestionAggressivenessState: SettingsSuggestionAggressivenessState {
-        SettingsSuggestionAggressivenessState(tuning: suggestionTuning)
+        settingsStateHost.suggestionAggressivenessState
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionTuning.displayName.lowercased()) • showing up to \(suggestionTuning.maxVisibleWords) • page context \(visiblePageContextEnabled ? "on" : "off")"
+        settingsStateHost.runtimeTargetSummary
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
