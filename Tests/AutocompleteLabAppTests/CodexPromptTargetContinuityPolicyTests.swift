@@ -914,6 +914,61 @@ struct CodexPromptTargetContinuityPolicyTests {
         ))
     }
 
+    @Test("Stable prompt acceptance uses bounds and title when window identity is unavailable")
+    func stablePromptAcceptanceUsesAffirmativeWindowFallback() throws {
+        let fieldIdentity = identity()
+        let trustedContext = context(windowIdentifier: nil)
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: trustedContext,
+            nowMilliseconds: 100
+        ))
+        let currentSnapshot = snapshot(fieldIdentity: fieldIdentity)
+        let shownSnapshot = SuggestionAcceptanceSnapshot(
+            snapshot: currentSnapshot,
+            targetFingerprint: anchor.targetFingerprint,
+            selectedTextLength: 0
+        )
+
+        #expect(policy.canAcceptStablePrompt(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            shownSnapshot: shownSnapshot,
+            trustedAnchor: anchor,
+            observedContext: trustedContext,
+            nowMilliseconds: 1_000
+        ))
+
+        let inconclusiveContext = context(
+            fingerprint: FocusedElementFingerprint(),
+            windowIdentifier: nil
+        )
+        let inconclusiveAnchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: inconclusiveContext,
+            nowMilliseconds: 100
+        ))
+        let inconclusiveShownSnapshot = SuggestionAcceptanceSnapshot(
+            snapshot: currentSnapshot,
+            targetFingerprint: inconclusiveAnchor.targetFingerprint,
+            selectedTextLength: 0
+        )
+        #expect(!policy.canAcceptStablePrompt(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            shownSnapshot: inconclusiveShownSnapshot,
+            trustedAnchor: inconclusiveAnchor,
+            observedContext: inconclusiveContext,
+            nowMilliseconds: 1_000
+        ))
+    }
+
     private func identity() -> FocusedFieldIdentity {
         FocusedFieldIdentity(
             bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
