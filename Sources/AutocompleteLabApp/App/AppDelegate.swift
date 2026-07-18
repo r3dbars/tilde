@@ -598,6 +598,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionTypingBurstSuppressionHost = SuggestionTypingBurstSuppressionHost(
+        dependencies: SuggestionTypingBurstSuppressionHostDependencies(
+            cancelIdleRetry: { [weak self] in self?.suggestionIdleRetryState.cancel() },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            showFieldStatusIndicator: { [weak self] state, context in
+                self?.showFieldStatusIndicator(state, context: context)
+            },
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
+            },
+            recordBlockedSuggestionEvent: { [weak self] event, context, profile, fieldIdentity, metadata in
+                self?.recordBlockedSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    metadata: metadata
+                )
+            },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
+            noteTypingBurstSuppression: { [weak self] snapshot, nowMilliseconds, settleDelayMilliseconds in
+                self?.suggestionIdleRetryState.noteTypingBurstSuppression(
+                    snapshot: snapshot,
+                    nowMilliseconds: nowMilliseconds,
+                    settleDelayMilliseconds: settleDelayMilliseconds
+                )
+            },
+            hideSuggestion: { [weak self] reason, metadata in
+                self?.hideSuggestion(reason: reason, metadata: metadata)
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6684,80 +6719,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
-            if didPresentFastPhraseFallback {
-                suggestionIdleRetryState.cancel()
-                let metadata = [
-                    "renderMode": renderMode.rawValue,
-                    "reason": "typing-burst-model-continuation-kept-fast-phrase"
-                ]
-                .merging(fieldClassification.traceMetadata) { current, _ in current }
-                .merging(typingBurstMetadata) { current, _ in current }
-                .merging(fastPhraseFallbackMetadata) { current, _ in current }
-                .merging(requestMetadata) { current, _ in current }
-                setSuggestionDecision("Shown: instant phrase while typing fast")
-                showFieldStatusIndicator(.shown, context: context)
-                RawAutocompleteTraceLog.shared.record(
-                    type: .suggestionSuppressed,
+            suggestionTypingBurstSuppressionHost.handle(
+                input: SuggestionTypingBurstSuppressionInput(
                     suggestionID: suggestionID,
                     appBundleIdentifier: appBundleIdentifier,
-                    fieldIdentity: fieldIdentityDescription,
-                    requestMode: request.mode.rawValue,
-                    triggerReason: "typing-burst-policy",
-                    textBeforeCursor: request.textBeforeCursor,
-                    textAfterCursor: request.textAfterCursor,
-                    reason: "typing-burst-model-continuation-kept-fast-phrase",
-                    metadata: metadata
-                )
-                recordSuggestionEvent(
-                    "suggestion-blocked",
+                    fieldIdentity: fieldIdentity,
+                    requestMode: request.mode,
+                    requestTextBeforeCursor: request.textBeforeCursor,
+                    requestTextAfterCursor: request.textAfterCursor,
+                    fieldIdentityDescription: fieldIdentityDescription,
                     context: context,
                     profile: profile,
-                    metadata: metadata
-                )
-                repositionVisibleSuggestion(context: context, profile: profile)
-                updateKeyboardEventTapSnapshot()
-                return
-            }
-
-            let metadata = [
-                "renderMode": renderMode.rawValue,
-                "reason": "typing-burst-model-continuation"
-            ]
-            .merging(fieldClassification.traceMetadata) { current, _ in current }
-            .merging(typingBurstMetadata) { current, _ in current }
-            .merging(fastPhraseFallbackMetadata) { current, _ in current }
-            .merging(requestMetadata) { current, _ in current }
-            setSuggestionDecision("Waiting: fast typing")
-            showFieldStatusIndicator(.waiting, context: context)
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "typing-burst-policy",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "typing-burst-model-continuation",
-                metadata: metadata
-            )
-            recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: metadata
-            )
-            suggestionIdleRetryState.noteTypingBurstSuppression(
-                snapshot: FocusedTextSnapshot(
-                    fieldIdentity: fieldIdentity,
-                    textBeforeCursor: context.textBeforeCursor,
-                    textAfterCursor: context.textAfterCursor
+                    fieldClassification: fieldClassification,
+                    renderMode: renderMode,
+                    typingBurstMetadata: typingBurstMetadata,
+                    fastPhraseFallbackMetadata: fastPhraseFallbackMetadata,
+                    requestMetadata: requestMetadata,
+                    settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
                 ),
-                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
-                settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+                didPresentFastPhraseFallback: didPresentFastPhraseFallback
             )
-            hideSuggestion(reason: "typing-burst", metadata: typingBurstMetadata)
             return
         }
 
