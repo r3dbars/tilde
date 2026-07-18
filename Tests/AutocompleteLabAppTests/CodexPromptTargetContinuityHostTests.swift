@@ -34,6 +34,26 @@ struct CodexPromptTargetContinuityHostTests {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        let anchor = try #require(host.trustedAnchor)
+        let shownSnapshot = SuggestionAcceptanceSnapshot(
+            snapshot: snapshot,
+            targetFingerprint: anchor.targetFingerprint,
+            selectedTextLength: 0
+        )
+        #expect(host.stablePromptInsertionTarget(
+            app: app,
+            currentFieldIdentity: identity,
+            currentSnapshot: snapshot,
+            shownSnapshot: shownSnapshot,
+            observedContext: makeContext(
+                elementIdentifier: 99,
+                elementRect: CGRect(x: 102, y: 619, width: 702, height: 82)
+            )
+        ) == FocusedFieldIdentity(
+            bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 99
+        ))
         #expect(host.beginAXCooldownPreservation(
             app: app,
             currentFieldIdentity: identity,
@@ -52,11 +72,21 @@ struct CodexPromptTargetContinuityHostTests {
         host.reset()
         #expect(host.trustedAnchor == nil)
         #expect(host.axCooldownPreservation == nil)
+        #expect(host.stablePromptInsertionTarget(
+            app: app,
+            currentFieldIdentity: identity,
+            currentSnapshot: snapshot,
+            shownSnapshot: shownSnapshot,
+            observedContext: context
+        ) == nil)
     }
 
-    private func makeContext() -> FocusedTextContext {
+    private func makeContext(
+        elementIdentifier: Int = 7,
+        elementRect: CGRect = CGRect(x: 100, y: 620, width: 700, height: 80)
+    ) -> FocusedTextContext {
         FocusedTextContext(
-            elementIdentifier: 7,
+            elementIdentifier: elementIdentifier,
             role: "AXTextArea",
             subrole: nil,
             fingerprint: FocusedElementFingerprint(
@@ -70,7 +100,7 @@ struct CodexPromptTargetContinuityHostTests {
             selectedText: "",
             selectedTextLength: 0,
             caretRect: CGRect(x: 120, y: 650, width: 1, height: 20),
-            elementRect: CGRect(x: 100, y: 620, width: 700, height: 80),
+            elementRect: elementRect,
             windowRect: CGRect(x: 0, y: 0, width: 900, height: 700),
             windowIdentifier: 1,
             textLineRect: nil,

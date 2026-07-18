@@ -151,6 +151,32 @@ final class CodexPromptTargetContinuityHost {
         )
     }
 
+    func stablePromptInsertionTarget(
+        app: RunningApplicationInfo,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        shownSnapshot: SuggestionAcceptanceSnapshot,
+        observedContext: FocusedTextContext
+    ) -> FocusedFieldIdentity? {
+        guard targetPolicy.canAcceptStablePrompt(
+            appBundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            shownSnapshot: shownSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext
+        ) else {
+            return nil
+        }
+
+        return FocusedFieldIdentity(
+            bundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            elementIdentifier: observedContext.elementIdentifier
+        )
+    }
+
     func remainingAXCooldownMilliseconds() -> Int {
         targetPolicy.remainingAXCooldownMilliseconds(
             preservation: axCooldownPreservation

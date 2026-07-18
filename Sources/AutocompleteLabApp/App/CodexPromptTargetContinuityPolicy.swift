@@ -308,6 +308,95 @@ struct CodexPromptTargetContinuityPolicy {
         return true
     }
 
+    func canAcceptStablePrompt(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        shownSnapshot: SuggestionAcceptanceSnapshot,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        observedContext: FocusedTextContext,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
+        maximumAnchorAgeMilliseconds: Int = 1_000
+    ) -> Bool {
+        guard observedContext.role == "AXTextArea",
+              shownSnapshot.selectedTextLength == 0,
+              let currentFieldIdentity,
+              let currentSnapshot,
+              let trustedAnchor,
+              shownSnapshot.fieldIdentity == currentFieldIdentity,
+              shownSnapshot.fieldIdentity == currentSnapshot.fieldIdentity,
+              shownSnapshot.textBeforeCursor == currentSnapshot.textBeforeCursor,
+              shownSnapshot.textAfterCursor == currentSnapshot.textAfterCursor,
+              shownSnapshot.targetFingerprint.surroundingTextRevision == FocusedTextRevision(
+                  textBeforeCursor: currentSnapshot.textBeforeCursor,
+                  textAfterCursor: currentSnapshot.textAfterCursor
+              ),
+              targetMatchesTrustedAnchor(
+                  shownSnapshot.targetFingerprint,
+                  trustedAnchor: trustedAnchor
+              ),
+              targetMatchesTrustedAnchor(
+                  targetFingerprint(for: observedContext),
+                  trustedAnchor: trustedAnchor
+              ) else {
+            return false
+        }
+
+        return verifiedTransientObservation(
+            appBundleIdentifier: appBundleIdentifier,
+            processIdentifier: processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext,
+            nowMilliseconds: nowMilliseconds,
+            maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
+        )?.resolution == .preserveWork
+    }
+
+    private func targetMatchesTrustedAnchor(
+        _ target: FocusedTargetFingerprint,
+        trustedAnchor: CodexPromptTargetContinuityAnchor,
+        maximumGeometryDelta: Int = 4
+    ) -> Bool {
+        let trustedTarget = trustedAnchor.targetFingerprint
+        guard target.role == trustedTarget.role,
+              target.subrole == trustedTarget.subrole,
+              hasAffirmativeSameWindowEvidence(
+                  target,
+                  trustedTarget
+              ),
+              let targetElementBounds = target.elementBounds,
+              let trustedElementBounds = trustedTarget.elementBounds else {
+            return false
+        }
+
+        return abs(targetElementBounds.x - trustedElementBounds.x) <= maximumGeometryDelta
+            && abs(targetElementBounds.y - trustedElementBounds.y) <= maximumGeometryDelta
+            && abs(targetElementBounds.width - trustedElementBounds.width) <= maximumGeometryDelta
+            && abs(targetElementBounds.height - trustedElementBounds.height) <= maximumGeometryDelta
+            && targetElementBounds.width > 0
+            && targetElementBounds.height > 0
+            && trustedElementBounds.width > 0
+            && trustedElementBounds.height > 0
+    }
+
+    private func hasAffirmativeSameWindowEvidence(
+        _ shownTarget: FocusedTargetFingerprint,
+        _ trustedTarget: FocusedTargetFingerprint
+    ) -> Bool {
+        if shownTarget.windowIdentifier != nil
+            || trustedTarget.windowIdentifier != nil {
+            return shownTarget.windowIdentifier == trustedTarget.windowIdentifier
+        }
+
+        return shownTarget.windowBounds != nil
+            && shownTarget.windowBounds == trustedTarget.windowBounds
+            && shownTarget.elementFingerprint.windowTitle != nil
+            && shownTarget.elementFingerprint.windowTitle == trustedTarget.elementFingerprint.windowTitle
+    }
+
     func remainingAXCooldownMilliseconds(
         preservation: CodexPromptAXCooldownPreservation?,
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
