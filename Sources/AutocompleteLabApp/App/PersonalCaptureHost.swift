@@ -152,10 +152,13 @@ final class PersonalCaptureHost {
             userTypedContext: request.textBeforeCursor,
             textAfterCursor: request.textAfterCursor,
             replyContext: replyContext,
-            replayContext: request.visiblePageContext.map {
-                SuggestionEpisodeReplayContext(
-                    visiblePageContext: $0,
-                    fingerprintSecret: dependencies.fingerprintSecret() ?? Data(),
+            replayContext: request.visiblePageContext.flatMap { visiblePageContext in
+                guard let fingerprintSecret = dependencies.fingerprintSecret() else {
+                    return nil
+                }
+                return SuggestionEpisodeReplayContext(
+                    visiblePageContext: visiblePageContext,
+                    fingerprintSecret: fingerprintSecret,
                     includeText: true
                 )
             },
