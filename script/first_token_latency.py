@@ -96,7 +96,7 @@ def measure(
     load_started = time.monotonic()
     model, tokenizer = mlx_lm.load(source)
     load_ms = round((time.monotonic() - load_started) * 1000)
-    sampler = batch.make_greedy_sampler()
+    sampler = batch.make_sampler()
 
     # Build prompts through the exact audit + batch shaping so the latency prompt
     # equals the quality prompt for this model/template.
@@ -144,6 +144,8 @@ def _round(value: Optional[float]) -> Optional[float]:
 
 
 def self_test() -> int:
+    assert hasattr(batch, "make_sampler")
+
     # Percentile math.
     sample = [10.0, 20.0, 30.0, 40.0, 50.0]
     assert percentile(sample, 0.0) == 10.0
