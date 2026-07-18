@@ -6355,27 +6355,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return metadata
     }
 
-    private func insertionVerificationPreflightMetadata(
-        baseline: InsertionVerificationBaseline,
-        currentContext: InsertionVerificationPreflightContext
-    ) -> [String: String] {
-        var metadata = [
-            "app": baseline.profile.bundleIdentifier,
-            "expectedFieldIdentity": baseline.fieldIdentity.traceDescription
-        ]
-
-        switch currentContext {
-        case .missingFrontmostApplication:
-            metadata["currentApp"] = "missing"
-            metadata["currentFieldIdentity"] = "missing"
-        case let .frontmostApplication(bundleIdentifier, fieldIdentity):
-            metadata["currentApp"] = bundleIdentifier
-            metadata["currentFieldIdentity"] = fieldIdentity?.traceDescription ?? "missing"
-        }
-
-        return metadata
-    }
-
     func insertionFailureRecoverabilityMetadata(
         baseline: InsertionVerificationBaseline
     ) -> [String: String] {
