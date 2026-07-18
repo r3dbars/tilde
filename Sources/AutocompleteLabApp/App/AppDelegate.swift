@@ -830,6 +830,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
         )
     )
+    private lazy var suggestionPresentationPreparationHost = SuggestionPresentationPreparationHost(
+        dependencies: SuggestionPresentationPreparationHostDependencies(
+            compatibilityLearningStore: compatibilityLearningStore,
+            visualTrustContext: { [weak self] context, bundleIdentifier in
+                self?.compatibilityLearningVisualTrustContext(
+                    for: context,
+                    bundleIdentifier: bundleIdentifier
+                ) ?? CompatibilityLearningVisualTrustContext()
+            },
+            placementHealthPlan: { [weak self] context, profile, adjustment, screenshotTracingEnabled in
+                guard let self else {
+                    return .suppress(
+                        PlacementHealthSuppression(
+                            requestedRenderMode: adjustment.effectiveRenderMode,
+                            reason: .disabled
+                        )
+                    )
+                }
+                return self.suggestionOrchestrator.placementHealthPlan(
+                    context: context,
+                    profile: profile,
+                    learningAdjustment: adjustment,
+                    screenshotTracingEnabled: screenshotTracingEnabled
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -7131,51 +7158,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let requestSnapshot = FocusedTextSnapshot(
-            fieldIdentity: fieldIdentity,
-            textBeforeCursor: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor
+        let preparationResult = suggestionPresentationPreparationHost.prepare(
+            input: SuggestionPresentationPreparationInput(
+                suggestion: suggestion,
+                request: request,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds,
+                screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
+            )
         )
-        let currentSnapshot = FocusedTextSnapshot(
-            fieldIdentity: fieldIdentity,
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
-        )
-        let typedSinceRequest: String
-        switch LateResultContextValidator().validate(
-            requestSnapshot: requestSnapshot,
-            currentSnapshot: currentSnapshot,
-            latencyMilliseconds: latencyMilliseconds
-        ) {
-        case let .stillValid(typedDelta):
-            typedSinceRequest = typedDelta
+        let suggestion: CompletionSuggestion
+        let visualTrustContext: CompatibilityLearningVisualTrustContext
+        let learningAdjustment: CompatibilityLearningAdjustment
+        let placementPlan: PlacementHealthPlan
+        switch preparationResult {
         case let .invalid(reason):
             hideSuggestion(reason: "late-result-\(reason.rawValue)")
             return
-        }
-        guard let suggestion = LateResultContextValidator().trimmedSuggestion(
-            suggestion,
-            typedSinceRequest: typedSinceRequest
-        ) else {
+        case .typedThroughVisiblePrefix:
             hideSuggestion(reason: "typed-through-visible-prefix")
             return
+        case let .ready(prepared):
+            suggestion = prepared.suggestion
+            visualTrustContext = prepared.visualTrustContext
+            learningAdjustment = prepared.learningAdjustment
+            placementPlan = prepared.placementPlan
         }
-
-        let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
-            for: profile.bundleIdentifier,
-            profileRenderMode: renderMode
-        )
-        let visualTrustContext = compatibilityLearningVisualTrustContext(
-            for: context,
-            bundleIdentifier: profile.bundleIdentifier
-        )
-        let learningAdjustment = storedLearningAdjustment.trustedVisualOffsetOnly(context: visualTrustContext)
-        let placementPlan = suggestionOrchestrator.placementHealthPlan(
-            context: context,
-            profile: profile,
-            learningAdjustment: learningAdjustment,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-        )
 
         guard case let .present(placement) = placementPlan else {
             let placementSuppression = suggestionOrchestrator.placementSuppressionResolution(
