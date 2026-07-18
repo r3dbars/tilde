@@ -332,8 +332,12 @@ struct CodexPromptTargetContinuityPolicy {
                   textBeforeCursor: currentSnapshot.textBeforeCursor,
                   textAfterCursor: currentSnapshot.textAfterCursor
               ),
-              shownTargetMatchesTrustedAnchor(
+              targetMatchesTrustedAnchor(
                   shownSnapshot.targetFingerprint,
+                  trustedAnchor: trustedAnchor
+              ),
+              targetMatchesTrustedAnchor(
+                  targetFingerprint(for: observedContext),
                   trustedAnchor: trustedAnchor
               ) else {
             return false
@@ -351,29 +355,29 @@ struct CodexPromptTargetContinuityPolicy {
         )?.resolution == .preserveWork
     }
 
-    private func shownTargetMatchesTrustedAnchor(
-        _ shownTarget: FocusedTargetFingerprint,
+    private func targetMatchesTrustedAnchor(
+        _ target: FocusedTargetFingerprint,
         trustedAnchor: CodexPromptTargetContinuityAnchor,
         maximumGeometryDelta: Int = 4
     ) -> Bool {
         let trustedTarget = trustedAnchor.targetFingerprint
-        guard shownTarget.role == trustedTarget.role,
-              shownTarget.subrole == trustedTarget.subrole,
+        guard target.role == trustedTarget.role,
+              target.subrole == trustedTarget.subrole,
               hasAffirmativeSameWindowEvidence(
-                  shownTarget,
+                  target,
                   trustedTarget
               ),
-              let shownElementBounds = shownTarget.elementBounds,
+              let targetElementBounds = target.elementBounds,
               let trustedElementBounds = trustedTarget.elementBounds else {
             return false
         }
 
-        return abs(shownElementBounds.x - trustedElementBounds.x) <= maximumGeometryDelta
-            && abs(shownElementBounds.y - trustedElementBounds.y) <= maximumGeometryDelta
-            && abs(shownElementBounds.width - trustedElementBounds.width) <= maximumGeometryDelta
-            && abs(shownElementBounds.height - trustedElementBounds.height) <= maximumGeometryDelta
-            && shownElementBounds.width > 0
-            && shownElementBounds.height > 0
+        return abs(targetElementBounds.x - trustedElementBounds.x) <= maximumGeometryDelta
+            && abs(targetElementBounds.y - trustedElementBounds.y) <= maximumGeometryDelta
+            && abs(targetElementBounds.width - trustedElementBounds.width) <= maximumGeometryDelta
+            && abs(targetElementBounds.height - trustedElementBounds.height) <= maximumGeometryDelta
+            && targetElementBounds.width > 0
+            && targetElementBounds.height > 0
             && trustedElementBounds.width > 0
             && trustedElementBounds.height > 0
     }

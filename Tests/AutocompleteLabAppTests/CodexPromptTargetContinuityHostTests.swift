@@ -40,7 +40,7 @@ struct CodexPromptTargetContinuityHostTests {
             targetFingerprint: anchor.targetFingerprint,
             selectedTextLength: 0
         )
-        #expect(host.canAcceptStablePrompt(
+        #expect(host.stablePromptInsertionTarget(
             app: app,
             currentFieldIdentity: identity,
             currentSnapshot: snapshot,
@@ -49,6 +49,10 @@ struct CodexPromptTargetContinuityHostTests {
                 elementIdentifier: 99,
                 elementRect: CGRect(x: 102, y: 619, width: 702, height: 82)
             )
+        ) == FocusedFieldIdentity(
+            bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 99
         ))
         #expect(host.beginAXCooldownPreservation(
             app: app,
@@ -68,13 +72,13 @@ struct CodexPromptTargetContinuityHostTests {
         host.reset()
         #expect(host.trustedAnchor == nil)
         #expect(host.axCooldownPreservation == nil)
-        #expect(!host.canAcceptStablePrompt(
+        #expect(host.stablePromptInsertionTarget(
             app: app,
             currentFieldIdentity: identity,
             currentSnapshot: snapshot,
             shownSnapshot: shownSnapshot,
             observedContext: context
-        ))
+        ) == nil)
     }
 
     private func makeContext(
