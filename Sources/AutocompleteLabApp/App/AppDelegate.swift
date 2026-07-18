@@ -875,6 +875,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
         )
     )
+    private lazy var suggestionTriggerTimingHost = SuggestionTriggerTimingHost(
+        dependencies: SuggestionTriggerTimingHostDependencies(
+            triggerTiming: suggestionSessionBehaviors.triggerTiming,
+            triggerPolicy: { [weak self] profile in
+                self?.triggerPolicy(for: profile) ?? SuggestionTriggerPolicy()
+            },
+            consumeManualSuggestionRequest: { [weak self] in
+                self?.manualSuggestionRequestHost.consumePendingRequest() == true
+            },
+            hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            showFieldStatusIndicator: { [weak self] state, context in
+                self?.showFieldStatusIndicator(state, context: context)
+            },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+            },
+            hideSuggestion: { [weak self] in self?.hideSuggestion() },
+            scheduleSuggestion: { [weak self] schedule in
+                self?.scheduleSuggestion(
+                    context: schedule.context,
+                    profile: schedule.profile,
+                    appBundleIdentifier: schedule.suggestionAppBundleIdentifier,
+                    fieldIdentity: schedule.fieldIdentity,
+                    fieldClassification: schedule.fieldClassification,
+                    renderMode: schedule.renderMode,
+                    delayMilliseconds: schedule.delayMilliseconds,
+                    timingLane: schedule.timingLane,
+                    requestMode: schedule.requestMode,
+                    typingBurstDecision: schedule.typingBurstDecision,
+                    visiblePageContext: schedule.visiblePageContext,
+                    triggerReason: schedule.triggerReason
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -2624,103 +2668,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let currentLineStructure = CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
         let suggestionAppBundleIdentifier = suggestionBundleIdentifier(for: frontmostApp, profile: profile)
-        let triggerBehaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: suggestionAppBundleIdentifier,
-            fieldKind: suggestionFieldClassification.kind,
-            currentLineStructure: currentLineStructure
-        ))
-        let triggerDecision = suggestionSessionBehaviors.triggerTiming.decision(
-            using: triggerPolicy(for: profile),
-            previousTextBeforeCursor: lastRequestedTextBeforeCursor,
-            currentTextBeforeCursor: context.textBeforeCursor,
-            lineStartBehavior: SuggestionLineStartBehavior.behavior(
-                for: triggerBehaviorProfile.id,
-                currentLineStructure: currentLineStructure
-            ),
-            behaviorProfileID: triggerBehaviorProfile.id,
-            requestMode: requestMode
-        )
-        let isManualSuggestionRequest = manualSuggestionRequestHost.consumePendingRequest()
-
-        let delayMilliseconds: Int
-        let timingLane: SuggestionTimingLane
-        if isManualSuggestionRequest {
-            delayMilliseconds = 0
-            if case let .request(_, policyTimingLane) = triggerDecision {
-                timingLane = policyTimingLane
-            } else {
-                timingLane = switch requestMode {
-                case .wordCompletion:
-                    .instantWord
-                case .sentenceContinuation:
-                    .longPauseThought
-                case .phraseContinuation:
-                    .pausePhrase
-                }
-            }
-        } else if idleRetryReason != nil {
-            delayMilliseconds = 0
-            timingLane = switch requestMode {
-            case .wordCompletion:
-                .instantWord
-            case .sentenceContinuation:
-                .longPauseThought
-            case .phraseContinuation:
-                .pausePhrase
-            }
-        } else if case let .request(policyDelayMilliseconds, policyTimingLane) = triggerDecision {
-            delayMilliseconds = policyDelayMilliseconds
-            timingLane = policyTimingLane
-        } else {
-            if suggestionSession.hasVisibleSuggestion {
-                setSuggestionDecision("Shown: waiting for cadence")
-                showFieldStatusIndicator(.shown, context: context)
-                repositionVisibleSuggestion(context: context, profile: profile)
-                return
-            }
-
-            setSuggestionDecision("Waiting: cadence policy")
-            showFieldStatusIndicator(.waiting.withReason("typing cadence"), context: context)
-            recordSuggestionEvent(
-                "suggestion-trigger-skipped",
+        suggestionTriggerTimingHost.handle(
+            input: SuggestionTriggerTimingHostInput(
                 context: context,
                 profile: profile,
-                metadata: [
-                    "reason": "cadence-policy"
-                ]
+                suggestionAppBundleIdentifier: suggestionAppBundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                fieldClassification: suggestionFieldClassification,
+                renderMode: renderMode,
+                requestMode: requestMode,
+                previousTextBeforeCursor: lastRequestedTextBeforeCursor,
+                idleRetryReason: idleRetryReason,
+                typingBurstDecision: typingBurstDecision,
+                visiblePageContext: cachedVisiblePageContext(
+                    context: context,
+                    appBundleIdentifier: frontmostApp.bundleIdentifier
+                )
             )
-            hideSuggestion()
-            return
-        }
-
-        setSuggestionDecision(
-            isManualSuggestionRequest
-                ? "Queued: asked once \(timingLane.rawValue)"
-                : "Queued: \(requestMode.rawValue) \(timingLane.rawValue)"
-        )
-        showFieldStatusIndicator(.thinking, context: context)
-        scheduleSuggestion(
-            context: context,
-            profile: profile,
-            appBundleIdentifier: suggestionAppBundleIdentifier,
-            fieldIdentity: fieldIdentity,
-            fieldClassification: suggestionFieldClassification,
-            renderMode: renderMode,
-            delayMilliseconds: delayMilliseconds,
-            timingLane: timingLane,
-            requestMode: requestMode,
-            typingBurstDecision: typingBurstDecision,
-            visiblePageContext: cachedVisiblePageContext(
-                context: context,
-                appBundleIdentifier: frontmostApp.bundleIdentifier
-            ),
-            triggerReason: isManualSuggestionRequest
-                ? "manual-summon"
-                : idleRetryReason != nil
-                    ? "idle-retry"
-                    : "poll"
         )
     }
 
