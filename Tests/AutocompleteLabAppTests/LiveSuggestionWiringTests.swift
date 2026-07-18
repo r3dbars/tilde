@@ -89,12 +89,16 @@ struct LiveSuggestionWiringTests {
     @Test("App delegate rearms cancelled suggestions after typing settles")
     func appDelegateRearmsCancelledSuggestionsAfterTypingSettles() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let triggerTimingHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionTriggerTimingHost.swift"
+        )
+        let suggestionTriggerWiring = appDelegate + triggerTimingHost
 
-        try require(appDelegate, contains: "suggestionIdleRetryState.consumeRetryIfReady(")
-        try require(appDelegate, contains: "suggestionIdleRetryState.noteTextChange(")
-        try require(appDelegate, contains: "suggestionIdleRetryState.noteTypingBurstSuppression(")
-        try require(appDelegate, contains: "else if idleRetryReason != nil {")
-        try require(appDelegate, contains: "? \"idle-retry\"")
+        try require(suggestionTriggerWiring, contains: "suggestionIdleRetryState.consumeRetryIfReady(")
+        try require(suggestionTriggerWiring, contains: "suggestionIdleRetryState.noteTextChange(")
+        try require(suggestionTriggerWiring, contains: "suggestionIdleRetryState.noteTypingBurstSuppression(")
+        try require(suggestionTriggerWiring, contains: "else if input.idleRetryReason != nil {")
+        try require(suggestionTriggerWiring, contains: "? \"idle-retry\"")
     }
 
     @Test("App delegate preserves and rechecks transient Codex prompt targets")
