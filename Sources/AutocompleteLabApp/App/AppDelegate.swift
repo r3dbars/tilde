@@ -274,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
-    private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
+    private let focusedTextAXHealthHost = FocusedTextAXHealthHost()
     private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
     private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
         FocusedTextPollingThrottleSuggestionVisibilityPolicy()
@@ -364,7 +364,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
-    private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private let typingBurstPolicy = TypingBurstPolicy()
     private var typingBurstState = TypingBurstState()
@@ -2493,10 +2492,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func allowFocusedTextAXRead(for app: RunningApplicationInfo) -> Bool {
-        switch focusedTextAXHealthPolicy.pollDecision(
+        switch focusedTextAXHealthHost.pollDecision(
             for: app.bundleIdentifier,
-            now: Date(),
-            state: &focusedTextAXHealthState
+            now: Date()
         ) {
         case let .allowed(recovery?):
             codexPromptTargetContinuityHost.clearCooldownPreservation()
@@ -2548,13 +2546,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyFocusedTextAXHealthObservation(_ result: FocusedTextAXReadResult) -> Bool {
-        let observation = focusedTextAXHealthPolicy.recordRead(
+        let observation = focusedTextAXHealthHost.recordRead(
             bundleIdentifier: result.app.bundleIdentifier,
             queueDelayMilliseconds: result.queueDelayMilliseconds,
             readDurationMilliseconds: result.readDurationMilliseconds,
             hasContext: result.context != nil,
-            now: Date(),
-            state: &focusedTextAXHealthState
+            now: Date()
         )
 
         guard observation.didStartCooldown,
