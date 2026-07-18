@@ -40,14 +40,20 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Blocks full-accept proof profile identity churn outside the proof scenario")
     func blocksFullAcceptProofProfileIdentityChurnOutsideProofScenario() throws {
-        let profile = try codexProfile().replacingAcceptanceProofMode(
+        let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile.replacingAcceptanceProofMode(
             supportsFullAcceptance: true,
             requiresNoSubmitAcceptanceProof: false
         )
 
         #expect(!policy.canTrustRefresh(
-            requestFieldIdentity: identity(elementIdentifier: 7),
-            refreshedFieldIdentity: identity(elementIdentifier: 99),
+            requestFieldIdentity: identity(
+                bundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                elementIdentifier: 7
+            ),
+            refreshedFieldIdentity: identity(
+                bundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                elementIdentifier: 99
+            ),
             profile: profile,
             proofModeEnabled: true,
             allowsFullAcceptNoSubmitProofProfile: false
@@ -69,9 +75,28 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Blocks prompt proof identity churn outside proof mode")
     func blocksPromptProofIdentityChurnOutsideProofMode() throws {
-        let profile = try codexProfile()
+        let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile
 
         #expect(!policy.canTrustRefresh(
+            requestFieldIdentity: identity(
+                bundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                elementIdentifier: 7
+            ),
+            refreshedFieldIdentity: identity(
+                bundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                elementIdentifier: 99
+            ),
+            profile: profile,
+            proofModeEnabled: false,
+            allowsFullAcceptNoSubmitProofProfile: false
+        ))
+    }
+
+    @Test("Allows native Codex editor identity churn in the same process")
+    func allowsNativeCodexIdentityChurn() throws {
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+
+        #expect(policy.canTrustRefresh(
             requestFieldIdentity: identity(elementIdentifier: 7),
             refreshedFieldIdentity: identity(elementIdentifier: 99),
             profile: profile,
@@ -85,11 +110,12 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
     }
 
     private func identity(
+        bundleIdentifier: String = CodexProofFocusedTargetPolicy.bundleIdentifier,
         processIdentifier: Int32 = 42,
         elementIdentifier: Int
     ) -> FocusedFieldIdentity {
         FocusedFieldIdentity(
-            bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            bundleIdentifier: bundleIdentifier,
             processIdentifier: processIdentifier,
             elementIdentifier: elementIdentifier
         )
