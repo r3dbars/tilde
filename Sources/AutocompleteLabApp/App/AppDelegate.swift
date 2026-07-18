@@ -654,11 +654,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ) ?? false
             },
             terminalHostProofBlockReason: { [weak self] app, context, profile in
-                self?.claudeCodeTerminalHostProofBlockReason(
+                guard let self else {
+                    return "missing-app"
+                }
+                return self.claudeCodeTerminalHostProofBlockReason(
                     app: app,
                     context: context,
                     profile: profile
-                ) ?? "missing-app"
+                )
             },
             promptTextAreaMatch: { [weak self] bundleIdentifier, context in
                 guard let self else {
