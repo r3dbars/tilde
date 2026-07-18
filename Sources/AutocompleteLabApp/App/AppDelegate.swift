@@ -263,8 +263,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionTuning.displayScorePolicy
     }
-    private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
-    private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
     private lazy var appProofModeCoordinator = AppProofModeCoordinator(runtimeProofOptions: runtimeProofOptions)
     private var activeAppProofBundleIdentifiers: Set<String> {
         appProofModeCoordinator.activeBundleIdentifiers
@@ -301,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
+    private lazy var appPreferencePersistenceHost = AppPreferencePersistenceHost()
     private lazy var settingsWindowHost = SettingsWindowHost(handler: self)
     private var settingsWindow: SettingsWindowController {
         settingsWindowHost.controller
@@ -393,9 +392,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         get { appEnablementHost.setupCompleted }
         set { appEnablementHost.setupCompleted = newValue }
     }
-    private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
-    private var suggestionTuning = SuggestionTuning()
-    private var visiblePageContextEnabled = false
+    private var keyboardShortcutConfiguration: KeyboardShortcutConfiguration {
+        get { appPreferencePersistenceHost.keyboardShortcutConfiguration }
+        set { appPreferencePersistenceHost.keyboardShortcutConfiguration = newValue }
+    }
+    private var suggestionTuning: SuggestionTuning {
+        get { appPreferencePersistenceHost.suggestionTuning }
+        set { appPreferencePersistenceHost.suggestionTuning = newValue }
+    }
+    private var visiblePageContextEnabled: Bool {
+        get { appPreferencePersistenceHost.visiblePageContextEnabled }
+        set { appPreferencePersistenceHost.visiblePageContextEnabled = newValue }
+    }
+    private var acceptedAndKeptLearning: AcceptedAndKeptLearningStore {
+        get { appPreferencePersistenceHost.acceptedAndKeptLearning }
+        set { appPreferencePersistenceHost.acceptedAndKeptLearning = newValue }
+    }
+    private var acceptedTextStyleMemory: AcceptedTextStyleMemoryStore {
+        get { appPreferencePersistenceHost.acceptedTextStyleMemory }
+        set { appPreferencePersistenceHost.acceptedTextStyleMemory = newValue }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appLifecycleHost.start()
@@ -408,11 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func prepareForAppLaunch() {
         loadPauseState()
         loadDisabledApps()
-        loadKeyboardShortcutConfiguration()
-        loadSuggestionTuning()
-        loadVisiblePageContextEnabled()
-        loadAcceptedAndKeptLearning()
-        loadAcceptedTextStyleMemory()
+        appPreferencePersistenceHost.load()
         personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         loadProofModeOverrides()
     }
@@ -6353,9 +6365,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     behaviorProfileID: result.tracker.behaviorProfileID
                 )
             )
-            persistAcceptedTextStyleMemory()
+            appPreferencePersistenceHost.persistAcceptedTextStyleMemory()
         }
-        persistAcceptedAndKeptLearning()
+        appPreferencePersistenceHost.persistAcceptedAndKeptLearning()
         return signal
     }
 
@@ -6382,7 +6394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfileID: behaviorProfileID
             )
         )
-        persistAcceptedAndKeptLearning()
+        appPreferencePersistenceHost.persistAcceptedAndKeptLearning()
         var metadata = signal.traceMetadata
         metadata["typeThroughConfidenceCredited"] = "true"
         return metadata
@@ -18394,7 +18406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !visiblePageContextEnabled {
             visiblePageContextProvider.clear()
         }
-        persistVisiblePageContextEnabled()
+        appPreferencePersistenceHost.persistVisiblePageContextEnabled()
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
         if suggestionSession.hasVisibleSuggestion {
@@ -18478,8 +18490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recentWordMemory = ScopedRecentWordMemory()
         suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
         suggestionOrchestrator.resetPrefixFamilyCooldownPolicy(makePrefixFamilyCooldownPolicy())
-        UserDefaults.standard.removeObject(forKey: Self.acceptedAndKeptLearningDefaultsKey)
-        UserDefaults.standard.removeObject(forKey: Self.acceptedTextStyleMemoryDefaultsKey)
+        appPreferencePersistenceHost.clearLearningData()
         DiagnosticsLog.shared.record(
             "learning-data-cleared",
             metadata: ["surface": "settings"]
@@ -18624,7 +18635,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
         keyboardShortcutConfiguration.acceptAllShortcut = shortcut
-        persistKeyboardShortcutConfiguration()
+        appPreferencePersistenceHost.persistKeyboardShortcutConfiguration()
         updateKeyboardEventTapSnapshot()
         DiagnosticsLog.shared.record(
             "keyboard-shortcut-control",
@@ -18716,7 +18727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         suggestionTuning = next
-        persistSuggestionTuning()
+        appPreferencePersistenceHost.persistSuggestionTuning()
         applySuggestionTuningChange(reason: reason)
         DiagnosticsLog.shared.record(
             "suggestion-tuning-control",
@@ -19357,58 +19368,6 @@ private extension AppDelegate {
         "SuggestionsPausedUntil"
     }
 
-    static var acceptAllShortcutDefaultsKey: String {
-        "AcceptAllShortcut"
-    }
-
-    static var suggestionAggressivenessDefaultsKey: String {
-        "SuggestionAggressiveness"
-    }
-
-    static var suggestionAggressivenessLevelDefaultsKey: String {
-        "SuggestionAggressivenessLevel"
-    }
-
-    static var suggestionMaxVisibleWordsDefaultsKey: String {
-        "SuggestionMaxVisibleWords"
-    }
-
-    static var suggestionWordStartCharactersDefaultsKey: String {
-        "SuggestionWordStartCharacters"
-    }
-
-    static var suggestionPhraseStartWordsDefaultsKey: String {
-        "SuggestionPhraseStartWords"
-    }
-
-    static var suggestionResponseSpeedLevelDefaultsKey: String {
-        "SuggestionResponseSpeedLevel"
-    }
-
-    static var suggestionConfidenceLevelDefaultsKey: String {
-        "SuggestionConfidenceLevel"
-    }
-
-    static var suggestionLearningRestraintLevelDefaultsKey: String {
-        "SuggestionLearningRestraintLevel"
-    }
-
-    static var suggestionTuningDefaultsVersionDefaultsKey: String {
-        "SuggestionTuningDefaultsVersion"
-    }
-
-    static var currentSuggestionTuningDefaultsVersion: Int {
-        6
-    }
-
-    static var previousDefaultSuggestionAggressivenessLevel: Int {
-        SuggestionAggressiveness.normal.defaultTuningLevel
-    }
-
-    static var visiblePageContextEnabledDefaultsKey: String {
-        "VisiblePageContextEnabled"
-    }
-
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
     }
@@ -19464,14 +19423,6 @@ private extension AppDelegate {
         Practice here:
 
         """
-    }
-
-    static var acceptedAndKeptLearningDefaultsKey: String {
-        "AcceptedAndKeptLearning"
-    }
-
-    static var acceptedTextStyleMemoryDefaultsKey: String {
-        "AcceptedTextStyleMemory"
     }
 
     func loadPauseState() {
@@ -19559,190 +19510,6 @@ private extension AppDelegate {
         appEnablementHost.markSetupCompleted()
     }
 
-    func loadKeyboardShortcutConfiguration() {
-        keyboardShortcutConfiguration = KeyboardShortcutConfiguration(
-            persistedAcceptAllShortcutRawValue: UserDefaults.standard.string(forKey: Self.acceptAllShortcutDefaultsKey)
-        )
-    }
-
-    func persistKeyboardShortcutConfiguration() {
-        UserDefaults.standard.set(
-            keyboardShortcutConfiguration.acceptAllShortcut.rawValue,
-            forKey: Self.acceptAllShortcutDefaultsKey
-        )
-    }
-
-    func loadSuggestionTuning() {
-        let defaults = UserDefaults.standard
-        var level: Int
-        let hasStoredLevel = defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil
-        if defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil {
-            level = defaults.integer(forKey: Self.suggestionAggressivenessLevelDefaultsKey)
-        } else {
-            level = SuggestionAggressiveness
-                .parsed(defaults.string(forKey: Self.suggestionAggressivenessDefaultsKey))
-                .defaultTuningLevel
-        }
-        if defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) == nil,
-           hasStoredLevel,
-           level == Self.previousDefaultSuggestionAggressivenessLevel {
-            level = SuggestionTuning.defaultAggressivenessLevel
-        }
-
-        let storedTuningVersion = defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) as? Int
-        let shouldMigrateDailyDriverDefaults = (storedTuningVersion ?? 0) < Self.currentSuggestionTuningDefaultsVersion
-        if shouldMigrateDailyDriverDefaults,
-           level == 3 {
-            level = SuggestionTuning.defaultAggressivenessLevel
-        }
-
-        var maxVisibleWords: Int
-        if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
-            maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
-        } else {
-            maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
-        }
-
-        let wordStartCharacters = defaults.object(forKey: Self.suggestionWordStartCharactersDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionWordStartCharactersDefaultsKey)
-            : SuggestionTuning.defaultWordStartCharacters
-        var phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionPhraseStartWordsDefaultsKey)
-            : SuggestionTuning.defaultPhraseStartWords
-        var responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionResponseSpeedLevelDefaultsKey)
-            : SuggestionTuning.defaultResponseSpeedLevel
-        var confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionConfidenceLevelDefaultsKey)
-            : SuggestionTuning.defaultConfidenceLevel
-        var learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionLearningRestraintLevelDefaultsKey)
-            : SuggestionTuning.defaultLearningRestraintLevel
-
-        if shouldMigrateDailyDriverDefaults {
-            if maxVisibleWords == 3 || maxVisibleWords == 5 {
-                maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
-            }
-            if phraseStartWords == 3 {
-                phraseStartWords = SuggestionTuning.defaultPhraseStartWords
-            }
-            if responseSpeedLevel == 3 {
-                responseSpeedLevel = SuggestionTuning.defaultResponseSpeedLevel
-            }
-            if confidenceLevel == 3 {
-                confidenceLevel = SuggestionTuning.defaultConfidenceLevel
-            }
-            if learningRestraintLevel == 2 {
-                learningRestraintLevel = SuggestionTuning.defaultLearningRestraintLevel
-            }
-        }
-
-        suggestionTuning = SuggestionTuning(
-            aggressivenessLevel: level,
-            maxVisibleWords: maxVisibleWords,
-            wordStartCharacters: wordStartCharacters,
-            phraseStartWords: phraseStartWords,
-            responseSpeedLevel: responseSpeedLevel,
-            confidenceLevel: confidenceLevel,
-            learningRestraintLevel: learningRestraintLevel
-        )
-        persistSuggestionTuning()
-        defaults.set(
-            Self.currentSuggestionTuningDefaultsVersion,
-            forKey: Self.suggestionTuningDefaultsVersionDefaultsKey
-        )
-    }
-
-    func persistSuggestionTuning() {
-        let defaults = UserDefaults.standard
-        defaults.set(
-            suggestionTuning.legacyAggressiveness.rawValue,
-            forKey: Self.suggestionAggressivenessDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.aggressivenessLevel,
-            forKey: Self.suggestionAggressivenessLevelDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.maxVisibleWords,
-            forKey: Self.suggestionMaxVisibleWordsDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.wordStartCharacters,
-            forKey: Self.suggestionWordStartCharactersDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.phraseStartWords,
-            forKey: Self.suggestionPhraseStartWordsDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.responseSpeedLevel,
-            forKey: Self.suggestionResponseSpeedLevelDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.confidenceLevel,
-            forKey: Self.suggestionConfidenceLevelDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.learningRestraintLevel,
-            forKey: Self.suggestionLearningRestraintLevelDefaultsKey
-        )
-    }
-
-    func loadVisiblePageContextEnabled() {
-        visiblePageContextEnabled = UserDefaults.standard.bool(
-            forKey: Self.visiblePageContextEnabledDefaultsKey
-        )
-    }
-
-    func persistVisiblePageContextEnabled() {
-        UserDefaults.standard.set(
-            visiblePageContextEnabled,
-            forKey: Self.visiblePageContextEnabledDefaultsKey
-        )
-    }
-
-    func loadAcceptedAndKeptLearning() {
-        guard let data = UserDefaults.standard.data(forKey: Self.acceptedAndKeptLearningDefaultsKey),
-              let store = AcceptedAndKeptLearningStore(jsonData: data) else {
-            acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
-            return
-        }
-
-        acceptedAndKeptLearning = store
-    }
-
-    func persistAcceptedAndKeptLearning() {
-        guard let data = acceptedAndKeptLearning.jsonData() else {
-            return
-        }
-
-        UserDefaults.standard.set(
-            data,
-            forKey: Self.acceptedAndKeptLearningDefaultsKey
-        )
-    }
-
-    func loadAcceptedTextStyleMemory() {
-        guard let data = UserDefaults.standard.data(forKey: Self.acceptedTextStyleMemoryDefaultsKey),
-              let store = AcceptedTextStyleMemoryStore(jsonData: data) else {
-            acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
-            return
-        }
-
-        acceptedTextStyleMemory = store
-    }
-
-    func persistAcceptedTextStyleMemory() {
-        guard let data = acceptedTextStyleMemory.jsonData() else {
-            return
-        }
-
-        UserDefaults.standard.set(
-            data,
-            forKey: Self.acceptedTextStyleMemoryDefaultsKey
-        )
-    }
 }
 
 private struct InsertionVerificationBaseline: Equatable {
