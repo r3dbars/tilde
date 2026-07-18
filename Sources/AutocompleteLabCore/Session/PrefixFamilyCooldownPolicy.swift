@@ -244,6 +244,12 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         }
     }
 
+    public mutating func reset() {
+        cooldowns.removeAll()
+        typedOverEagernessBuckets.removeAll()
+        acceptedThenDeletedEagernessBuckets.removeAll()
+    }
+
     private func duration(for reason: PrefixFamilyCooldownReason) -> Int {
         switch reason {
         case .typedOver:

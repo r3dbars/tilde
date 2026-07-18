@@ -1464,12 +1464,14 @@ struct SuggestionOrchestratorTests {
         let now = Date(timeIntervalSince1970: 100)
         let orchestrator = SuggestionOrchestrator(
             engine: EchoCompletionEngine(),
-            prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy(
-                typedOverCooldownMilliseconds: 1_000,
-                repeatedTypedOverCooldownMilliseconds: 1_000,
-                typedOverEagernessThreshold: 1,
-                typedOverEagernessHalfLifeSeconds: 600,
-                traceFingerprintSecret: Data("unit-test-secret".utf8)
+            suggestionAnnoyanceBackoffPolicy: SuggestionAnnoyanceBackoffPolicy(
+                prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy(
+                    typedOverCooldownMilliseconds: 1_000,
+                    repeatedTypedOverCooldownMilliseconds: 1_000,
+                    typedOverEagernessThreshold: 1,
+                    typedOverEagernessHalfLifeSeconds: 600,
+                    traceFingerprintSecret: Data("unit-test-secret".utf8)
+                )
             )
         )
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
