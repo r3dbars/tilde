@@ -60,6 +60,45 @@ final class CodexPromptTargetContinuityHost {
         )
     }
 
+    func invalidationResolution(
+        app: RunningApplicationInfo,
+        promptBlockReason: String,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        observedContext: FocusedTextContext,
+        hasActiveSuggestionWork: Bool
+    ) -> CodexPromptTargetInvalidationResolution {
+        guard hasActiveSuggestionWork else {
+            return .reject
+        }
+
+        return targetPolicy.invalidationResolution(
+            appBundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            promptBlockReason: promptBlockReason,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext
+        )
+    }
+
+    func axHealthInvalidationResolution(
+        app: RunningApplicationInfo,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        observedContext: FocusedTextContext
+    ) -> CodexPromptTargetInvalidationResolution {
+        targetPolicy.axHealthInvalidationResolution(
+            appBundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext
+        )
+    }
+
     func beginAXCooldownPreservation(
         app: RunningApplicationInfo,
         currentFieldIdentity: FocusedFieldIdentity?,
@@ -84,6 +123,15 @@ final class CodexPromptTargetContinuityHost {
             )
             : nil
         return shouldPreserve
+    }
+
+    @discardableResult
+    func preserveDuringAXCooldown(forMilliseconds cooldownMilliseconds: Int) -> Bool {
+        axCooldownPreservation = targetPolicy.axCooldownPreservation(
+            trustedAnchor: trustedAnchor,
+            cooldownMilliseconds: cooldownMilliseconds
+        )
+        return axCooldownPreservation != nil
     }
 
     func canPreserveDuringAXCooldown(
