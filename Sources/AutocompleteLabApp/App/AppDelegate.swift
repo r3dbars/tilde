@@ -358,7 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionRequestScheduler = SuggestionRequestScheduler()
     private let codexPromptPresentationRetryHost = CodexPromptPresentationRetryHost()
     private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
-    private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
+    private let deferredTerminalHostAcceptanceHost = DeferredTerminalHostAcceptanceHost()
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private let acceptanceSurvivalTaskHost = AcceptanceSurvivalTaskHost()
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
@@ -462,7 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionPauseStateHost.stop()
         keyboardEventCaptureHost.cancelIdleStop()
         insertionVerificationHost.cancel()
-        deferredTerminalHostAcceptanceTask?.cancel()
+        deferredTerminalHostAcceptanceHost.cancel()
         acceptedInsertionUndoExpirationHost.cancel()
         modelRuntimeWarmHost.cancel()
         invalidatePendingSuggestionRequest()
@@ -4813,7 +4813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scheduledFieldIdentity = currentSuggestionState.fieldIdentity
         let scheduledRequestMode = currentSuggestionState.requestMode
         let delayMilliseconds = deferredGhosttyInsertionProbeDelayMilliseconds()
-        deferredTerminalHostAcceptanceTask?.cancel()
+        deferredTerminalHostAcceptanceHost.cancel()
         suggestionPipeline.pausePolling(
             now: Date(),
             durationMilliseconds: delayMilliseconds + postInsertionPollPauseMilliseconds
@@ -4831,13 +4831,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        deferredTerminalHostAcceptanceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            guard !Task.isCancelled,
-                  let self else {
+        deferredTerminalHostAcceptanceHost.schedule(afterMilliseconds: delayMilliseconds) { [weak self] in
+            guard let self else {
                 return
             }
-            self.deferredTerminalHostAcceptanceTask = nil
             guard self.suggestionSession.hasVisibleSuggestion,
                   self.currentSuggestionState.id == scheduledSuggestionID,
                   self.currentSuggestionState.fieldIdentity == scheduledFieldIdentity,
