@@ -210,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let personalizationCoordinator = PersonalizationCoordinator()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
-    private let suggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
+    private let suggestionTriggerTimingPolicy = SuggestionTriggerTimingPolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
@@ -2263,7 +2263,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKind: suggestionFieldClassification.kind,
             currentLineStructure: currentLineStructure
         ))
-        let triggerDecision = triggerPolicy(for: profile).decision(
+        let triggerDecision = suggestionTriggerTimingPolicy.decision(
+            using: triggerPolicy(for: profile),
             previousTextBeforeCursor: lastRequestedTextBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor,
             lineStartBehavior: SuggestionLineStartBehavior.behavior(
@@ -6503,7 +6504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
-        let requestSchedule = suggestionRequestSchedulingPolicy.schedule(
+        let requestSchedule = suggestionTriggerTimingPolicy.schedule(
             policyDelayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
             requestMode: request.mode,
@@ -7112,7 +7113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    if self.suggestionRequestSchedulingPolicy.shouldSuppressResult(
+                    if self.suggestionTriggerTimingPolicy.shouldSuppressResult(
                         latencyMilliseconds: latencyMilliseconds,
                         schedule: requestSchedule
                     ) {
