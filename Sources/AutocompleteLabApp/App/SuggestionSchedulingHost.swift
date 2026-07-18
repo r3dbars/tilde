@@ -493,6 +493,8 @@ final class SuggestionSchedulingHost {
                     behaviorProfileID: request.behaviorProfileID,
                     visiblePageContext: visiblePageContext
                 )
+            let allowsPromptAppPrediction = allowsClaudeCodeProofPromptPrediction
+                || (request.behaviorProfileID == .aiChat && allowsPredictivePhraseFallback)
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 docLocalContextTexts: orchestration.docLocalContextTexts,
@@ -500,7 +502,7 @@ final class SuggestionSchedulingHost {
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
-                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
+                allowPromptAppPrediction: allowsPromptAppPrediction
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }

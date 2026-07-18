@@ -400,7 +400,9 @@ public struct SuggestionTuning: Equatable, Sendable {
         visiblePageContextAvailable: Bool
     ) -> Bool {
         switch behaviorProfileID {
-        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+        case .some(.aiChat):
+            return visiblePageContextAvailable || aggressivenessLevel >= 3
+        case .some(.coding), .some(.forms), .some(.search):
             return false
         case .some, .none:
             break
