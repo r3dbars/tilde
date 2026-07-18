@@ -81,7 +81,7 @@ struct TypingReplayEvalTests {
         #expect(scorecard.markdown.contains("Wrong first word among suggestions: 50.0%"))
     }
 
-    @Test("User-feel scorecard reports aggregate timing, visibility, stability, and acceptance")
+    @Test("User-feel scorecard reports directly observed latency and acceptance")
     func userFeelScorecardAggregates() {
         let cases = [
             replay(id: "a", context: "one two three four", actual: "alpha beta"),
@@ -101,12 +101,11 @@ struct TypingReplayEvalTests {
         ])
 
         #expect(scorecard.caseCount == 2)
-        #expect(scorecard.eligiblePauseCount == 2)
-        #expect(scorecard.visibleEligiblePauseCount == 2)
-        #expect(scorecard.eligiblePauseSuggestionVisibleRate == 1)
-        #expect(scorecard.pauseToSuggestionLatencyP95Milliseconds == 380)
-        #expect(scorecard.suggestionStabilityRate == 0.5)
-        #expect(scorecard.acceptanceQualityRate == 0.5)
+        #expect(scorecard.visibleSuggestionCount == 2)
+        #expect(scorecard.visibleSuggestionRate == 1)
+        #expect(scorecard.modelResultLatencyP50Milliseconds == 200)
+        #expect(scorecard.modelResultLatencyP95Milliseconds == 200)
+        #expect(scorecard.visibleCompletionAcceptanceQualityRate == 0.5)
     }
 
     @Test("Trend encoding is aggregate-only")
@@ -132,9 +131,7 @@ struct TypingReplayEvalTests {
             "top1WordAccuracy", "wordPrefixAccuracy2",
             "wordPrefixAccuracy3", "wordPrefixAccuracy4", "suggestionRate",
             "wrongFirstWordRate", "endToEndP95LatencyMs", "acceptedAndKeptRate", "acceptRate",
-            "pauseToSuggestionP50LatencyMs", "pauseToSuggestionP95LatencyMs",
-            "eligiblePauseSuggestionVisibleRate", "suggestionStabilityRate",
-            "acceptanceQualityRate",
+            "modelResultLatencyP50Ms", "visibleCompletionAcceptanceQualityRate",
             "promptContextCharacters", "suffixEnabled", "fewShotSource", "decodingVariant"
         ]
 
