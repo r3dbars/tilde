@@ -640,11 +640,12 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportLevel: .yellow,
             supportReason: "Codex prompt support is on for this installed app: Tab and whole-suggestion accept are available, and prompt safety gates stay on.",
             renderMode: .inlineAdjacent,
-            insertionMode: .axValueReplacement,
+            insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .axValueReplacement,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
-            knownFailureModes: ["prompt editor may need synthetic caret", "detached whole-box suggestions are disallowed", "key-event insertion can land at the start of the prompt"],
+            knownFailureModes: ["prompt editor may need synthetic caret", "detached whole-box suggestions are disallowed"],
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
             supportsOneWordAcceptance: true,
@@ -653,7 +654,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
-            notes: "Enabled for this local Codex build with one-word no-submit proof, full-accept no-submit proof, and prompt-safe accepted-text filtering. Detached suggestions, generic key-event insertion, and clipboard fallback stay off."
+            notes: "Enabled for this local Codex build with one-word no-submit proof, full-accept no-submit proof, prompt-safe accepted-text filtering, and a guarded AX-then-key-event insertion ladder. Detached suggestions and clipboard fallback stay off."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
