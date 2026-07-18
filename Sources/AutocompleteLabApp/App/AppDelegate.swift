@@ -731,6 +731,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionPresentationCommitHost = SuggestionPresentationCommitHost(
+        dependencies: SuggestionPresentationCommitHostDependencies(
+            suggestionSession: suggestionSession,
+            currentSuggestionState: currentSuggestionState,
+            targetFingerprint: { [weak self] context in
+                self?.targetFingerprint(context: context)
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            activateKeyboardCapture: { [weak self] in
+                guard let self else { return false }
+                return self.keyboardEventCaptureHost.activateForSuggestionPresentation(
+                    isTrustedForAccessibility: self.accessibilityClient.isTrusted,
+                    hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
+                    controlState: self.suggestionControlState,
+                    snapshot: self.keyboardEventTapSnapshot()
+                )
+            },
+            handleKeyboardCaptureUnavailable: { [weak self] in
+                self?.setSuggestionDecision("Blocked: keyboard capture unavailable")
+                self?.hideSuggestion(reason: "keyboard-capture-unavailable")
+            },
+            cacheProofOnlyAcceptRecentSuggestion: { [weak self] input, acceptanceSnapshot, presentedAt in
+                self?.cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+                    suggestion: input.suggestion,
+                    suggestionID: input.suggestionID,
+                    appBundleIdentifier: input.request.appBundleIdentifier ?? input.profile.bundleIdentifier,
+                    fieldIdentity: input.fieldIdentity,
+                    requestMode: input.request.mode,
+                    textBeforeCursor: input.request.textBeforeCursor,
+                    acceptanceSnapshot: acceptanceSnapshot,
+                    displayedText: input.suggestion.visibleText,
+                    fieldClassification: input.displayFieldClassification,
+                    presentedAt: presentedAt,
+                    displayScoreFinal: input.displayScoreFinal
+                )
+            },
+            recordGeometry: { [weak self] input in
+                self?.lastCaretRect = input.deliveredPlacement.anchorRect
+                self?.lastTextLineRect = input.deliveredPlacement.textLineRect
+                self?.lastClippingRect = input.deliveredPlacement.clippingRect
+                self?.lastTextStyle = input.context.textStyle
+                self?.lastRenderMode = input.deliveredPlacement.renderMode
+                self?.lastVisibleSuggestionGeometrySnapshot = self?.visibleGeometrySnapshot(
+                    context: input.context,
+                    fieldIdentity: input.fieldIdentity,
+                    placement: input.deliveredPlacement
+                )
+            },
+            screenshotCapture: traceScreenshotCaptureCoordinator,
+            compatibilityLearningStore: compatibilityLearningStore,
+            presentationDelivery: suggestionChromeHost.presentationDelivery,
+            recordPersonalCaptureEpisodePresented: { [weak self] input, screenshotCapture, payload in
+                self?.recordPersonalCaptureSuggestionEpisodePresented(
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    fieldIdentity: input.fieldIdentity,
+                    fieldClassification: input.rawDisplayFieldClassification,
+                    suggestion: input.suggestion,
+                    latencyMilliseconds: input.latencyMilliseconds,
+                    triggerReason: input.triggerReason,
+                    placement: input.deliveredPlacement,
+                    panelRect: input.panelRect,
+                    screenshotPath: screenshotCapture.path,
+                    metadata: payload.rawTraceMetadata
+                )
+            },
+            recordSuggestionEvent: { [weak self] input, payload in
+                self?.recordSuggestionEvent(
+                    "suggestion-presented",
+                    context: input.context,
+                    profile: input.profile,
+                    metadata: payload.diagnosticsMetadata
+                )
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -7415,136 +7494,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        lastCaretRect = deliveredPlacement.anchorRect
-        lastTextLineRect = deliveredPlacement.textLineRect
-        lastClippingRect = deliveredPlacement.clippingRect
-        lastTextStyle = context.textStyle
-        lastRenderMode = deliveredPlacement.renderMode
-        lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
-            context: context,
-            fieldIdentity: fieldIdentity,
-            placement: deliveredPlacement
-        )
-        suggestionSession.present(suggestion)
-        setSuggestionDecision(
-            SuggestionStatusText.shown(
-                mode: request.mode,
-                triggerReason: triggerReason,
-                latencyMilliseconds: latencyMilliseconds,
-                metadata: candidateSelectionMetadata
-            )
-        )
-        currentSuggestionState.id = suggestionID
-        currentSuggestionState.appBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        currentSuggestionState.fieldIdentity = fieldIdentity
-        currentSuggestionState.requestMode = request.mode
-        currentSuggestionState.textBeforeCursor = request.textBeforeCursor
-        let acceptanceSnapshot = SuggestionAcceptanceSnapshot(
-            fieldIdentity: fieldIdentity,
-            targetFingerprint: targetFingerprint(context: context),
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
-            selectedTextLength: context.selectedTextLength
-        )
-        currentSuggestionState.acceptanceSnapshot = acceptanceSnapshot
-        let presentedAt = Date()
-        currentSuggestionState.displayedText = suggestion.visibleText
-        currentSuggestionState.optimisticOriginalDisplayedText = suggestion.visibleText
-        currentSuggestionState.optimisticTypedPrefix = ""
-        currentSuggestionState.fieldClassification = displayFieldClassification
-        currentSuggestionState.presentedAt = presentedAt
-        currentSuggestionState.displayScoreFinal = displayScoreTrace.score.finalScore
-        currentSuggestionState.invalidatedByUserKeyDown = false
-        cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+        let presentationCommitInput = SuggestionPresentationCommitInput(
             suggestion: suggestion,
-            suggestionID: suggestionID,
-            appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity,
-            requestMode: request.mode,
-            textBeforeCursor: request.textBeforeCursor,
-            acceptanceSnapshot: acceptanceSnapshot,
-            displayedText: suggestion.visibleText,
-            fieldClassification: displayFieldClassification,
-            presentedAt: presentedAt,
-            displayScoreFinal: displayScoreTrace.score.finalScore
-        )
-        guard keyboardEventCaptureHost.activateForSuggestionPresentation(
-            isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            controlState: suggestionControlState,
-            snapshot: keyboardEventTapSnapshot()
-        ) else {
-            setSuggestionDecision("Blocked: keyboard capture unavailable")
-            hideSuggestion(reason: "keyboard-capture-unavailable")
-            return
-        }
-
-        let screenshotCapture = traceScreenshotCaptureCoordinator.capture(
-            TraceScreenshotCaptureRequest(
-                rects: [
-                    deliveredPlacement.anchorRect,
-                    deliveredPlacement.textLineRect,
-                    panelRect,
-                    deliveredPlacement.clippingRect
-                ].compactMap { $0 },
-                expectedSignalRect: traceScreenshotCaptureCoordinator.expectedSignalRect(
-                    panelRect: panelRect
-                ),
-                suggestionID: suggestionID,
-                bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                triggerReason: triggerReason,
-                appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot,
-                visualTrustContext: visualTrustContext
-            )
-        )
-        compatibilityLearningStore.recordObservation(
-            for: profile.bundleIdentifier,
-            reason: "suggestion-presented"
-        )
-        let presentationTracePayload = suggestionChromeHost.presentationDelivery.tracePayload(
-            for: presentationDeliveryRequest,
-            placement: deliveredPlacement,
-            panelRect: panelRect,
-            screenshotCapture: screenshotCapture
-        )
-        RawAutocompleteTraceLog.shared.record(
-            type: .suggestionPresented,
-            suggestionID: suggestionID,
-            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            requestMode: request.mode.rawValue,
-            triggerReason: triggerReason,
-            textBeforeCursor: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor,
-            cleanedVisibleText: suggestion.visibleText,
-            displayedText: suggestion.visibleText,
-            latencyMilliseconds: latencyMilliseconds,
-            screenshotPath: screenshotCapture.path,
-            screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized,
-            metadata: presentationTracePayload.rawTraceMetadata
-        )
-        recordPersonalCaptureSuggestionEpisodePresented(
             suggestionID: suggestionID,
             request: request,
             context: context,
             profile: profile,
             fieldIdentity: fieldIdentity,
-            fieldClassification: rawDisplayFieldClassification,
-            suggestion: suggestion,
+            rawDisplayFieldClassification: rawDisplayFieldClassification,
+            displayFieldClassification: displayFieldClassification,
             latencyMilliseconds: latencyMilliseconds,
             triggerReason: triggerReason,
-            placement: deliveredPlacement,
+            deliveredPlacement: deliveredPlacement,
             panelRect: panelRect,
-            screenshotPath: screenshotCapture.path,
-            metadata: presentationTracePayload.rawTraceMetadata
+            presentationDeliveryRequest: presentationDeliveryRequest,
+            visualTrustContext: visualTrustContext,
+            learningAdjustment: learningAdjustment,
+            displayScoreFinal: displayScoreTrace.score.finalScore
         )
-        recordSuggestionEvent(
-            "suggestion-presented",
-            context: context,
-            profile: profile,
-            metadata: presentationTracePayload.diagnosticsMetadata
-        )
-        updateKeyboardEventTapSnapshot()
+        _ = suggestionPresentationCommitHost.commit(input: presentationCommitInput)
+        return
+
     }
 
     private func scheduleCodexPromptPresentationRefreshRetry(
