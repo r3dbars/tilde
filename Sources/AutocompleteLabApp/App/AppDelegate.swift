@@ -215,7 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
     private let obsidianTrustedEndOfDocumentSnapshotPolicy = ObsidianTrustedEndOfDocumentSnapshotPolicy()
-    private let proofActivationModePolicy = ProofActivationModePolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
@@ -17994,7 +17993,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allowsUnknownFieldKind: profile.allowsUnknownFieldKind
         )
 
-        return proofActivationModePolicy.adjustedDecision(
+        return suggestionSessionBehaviors.safetyActivation.adjustedProofDecision(
             original: decision,
             wordFallback: wordFallbackDecision,
             disablesPhraseContinuation: true,
