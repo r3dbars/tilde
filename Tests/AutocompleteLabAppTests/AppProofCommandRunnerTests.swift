@@ -39,6 +39,52 @@ struct AppProofCommandRunnerTests {
         #expect(missingApp.standardError.hasPrefix("Usage: script/real_app_smoke.sh"))
     }
 
+    @Test("TextEdit cleanup bounds a hanging osascript without signaling unrelated work")
+    func textEditCleanupBoundsHangingOsaScriptWithoutSignalingUnrelatedWork() throws {
+        let scriptURL = AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL())
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let cleanupStart = try #require(script.range(of: "cleanup() {")?.lowerBound)
+        let cleanupEnd = try #require(
+            script.range(of: "\ntrap cleanup", range: cleanupStart..<script.endIndex)?.lowerBound
+        )
+        let cleanupFunction = String(script[cleanupStart..<cleanupEnd])
+        #expect(
+            cleanupFunction.contains(
+                "osascript - \"$TEXTEDIT_WINDOW_TITLE\" <<'APPLESCRIPT' >/dev/null 2>&1 &"
+            )
+        )
+
+        let fixture = """
+        set -euo pipefail
+        osascript() { sleep 5; }
+        TEXTEDIT_WINDOW_TITLE="steadytype-cleanup-fixture"
+        CHROME_PID=""
+        TEMP_DIR=""
+        LOCK_DIR=""
+        LOCK_HELD=0
+        \(cleanupFunction)
+        sleep 20 &
+        unrelated_pid=$!
+        started_at=$SECONDS
+        cleanup
+        elapsed=$((SECONDS - started_at))
+        kill -0 "$unrelated_pid"
+        kill "$unrelated_pid"
+        wait "$unrelated_pid" >/dev/null 2>&1 || true
+        ((elapsed <= 4))
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", fixture]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        process.waitUntilExit()
+
+        #expect(process.terminationStatus == 0)
+    }
+
     @Test("TextEdit proof plan runs the safe skip-build smoke lane")
     func textEditProofPlanRunsTheSafeSkipBuildSmokeLane() throws {
         let sourceRootURL = URL(fileURLWithPath: "/tmp/autocomplete-lab", isDirectory: true)

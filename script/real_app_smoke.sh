@@ -45,23 +45,30 @@ fail() {
 
 cleanup() {
   if [[ -n "$TEXTEDIT_WINDOW_TITLE" ]]; then
-    osascript - "$TEXTEDIT_WINDOW_TITLE" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+    local close_pid close_deadline
+    osascript - "$TEXTEDIT_WINDOW_TITLE" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   set smokeWindowTitle to item 1 of argv
   with timeout of 3 seconds
     tell application "TextEdit"
-      repeat with documentRef in documents
-        try
-          if name of documentRef is smokeWindowTitle then
-            close documentRef saving no
-            exit repeat
-          end if
-        end try
-      end repeat
+      try
+        close document smokeWindowTitle saving no
+      end try
     end tell
   end timeout
 end run
 APPLESCRIPT
+    close_pid=$!
+    close_deadline=$((SECONDS + 3))
+    while kill -0 "$close_pid" >/dev/null 2>&1 && ((SECONDS < close_deadline)); do
+      sleep 0.1
+    done
+    if kill -0 "$close_pid" >/dev/null 2>&1; then
+      kill "$close_pid" >/dev/null 2>&1 || true
+      sleep 0.1
+      kill -KILL "$close_pid" >/dev/null 2>&1 || true
+    fi
+    wait "$close_pid" >/dev/null 2>&1 || true
   fi
 
   if [[ -n "$CHROME_PID" ]] && kill -0 "$CHROME_PID" >/dev/null 2>&1; then
