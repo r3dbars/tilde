@@ -37,7 +37,6 @@ final class SuggestionRequestPreparationHost {
         delayMilliseconds: Int,
         timingLane: SuggestionTimingLane,
         requestMode: CompletionRequestMode,
-        typingBurstDecision: TypingBurstDecision,
         visiblePageContext: VisiblePageContext?,
         triggerReason: String
     ) -> SuggestionRequestPreparation {
@@ -75,10 +74,6 @@ final class SuggestionRequestPreparationHost {
         )
         let requestMetadata = orchestration.requestMetadata
             .merging(timingLane.traceMetadata) { current, _ in current }
-        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
-            ? [:]
-            : typingBurstDecision.traceMetadata
-
         dependencies.suggestionOrchestrator.startStreamingPresentation(
             suggestionID: orchestration.suggestionID
         )
@@ -94,7 +89,6 @@ final class SuggestionRequestPreparationHost {
             metadata: [
                 "renderMode": renderMode.rawValue
             ]
-            .merging(typingBurstMetadata) { current, _ in current }
             .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )

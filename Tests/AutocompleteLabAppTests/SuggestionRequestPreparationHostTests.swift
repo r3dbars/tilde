@@ -25,7 +25,6 @@ struct SuggestionRequestPreparationHostTests {
             delayMilliseconds: 500,
             timingLane: .instantWord,
             requestMode: .wordCompletion,
-            typingBurstDecision: .idle,
             visiblePageContext: nil,
             triggerReason: "test"
         )
@@ -56,7 +55,6 @@ struct SuggestionRequestPreparationHostTests {
             delayMilliseconds: 0,
             timingLane: .pausePhrase,
             requestMode: .phraseContinuation,
-            typingBurstDecision: .burst(insertedCharacterCount: 2, eventCount: 2),
             visiblePageContext: nil,
             triggerReason: "test"
         )

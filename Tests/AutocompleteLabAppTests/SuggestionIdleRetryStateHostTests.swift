@@ -29,36 +29,17 @@ struct SuggestionIdleRetryStateHostTests {
         #expect(!host.hasPendingRetry)
     }
 
-    @Test("forwards typing-burst suppression and cancellation through the host")
-    func forwardsTypingBurstSuppressionAndCancellation() {
+    @Test("cancellation clears a pending retry")
+    func cancellationClearsPendingRetry() {
         let host = SuggestionIdleRetryStateHost(settleDelayMilliseconds: 200)
         let first = snapshot("Burst a")
-        let final = snapshot("Burst abc")
 
         host.noteTextChange(
             snapshot: first,
             cancelledPendingRequest: true,
             nowMilliseconds: 0
         )
-        host.noteTypingBurstSuppression(snapshot: final, nowMilliseconds: 100)
-
         #expect(host.hasPendingRetry)
-        #expect(host.consumeRetryIfReady(
-            snapshot: final,
-            nowMilliseconds: 299,
-            hasVisibleSuggestion: false
-        ) == nil)
-        #expect(host.consumeRetryIfReady(
-            snapshot: final,
-            nowMilliseconds: 300,
-            hasVisibleSuggestion: false
-        ) == .typingBurstSuppressed)
-
-        host.noteTextChange(
-            snapshot: snapshot("Again"),
-            cancelledPendingRequest: true,
-            nowMilliseconds: 400
-        )
         host.cancel()
         #expect(!host.hasPendingRetry)
     }

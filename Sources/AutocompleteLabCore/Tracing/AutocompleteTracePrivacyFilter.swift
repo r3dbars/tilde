@@ -376,7 +376,6 @@ public enum AutocompleteTracePrivacyFilter {
         "typed-through",
         "typedOver",
         "typing",
-        "typing-burst",
         "typing-cadence",
         "unsupportedComposition",
         "undone",

@@ -10,7 +10,6 @@ struct SuggestionTriggerTimingHostInput {
     let requestMode: CompletionRequestMode
     let previousTextBeforeCursor: String?
     let idleRetryReason: SuggestionIdleRetryReason?
-    let typingBurstDecision: TypingBurstDecision
     let visiblePageContext: VisiblePageContext?
 }
 
@@ -24,7 +23,6 @@ struct SuggestionTriggerTimingSchedule {
     let delayMilliseconds: Int
     let timingLane: SuggestionTimingLane
     let requestMode: CompletionRequestMode
-    let typingBurstDecision: TypingBurstDecision
     let visiblePageContext: VisiblePageContext?
     let triggerReason: String
 }
@@ -130,7 +128,6 @@ final class SuggestionTriggerTimingHost {
                 delayMilliseconds: delayMilliseconds,
                 timingLane: timingLane,
                 requestMode: input.requestMode,
-                typingBurstDecision: input.typingBurstDecision,
                 visiblePageContext: input.visiblePageContext,
                 triggerReason: isManualSuggestionRequest
                     ? "manual-summon"

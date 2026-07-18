@@ -27,18 +27,6 @@ final class SuggestionIdleRetryStateHost {
         )
     }
 
-    func noteTypingBurstSuppression(
-        snapshot: FocusedTextSnapshot,
-        nowMilliseconds: Int,
-        settleDelayMilliseconds: Int? = nil
-    ) {
-        state.noteTypingBurstSuppression(
-            snapshot: snapshot,
-            nowMilliseconds: nowMilliseconds,
-            settleDelayMilliseconds: settleDelayMilliseconds
-        )
-    }
-
     func cancel() {
         state.cancel()
     }
