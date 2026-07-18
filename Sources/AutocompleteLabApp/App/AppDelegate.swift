@@ -7468,14 +7468,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentedAt: presentedAt,
             displayScoreFinal: displayScoreTrace.score.finalScore
         )
-        keyboardEventTap?.resetPassthroughObservation()
-        updateKeyboardEventTapSnapshot()
-        guard startKeyboardEventTapIfPossible() else {
+        guard keyboardEventCaptureHost.activateForSuggestionPresentation(
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            controlState: suggestionControlState,
+            snapshot: keyboardEventTapSnapshot()
+        ) else {
             setSuggestionDecision("Blocked: keyboard capture unavailable")
             hideSuggestion(reason: "keyboard-capture-unavailable")
             return
         }
-        keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
 
         let screenshotCapture = traceScreenshotCaptureCoordinator.capture(
             TraceScreenshotCaptureRequest(
