@@ -34,8 +34,8 @@ struct LiveSuggestionWiringTests {
 
         try require(appDelegate, contains: "private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()")
         try require(appDelegate, contains: "private func advanceVisibleSuggestionForTypingProgressIfNeeded(")
-        try require(appDelegate, contains: "typeThroughPrefixStateMachine.apply(")
-        try require(appDelegate, contains: "to: &suggestionSession,")
+        try require(appDelegate, contains: "suggestionSession.applyTypeThrough(")
+        try require(appDelegate, contains: "using: typeThroughPrefixStateMachine,")
         try require(appDelegate, contains: "case let .survived(survival):")
         try require(appDelegate, contains: "currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText")
         try require(appDelegate, contains: "\"Shown: typing through suggestion\"")
