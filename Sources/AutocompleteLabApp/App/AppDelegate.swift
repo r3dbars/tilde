@@ -1330,7 +1330,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
-    private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private let typingBurstStateHost = TypingBurstStateHost()
