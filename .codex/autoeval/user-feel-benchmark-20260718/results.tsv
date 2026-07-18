@@ -1,0 +1,3 @@
+attempt\tcheckpoint\tknob\tstatus\tcommand\tprimary\tguardrails\tlog\tdecision\tdescription
+0\t99dc4fcb\tbaseline\tbaseline\tpre-change replay evaluator\tmock: 6.33 shown keys/case; batch: 1.67 shown keys/case; batch p95 generation 476-541 ms\tfixture 3 cases; no raw text in artifacts\tlogs/attempt-000.log; logs/attempt-000-batch.log\tstarting point\tfresh unmodified baseline; requested user-feel metrics not yet exposed
+1\tworking-tree\tuser-feel-scorecard\tblocked\tswift run replay benchmark command in resume.md\tnot run; serialization hold\tnot run; focused compile canceled before assertions\tlogs/focused-typing-replay-tests-2.log\thold\tbenchmark-only instrumentation added; no knob experiment started

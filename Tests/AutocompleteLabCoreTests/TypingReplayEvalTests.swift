@@ -81,6 +81,34 @@ struct TypingReplayEvalTests {
         #expect(scorecard.markdown.contains("Wrong first word among suggestions: 50.0%"))
     }
 
+    @Test("User-feel scorecard reports aggregate timing, visibility, stability, and acceptance")
+    func userFeelScorecardAggregates() {
+        let cases = [
+            replay(id: "a", context: "one two three four", actual: "alpha beta"),
+            replay(id: "b", context: "one two three four", actual: "gamma delta")
+        ]
+        let scorecard = TypingReplayUserFeelScorecard(samples: [
+            TypingReplayUserFeelSample(
+                replayCase: cases[0],
+                visibleSuggestionText: "alpha beta",
+                modelLatencyMilliseconds: 100
+            ),
+            TypingReplayUserFeelSample(
+                replayCase: cases[1],
+                visibleSuggestionText: "wrong beta",
+                modelLatencyMilliseconds: 200
+            )
+        ])
+
+        #expect(scorecard.caseCount == 2)
+        #expect(scorecard.eligiblePauseCount == 2)
+        #expect(scorecard.visibleEligiblePauseCount == 2)
+        #expect(scorecard.eligiblePauseSuggestionVisibleRate == 1)
+        #expect(scorecard.pauseToSuggestionLatencyP95Milliseconds == 380)
+        #expect(scorecard.suggestionStabilityRate == 0.5)
+        #expect(scorecard.acceptanceQualityRate == 0.5)
+    }
+
     @Test("Trend encoding is aggregate-only")
     func trendEncodingHasNoTextFields() throws {
         let score = TypingReplayScorer().score(suggestionText: "alpha beta", for: replay(actual: "alpha beta gamma"))
@@ -104,6 +132,9 @@ struct TypingReplayEvalTests {
             "top1WordAccuracy", "wordPrefixAccuracy2",
             "wordPrefixAccuracy3", "wordPrefixAccuracy4", "suggestionRate",
             "wrongFirstWordRate", "endToEndP95LatencyMs", "acceptedAndKeptRate", "acceptRate",
+            "pauseToSuggestionP50LatencyMs", "pauseToSuggestionP95LatencyMs",
+            "eligiblePauseSuggestionVisibleRate", "suggestionStabilityRate",
+            "acceptanceQualityRate",
             "promptContextCharacters", "suffixEnabled", "fewShotSource", "decodingVariant"
         ]
 
