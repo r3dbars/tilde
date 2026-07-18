@@ -97,6 +97,28 @@ final class KeyboardEventCaptureHost {
         keyboardEventTap?.updateSnapshot(snapshot)
     }
 
+    @discardableResult
+    func activateForSuggestionPresentation(
+        isTrustedForAccessibility: Bool,
+        hasVisibleSuggestion: Bool,
+        controlState: SuggestionControlState,
+        snapshot: KeyboardEventTapSnapshot
+    ) -> Bool {
+        resetPassthroughObservation()
+        updateSnapshot(snapshot)
+        guard startIfPossible(
+            isTrustedForAccessibility: isTrustedForAccessibility,
+            hasVisibleSuggestion: hasVisibleSuggestion,
+            controlState: controlState,
+            snapshot: snapshot
+        ) else {
+            return false
+        }
+
+        suppressPassthroughObservation(for: 0.35)
+        return true
+    }
+
     func resetPassthroughObservation() {
         keyboardEventTap?.resetPassthroughObservation()
     }
