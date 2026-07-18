@@ -9,7 +9,7 @@ struct SuggestionRequestPreparationHostDependencies {
     let isPersonalCaptureEnabled: () -> Bool
     let maxVisibleWords: (CompletionRequestMode, CompatibilityProfile) -> Int
     let suggestionTuning: () -> SuggestionTuning
-    let triggerTiming: SuggestionTriggerTimingPolicy
+    let requestSchedulingPolicy: SuggestionRequestSchedulingPolicy
 }
 
 struct SuggestionRequestPreparation: Sendable {
@@ -69,7 +69,7 @@ final class SuggestionRequestPreparationHost {
             requestMode: requestMode,
             suggestionTuning: dependencies.suggestionTuning()
         ))
-        let requestSchedule = dependencies.triggerTiming.schedule(
+        let requestSchedule = dependencies.requestSchedulingPolicy.schedule(
             policyDelayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
             requestMode: orchestration.request.mode,
