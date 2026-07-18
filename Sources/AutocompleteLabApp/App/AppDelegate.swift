@@ -352,6 +352,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handler: self,
         developerMenuEnabled: developerMenuEnabled
     )
+    private lazy var statusChromeHost = StatusChromeHost(
+        statusMenuHost: statusMenuHost,
+        settingsWindow: { [weak self] in self?.settingsWindow }
+    )
     lazy var workspaceObserverHost = WorkspaceObserverHost(handler: self)
     let resourceDiagnosticsHost = ResourceDiagnosticsHost()
     private lazy var appLifecycleHost = AppLifecycleHost(handler: self)
@@ -426,7 +430,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
     private let acceptedInsertionUndoExpirationHost = AcceptedInsertionUndoExpirationHost()
     private let acceptedInsertionUndoRecoveryMode = AcceptedInsertionUndoRecoveryMode.fromEnvironment()
-    private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastClaudeCodeTerminalProofInputSignature: String?
@@ -16942,56 +16945,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldControlState.statusText
         ].joined(separator: "|")
 
-        let decisionPresentation = SuggestionDecisionPresentation(lastSuggestionDecision)
-        statusMenuHost.update(
-            statusLine: statusLine,
-            statusToolTip: lastSuggestionDecision,
-            pauseSuggestionsTitle: pauseSuggestionsTitle,
-            silenceFieldTitle: fieldControlState.buttonTitle,
-            silenceFieldEnabled: fieldControlState.canSilence,
-            silenceFieldToolTip: fieldControlState.detailText,
-            toggleAppTitle: appControlState?.menuToggleTitle ?? "Pause Current App",
-            toggleAppEnabled: appControlState?.canToggle ?? false,
-            toggleAppToolTip: appControlState?.fallbackText ?? ""
-        )
-        if settingsWindow.isShowing {
-            settingsWindow.refresh(
-                isTrusted: accessibilityClient.isTrusted,
-                suggestionsPaused: suggestionsPaused,
-                suggestionsPausedUntil: suggestionsPausedUntil,
-                runtimeReport: runtimeReadinessReport,
-                runtimeTargetSummary: runtimeTargetSummary,
-                modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
-                isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
-                currentApp: settingsCurrentAppState,
-                fieldControl: settingsFieldControlState,
-                practice: settingsPracticeState,
-                privacy: settingsPrivacyState,
-                keyboardShortcuts: settingsKeyboardShortcutState,
-                suggestionAggressiveness: settingsSuggestionAggressivenessState,
-                lastSuggestionDecision: lastSuggestionDecision
+        statusChromeHost.update(
+            StatusChromeUpdate(
+                statusLine: statusLine,
+                statusSignature: statusSignature,
+                lastSuggestionDecision: lastSuggestionDecision,
+                pauseSuggestionsTitle: pauseSuggestionsTitle,
+                silenceFieldTitle: fieldControlState.buttonTitle,
+                silenceFieldEnabled: fieldControlState.canSilence,
+                silenceFieldToolTip: fieldControlState.detailText,
+                toggleAppTitle: appControlState?.menuToggleTitle ?? "Pause Current App",
+                toggleAppEnabled: appControlState?.canToggle ?? false,
+                toggleAppToolTip: appControlState?.fallbackText ?? "",
+                settings: StatusChromeSettingsState(
+                    isTrusted: accessibilityClient.isTrusted,
+                    suggestionsPaused: suggestionsPaused,
+                    suggestionsPausedUntil: suggestionsPausedUntil,
+                    runtimeReport: runtimeReadinessReport,
+                    runtimeTargetSummary: runtimeTargetSummary,
+                    modelDirectoryPath: modelDirectoryPath,
+                    modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
+                    isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
+                    currentApp: settingsCurrentAppState,
+                    fieldControl: settingsFieldControlState,
+                    practice: settingsPracticeState,
+                    privacy: settingsPrivacyState,
+                    keyboardShortcuts: settingsKeyboardShortcutState,
+                    suggestionAggressiveness: settingsSuggestionAggressivenessState,
+                    lastSuggestionDecision: lastSuggestionDecision
+                ),
+                diagnosticsMetadata: [
+                    "accessibility": permission,
+                    "control": control,
+                    "app": appName,
+                    "profile": profileName,
+                    "enabled": enabled,
+                    "paused": String(suggestionsPaused),
+                    "decision": lastSuggestionDecision
+                ]
             )
-        }
-
-        guard lastStatusLine != statusSignature else {
-            return
-        }
-
-        lastStatusLine = statusSignature
-        DiagnosticsLog.shared.record(
-            "status",
-            metadata: [
-                "accessibility": permission,
-                "control": control,
-                "app": appName,
-                "profile": profileName,
-                "enabled": enabled,
-                "paused": String(suggestionsPaused),
-                "decision": lastSuggestionDecision,
-                "decisionKind": decisionPresentation.diagnosticsKind,
-                "decisionSummary": decisionPresentation.summary
-            ]
         )
     }
 
