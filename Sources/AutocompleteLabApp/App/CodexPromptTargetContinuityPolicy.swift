@@ -75,6 +75,8 @@ struct CodexPromptPresentationRefreshRetryPolicy {
 }
 
 struct CodexPromptTargetContinuityPolicy {
+    static let maximumStablePromptAcceptanceAgeMilliseconds = 15_000
+
     private static let transientPromptBlockReasons: Set<String> = [
         "missing-prompt-bounds",
         "missing-prompt-fingerprint"
@@ -317,7 +319,7 @@ struct CodexPromptTargetContinuityPolicy {
         trustedAnchor: CodexPromptTargetContinuityAnchor?,
         observedContext: FocusedTextContext,
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
-        maximumAnchorAgeMilliseconds: Int = 1_000
+        maximumAnchorAgeMilliseconds: Int = Self.maximumStablePromptAcceptanceAgeMilliseconds
     ) -> Bool {
         guard observedContext.role == "AXTextArea",
               shownSnapshot.selectedTextLength == 0,
