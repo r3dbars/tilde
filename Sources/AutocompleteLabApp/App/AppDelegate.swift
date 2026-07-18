@@ -225,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var modelInstallLifecycleHost = ModelInstallLifecycleHost(handler: self)
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
+    private lazy var appTargetStateHost = AppTargetStateHost(profileStore: profileStore)
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -379,9 +380,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastClaudeCodeTerminalProofInputSignature: String?
     private var claudeCodeTerminalScreenPromptAnchorCache = ClaudeCodeTerminalScreenPromptAnchorCache()
     private var lastTextContextRepairDiagnosticSignature: String?
-    private var lastEligibleTargetApp: RunningApplicationInfo?
-    private var lastObservedSettingsApp: RunningApplicationInfo?
-    private var lastFieldControlTarget: FieldControlTarget?
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
@@ -960,59 +958,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var fieldControlTarget: FieldControlTarget? {
-        if let currentFieldIdentity,
-           let target = lastFieldControlTarget,
-           target.fieldIdentity == currentFieldIdentity {
-            return target
-        }
-
-        return lastFieldControlTarget
+        appTargetStateHost.fieldControlTarget(currentFieldIdentity: currentFieldIdentity)
     }
 
     private var appForSettingsState: RunningApplicationInfo? {
-        if let app = accessibilityClient.frontmostApplication(),
-           app.bundleIdentifier != Bundle.main.bundleIdentifier {
-            return app
-        }
-
-        return lastObservedSettingsApp ?? targetAppForControls()
+        appTargetStateHost.appForSettingsState(
+            frontmostApplication: accessibilityClient.frontmostApplication()
+        )
     }
 
     private func targetAppForControls() -> RunningApplicationInfo? {
-        if let app = accessibilityClient.frontmostApplication(),
-           profileStore.allows(bundleIdentifier: app.bundleIdentifier) {
-            rememberEligibleTargetApp(app)
-            return app
-        }
-
-        guard let app = lastEligibleTargetApp,
-              profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
-            return nil
-        }
-
-        return app
-    }
-
-    private func rememberEligibleTargetApp(_ app: RunningApplicationInfo) {
-        guard profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
-            return
-        }
-
-        lastEligibleTargetApp = app
-    }
-
-    private func rememberFieldControlTarget(
-        app: RunningApplicationInfo,
-        fieldIdentity: FocusedFieldIdentity,
-        requestMode: CompletionRequestMode?,
-        fieldKind: AXFieldKind
-    ) {
-        lastFieldControlTarget = FieldControlTarget(
-            appBundleIdentifier: app.bundleIdentifier,
-            appDisplayName: app.localizedName,
-            fieldIdentity: fieldIdentity,
-            requestMode: requestMode,
-            fieldKind: fieldKind
+        appTargetStateHost.targetAppForControls(
+            frontmostApplication: accessibilityClient.frontmostApplication()
         )
     }
 
@@ -1219,7 +1176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        rememberEligibleTargetApp(frontmostApp)
+        appTargetStateHost.rememberEligibleTargetApp(frontmostApp)
         let appEnabled = isSuggestionEnabled(for: frontmostApp, profile: profile)
         currentProfile = profile
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
@@ -1744,7 +1701,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             raw: fieldClassification
         )
-        rememberFieldControlTarget(
+        appTargetStateHost.rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
             requestMode: nil,
@@ -1971,7 +1928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             fieldKind: suggestionFieldClassification.kind
         )
-        rememberFieldControlTarget(
+        appTargetStateHost.rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
             requestMode: activationDecision.requestMode,
@@ -16937,7 +16894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         if let app,
            app.bundleIdentifier != Bundle.main.bundleIdentifier {
-            lastObservedSettingsApp = app
+            appTargetStateHost.noteObservedSettingsApp(app)
         }
 
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
@@ -19095,14 +19052,6 @@ private enum AcceptedInsertionUndoRecoveryMode: Equatable {
             .appRollback
         }
     }
-}
-
-private struct FieldControlTarget: Equatable {
-    let appBundleIdentifier: String
-    let appDisplayName: String
-    let fieldIdentity: FocusedFieldIdentity
-    let requestMode: CompletionRequestMode?
-    let fieldKind: AXFieldKind
 }
 
 private extension String {
