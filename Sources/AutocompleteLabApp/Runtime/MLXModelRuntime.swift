@@ -474,7 +474,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             cleanedCandidates,
             mode: request.mode,
             textBeforeCursor: request.textBeforeCursor,
-            behaviorProfileID: request.behaviorProfile.id
+            behaviorProfileID: request.behaviorProfile.id,
+            bypassConfidenceGate: RawSuggestionEvaluationMode().isEnabled
         )
         var retryAttempted = false
         var retryUsed = false
@@ -547,7 +548,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                     retryCandidates,
                     mode: request.mode,
                     textBeforeCursor: request.textBeforeCursor,
-                    behaviorProfileID: request.behaviorProfile.id
+                    behaviorProfileID: request.behaviorProfile.id,
+                    bypassConfidenceGate: RawSuggestionEvaluationMode().isEnabled
                 )
 
                 if retrySelection.suggestion != nil ||
@@ -574,7 +576,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 cleanedCandidates,
                 mode: request.mode == .phraseContinuation ? .wordCompletion : request.mode,
                 textBeforeCursor: request.textBeforeCursor,
-                behaviorProfileID: request.behaviorProfile.id
+                behaviorProfileID: request.behaviorProfile.id,
+                bypassConfidenceGate: RawSuggestionEvaluationMode().isEnabled
             )
             DiagnosticsLog.shared.record(
                 "mlx-word-completion-fallback-used",

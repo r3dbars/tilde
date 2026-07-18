@@ -106,7 +106,8 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         _ suggestions: [CompletionSuggestion],
         mode: CompletionRequestMode,
         textBeforeCursor: String? = nil,
-        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        bypassConfidenceGate: Bool = false
     ) -> CompletionCandidateSelection {
         let rankedCandidates = ranked(
             suggestions,
@@ -121,6 +122,16 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
                 selectedCandidate: nil,
                 scoreMargin: nil,
                 suppressionReason: .noCandidates
+            )
+        }
+
+        if bypassConfidenceGate {
+            let scoreMargin = rankedCandidates.dropFirst().first.map { topCandidate.score - $0.score }
+            return CompletionCandidateSelection(
+                rankedCandidates: rankedCandidates,
+                selectedCandidate: topCandidate,
+                scoreMargin: scoreMargin,
+                suppressionReason: nil
             )
         }
 

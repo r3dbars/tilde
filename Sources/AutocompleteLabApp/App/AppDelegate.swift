@@ -271,6 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
+    private let rawSuggestionEvaluationMode = RawSuggestionEvaluationMode()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
         wordCompletionRanker: wordCompletionRanker,
@@ -850,6 +851,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             triggerPolicy: { [weak self] profile in
                 self?.triggerPolicy(for: profile) ?? SuggestionTriggerPolicy()
             },
+            rawEvaluationModeEnabled: { [weak self] in
+                self?.rawSuggestionEvaluationMode.isEnabled == true
+            },
             consumeManualSuggestionRequest: { [weak self] in
                 self?.manualSuggestionRequestHost.consumePendingRequest() == true
             },
@@ -992,6 +996,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastTextSnapshot: { [weak self] in self?.lastTextSnapshot },
             displayScorePolicy: displayScorePolicy,
             suggestionTuning: { [unowned self] in self.suggestionTuning },
+            rawEvaluationModeEnabled: { [unowned self] in
+                self.rawSuggestionEvaluationMode.isEnabled
+            },
             suggestionReplacementVisibilityPolicy: suggestionReplacementVisibilityPolicy,
             maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds,
             suggestionPresentationPreparationHost: suggestionPresentationPreparationHost,
@@ -2902,7 +2909,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
-        switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
+        switch rawSuggestionEvaluationMode.isEnabled
+            ? PrefixFamilyCooldownDecision.allowed
+            : suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
         case .allowed:
             cancelPrefixCooldownRetry()
             break
@@ -2945,7 +2954,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: requestMode,
             fieldKind: suggestionFieldClassification.kind
         )
-        let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
+        let quietMode: QuietMode
+        if rawSuggestionEvaluationMode.isEnabled {
+            quietMode = .normal
+        } else {
+            quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
+        }
         guard !quietMode.isActive else {
             setSuggestionDecision(SuggestionStatusText.notShown(reason: quietMode.traceReason))
             showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)
@@ -16137,7 +16151,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
-        suggestionTuning.activationPolicy(
+        if rawSuggestionEvaluationMode.isEnabled {
+            return CompletionActivationPolicy(
+                minimumContextCharacters: 1,
+                minimumContextWords: 1,
+                minimumPhraseContinuationWords: 1,
+                minimumWordCompletionCharacters: 1,
+                maximumWordCompletionCharacters: 18,
+                allowsTerminalSentenceBoundary: true,
+                allowsUnfinishedWordPhraseContinuation: true,
+                prefersPhraseContinuationForWordFragments: true
+            )
+        }
+
+        return suggestionTuning.activationPolicy(
             supportPace: effectiveSuggestionPace(for: profile),
             allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
             minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile)
@@ -16201,7 +16228,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldAskModelForWordCompletionFallback(
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.allowsModelWordCompletionFallback(
+        if rawSuggestionEvaluationMode.isEnabled {
+            return true
+        }
+        return suggestionTuning.allowsModelWordCompletionFallback(
             visiblePageContextAvailable: visiblePageContext != nil
         )
     }
@@ -16210,7 +16240,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.allowsPredictiveWordFallback(
+        if rawSuggestionEvaluationMode.isEnabled {
+            return true
+        }
+        return suggestionTuning.allowsPredictiveWordFallback(
             appBundleIdentifier: profile.bundleIdentifier,
             visiblePageContextAvailable: visiblePageContext != nil
         )
@@ -16221,7 +16254,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
-        suggestionTuning.allowsPredictivePhraseFallback(
+        if rawSuggestionEvaluationMode.isEnabled {
+            return true
+        }
+        return suggestionTuning.allowsPredictivePhraseFallback(
             appBundleIdentifier: profile.bundleIdentifier,
             behaviorProfileID: behaviorProfileID,
             visiblePageContextAvailable: visiblePageContext != nil

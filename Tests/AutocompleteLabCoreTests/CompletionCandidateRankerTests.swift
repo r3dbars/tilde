@@ -71,6 +71,19 @@ struct CompletionCandidateRankerTests {
         #expect(selection.suppressionReason == .lowTopScore)
     }
 
+    @Test("Raw evaluation selects the best available candidate despite confidence gates")
+    func rawEvaluationSelectsBestAvailableCandidate() {
+        let ranker = CompletionCandidateRanker()
+        let selection = ranker.selection(
+            [CompletionSuggestion(text: " permission feel clear today", maxVisibleWords: 20)],
+            mode: .phraseContinuation,
+            bypassConfidenceGate: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " permission feel clear today")
+        #expect(selection.suppressionReason == nil)
+    }
+
     @Test("Sentence mode prefers sentence-length continuations over questions")
     func sentenceModePrefersSentenceLengthContinuationsOverQuestions() {
         let ranker = CompletionCandidateRanker()

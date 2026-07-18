@@ -69,6 +69,32 @@ struct GoodAndFastEnoughPolicyTests {
         #expect(decision.confidence.reasons.contains("generic-or-assistant-like"))
     }
 
+    @Test("raw evaluation exposes a slow low-confidence candidate")
+    func rawEvaluationBypassesProductHeuristics() {
+        let decision = GoodAndFastEnoughPolicy().decision(
+            suggestion: CompletionSuggestion(text: " let me know if I can help", maxVisibleWords: 8),
+            mode: .phraseContinuation,
+            textBeforeCursor: "Can you send the notes",
+            supportLevel: .yellow,
+            score: DisplayScore(
+                utility: 0,
+                styleFit: 0,
+                contextFit: 0,
+                userAffinity: 0,
+                risk: 1,
+                repetition: 1,
+                instability: 1
+            ),
+            displayScorePolicy: DisplayScorePolicy(),
+            latencyMilliseconds: 5_000,
+            latencyBudgetMilliseconds: 1,
+            bypassProductHeuristics: true
+        )
+
+        #expect(decision.shouldDisplay)
+        #expect(decision.metadata["rawSuggestionEvaluation"] == "true")
+    }
+
     @Test("fallback stays on the same core decision surface")
     func fallbackStaysOnTheSameCoreDecisionSurface() {
         let decision = GoodAndFastEnoughPolicy().fallbackDecision(

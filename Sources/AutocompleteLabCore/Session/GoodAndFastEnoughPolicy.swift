@@ -58,6 +58,7 @@ public struct GoodAndFastEnoughPolicy: Equatable, Sendable {
         latencyForBudgetMilliseconds: Int? = nil,
         enforceLatencyCeiling: Bool = true,
         allowLatencyBypass: Bool = false,
+        bypassProductHeuristics: Bool = false,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> GoodAndFastEnoughDecision {
         let budget = max(1, latencyBudgetMilliseconds ?? maximumDisplayLatencyMilliseconds)
@@ -81,6 +82,24 @@ public struct GoodAndFastEnoughPolicy: Equatable, Sendable {
         metadata["completionConfidenceReasons"] = confidence.reasons.joined(separator: ",")
         metadata["modelDisplayLatencyBudgetMilliseconds"] = String(budget)
         metadata["modelLatencyForBudgetMilliseconds"] = String(measuredLatency)
+
+        if bypassProductHeuristics {
+            let displayDecision = DisplayScoreDecision.display(scoredDecision.trace)
+            metadata = displayDecision.metadata
+            metadata["completionConfidenceBucket"] = confidence.bucket.rawValue
+            metadata["completionConfidenceScore"] = String(confidence.score)
+            metadata["completionConfidenceReasons"] = confidence.reasons.joined(separator: ",")
+            metadata["modelDisplayLatencyBudgetMilliseconds"] = String(budget)
+            metadata["modelLatencyForBudgetMilliseconds"] = String(measuredLatency)
+            metadata["rawSuggestionEvaluation"] = "true"
+            return GoodAndFastEnoughDecision(
+                decision: displayDecision,
+                confidence: confidence,
+                latencyBudgetMilliseconds: budget,
+                measuredLatencyMilliseconds: measuredLatency,
+                metadata: metadata
+            )
+        }
 
         if enforceLatencyCeiling,
            !allowLatencyBypass,

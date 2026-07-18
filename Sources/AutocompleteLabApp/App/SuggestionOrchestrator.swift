@@ -835,6 +835,7 @@ final class SuggestionOrchestrator {
         isRepeatedMiss: Bool,
         displayScorePolicy: DisplayScorePolicy,
         suggestionTuning: SuggestionTuning? = nil,
+        bypassProductHeuristics: Bool = false,
         modelIsFirstVisibleSuggestion: Bool = false,
         scheduledDelayMilliseconds: Int = 0,
         now: Date = Date()
@@ -910,6 +911,7 @@ final class SuggestionOrchestrator {
             latencyForBudgetMilliseconds: modelLatencyForBudget,
             enforceLatencyCeiling: triggerReason != "model-stream",
             allowLatencyBypass: proofLatencyBypass,
+            bypassProductHeuristics: bypassProductHeuristics,
             behaviorProfileID: request.behaviorProfile.id
         )
         var confidenceMetadata = unifiedDecision.metadata
