@@ -1145,9 +1145,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shouldUseObsidianDirectValueInsertion: { [unowned self] profile, action in
                 self.shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
             },
-            shouldUseObsidianSystemEventsInsertion: { [unowned self] profile in
-                self.shouldUseObsidianSystemEventsInsertion(profile: profile)
-            },
             insertCodexProofText: { [unowned self] acceptedText in self.insertCodexProofText(acceptedText) },
             insertClaudeCodeTerminalHostProofText: { [unowned self] acceptedText in
                 self.insertClaudeCodeTerminalHostProofText(acceptedText)
@@ -1157,9 +1154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             insertObsidianDirectValueText: { [unowned self] acceptedText, profile in
                 self.insertObsidianDirectValueText(acceptedText, profile: profile)
-            },
-            insertObsidianSystemEventsPasteText: { [unowned self] acceptedText in
-                self.insertObsidianSystemEventsPasteText(acceptedText)
             },
             repairObsidianFullAcceptCaret: { [unowned self] profile, action in
                 self.repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
@@ -7198,12 +7192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1"
     }
 
-    private func shouldUseObsidianSystemEventsInsertion(profile: CompatibilityProfile) -> Bool {
-        currentSuggestionState.appBundleIdentifier == "md.obsidian"
-            && profile.bundleIdentifier == "md.obsidian"
-            && profile.insertionMode == .axValueReplacement
-    }
-
     private func insertObsidianDirectValueText(
         _ acceptedText: String,
         profile: CompatibilityProfile
@@ -7483,74 +7471,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return clone
         }
-    }
-
-    private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
-        let bundleIdentifier = "md.obsidian"
-        guard !acceptedText.isEmpty,
-              let currentSuggestionFieldIdentity = currentSuggestionState.fieldIdentity,
-              let lastTextSnapshot,
-              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
-              let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == bundleIdentifier,
-              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
-            DiagnosticsLog.shared.record(
-                "obsidian-system-events-insert",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "posted": "false",
-                    "reason": "precondition-failed"
-                ]
-            )
-            return false
-        }
-
-        let pasteboard = NSPasteboard.general
-        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
-        func restoreOriginalPasteboard() {
-            pasteboard.clearContents()
-            if !originalItems.isEmpty {
-                pasteboard.writeObjects(originalItems)
-            }
-        }
-        pasteboard.clearContents()
-        guard pasteboard.setString(acceptedText, forType: .string) else {
-            restoreOriginalPasteboard()
-            DiagnosticsLog.shared.record(
-                "obsidian-system-events-insert",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "posted": "false",
-                    "reason": "pasteboard-set-failed"
-                ]
-            )
-            return false
-        }
-        let fallbackChangeCount = pasteboard.changeCount
-
-        let pasteDelayMilliseconds = 30
-        let posted = Self.postCommandVKeyAsync(afterMilliseconds: pasteDelayMilliseconds)
-        if posted {
-            schedulePasteboardRestore(
-                insertedText: acceptedText,
-                fallbackChangeCount: fallbackChangeCount,
-                originalItems: originalItems,
-                delaySeconds: 0.35
-            )
-        } else {
-            restoreOriginalPasteboard()
-        }
-        DiagnosticsLog.shared.record(
-            "obsidian-system-events-insert",
-            metadata: [
-                "app": bundleIdentifier,
-                "posted": String(posted),
-                "source": "cgEventCommandPasteAsync",
-                "delayMilliseconds": String(pasteDelayMilliseconds),
-                "acceptedChars": String(acceptedText.count)
-            ]
-        )
-        return posted
     }
 
     private func repairObsidianTabPassthroughIfNeeded(
