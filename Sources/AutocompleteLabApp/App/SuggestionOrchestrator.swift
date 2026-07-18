@@ -381,12 +381,6 @@ final class SuggestionOrchestrator {
         suggestionAnnoyanceBackoffPolicy.recordPrefixCooldown(reason, input: input, now: now)
     }
 
-    func resetPrefixFamilyCooldownPolicy(_ policy: PrefixFamilyCooldownPolicy) {
-        suggestionAnnoyanceBackoffPolicy = SuggestionAnnoyanceBackoffPolicy(
-            prefixFamilyCooldownPolicy: policy
-        )
-    }
-
     func shouldSuppressRepetition(
         _ text: String,
         mode: CompletionRequestMode,

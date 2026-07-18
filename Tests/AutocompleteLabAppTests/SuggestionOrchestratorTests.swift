@@ -1537,8 +1537,12 @@ struct SuggestionOrchestratorTests {
         #expect(display.metadata["prefixEagernessThresholdAdjustment"] == "0.18")
         #expect(display.metadata["displayScoreThreshold"] == "1.28")
 
-        orchestrator.resetPrefixFamilyCooldownPolicy(
-            PrefixFamilyCooldownPolicy(traceFingerprintSecret: Data("unit-test-secret".utf8))
+        orchestrator.resetSuggestionAnnoyanceBackoffPolicy(
+            SuggestionAnnoyanceBackoffPolicy(
+                prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy(
+                    traceFingerprintSecret: Data("unit-test-secret".utf8)
+                )
+            )
         )
         #expect(orchestrator.prefixCooldownDecision(for: input, now: now).canRequest)
     }
