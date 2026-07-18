@@ -38,6 +38,26 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
 public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
     public init() {}
 
+    public func shouldCaptureKeys(
+        isTrustedForAccessibility: Bool,
+        hasVisibleSuggestion: Bool,
+        controlState: SuggestionControlState = .running
+    ) -> Bool {
+        isTrustedForAccessibility
+            && hasVisibleSuggestion
+            && controlState == .running
+    }
+
+    public func shouldStopKeyboardCapture(
+        hasVisibleSuggestion: Bool,
+        isSuggestionPanelVisible: Bool,
+        hasPendingAcceptedInsertionUndo: Bool
+    ) -> Bool {
+        !hasVisibleSuggestion
+            && !isSuggestionPanelVisible
+            && !hasPendingAcceptedInsertionUndo
+    }
+
     public func shouldConsume(_ input: KeyboardEventTapConsumptionInput) -> Bool {
         if input.key == .controlBacktick {
             return true
