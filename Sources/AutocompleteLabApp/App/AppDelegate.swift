@@ -334,7 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.requestSuggestionNow(source: "hotkey")
     }
     private let prefixCooldownRetryHost = PrefixCooldownRetryHost()
-    private var suggestionSession = SuggestionSession()
+    private let suggestionSession = SuggestionSessionHost()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
     private var lastClippingRect: CGRect?
@@ -16650,8 +16650,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: originalTextBeforeCursor,
                 textAfterCursor: context.textAfterCursor
             )
-        let transition = typeThroughPrefixStateMachine.apply(
-            to: &suggestionSession,
+        let transition = suggestionSession.applyTypeThrough(
+            using: typeThroughPrefixStateMachine,
             input: TypeThroughPrefixInput(
                 baselineSnapshot: baselineSnapshot,
                 currentSnapshot: snapshot
