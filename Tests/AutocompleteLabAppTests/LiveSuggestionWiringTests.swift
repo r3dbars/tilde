@@ -35,7 +35,7 @@ struct LiveSuggestionWiringTests {
         try require(suggestionWiring, contains: "personalizationCoordinator.selection(")
         try require(suggestionWiring, contains: "personalContext: personalization.context")
         try require(suggestionWiring, contains: "personalWritingMemory: personalization.memory")
-        try require(suggestionWiring, contains: "suggestionOrchestrator.fastPhraseFallbackLearningDecision(")
+        try require(suggestionWiring, contains: "\"instantPhraseAlwaysOn\": \"true\"")
         try require(suggestionWiring, contains: "triggerReason: \"canned-bridge\"")
         try require(suggestionWiring, contains: "try await suggestionOrchestrator.suggestion(")
         try require(suggestionWiring, contains: "suggestionOrchestrator.shouldPresentStreamingPartial(")
@@ -114,6 +114,21 @@ struct LiveSuggestionWiringTests {
 
         #expect(!sources.contains("typingBurst"))
         #expect(!sources.contains("typing-burst"))
+    }
+
+    @Test("Typing past an instant suggestion records the outcome without silencing future suggestions")
+    func typedOverDoesNotCreateLiveSuppression() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let start = try #require(appDelegate.range(of: "private func recordTypedOverSuggestionIfNeeded("))
+        let end = try #require(appDelegate.range(
+            of: "private func advanceVisibleSuggestionForTypingProgressIfNeeded(",
+            range: start.upperBound..<appDelegate.endIndex
+        ))
+        let typedOverHandler = appDelegate[start.lowerBound..<end.lowerBound]
+
+        #expect(typedOverHandler.contains("suggestionTypedOver"))
+        #expect(!typedOverHandler.contains("recordPrefixFamilyCooldown"))
+        #expect(!typedOverHandler.contains("recordAnnoyanceSignal"))
     }
 
     @Test("Dogfood composers measure synthetic carets with the focused text style")

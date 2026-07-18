@@ -401,19 +401,12 @@ public struct SuggestionTuning: Equatable, Sendable {
     ) -> Bool {
         switch behaviorProfileID {
         case .some(.aiChat):
-            return visiblePageContextAvailable || aggressivenessLevel >= 3
+            return true
         case .some(.coding), .some(.forms), .some(.search):
             return false
         case .some, .none:
-            break
-        }
-
-        if visiblePageContextAvailable || aggressivenessLevel >= 3 {
             return true
         }
-
-        return Self.predictiveFallbackWritingApps.contains(appBundleIdentifier)
-            || appBundleIdentifier == "com.google.Chrome"
     }
 
     public var traceMetadata: [String: String] {

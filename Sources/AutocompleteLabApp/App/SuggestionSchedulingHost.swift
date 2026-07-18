@@ -507,129 +507,34 @@ final class SuggestionSchedulingHost {
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }
             if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionOrchestrator.shouldSuppressRepetition(
-                    fastSuggestion.visibleText,
-                    mode: request.mode,
-                    scope: appBundleIdentifier
-                ) else {
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: fastSuggestion.visibleText,
-                        displayedText: fastSuggestion.visibleText,
-                        latencyMilliseconds: 0,
-                        reason: "repeated-miss",
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastSelectionMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": "repeated-miss",
-                            "triggerReason": "canned-bridge"
-                        ]
-                    )
-                    recordAnnoyanceSignal(
-                        .repeatedRejection,
-                        context: annoyanceContext(
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            requestMode: request.mode,
-                            fieldKind: fieldClassification.kind
-                        ),
-                        suggestionID: suggestionID,
-                        reason: "repeated-miss"
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                    hideSuggestion()
-                    return
-                }
-
-                let acceptedAndKeptSignal = acceptedAndKeptSignal(
-                    request: request,
-                    fieldClassification: fieldClassification,
-                    profile: profile
-                )
-                let learningDecision = suggestionOrchestrator.fastPhraseFallbackLearningDecision(
-                    acceptedAndKeptSignal: acceptedAndKeptSignal,
-                    probabilityThreshold: acceptedAndKeptLearning.probabilityThreshold(for: request.mode)
-                )
                 let fastPresentationMetadata = fastSelectionMetadata
-                    .merging(learningDecision.metadata) { current, _ in current }
-                if learningDecision.shouldSuppress {
-                    let reason = learningDecision.reason ?? "fast-phrase-learning-restraint"
-                    fastPhraseFallbackMetadata = [
-                        "fastPhraseFallbackChecked": "true",
-                        "fastPhraseFallbackOutcome": reason
-                    ]
-                    .merging(fastPresentationMetadata) { current, _ in current }
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        latencyMilliseconds: 0,
-                        reason: reason,
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastPresentationMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": reason,
-                            "triggerReason": "canned-bridge"
-                        ]
-                        .merging(learningDecision.metadata) { current, _ in current }
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-                } else {
-                    presentSuggestion(
-                        fastSuggestion,
-                        suggestionID: suggestionID,
-                        request: request,
-                        context: context,
-                        profile: profile,
-                        fieldIdentity: fieldIdentity,
-                        renderMode: renderMode,
-                        latencyMilliseconds: 0,
-                        triggerReason: "canned-bridge",
-                        requestTicket: requestTicket,
-                        candidateSelectionMetadata: fastPresentationMetadata,
-                        refreshBeforePresenting: false
-                    )
-                    didPresentFastPhraseFallback = suggestionSession.hasVisibleSuggestion
-                        && dependencies.currentSuggestionID() == suggestionID
-                    fastPhraseFallbackMetadata = [
-                        "fastPhraseFallbackChecked": "true",
-                        "fastPhraseFallbackOutcome": didPresentFastPhraseFallback
-                            ? "shown-then-model"
-                            : "presentation-blocked-model-only",
-                        "fastPhraseFallbackVisibleWords": String(fastSuggestion.visibleWordCount)
-                    ]
-                    .merging(fastPresentationMetadata) { current, _ in current }
-                    if didPresentFastPhraseFallback {
-                        setSuggestionDecision("Shown: instant phrase; refining with model")
-                    }
+                    .merging(["instantPhraseAlwaysOn": "true"]) { current, _ in current }
+                presentSuggestion(
+                    fastSuggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    renderMode: renderMode,
+                    latencyMilliseconds: 0,
+                    triggerReason: "canned-bridge",
+                    requestTicket: requestTicket,
+                    candidateSelectionMetadata: fastPresentationMetadata,
+                    refreshBeforePresenting: false
+                )
+                didPresentFastPhraseFallback = suggestionSession.hasVisibleSuggestion
+                    && dependencies.currentSuggestionID() == suggestionID
+                fastPhraseFallbackMetadata = [
+                    "fastPhraseFallbackChecked": "true",
+                    "fastPhraseFallbackOutcome": didPresentFastPhraseFallback
+                        ? "shown-then-model"
+                        : "presentation-blocked-model-only",
+                    "fastPhraseFallbackVisibleWords": String(fastSuggestion.visibleWordCount)
+                ]
+                .merging(fastPresentationMetadata) { current, _ in current }
+                if didPresentFastPhraseFallback {
+                    setSuggestionDecision("Shown: instant phrase; refining with model")
                 }
             }
 
