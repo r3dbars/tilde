@@ -226,6 +226,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
     private lazy var appTargetStateHost = AppTargetStateHost(profileStore: profileStore)
+    private lazy var suggestionPauseStateHost = SuggestionPauseStateHost(
+        controlPolicy: suggestionControlPolicy,
+        schedulePolicy: suggestionPauseSchedulePolicy,
+        onTimedPauseEnded: { [weak self] in
+            self?.setSuggestionDecision("Ready: timed pause ended")
+            self?.refreshRuntimeChrome()
+        }
+    )
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -354,7 +362,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
-    private var pauseExpirationTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -384,8 +391,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let postInsertionPollPauseMilliseconds = 220
     private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
     private let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds = 5_000
-    private var suggestionsPaused = false
-    private var suggestionsPausedUntil: Date?
+    private var suggestionsPaused: Bool {
+        suggestionPauseStateHost.isPaused
+    }
+    private var suggestionsPausedUntil: Date? {
+        suggestionPauseStateHost.pausedUntil
+    }
     private var appEnablementSetupCompleted: Bool {
         get { appEnablementHost.setupCompleted }
         set { appEnablementHost.setupCompleted = newValue }
@@ -420,7 +431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func prepareForAppLaunch() {
-        loadPauseState()
+        suggestionPauseStateHost.load()
         loadDisabledApps()
         appPreferencePersistenceHost.load()
         personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
@@ -449,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopForAppTermination() {
         DiagnosticsLog.shared.record("terminate")
         cancelPendingSuggestionTask(reason: "terminate")
-        pauseExpirationTask?.cancel()
+        suggestionPauseStateHost.stop()
         keyboardEventCaptureHost.cancelIdleStop()
         insertionVerificationHost.cancel()
         deferredTerminalHostAcceptanceTask?.cancel()
@@ -1026,7 +1037,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var pauseControlState: ControlPauseState {
-        expireTimedPauseIfNeeded(now: Date())
+        suggestionPauseStateHost.expireTimedPauseIfNeeded(now: Date())
         return ControlPauseState(
             isPaused: suggestionsPaused,
             pausedUntil: suggestionsPausedUntil
@@ -1034,8 +1045,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var suggestionControlState: SuggestionControlState {
-        expireTimedPauseIfNeeded(now: Date())
-        return suggestionControlPolicy.state(isPaused: suggestionsPaused)
+        suggestionPauseStateHost.controlState
     }
 
     private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
@@ -18655,11 +18665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func togglePauseSuggestions() {
-        let transition = suggestionControlPolicy.toggle(suggestionControlState)
-        suggestionsPaused = transition.nextState.isPaused
-        suggestionsPausedUntil = nil
-        pauseExpirationTask?.cancel()
-        pauseExpirationTask = nil
+        let transition = suggestionPauseStateHost.toggle()
 
         setSuggestionDecision(transition.decisionText)
 
@@ -18690,7 +18696,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stopKeyboardEventTapNow(reason: cleanupReason ?? "control-toggle")
         }
 
-        persistPauseState()
         DiagnosticsLog.shared.record(
             "suggestions-control",
             metadata: [
@@ -18747,8 +18752,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         let context = currentAnnoyanceContext()
         let suggestionID = currentSuggestionState.id ?? ""
-        suggestionsPaused = state.isPaused
-        suggestionsPausedUntil = state.pausedUntil
+        suggestionPauseStateHost.applyScheduledPause(state)
         setSuggestionDecision(decisionText)
         clearFocusedFieldState(hideReason: reason)
         stopKeyboardEventTapNow(reason: reason)
@@ -18768,8 +18772,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: reason,
             metadata: metadata
         )
-        persistPauseState()
-        schedulePauseExpiration()
         DiagnosticsLog.shared.record(
             "suggestions-control",
             metadata: metadata.merging([
@@ -18792,14 +18794,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 private extension AppDelegate {
-    static var suggestionsPausedDefaultsKey: String {
-        "SuggestionsPaused"
-    }
-
-    static var suggestionsPausedUntilDefaultsKey: String {
-        "SuggestionsPausedUntil"
-    }
-
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
     }
@@ -18855,75 +18849,6 @@ private extension AppDelegate {
         Practice here:
 
         """
-    }
-
-    func loadPauseState() {
-        let defaults = UserDefaults.standard
-        let pausedUntilValue = defaults.double(forKey: Self.suggestionsPausedUntilDefaultsKey)
-        let pausedUntil = pausedUntilValue > 0 ? Date(timeIntervalSince1970: pausedUntilValue) : nil
-        let persistedIsPaused = defaults.object(forKey: Self.suggestionsPausedDefaultsKey) as? Bool
-        let startupState = suggestionControlPolicy.startupState(persistedIsPaused: persistedIsPaused)
-        let state = suggestionPauseSchedulePolicy.normalizedState(
-            isPaused: startupState.isPaused,
-            pausedUntil: pausedUntil,
-            now: Date()
-        )
-        suggestionsPaused = state.isPaused
-        suggestionsPausedUntil = state.pausedUntil
-        persistPauseState()
-        schedulePauseExpiration()
-    }
-
-    func persistPauseState() {
-        let defaults = UserDefaults.standard
-        defaults.set(suggestionsPaused, forKey: Self.suggestionsPausedDefaultsKey)
-        if let suggestionsPausedUntil {
-            defaults.set(
-                suggestionsPausedUntil.timeIntervalSince1970,
-                forKey: Self.suggestionsPausedUntilDefaultsKey
-            )
-        } else {
-            defaults.removeObject(forKey: Self.suggestionsPausedUntilDefaultsKey)
-        }
-    }
-
-    func expireTimedPauseIfNeeded(now: Date) {
-        let state = suggestionPauseSchedulePolicy.normalizedState(
-            isPaused: suggestionsPaused,
-            pausedUntil: suggestionsPausedUntil,
-            now: now
-        )
-        guard state.isPaused != suggestionsPaused || state.pausedUntil != suggestionsPausedUntil else {
-            return
-        }
-
-        suggestionsPaused = state.isPaused
-        suggestionsPausedUntil = state.pausedUntil
-        persistPauseState()
-        if !suggestionsPaused {
-            pauseExpirationTask?.cancel()
-            pauseExpirationTask = nil
-            setSuggestionDecision("Ready: timed pause ended")
-            refreshRuntimeChrome()
-        }
-    }
-
-    func schedulePauseExpiration() {
-        pauseExpirationTask?.cancel()
-        pauseExpirationTask = nil
-
-        guard suggestionsPaused,
-              let suggestionsPausedUntil else {
-            return
-        }
-
-        let delay = max(0, suggestionsPausedUntil.timeIntervalSinceNow)
-        pauseExpirationTask = Task { [weak self, suggestionsPausedUntil] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await MainActor.run {
-                self?.expireTimedPauseIfNeeded(now: suggestionsPausedUntil)
-            }
-        }
     }
 
     func loadDisabledApps() {
