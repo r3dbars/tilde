@@ -334,7 +334,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.requestSuggestionNow(source: "hotkey")
     }
     private let prefixCooldownRetryHost = PrefixCooldownRetryHost()
-    private var suggestionSession = SuggestionSession()
+    private let suggestionSession = SuggestionSessionHost()
+    private let focusedTextSessionStateHost = FocusedTextSessionStateHost()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
     private var lastClippingRect: CGRect?
@@ -342,13 +343,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastRenderMode: SuggestionRenderMode?
     private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
     private var lastVisibleSuggestionGeometrySnapshot: SuggestionGeometrySnapshot?
-    private var currentFieldIdentity: FocusedFieldIdentity?
-    private var currentProfile: CompatibilityProfile?
-    private var lastTextSnapshot: FocusedTextSnapshot?
-    private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
-    private var personalCaptureLastSnapshot: FocusedTextSnapshot?
-    private var lastFocusedTextChangeAt: Date?
-    private var lastRequestedTextBeforeCursor: String?
+    private var currentFieldIdentity: FocusedFieldIdentity? {
+        get { focusedTextSessionStateHost.currentFieldIdentity }
+        set { focusedTextSessionStateHost.currentFieldIdentity = newValue }
+    }
+    private var currentProfile: CompatibilityProfile? {
+        get { focusedTextSessionStateHost.currentProfile }
+        set { focusedTextSessionStateHost.currentProfile = newValue }
+    }
+    private var lastTextSnapshot: FocusedTextSnapshot? {
+        get { focusedTextSessionStateHost.lastTextSnapshot }
+        set { focusedTextSessionStateHost.lastTextSnapshot = newValue }
+    }
+    private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot? {
+        get { focusedTextSessionStateHost.lastTrustedObsidianEndOfDocumentSnapshot }
+        set { focusedTextSessionStateHost.lastTrustedObsidianEndOfDocumentSnapshot = newValue }
+    }
+    private var personalCaptureLastSnapshot: FocusedTextSnapshot? {
+        get { focusedTextSessionStateHost.personalCaptureLastSnapshot }
+        set { focusedTextSessionStateHost.personalCaptureLastSnapshot = newValue }
+    }
+    private var lastFocusedTextChangeAt: Date? {
+        get { focusedTextSessionStateHost.lastFocusedTextChangeAt }
+        set { focusedTextSessionStateHost.lastFocusedTextChangeAt = newValue }
+    }
+    private var lastRequestedTextBeforeCursor: String? {
+        get { focusedTextSessionStateHost.lastRequestedTextBeforeCursor }
+        set { focusedTextSessionStateHost.lastRequestedTextBeforeCursor = newValue }
+    }
     private let manualSuggestionRequestHost = ManualSuggestionRequestHost()
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> {
