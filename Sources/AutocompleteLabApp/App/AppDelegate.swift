@@ -221,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
-    private lazy var runtimeStatusHost = RuntimeStatusHost(handler: self)
+    lazy var runtimeStatusHost = RuntimeStatusHost(handler: self)
     lazy var modelInstallLifecycleHost = ModelInstallLifecycleHost(handler: self)
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
@@ -19035,24 +19035,6 @@ extension AppDelegate: SettingsWindowActionHandling {
         case .resetSuggestionTuning:
             resetSuggestionTuning()
         }
-    }
-}
-
-extension AppDelegate: ModelInstallLifecycleHandling {
-    var modelRuntimeBundleForInstall: AppModelRuntimeBundle {
-        modelRuntimeBundle
-    }
-
-    func setModelInstallStatus(_ statusText: String?) {
-        runtimeStatusHost.setModelInstallStatus(statusText)
-    }
-
-    func refreshModelInstallUI() {
-        refreshRuntimeChrome()
-    }
-
-    func showModelInstallSettings() {
-        showSettings()
     }
 }
 
