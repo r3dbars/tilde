@@ -348,7 +348,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         get { appEnablementHost.disabledBundleIdentifiers }
         set { appEnablementHost.disabledBundleIdentifiers = newValue }
     }
-    private let suggestionRequestScheduler = SuggestionRequestScheduler()
+    private var debounceTask: Task<Void, Never>?
+    private var debounceTaskSuggestionID: String?
     private var codexPromptPresentationRetryTask: Task<Void, Never>?
     private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
@@ -448,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopForAppTermination() {
         DiagnosticsLog.shared.record("terminate")
-        cancelPendingSuggestionTask(reason: "terminate")
+        debounceTask?.cancel()
         pauseExpirationTask?.cancel()
         keyboardEventCaptureHost.cancelIdleStop()
         insertionVerificationHost.cancel()
@@ -2507,7 +2508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             codexPromptTargetContinuityHost.clearCooldownPreservation()
             return true
         case let .coolingDown(cooldown):
-            let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
+            let hasActiveSuggestionWork = debounceTask != nil
                 || codexPromptPresentationRetryTask != nil
                 || suggestionSession.hasVisibleSuggestion
                 || suggestionIdleRetryState.hasPendingRetry
@@ -2556,7 +2557,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
+        let hasActiveSuggestionWork = debounceTask != nil
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
@@ -3228,7 +3229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context: FocusedTextContext,
         promptBlockReason: String
     ) -> CodexPromptTargetInvalidationResolution {
-        let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
+        let hasActiveSuggestionWork = debounceTask != nil
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
@@ -3259,7 +3260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let shouldArmRetry = suggestionRequestScheduler.hasPendingRequest
+        let shouldArmRetry = debounceTask != nil
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
             || manualSuggestionRequestPending
@@ -6663,10 +6664,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(requestMetadata) { current, _ in current }
         )
         suggestionIdleRetryState.cancel()
-        suggestionRequestScheduler.schedule(
-            suggestionID: suggestionID,
-            delayMilliseconds: requestSchedule.scheduledDelayMilliseconds
-        ) { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
+        debounceTaskSuggestionID = suggestionID
+        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
+            try? await Task.sleep(for: .milliseconds(requestSchedule.scheduledDelayMilliseconds))
+            guard !Task.isCancelled else {
+                await MainActor.run {
+                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
+                }
+                return
+            }
+
             do {
                 let suggestion = try await suggestionOrchestrator.suggestion(
                     for: request,
@@ -6926,9 +6933,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         scheduledDelayMilliseconds: requestSchedule.scheduledDelayMilliseconds
                     )
                 }
+                await MainActor.run {
+                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
+                }
             } catch {
                 await MainActor.run {
                     self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
+                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
                     if self.suggestionOrchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
                         suggestionID: suggestionID,
                         currentSuggestionID: self.currentSuggestionState.id,
@@ -17421,11 +17432,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        let cancelledPendingRequest = suggestionRequestScheduler.cancelPendingRequest()
-        guard cancelledPendingRequest else {
+        guard let debounceTask else {
             return cancelledPresentationRefreshRetry
         }
 
+        debounceTask.cancel()
+        self.debounceTask = nil
+        debounceTaskSuggestionID = nil
         suggestionOrchestrator.clearStreamingPresentations()
         DiagnosticsLog.shared.record(
             "suggestion-request-cancelled",
@@ -17434,6 +17447,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return true
+    }
+
+    private func clearCompletedSuggestionTask(suggestionID: String) {
+        guard debounceTaskSuggestionID == suggestionID else {
+            return
+        }
+
+        debounceTask = nil
+        debounceTaskSuggestionID = nil
     }
 
     @objc
