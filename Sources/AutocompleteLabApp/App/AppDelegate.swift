@@ -14860,19 +14860,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        var metadata = [
+        let metadata = [
             "typedSuffixChars": String(typedSuffix.count)
         ]
-        metadata.merge(recordPrefixFamilyCooldown(
-            .typedOver,
-            input: PrefixFamilyCooldownInput(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentifier: fieldIdentity.traceDescription,
-                requestMode: currentSuggestionState.requestMode,
-                textBeforeCursor: newTextBeforeCursor
-            )
-        )) { current, _ in current }
-        metadata.merge(currentSuggestionLifetimeMetadata()) { current, _ in current }
+        .merging(currentSuggestionLifetimeMetadata()) { current, _ in current }
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionTypedOver,
@@ -14890,18 +14881,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: suggestionID,
             appBundleIdentifier: profile.bundleIdentifier,
             outcome: .typedPast,
-            reason: "typed-against-visible-suggestion",
-            metadata: metadata
-        )
-        recordAnnoyanceSignal(
-            .typedOver,
-            context: annoyanceContext(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity,
-                requestMode: currentSuggestionState.requestMode,
-                fieldKind: currentSuggestionState.fieldClassification?.kind ?? .unknown
-            ),
-            suggestionID: suggestionID,
             reason: "typed-against-visible-suggestion",
             metadata: metadata
         )

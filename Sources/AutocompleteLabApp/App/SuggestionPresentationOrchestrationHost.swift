@@ -547,7 +547,8 @@ final class SuggestionPresentationOrchestrationHost {
             fieldClassification: displayFieldClassification,
             profile: profile
         )
-        let isRepeatedMiss = suggestionOrchestrator.shouldSuppressRepetition(
+        let isInstantLocalSuggestion = triggerReason == "canned-bridge"
+        let isRepeatedMiss = isInstantLocalSuggestion ? false : suggestionOrchestrator.shouldSuppressRepetition(
             suggestion.visibleText,
             mode: request.mode,
             scope: request.appBundleIdentifier ?? profile.bundleIdentifier

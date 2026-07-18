@@ -860,8 +860,19 @@ final class SuggestionOrchestrator {
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss
         )
-        let adjustedPolicy = displayScorePolicy
-            .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
+        let adjustedPolicy: DisplayScorePolicy
+        if triggerReason == "canned-bridge" {
+            adjustedPolicy = displayScorePolicy
+                .adjustingThresholds(by: -0.60)
+                .withLearningRestraint(
+                    acceptedAndKeptProbabilityMultiplier: 0,
+                    learningRestraintScoreScale: 0,
+                    minimumAcceptedAndKeptSamples: .max
+                )
+        } else {
+            adjustedPolicy = displayScorePolicy
+                .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
+        }
         let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && (
