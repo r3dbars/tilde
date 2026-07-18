@@ -59,10 +59,15 @@ struct SuggestionTypingBurstSuppressionHostTests {
     @Test("AppDelegate delegates typing-burst suppression side effects to the host")
     func appDelegateUsesTypingBurstSuppressionHost() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
+        let appDelegate = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let schedulingHost = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/SuggestionSchedulingHost.swift"),
+            encoding: .utf8
+        )
+        let source = appDelegate + schedulingHost
 
         #expect(source.contains("private lazy var suggestionTypingBurstSuppressionHost"))
         #expect(source.contains("suggestionTypingBurstSuppressionHost.handle("))

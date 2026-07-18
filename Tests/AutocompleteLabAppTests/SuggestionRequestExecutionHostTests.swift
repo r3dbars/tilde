@@ -60,10 +60,15 @@ struct SuggestionRequestExecutionHostTests {
     @Test("AppDelegate delegates delayed model execution to the host")
     func appDelegateUsesExecutionHost() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let source = try String(
+        let appDelegate = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let schedulingHost = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/SuggestionSchedulingHost.swift"),
+            encoding: .utf8
+        )
+        let source = appDelegate + schedulingHost
 
         #expect(source.contains("private lazy var suggestionRequestExecutionHost"))
         #expect(source.contains("suggestionRequestExecutionHost.schedule("))
