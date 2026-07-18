@@ -882,7 +882,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         )
     ])
 
-    public static let defaultDenylist: Set<String> = [
+    public static let defaultDenylist: Set<String> = Set([
         "com.apple.dt.Xcode",
         "com.microsoft.VSCodeInsiders",
         "com.visualstudio.code.oss",
@@ -909,7 +909,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         "com.lastpass.LastPass",
         "com.apple.systempreferences",
         "com.apple.systemsettings"
-    ]
+    ]).union(ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts)
 }
 
 public enum CompatibilitySupportStatus: Equatable, Sendable {

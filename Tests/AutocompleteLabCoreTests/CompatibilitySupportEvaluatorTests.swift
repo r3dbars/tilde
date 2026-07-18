@@ -63,11 +63,11 @@ struct CompatibilitySupportEvaluatorTests {
         #expect(!evaluation.reasons.contains("Codex cannot present suggestions safely yet."))
     }
 
-    @Test("Blocked apps stay blocked and terminal hosts are experimental")
-    func blockedAppsStayBlockedAndTerminalHostsAreExperimental() {
+    @Test("Blocked apps stay blocked and terminal hosts are not generic")
+    func blockedAppsStayBlockedAndTerminalHostsAreNotGeneric() {
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.mail", events: []).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.openai.atlas", events: []).state == .blocked)
-        #expect(evaluator.evaluate(bundleIdentifier: "com.apple.Terminal", events: []).state == .experimental)
+        #expect(evaluator.evaluate(bundleIdentifier: "com.apple.Terminal", events: []).state == .blocked)
     }
 
     @Test("Insertion, focus, Tab, and sensitive-field failures block support")
