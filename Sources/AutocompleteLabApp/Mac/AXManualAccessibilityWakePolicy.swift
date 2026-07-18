@@ -1,16 +1,16 @@
 import AutocompleteLabCore
 
 enum AXManualAccessibilityWakeReason: String, Equatable, Sendable {
-    case electronTreeHasNoTextNodes = "electron-tree-has-no-text-nodes"
+    case chromiumBackedTreeHasNoTextNodes = "chromium-backed-tree-has-no-text-nodes"
 }
 
 struct AXManualAccessibilityWakeDecision: Equatable, Sendable {
     let shouldWake: Bool
     let reason: AXManualAccessibilityWakeReason?
 
-    static let wakeElectronTree = AXManualAccessibilityWakeDecision(
+    static let wakeChromiumBackedTree = AXManualAccessibilityWakeDecision(
         shouldWake: true,
-        reason: .electronTreeHasNoTextNodes
+        reason: .chromiumBackedTreeHasNoTextNodes
     )
     static let skip = AXManualAccessibilityWakeDecision(shouldWake: false, reason: nil)
 }
@@ -23,12 +23,12 @@ enum AXManualAccessibilityWakePolicy {
         focusedReadReturnedContext: Bool,
         treeHasTextNodes: Bool
     ) -> AXManualAccessibilityWakeDecision {
-        guard appFamily == .electron,
+        guard appFamily == .electron || appFamily == .customCanvas,
               !focusedReadReturnedContext,
               !treeHasTextNodes else {
             return .skip
         }
 
-        return .wakeElectronTree
+        return .wakeChromiumBackedTree
     }
 }

@@ -118,6 +118,7 @@ struct SerialFocusedTextAXReaderTests {
             readsBounds: false
         ))
         #expect(options.assumedCanSetSelectedText == true)
+        #expect(options.manualAccessibilityWakeAppFamily == .customCanvas)
     }
 
     @Test("Electron profiles request AXManualAccessibility wake when no text nodes are exposed")
@@ -133,7 +134,12 @@ struct SerialFocusedTextAXReaderTests {
             appFamily: .electron,
             focusedReadReturnedContext: false,
             treeHasTextNodes: false
-        ) == .wakeElectronTree)
+        ) == .wakeChromiumBackedTree)
+        #expect(AXManualAccessibilityWakePolicy.decision(
+            appFamily: .customCanvas,
+            focusedReadReturnedContext: false,
+            treeHasTextNodes: false
+        ) == .wakeChromiumBackedTree)
     }
 
     @Test("AXManualAccessibility wake skips readable trees and non Electron apps")
