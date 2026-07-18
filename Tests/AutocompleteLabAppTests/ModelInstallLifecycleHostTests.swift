@@ -10,13 +10,17 @@ struct ModelInstallLifecycleHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let wiring = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/ModelInstallLifecycleWiring.swift"),
+            encoding: .utf8
+        )
         let host = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/ModelInstallLifecycleHost.swift"),
             encoding: .utf8
         )
 
         #expect(appDelegate.contains("ModelInstallLifecycleHost(handler: self)"))
-        #expect(appDelegate.contains("extension AppDelegate: ModelInstallLifecycleHandling"))
+        #expect(wiring.contains("extension AppDelegate: ModelInstallLifecycleHandling"))
         #expect(!appDelegate.contains("private let modelInstallHost = ModelInstallHost()"))
         #expect(host.contains("model-install-succeeded"))
         #expect(host.contains("model-install-cancel-requested"))
