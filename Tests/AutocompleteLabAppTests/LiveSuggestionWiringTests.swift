@@ -42,20 +42,25 @@ struct LiveSuggestionWiringTests {
     @Test("App delegate advances the visible suggestion through the type-through state machine")
     func appDelegateAdvancesVisibleSuggestionThroughTypeThroughStateMachine() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let preparationHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionPresentationPreparationHost.swift"
+        )
+        let suggestionPresentationWiring = appDelegate + preparationHost
 
-        try require(appDelegate, contains: "private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()")
-        try require(appDelegate, contains: "private func advanceVisibleSuggestionForTypingProgressIfNeeded(")
-        try require(appDelegate, contains: "suggestionSession.applyTypeThrough(")
-        try require(appDelegate, contains: "using: typeThroughPrefixStateMachine,")
-        try require(appDelegate, contains: "case let .survived(survival):")
-        try require(appDelegate, contains: "currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText")
-        try require(appDelegate, contains: "\"Shown: typing through suggestion\"")
-        try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
-        try require(appDelegate, contains: "reason: \"survived_typethrough\"")
-        try require(appDelegate, contains: "passthroughTypingMatchObserver:")
-        try require(appDelegate, contains: "observeOptimisticTypeThrough(transition)")
-        try require(appDelegate, contains: "currentSuggestionState.invalidatedByUserKeyDown = false")
-        try require(appDelegate, contains: "LateResultContextValidator().trimmedSuggestion(")
+        try require(suggestionPresentationWiring, contains: "private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()")
+        try require(suggestionPresentationWiring, contains: "private func advanceVisibleSuggestionForTypingProgressIfNeeded(")
+        try require(suggestionPresentationWiring, contains: "suggestionSession.applyTypeThrough(")
+        try require(suggestionPresentationWiring, contains: "using: typeThroughPrefixStateMachine,")
+        try require(suggestionPresentationWiring, contains: "case let .survived(survival):")
+        try require(suggestionPresentationWiring, contains: "currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText")
+        try require(suggestionPresentationWiring, contains: "\"Shown: typing through suggestion\"")
+        try require(suggestionPresentationWiring, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
+        try require(suggestionPresentationWiring, contains: "reason: \"survived_typethrough\"")
+        try require(suggestionPresentationWiring, contains: "passthroughTypingMatchObserver:")
+        try require(suggestionPresentationWiring, contains: "observeOptimisticTypeThrough(transition)")
+        try require(suggestionPresentationWiring, contains: "currentSuggestionState.invalidatedByUserKeyDown = false")
+        try require(suggestionPresentationWiring, contains: "validator.validate(")
+        try require(suggestionPresentationWiring, contains: "validator.trimmedSuggestion(")
     }
 
     @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
