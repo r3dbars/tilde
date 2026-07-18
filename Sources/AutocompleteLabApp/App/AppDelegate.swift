@@ -17415,7 +17415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func requestAccessibilityPermission() {
+    func requestAccessibilityPermission() {
         let isTrusted = accessibilityPermissionHost.requestPermission()
         settingsWindow.refresh(
             isTrusted: isTrusted,
@@ -17504,7 +17504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func openAccessibilitySettings() {
+    func openAccessibilitySettings() {
         if accessibilityPermissionHost.openAccessibilitySettings() {
             DiagnosticsLog.shared.record("open-accessibility-settings")
         } else {
@@ -17512,7 +17512,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func startTextEditPractice() {
+    func startTextEditPractice() {
         guard accessibilityClient.isTrusted else {
             requestAccessibilityPermission()
             return
@@ -17695,7 +17695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return metadata
     }
 
-    private func performRuntimeAction(_ action: RuntimeReadinessAction) {
+    func performRuntimeAction(_ action: RuntimeReadinessAction) {
         switch action {
         case .installModel, .repairModel:
             startModelInstall()
@@ -17762,7 +17762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showDiagnostics()
     }
 
-    private func toggleSettingsTracingPaused() {
+    func toggleSettingsTracingPaused() {
         let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
         RawAutocompleteTraceLog.shared.setPaused(nextPaused)
         DiagnosticsLog.shared.record(
@@ -17775,7 +17775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func toggleRawContentTracing() {
+    func toggleRawContentTracing() {
         let nextEnabled = !RawAutocompleteTraceLog.shared.rawContentTracingEnabled
         RawAutocompleteTraceLog.shared.setRawContentTracingEnabled(nextEnabled)
         DiagnosticsLog.shared.record(
@@ -17788,7 +17788,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func toggleGlobalScreenshotTracing() {
+    func toggleGlobalScreenshotTracing() {
         let nextEnabled = !RawAutocompleteTraceLog.shared.screenshotTracingEnabled
         RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(nextEnabled)
         DiagnosticsLog.shared.record(
@@ -17801,7 +17801,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func toggleVisiblePageContext() {
+    func toggleVisiblePageContext() {
         visiblePageContextEnabled.toggle()
         if !visiblePageContextEnabled {
             visiblePageContextProvider.clear()
@@ -17824,7 +17824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func togglePersonalCapture() {
+    func togglePersonalCapture() {
         appSettings.togglePersonalCapture()
         if !appSettings.personalCaptureEnabled {
             personalCaptureLastSnapshot = nil
@@ -17858,7 +17858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func deletePersonalCapture() {
+    func deletePersonalCapture() {
         appSettings.personalCaptureEnabled = false
         personalCaptureLastSnapshot = nil
         personalCaptureJournal.deleteAll()
@@ -17884,7 +17884,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func clearLearningData() {
+    func clearLearningData() {
         acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
         acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
         recentWordMemory = ScopedRecentWordMemory()
@@ -17899,7 +17899,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func cycleAcceptAllShortcut() {
+    func cycleAcceptAllShortcut() {
         setAcceptAllShortcut(keyboardShortcutConfiguration.acceptAllShortcut.next)
     }
 
@@ -18038,7 +18038,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
+    func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
         keyboardShortcutConfiguration.acceptAllShortcut = shortcut
         appPreferencePersistenceHost.persistKeyboardShortcutConfiguration()
         updateKeyboardEventTapSnapshot()
@@ -18052,56 +18052,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func setSuggestionAggressivenessLevel(_ level: Int) {
+    func setSuggestionAggressivenessLevel(_ level: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(aggressivenessLevel: level),
             reason: "aggressiveness-changed"
         )
     }
 
-    private func setSuggestionMaxVisibleWords(_ words: Int) {
+    func setSuggestionMaxVisibleWords(_ words: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(maxVisibleWords: words),
             reason: "max-visible-words-changed"
         )
     }
 
-    private func setSuggestionWordStartCharacters(_ characters: Int) {
+    func setSuggestionWordStartCharacters(_ characters: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(wordStartCharacters: characters),
             reason: "word-start-characters-changed"
         )
     }
 
-    private func setSuggestionPhraseStartWords(_ words: Int) {
+    func setSuggestionPhraseStartWords(_ words: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(phraseStartWords: words),
             reason: "phrase-start-words-changed"
         )
     }
 
-    private func setSuggestionResponseSpeedLevel(_ level: Int) {
+    func setSuggestionResponseSpeedLevel(_ level: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(responseSpeedLevel: level),
             reason: "response-speed-changed"
         )
     }
 
-    private func setSuggestionConfidenceLevel(_ level: Int) {
+    func setSuggestionConfidenceLevel(_ level: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(confidenceLevel: level),
             reason: "confidence-changed"
         )
     }
 
-    private func setSuggestionLearningRestraintLevel(_ level: Int) {
+    func setSuggestionLearningRestraintLevel(_ level: Int) {
         setSuggestionTuning(
             updatedSuggestionTuning(learningRestraintLevel: level),
             reason: "learning-restraint-changed"
         )
     }
 
-    private func resetSuggestionTuning() {
+    func resetSuggestionTuning() {
         setSuggestionTuning(SuggestionTuning(), reason: "reset-tuning")
     }
 
@@ -18355,7 +18355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func toggleCurrentAppMirrorMode() {
+    func toggleCurrentAppMirrorMode() {
         guard let app = targetAppForControls(),
               let profile = profileStore.profile(for: app.bundleIdentifier),
               profile.canPresentSuggestions,
@@ -18409,7 +18409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func startCurrentAppProof() {
+    func startCurrentAppProof() {
         guard let app = targetAppForControls(),
               let profile = profileStore.profile(for: app.bundleIdentifier),
               !profile.isSensitive else {
@@ -18533,7 +18533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appProofModeCoordinator.end(for: bundleIdentifier, reason: reason)
     }
 
-    private func enableAllDisabledApps() {
+    func enableAllDisabledApps() {
         var selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
         guard !selection.isEmpty else {
             return
@@ -18959,81 +18959,6 @@ private extension CompletionActivationDecision {
             return "allowed"
         case let .block(reason):
             return reason.rawValue
-        }
-    }
-}
-
-// MARK: - Settings window wiring
-
-extension AppDelegate: SettingsWindowActionHandling {
-    func handleSettingsWindowAction(_ action: SettingsWindowAction) {
-        switch action {
-        case .requestPermission:
-            requestAccessibilityPermission()
-        case .openAccessibilitySettings:
-            openAccessibilitySettings()
-        case .toggleSuggestionsPaused:
-            togglePauseSuggestions()
-        case .pauseSuggestionsFor15Minutes:
-            pauseSuggestionsFor15Minutes()
-        case .pauseSuggestionsFor1Hour:
-            pauseSuggestionsFor1Hour()
-        case .pauseSuggestionsUntilTomorrow:
-            pauseSuggestionsUntilTomorrowFromControl()
-        case .silenceCurrentField:
-            silenceCurrentField()
-        case let .performRuntimeAction(action):
-            performRuntimeAction(action)
-        case .toggleCurrentApp:
-            toggleCurrentApp()
-        case .toggleCurrentAppMirrorMode:
-            toggleCurrentAppMirrorMode()
-        case .startCurrentAppProof:
-            startCurrentAppProof()
-        case .startTextEditPractice:
-            startTextEditPractice()
-        case .enableAllApps:
-            enableAllDisabledApps()
-        case .toggleTracingPaused:
-            toggleSettingsTracingPaused()
-        case .toggleRawContentTracing:
-            toggleRawContentTracing()
-        case .toggleScreenshotTracing:
-            toggleGlobalScreenshotTracing()
-        case .toggleVisiblePageContext:
-            toggleVisiblePageContext()
-        case .togglePersonalCapture:
-            togglePersonalCapture()
-        case .revealPersonalCaptureFolder:
-            revealPersonalCaptureFolder()
-        case .deletePersonalCapture:
-            deletePersonalCapture()
-        case .deleteLocalLogs:
-            deleteLocalPrivacyLogs()
-        case .clearLearningData:
-            clearLearningData()
-        case .exportPrivacyBundle:
-            exportTraceReport()
-        case .cycleAcceptAllShortcut:
-            cycleAcceptAllShortcut()
-        case let .setAcceptAllShortcut(shortcut):
-            setAcceptAllShortcut(shortcut)
-        case let .setSuggestionAggressivenessLevel(level):
-            setSuggestionAggressivenessLevel(level)
-        case let .setSuggestionMaxVisibleWords(words):
-            setSuggestionMaxVisibleWords(words)
-        case let .setSuggestionWordStartCharacters(characters):
-            setSuggestionWordStartCharacters(characters)
-        case let .setSuggestionPhraseStartWords(words):
-            setSuggestionPhraseStartWords(words)
-        case let .setSuggestionResponseSpeedLevel(level):
-            setSuggestionResponseSpeedLevel(level)
-        case let .setSuggestionConfidenceLevel(level):
-            setSuggestionConfidenceLevel(level)
-        case let .setSuggestionLearningRestraintLevel(level):
-            setSuggestionLearningRestraintLevel(level)
-        case .resetSuggestionTuning:
-            resetSuggestionTuning()
         }
     }
 }
