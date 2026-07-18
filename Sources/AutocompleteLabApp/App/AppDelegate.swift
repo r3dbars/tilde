@@ -1182,6 +1182,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             postInsertionPollPauseMilliseconds: postInsertionPollPauseMilliseconds
         )
     )
+    private lazy var insertionVerificationBaselineHost = InsertionVerificationBaselineHost(
+        dependencies: InsertionVerificationBaselineHostDependencies(
+            currentFieldIdentity: { [unowned self] in self.currentFieldIdentity },
+            lastTextSnapshot: { [unowned self] in self.lastTextSnapshot },
+            currentSuggestionState: currentSuggestionState,
+            currentProfile: { [unowned self] in self.currentProfile },
+            currentBehaviorProfileID: { [unowned self] in
+                self.suggestionOrchestrator.currentRequest?.behaviorProfile.id
+            }
+        )
+    )
     private lazy var suggestionAcceptanceHost = SuggestionAcceptanceHost(
         dependencies: SuggestionAcceptanceHostDependencies(
             keyboardShortcutConfiguration: { [unowned self] in self.keyboardShortcutConfiguration },
@@ -1237,7 +1248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             recordAcceptanceGuardBlock: { [unowned self] reason in self.recordAcceptanceGuardBlock(reason: reason) },
             insertionVerificationBaseline: { [unowned self] acceptanceID, acceptedAt, action, acceptMode in
-                self.insertionVerificationBaseline(
+                self.insertionVerificationBaselineHost.baseline(
                     acceptanceID: acceptanceID,
                     acceptedAt: acceptedAt,
                     action: action,
@@ -5604,47 +5615,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func insertionVerificationBaseline(
-        acceptanceID: String,
-        acceptedAt: Date,
-        action: KeyboardAction?,
-        acceptMode: String
-    ) -> InsertionVerificationBaseline? {
-        guard let currentFieldIdentity,
-              let lastTextSnapshot,
-              lastTextSnapshot.fieldIdentity == currentFieldIdentity,
-              let currentSuggestionAcceptanceSnapshot = currentSuggestionState.acceptanceSnapshot,
-              let profile = currentProfile else {
-            return nil
-        }
-        let fieldClassification = currentSuggestionState.fieldClassification
-        let fieldKind = fieldClassification?.kind ?? .unknown
-        let behaviorProfileID = suggestionOrchestrator.currentRequest?.behaviorProfile.id
-            ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldKind: fieldKind,
-                currentLineStructure: CurrentLineStructure.from(textBeforeCursor: lastTextSnapshot.textBeforeCursor)
-            )).id
-
-        return InsertionVerificationBaseline(
-            fieldIdentity: currentFieldIdentity,
-            targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.postInsertionScope,
-            previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
-            previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
-            profile: profile,
-            suggestionID: currentSuggestionState.id,
-            requestMode: currentSuggestionState.requestMode,
-            acceptanceID: acceptanceID,
-            acceptedAt: acceptedAt,
-            action: action,
-            acceptMode: acceptMode,
-            fieldKind: fieldKind,
-            fieldKindReason: fieldClassification?.reason ?? "unknown",
-            behaviorProfileID: behaviorProfileID,
-            retryCount: 0
-        )
-    }
-
     private func scheduleInsertionVerification(
         acceptedText: String,
         baseline: InsertionVerificationBaseline?
@@ -7820,7 +7790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let acceptanceID = UUID().uuidString
         let acceptedAt = Date()
-        let verificationBaseline = insertionVerificationBaseline(
+        let verificationBaseline = insertionVerificationBaselineHost.baseline(
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
             action: action,
