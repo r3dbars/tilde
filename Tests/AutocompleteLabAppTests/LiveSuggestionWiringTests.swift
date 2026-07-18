@@ -116,6 +116,22 @@ struct LiveSuggestionWiringTests {
         #expect(!sources.contains("typing-burst"))
     }
 
+    @Test("Dogfood composers measure synthetic carets with the focused text style")
+    func dogfoodComposersUseFocusedTextStyleForSyntheticCarets() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let start = try #require(appDelegate.range(
+            of: "if PromptEditorFingerprintPolicy.dogfoodBundleIdentifiers.contains(bundleIdentifier) {"
+        ))
+        let end = try #require(appDelegate.range(
+            of: "guard bundleIdentifier == \"com.google.Chrome\" else {",
+            range: start.upperBound..<appDelegate.endIndex
+        ))
+        let dogfoodTuning = appDelegate[start.lowerBound..<end.lowerBound]
+
+        #expect(dogfoodTuning.contains("font: nil"))
+        #expect(!dogfoodTuning.contains("ofSize: 15"))
+    }
+
     @Test("App delegate preserves and rechecks transient Codex prompt targets")
     func appDelegatePreservesAndRechecksTransientCodexPromptTargets() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
