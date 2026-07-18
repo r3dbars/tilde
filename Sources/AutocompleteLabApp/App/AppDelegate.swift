@@ -633,6 +633,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionRequestExecutionHost = SuggestionRequestExecutionHost(
+        dependencies: SuggestionRequestExecutionHostDependencies(
+            scheduler: suggestionRequestScheduler,
+            suggestionOrchestrator: suggestionOrchestrator,
+            handlePartial: { [weak self] partialSuggestion, input in
+                self?.suggestionStreamingPartialHost.handle(
+                    partialSuggestion: partialSuggestion,
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    appBundleIdentifier: input.appBundleIdentifier,
+                    fieldIdentity: input.fieldIdentity,
+                    renderMode: input.renderMode,
+                    requestTicket: input.requestTicket,
+                    requestStartedAt: input.requestStartedAt
+                )
+            },
+            handleFinal: { [weak self] suggestion, input in
+                self?.suggestionModelResultHost.handle(suggestion: suggestion, input: input)
+            },
+            handleFailure: { [weak self] input in
+                self?.suggestionContinuationFailureHost.handle(
+                    suggestionID: input.suggestionID,
+                    requestTicket: input.requestTicket,
+                    fieldIdentity: input.fieldIdentity,
+                    context: input.context,
+                    profile: input.profile
+                )
+            }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6758,62 +6790,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(requestMetadata) { current, _ in current }
         )
         suggestionIdleRetryState.cancel()
-        suggestionRequestScheduler.schedule(
-            suggestionID: suggestionID,
-            delayMilliseconds: requestSchedule.scheduledDelayMilliseconds
-        ) { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
-            do {
-                let suggestion = try await suggestionOrchestrator.suggestion(
-                    for: request,
-                    onPartialSuggestion: { partialSuggestion in
-                        Task { @MainActor in
-                            self.suggestionStreamingPartialHost.handle(
-                                partialSuggestion: partialSuggestion,
-                                suggestionID: suggestionID,
-                                request: request,
-                                context: context,
-                                profile: profile,
-                                appBundleIdentifier: appBundleIdentifier,
-                                fieldIdentity: fieldIdentity,
-                                renderMode: renderMode,
-                                requestTicket: requestTicket,
-                                requestStartedAt: requestStartedAt
-                            )
-                        }
-                    }
-                )
-                await MainActor.run {
-                    self.suggestionModelResultHost.handle(
-                        suggestion: suggestion,
-                        input: SuggestionModelResultInput(
-                            suggestionID: suggestionID,
-                            request: request,
-                            context: context,
-                            profile: profile,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            fieldClassification: fieldClassification,
-                            fieldIdentityDescription: fieldIdentityDescription,
-                            renderMode: renderMode,
-                            requestMetadata: requestMetadata,
-                            requestSchedule: requestSchedule,
-                            requestTicket: requestTicket,
-                            requestStartedAt: requestStartedAt
-                        )
-                    )
-                }
-            } catch {
-                await MainActor.run {
-                    self.suggestionContinuationFailureHost.handle(
-                        suggestionID: suggestionID,
-                        requestTicket: requestTicket,
-                        fieldIdentity: fieldIdentity,
-                        context: context,
-                        profile: profile
-                    )
-                }
-            }
-        }
+        suggestionRequestExecutionHost.schedule(
+            input: SuggestionModelResultInput(
+                suggestionID: suggestionID,
+                request: request,
+                context: context,
+                profile: profile,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                fieldClassification: fieldClassification,
+                fieldIdentityDescription: fieldIdentityDescription,
+                renderMode: renderMode,
+                requestMetadata: requestMetadata,
+                requestSchedule: requestSchedule,
+                requestTicket: requestTicket,
+                requestStartedAt: requestStartedAt
+            )
+        )
     }
 
     private func presentSuggestion(
