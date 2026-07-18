@@ -5168,6 +5168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               ),
               frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier,
               let rawContext = accessibilityClient.focusedTextContext(
+                  for: frontmostApp,
                   allowDescendantTextFallback: profile.allowsDescendantTextFallback
               ),
               !rawContext.isSecure,
