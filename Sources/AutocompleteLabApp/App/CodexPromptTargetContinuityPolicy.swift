@@ -323,6 +323,7 @@ struct CodexPromptTargetContinuityPolicy {
               shownSnapshot.selectedTextLength == 0,
               let currentFieldIdentity,
               let currentSnapshot,
+              let trustedAnchor,
               shownSnapshot.fieldIdentity == currentFieldIdentity,
               shownSnapshot.fieldIdentity == currentSnapshot.fieldIdentity,
               shownSnapshot.textBeforeCursor == currentSnapshot.textBeforeCursor,
@@ -330,6 +331,10 @@ struct CodexPromptTargetContinuityPolicy {
               shownSnapshot.targetFingerprint.surroundingTextRevision == FocusedTextRevision(
                   textBeforeCursor: currentSnapshot.textBeforeCursor,
                   textAfterCursor: currentSnapshot.textAfterCursor
+              ),
+              shownTargetMatchesTrustedAnchor(
+                  shownSnapshot.targetFingerprint,
+                  trustedAnchor: trustedAnchor
               ) else {
             return false
         }
@@ -344,6 +349,35 @@ struct CodexPromptTargetContinuityPolicy {
             nowMilliseconds: nowMilliseconds,
             maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
         )?.resolution == .preserveWork
+    }
+
+    private func shownTargetMatchesTrustedAnchor(
+        _ shownTarget: FocusedTargetFingerprint,
+        trustedAnchor: CodexPromptTargetContinuityAnchor,
+        maximumGeometryDelta: Int = 4
+    ) -> Bool {
+        let trustedTarget = trustedAnchor.targetFingerprint
+        guard shownTarget.role == trustedTarget.role,
+              shownTarget.subrole == trustedTarget.subrole,
+              let shownWindowIdentifier = shownTarget.windowIdentifier,
+              let trustedWindowIdentifier = trustedTarget.windowIdentifier,
+              shownWindowIdentifier == trustedWindowIdentifier,
+              let shownWindowBounds = shownTarget.windowBounds,
+              let trustedWindowBounds = trustedTarget.windowBounds,
+              shownWindowBounds == trustedWindowBounds,
+              let shownElementBounds = shownTarget.elementBounds,
+              let trustedElementBounds = trustedTarget.elementBounds else {
+            return false
+        }
+
+        return abs(shownElementBounds.x - trustedElementBounds.x) <= maximumGeometryDelta
+            && abs(shownElementBounds.y - trustedElementBounds.y) <= maximumGeometryDelta
+            && abs(shownElementBounds.width - trustedElementBounds.width) <= maximumGeometryDelta
+            && abs(shownElementBounds.height - trustedElementBounds.height) <= maximumGeometryDelta
+            && shownElementBounds.width > 0
+            && shownElementBounds.height > 0
+            && trustedElementBounds.width > 0
+            && trustedElementBounds.height > 0
     }
 
     func remainingAXCooldownMilliseconds(

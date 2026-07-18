@@ -891,6 +891,27 @@ struct CodexPromptTargetContinuityPolicyTests {
                 nowMilliseconds: 1_000
             ))
         }
+
+        let replacementWindowContext = context(
+            elementIdentifier: 99,
+            windowIdentifier: 2
+        )
+        let replacementWindowAnchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: replacementWindowContext,
+            nowMilliseconds: 100
+        ))
+        #expect(!policy.canAcceptStablePrompt(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            shownSnapshot: shownSnapshot,
+            trustedAnchor: replacementWindowAnchor,
+            observedContext: replacementWindowContext,
+            nowMilliseconds: 1_000
+        ))
     }
 
     private func identity() -> FocusedFieldIdentity {
