@@ -116,8 +116,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public let traceFingerprintSecret: Data
 
     private var cooldowns: [PrefixFamilyCooldownKey: PrefixFamilyCooldown] = [:]
-    private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
-    private var acceptedThenDeletedEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
+    private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: DecayingScoreBucket] = [:]
+    private var acceptedThenDeletedEagernessBuckets: [PrefixFamilyCooldownKey: DecayingScoreBucket] = [:]
 
     // Cooldowns back off briefly after a rejection signal without silencing the
     // prefix family for minutes at a time — the old 3–10 minute accepted-then-
@@ -210,11 +210,11 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     ) -> PrefixFamilyEagernessAdjustment {
         expireEagernessBuckets(now: now)
         let key = key(for: input)
-        let typedOverScore = typedOverEagernessBuckets[key]?.score(
+        let typedOverScore = typedOverEagernessBuckets[key]?.decayedScore(
             at: now,
             halfLifeSeconds: typedOverEagernessHalfLifeSeconds
         ) ?? 0
-        let acceptedThenDeletedScore = acceptedThenDeletedEagernessBuckets[key]?.score(
+        let acceptedThenDeletedScore = acceptedThenDeletedEagernessBuckets[key]?.decayedScore(
             at: now,
             halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds
         ) ?? 0
@@ -292,11 +292,11 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         for key: PrefixFamilyCooldownKey,
         now: Date
     ) {
-        let decayedScore = typedOverEagernessBuckets[key]?.score(
+        let decayedScore = typedOverEagernessBuckets[key]?.decayedScore(
             at: now,
             halfLifeSeconds: typedOverEagernessHalfLifeSeconds
         ) ?? 0
-        typedOverEagernessBuckets[key] = PrefixFamilyEagernessBucket(
+        typedOverEagernessBuckets[key] = DecayingScoreBucket(
             score: decayedScore + 1,
             updatedAt: now
         )
@@ -306,11 +306,11 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         for key: PrefixFamilyCooldownKey,
         now: Date
     ) {
-        let decayedScore = acceptedThenDeletedEagernessBuckets[key]?.score(
+        let decayedScore = acceptedThenDeletedEagernessBuckets[key]?.decayedScore(
             at: now,
             halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds
         ) ?? 0
-        acceptedThenDeletedEagernessBuckets[key] = PrefixFamilyEagernessBucket(
+        acceptedThenDeletedEagernessBuckets[key] = DecayingScoreBucket(
             score: decayedScore + 1,
             updatedAt: now
         )
@@ -318,10 +318,10 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
 
     private mutating func expireEagernessBuckets(now: Date) {
         typedOverEagernessBuckets = typedOverEagernessBuckets.filter { _, bucket in
-            bucket.score(at: now, halfLifeSeconds: typedOverEagernessHalfLifeSeconds) >= 0.05
+            bucket.decayedScore(at: now, halfLifeSeconds: typedOverEagernessHalfLifeSeconds) >= 0.05
         }
         acceptedThenDeletedEagernessBuckets = acceptedThenDeletedEagernessBuckets.filter { _, bucket in
-            bucket.score(at: now, halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds) >= 0.05
+            bucket.decayedScore(at: now, halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds) >= 0.05
         }
     }
 
@@ -399,14 +399,4 @@ private struct PrefixFamilyCooldownKey: Hashable, Sendable {
     let prefixTokenCount: Int
     let prefixFamilyFingerprintVersion: String?
     let prefixFamilyHMACToken: String?
-}
-
-private struct PrefixFamilyEagernessBucket: Equatable, Sendable {
-    let score: Double
-    let updatedAt: Date
-
-    func score(at now: Date, halfLifeSeconds: TimeInterval) -> Double {
-        let elapsedSeconds = max(0, now.timeIntervalSince(updatedAt))
-        return score * pow(0.5, elapsedSeconds / halfLifeSeconds)
-    }
 }
