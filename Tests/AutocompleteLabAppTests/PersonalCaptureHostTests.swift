@@ -61,6 +61,72 @@ struct PersonalCaptureHostTests {
         host.deleteAll()
     }
 
+    @Test("Missing fingerprint secret omits replay context")
+    func missingFingerprintSecretOmitsReplayContext() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("steadytype-personal-capture-missing-secret-\(UUID().uuidString)", isDirectory: true)
+        let episodes = PersonalCaptureEpisodeStore(folderURL: root.appendingPathComponent("episodes"))
+        let host = PersonalCaptureHost(
+            dependencies: PersonalCaptureHostDependencies(
+                isEnabled: { true },
+                runtimeDiagnosticsMetadata: { [:] },
+                fingerprintSecret: { nil },
+                compactRect: { _ in "none" }
+            ),
+            journal: PersonalCaptureJournalWriter(folderURL: root.appendingPathComponent("journal")),
+            episodes: episodes
+        )
+        let visiblePageContext = try #require(VisiblePageContext(text: "visible context"))
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        host.recordSuggestionEpisodePresented(
+            suggestionID: "missing-secret-episode",
+            request: CompletionRequest(
+                textBeforeCursor: "draft",
+                appBundleIdentifier: "com.apple.TextEdit",
+                fieldKind: .singlelineCompose,
+                visiblePageContext: visiblePageContext,
+                suggestionID: "missing-secret-episode"
+            ),
+            context: makeContext(isSecure: false),
+            profile: profile,
+            fieldIdentity: makeField(),
+            fieldClassification: AXFieldClassification(kind: .singlelineCompose, reason: "test"),
+            suggestion: CompletionSuggestion(text: "continuation"),
+            latencyMilliseconds: 100,
+            triggerReason: "test",
+            placement: PlacementHealthPresentation(
+                requestedRenderMode: .inlineAdjacent,
+                renderMode: .inlineAdjacent,
+                anchorRect: CGRect(x: 10, y: 10, width: 1, height: 18),
+                anchorSource: .caret,
+                textLineRect: nil,
+                clippingRect: nil,
+                reason: .healthy
+            ),
+            panelRect: CGRect(x: 10, y: 10, width: 120, height: 24),
+            screenshotPath: "",
+            metadata: [:]
+        )
+        episodes.waitForPendingWrites()
+
+        let day = PersonalCaptureEpisodeStore.dayString(from: Date(), calendar: .current)
+        let fileURL = URL(fileURLWithPath: episodes.folderPath)
+            .appendingPathComponent("\(day).episodes.jsonl")
+        let line = try #require(
+            String(contentsOf: fileURL, encoding: .utf8)
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .first
+        )
+        let record = try JSONDecoder().decode(
+            SuggestionEpisodeRecord.self,
+            from: Data(line.utf8)
+        )
+
+        #expect(record.replayContext == nil)
+        host.deleteAll()
+    }
+
     @Test("AppDelegate delegates personal capture record construction")
     func appDelegateUsesPersonalCaptureHost() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
