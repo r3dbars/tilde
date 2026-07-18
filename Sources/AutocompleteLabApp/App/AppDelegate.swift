@@ -194,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private let accessibilityClient = AccessibilityClient()
+    private lazy var accessibilityPermissionHost = AccessibilityPermissionHost(client: accessibilityClient)
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
     private let appSettings = AppSettings()
     private let profileStore = CompatibilityProfileStore.mvp
@@ -423,9 +424,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func requestAccessibilityPermissionIfNeededAtLaunch() {
         if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
-            isTrusted: accessibilityClient.isTrusted
+            isTrusted: accessibilityPermissionHost.isTrusted
         ) {
-            accessibilityClient.requestPermissionIfNeeded()
+            accessibilityPermissionHost.requestPermissionIfNeeded()
         }
     }
 
@@ -17910,9 +17911,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func requestAccessibilityPermission() {
-        accessibilityClient.requestPermissionIfNeeded()
+        let isTrusted = accessibilityPermissionHost.requestPermission()
         settingsWindow.refresh(
-            isTrusted: accessibilityClient.isTrusted,
+            isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
             suggestionsPausedUntil: suggestionsPausedUntil,
             runtimeReport: runtimeReadinessReport,
@@ -18004,8 +18005,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     private func openAccessibilitySettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        if let url, NSWorkspace.shared.open(url) {
+        if accessibilityPermissionHost.openAccessibilitySettings() {
             DiagnosticsLog.shared.record("open-accessibility-settings")
         } else {
             DiagnosticsLog.shared.record("open-accessibility-settings-failed")
