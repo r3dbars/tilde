@@ -171,92 +171,6 @@ private struct ObsidianPostAcceptanceSuppression {
     }
 }
 
-private final class ProcessResourceDiagnosticsSampler {
-    private var previousCPUSeconds: Double?
-    private var previousWallTime: Date?
-
-    func sample() -> [String: String] {
-        let now = Date()
-        let cpuSeconds = Self.currentCPUSeconds()
-        var metadata: [String: String] = [
-            "lowPowerMode": String(ProcessInfo.processInfo.isLowPowerModeEnabled),
-            "processorCount": String(ProcessInfo.processInfo.activeProcessorCount),
-            "thermalState": ProcessInfo.processInfo.thermalState.diagnosticsValue
-        ]
-
-        if let rssMB = Self.currentResidentMemoryMegabytes() {
-            metadata["rssMB"] = String(rssMB)
-        }
-
-        if let cpuSeconds {
-            if let previousCPUSeconds, let previousWallTime {
-                let elapsed = max(0.001, now.timeIntervalSince(previousWallTime))
-                let cpuPercent = max(0, ((cpuSeconds - previousCPUSeconds) / elapsed) * 100)
-                metadata["cpuPercent"] = String(format: "%.1f", cpuPercent)
-            } else {
-                metadata["cpuPercent"] = "0.0"
-            }
-            previousCPUSeconds = cpuSeconds
-            previousWallTime = now
-        }
-
-        return metadata
-    }
-
-    private static func currentCPUSeconds() -> Double? {
-        var usage = rusage()
-        guard getrusage(RUSAGE_SELF, &usage) == 0 else {
-            return nil
-        }
-
-        return seconds(from: usage.ru_utime) + seconds(from: usage.ru_stime)
-    }
-
-    private static func seconds(from timeValue: timeval) -> Double {
-        Double(timeValue.tv_sec) + (Double(timeValue.tv_usec) / 1_000_000)
-    }
-
-    private static func currentResidentMemoryMegabytes() -> Int? {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<mach_task_basic_info>.stride / MemoryLayout<natural_t>.stride
-        )
-        let result = withUnsafeMutablePointer(to: &info) { pointer in
-            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
-                task_info(
-                    mach_task_self_,
-                    task_flavor_t(MACH_TASK_BASIC_INFO),
-                    reboundPointer,
-                    &count
-                )
-            }
-        }
-        guard result == KERN_SUCCESS else {
-            return nil
-        }
-
-        let megabyte = UInt64(1_048_576)
-        return Int((UInt64(info.resident_size) + megabyte - 1) / megabyte)
-    }
-}
-
-private extension ProcessInfo.ThermalState {
-    var diagnosticsValue: String {
-        switch self {
-        case .nominal:
-            "nominal"
-        case .fair:
-            "fair"
-        case .serious:
-            "serious"
-        case .critical:
-            "critical"
-        @unknown default:
-            "unknown"
-        }
-    }
-}
-
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private struct ProofOnlyAcceptRecentSuggestion {
@@ -279,38 +193,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let geometrySnapshot: SuggestionGeometrySnapshot?
     }
 
-    private let accessibilityClient = AccessibilityClient()
+    let accessibilityClient = AccessibilityClient()
+    private lazy var accessibilityPermissionHost = AccessibilityPermissionHost(client: accessibilityClient)
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
-    private let appSettings = AppSettings()
+    let appSettings = AppSettings()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
-    private let codexPromptTargetContinuityPolicy = CodexPromptTargetContinuityPolicy()
-    private let codexPromptPresentationRefreshRetryPolicy = CodexPromptPresentationRefreshRetryPolicy()
-    private let codexPromptPresentationPreparationPolicy = CodexPromptPresentationPreparationPolicy()
+    private let codexPromptTargetContinuityHost = CodexPromptTargetContinuityHost()
     private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
     private let personalCapturePolicy = PersonalCapturePolicy()
-    private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
-    private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let personalizationCoordinator = PersonalizationCoordinator()
-    private let suggestionControlPolicy = SuggestionControlPolicy()
+    private lazy var personalCaptureHost = PersonalCaptureHost(
+        dependencies: PersonalCaptureHostDependencies(
+            isEnabled: { [weak self] in self?.appSettings.personalCaptureEnabled ?? false },
+            runtimeDiagnosticsMetadata: { [weak self] in self?.modelRuntimeBundle.diagnosticsMetadata ?? [:] },
+            fingerprintSecret: { [weak self] in self?.tracePrivacySecretStore.secret() },
+            compactRect: { [weak self] rect in
+                guard let rect else { return "none" }
+                return self?.compactRectDescription(rect) ?? "none"
+            }
+        )
+    )
+    private let suggestionSessionBehaviors = SuggestionSessionBehaviors()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
-    private let suggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
     private let obsidianTrustedEndOfDocumentSnapshotPolicy = ObsidianTrustedEndOfDocumentSnapshotPolicy()
-    private let proofActivationModePolicy = ProofActivationModePolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
-    private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
-    private let modelInstallHost = ModelInstallHost()
+    lazy var runtimeStatusHost = RuntimeStatusHost(handler: self)
+    lazy var modelInstallLifecycleHost = ModelInstallLifecycleHost(handler: self)
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
-    private var completionLengthConfiguration: CompletionLengthConfiguration {
+    private lazy var appEnablementHost = AppEnablementHost(profileStore: profileStore)
+    private lazy var appTargetStateHost = AppTargetStateHost(profileStore: profileStore)
+    private lazy var suggestionPauseStateHost = SuggestionPauseStateHost(
+        controlPolicy: suggestionSessionBehaviors.control,
+        schedulePolicy: suggestionPauseSchedulePolicy,
+        onTimedPauseEnded: { [weak self] in
+            self?.setSuggestionDecision("Ready: timed pause ended")
+            self?.refreshRuntimeChrome()
+        }
+    )
+    var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
     private var modelRuntime: any ModelRuntime {
@@ -318,16 +249,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
-    private let keyboardCapturePolicy = KeyboardCapturePolicy()
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
-    private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
-    private let obsidianInsertionVerificationFastPathPolicy = ObsidianInsertionVerificationFastPathPolicy()
-    private let insertionRetryPolicy = InsertionRetryPolicy()
-    private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
-    private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let proofOnlyAcceptRecentSuggestionPolicy = ProofOnlyAcceptRecentSuggestionPolicy()
@@ -342,172 +267,168 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
         engine: engine,
         wordCompletionRanker: wordCompletionRanker,
-        prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()
+        suggestionAnnoyanceBackoffPolicy: makeSuggestionAnnoyanceBackoffPolicy()
     )
     private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionTuning.displayScorePolicy
     }
-    private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
-    private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
     private lazy var appProofModeCoordinator = AppProofModeCoordinator(runtimeProofOptions: runtimeProofOptions)
     private var activeAppProofBundleIdentifiers: Set<String> {
         appProofModeCoordinator.activeBundleIdentifiers
     }
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
-    private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
+    private let focusedTextAXHealthHost = FocusedTextAXHealthHost()
+    private let focusedTextContextDiagnosticsHost = FocusedTextContextDiagnosticsHost()
     private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
     private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
         FocusedTextPollingThrottleSuggestionVisibilityPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
-    private let suggestionPanel = SuggestionPanelController()
-    private let fieldStatusIndicator = FieldStatusIndicatorController()
-    private lazy var suggestionPresentationDelivery = SuggestionPresentationDelivery(
-        panelPresenter: { [suggestionPanel] text, anchorRect, textLineRect, clippingRect, textStyle, renderMode in
-            suggestionPanel.show(
-                text: text,
-                near: anchorRect,
-                alignedTo: textLineRect,
-                boundedBy: clippingRect,
-                style: textStyle,
-                renderMode: renderMode
-            )
-        },
-        fieldStatusPresenter: { [weak self] context in
-            self?.showFieldStatusIndicator(.shown, context: context)
-        }
-    )
+    private lazy var suggestionChromeHost = SuggestionChromeHost()
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
     /// First extracted slice of the suggestion pipeline: owns the focused-text polling driver
     /// (timer, cadence, in-flight guard, throttle/pause, latency/skip stats). AppDelegate holds
     /// it and delegates timing concerns to it via `SuggestionPipelineHost` (see extension below).
-    private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
-    private let diagnosticsWindow = DiagnosticsWindowController()
+    lazy var suggestionPipeline = SuggestionPipelineController(host: self)
+    private lazy var diagnosticsWindowHost = DiagnosticsWindowHost(handler: self)
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
-    private lazy var settingsWindow = SettingsWindowController(
-        requestPermission: { [weak self] in
-            self?.requestAccessibilityPermission()
+    private lazy var appPreferencePersistenceHost = AppPreferencePersistenceHost()
+    private lazy var suggestionTuningHost = SuggestionTuningHost(
+        currentTuning: { [weak self] in
+            self?.appPreferencePersistenceHost.suggestionTuning ?? SuggestionTuning()
         },
-        openAccessibilitySettings: { [weak self] in
-            self?.openAccessibilitySettings()
+        updateTuning: { [weak self] tuning in
+            self?.appPreferencePersistenceHost.suggestionTuning = tuning
         },
-        toggleSuggestionsPaused: { [weak self] in
-            self?.togglePauseSuggestions()
+        persistTuning: { [weak self] in
+            self?.appPreferencePersistenceHost.persistSuggestionTuning()
         },
-        pauseSuggestionsFor15Minutes: { [weak self] in
-            self?.pauseSuggestionsFor15Minutes()
+        clearPendingRequest: { [weak self] in
+            self?.lastRequestedTextBeforeCursor = nil
+            _ = self?.invalidatePendingSuggestionRequest()
         },
-        pauseSuggestionsFor1Hour: { [weak self] in
-            self?.pauseSuggestionsFor1Hour()
+        hasVisibleSuggestion: { [weak self] in
+            self?.suggestionSession.hasVisibleSuggestion == true
         },
-        pauseSuggestionsUntilTomorrow: { [weak self] in
-            self?.pauseSuggestionsUntilTomorrowFromControl()
+        hideSuggestion: { [weak self] reason in
+            self?.hideSuggestion(reason: reason)
         },
-        silenceCurrentField: { [weak self] in
-            self?.silenceCurrentField()
+        setSuggestionDecision: { [weak self] decision in
+            self?.setSuggestionDecision(decision)
         },
-        performRuntimeAction: { [weak self] action in
-            self?.performRuntimeAction(action)
-        },
-        toggleCurrentApp: { [weak self] in
-            self?.toggleCurrentApp()
-        },
-        toggleCurrentAppMirrorMode: { [weak self] in
-            self?.toggleCurrentAppMirrorMode()
-        },
-        startCurrentAppProof: { [weak self] in
-            self?.startCurrentAppProof()
-        },
-        startTextEditPractice: { [weak self] in
-            self?.startTextEditPractice()
-        },
-        enableAllApps: { [weak self] in
-            self?.enableAllDisabledApps()
-        },
-        toggleTracingPaused: { [weak self] in
-            self?.toggleSettingsTracingPaused()
-        },
-        toggleRawContentTracing: { [weak self] in
-            self?.toggleRawContentTracing()
-        },
-        toggleScreenshotTracing: { [weak self] in
-            self?.toggleGlobalScreenshotTracing()
-        },
-        toggleVisiblePageContext: { [weak self] in
-            self?.toggleVisiblePageContext()
-        },
-        togglePersonalCapture: { [weak self] in
-            self?.togglePersonalCapture()
-        },
-        revealPersonalCaptureFolder: { [weak self] in
-            self?.revealPersonalCaptureFolder()
-        },
-        deletePersonalCapture: { [weak self] in
-            self?.deletePersonalCapture()
-        },
-        deleteLocalLogs: { [weak self] in
-            self?.deleteLocalPrivacyLogs()
-        },
-        clearLearningData: { [weak self] in
-            self?.clearLearningData()
-        },
-        exportPrivacyBundle: { [weak self] in
-            self?.exportTraceReport()
-        },
-        cycleAcceptAllShortcut: { [weak self] in
-            self?.cycleAcceptAllShortcut()
-        },
-        setAcceptAllShortcut: { [weak self] shortcut in
-            self?.setAcceptAllShortcut(shortcut)
-        },
-        setSuggestionAggressivenessLevel: { [weak self] level in
-            self?.setSuggestionAggressivenessLevel(level)
-        },
-        setSuggestionMaxVisibleWords: { [weak self] words in
-            self?.setSuggestionMaxVisibleWords(words)
-        },
-        setSuggestionWordStartCharacters: { [weak self] characters in
-            self?.setSuggestionWordStartCharacters(characters)
-        },
-        setSuggestionPhraseStartWords: { [weak self] words in
-            self?.setSuggestionPhraseStartWords(words)
-        },
-        setSuggestionResponseSpeedLevel: { [weak self] level in
-            self?.setSuggestionResponseSpeedLevel(level)
-        },
-        setSuggestionConfidenceLevel: { [weak self] level in
-            self?.setSuggestionConfidenceLevel(level)
-        },
-        setSuggestionLearningRestraintLevel: { [weak self] level in
-            self?.setSuggestionLearningRestraintLevel(level)
-        },
-        resetSuggestionTuning: { [weak self] in
-            self?.resetSuggestionTuning()
+        refreshRuntimeChrome: { [weak self] in
+            self?.refreshRuntimeChrome()
         }
     )
+    private lazy var keyboardEventCaptureHost = KeyboardEventCaptureHost(
+        handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
+            self?.handleAutocompleteKey(
+                key,
+                isAutorepeat: isAutorepeat,
+                didObservePassthroughKeyDown: didObservePassthroughKeyDown
+            ) ?? .replayOriginalKey(.noVisibleSuggestion)
+        },
+        passthroughKeyDownObserver: { [weak self] in
+            self?.observePassthroughTypingKeyDown()
+        },
+        passthroughTypingMatchObserver: { [weak self] transition in
+            self?.observeOptimisticTypeThrough(transition)
+        },
+        disabledObserver: { [weak self] reason in
+            self?.handleKeyboardEventTapDisabled(reason: reason)
+        },
+        idleStateProvider: { [weak self] in
+            KeyboardEventCaptureIdleState(
+                hasVisibleSuggestion: self?.suggestionSession.hasVisibleSuggestion == true,
+                isSuggestionPanelVisible: self?.suggestionChromeHost.isSuggestionPanelVisible == true,
+                hasPendingAcceptedInsertionUndo: self?.acceptedInsertionUndoIsActive() == true
+            )
+        }
+    )
+    private var keyboardEventTap: KeyboardEventCaptureHost? {
+        keyboardEventCaptureHost
+    }
+    private lazy var settingsWindowHost = SettingsWindowHost(handler: self)
+    private var settingsWindow: SettingsWindowController {
+        settingsWindowHost.controller
+    }
+    private lazy var settingsStateHost = SettingsStateHost(
+        dependencies: SettingsStateHostDependencies(
+            appForSettingsState: { [weak self] in self?.appForSettingsState },
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            profileSupportStatus: { [weak self] bundleIdentifier in
+                self?.profileStore.supportStatus(for: bundleIdentifier) ?? .unsupported
+            },
+            disabledBundleIdentifiers: { [weak self] in self?.disabledBundleIdentifiers ?? [] },
+            renderModeOverride: { [weak self] bundleIdentifier in
+                self?.compatibilityLearningStore.profile(for: bundleIdentifier)?.renderModeOverride
+            },
+            fieldControlTarget: { [weak self] in
+                guard let self else { return nil }
+                return self.appTargetStateHost.fieldControlTarget(currentFieldIdentity: self.currentFieldIdentity)
+            },
+            isFieldSilenced: { [weak self] fieldIdentity in
+                self?.suppressedFieldIdentities.contains(fieldIdentity) == true
+            },
+            isTrusted: { [weak self] in self?.accessibilityClient.isTrusted ?? false },
+            suggestionsPaused: { [weak self] in self?.suggestionsPaused ?? false },
+            suggestionsPausedUntil: { [weak self] in self?.suggestionsPausedUntil },
+            runtimeReadinessReport: { [weak self] in
+                self?.runtimeReadinessReport ?? RuntimeReadinessReport(
+                    stage: .runtimeUnavailable,
+                    summary: "runtime unavailable",
+                    action: .retry
+                )
+            },
+            modelDirectoryPath: { [weak self] in self?.modelDirectoryPath ?? "" },
+            modelInstallStatusText: { [weak self] in self?.runtimeStatusHost.modelInstallStatus ?? "" },
+            modelInstallInProgress: { [weak self] in self?.modelInstallLifecycleHost.isInstalling ?? false },
+            isTextEditEnabled: { [weak self] in
+                guard let self else { return false }
+                return !self.disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
+            },
+            acceptAllShortcut: { [weak self] in
+                self?.keyboardShortcutConfiguration.acceptAllShortcut ?? .disabled
+            },
+            tracingPaused: { RawAutocompleteTraceLog.shared.isPaused },
+            rawContentTracingEnabled: { RawAutocompleteTraceLog.shared.rawContentTracingEnabled },
+            rawContentTracingExpiresAt: { RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt },
+            screenshotTracingEnabled: { RawAutocompleteTraceLog.shared.screenshotTracingEnabled },
+            screenshotTracingExpiresAt: { RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt },
+            visiblePageContextEnabled: { [weak self] in self?.visiblePageContextEnabled ?? false },
+            personalCaptureEnabled: { [weak self] in self?.appSettings.personalCaptureEnabled ?? false },
+            diagnosticsPath: { DiagnosticsLog.shared.path },
+            tracePath: { RawAutocompleteTraceLog.shared.path },
+            personalCapturePath: { PersonalCaptureJournalWriter.shared.folderPath },
+            suggestionTuning: { [weak self] in self?.suggestionTuning ?? SuggestionTuning() },
+            modelName: { [weak self] in
+                self?.modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue ?? "unknown"
+            },
+            completionLengthSummary: { [weak self] in self?.completionLengthConfiguration.displaySummary ?? "default" }
+        )
+    )
+    lazy var statusMenuHost = StatusMenuHost(
+        handler: self,
+        developerMenuEnabled: developerMenuEnabled
+    )
+    private lazy var statusChromeHost = StatusChromeHost(
+        statusMenuHost: statusMenuHost,
+        settingsWindow: { [weak self] in self?.settingsWindow }
+    )
+    lazy var workspaceObserverHost = WorkspaceObserverHost(handler: self)
+    let resourceDiagnosticsHost = ResourceDiagnosticsHost()
+    private lazy var appLifecycleHost = AppLifecycleHost(handler: self)
 
-    private var statusItem: NSStatusItem?
-    private var statusMenuItem: NSMenuItem?
-    private var suggestionDecisionMenuItem: NSMenuItem?
-    private var runtimeMenuItem: NSMenuItem?
-    private var pauseSuggestionsMenuItem: NSMenuItem?
-    private var silenceFieldMenuItem: NSMenuItem?
-    private var toggleAppMenuItem: NSMenuItem?
-    private var workspaceFocusObservers: [NSObjectProtocol] = []
-    private var screenGeometryObserver: NSObjectProtocol?
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
-    private var resourceDiagnosticsTimer: Timer?
-    private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
-    private lazy var suggestionSummonHotKey = SuggestionSummonHotKey { [weak self] in
+    private lazy var suggestionSummonHotKeyHost = SuggestionSummonHotKeyHost { [weak self] in
         self?.requestSuggestionNow(source: "hotkey")
     }
-    private var keyboardEventTap: KeyboardEventTap?
-    private var keyboardEventTapStopTask: Task<Void, Never>?
-    private var prefixCooldownRetryTask: Task<Void, Never>?
-    private var suggestionSession = SuggestionSession()
+    private let prefixCooldownRetryHost = PrefixCooldownRetryHost()
+    let suggestionSession = SuggestionSessionHost()
+    private let focusedTextSessionStateHost = FocusedTextSessionStateHost()
     private var lastCaretRect: CGRect?
     private var lastTextLineRect: CGRect?
     private var lastClippingRect: CGRect?
@@ -515,37 +436,906 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastRenderMode: SuggestionRenderMode?
     private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
     private var lastVisibleSuggestionGeometrySnapshot: SuggestionGeometrySnapshot?
-    private var currentFieldIdentity: FocusedFieldIdentity?
-    private var currentProfile: CompatibilityProfile?
-    private var lastTextSnapshot: FocusedTextSnapshot?
-    private var lastTrustedCodexPromptTargetContinuityAnchor: CodexPromptTargetContinuityAnchor?
-    private var codexPromptAXCooldownPreservation: CodexPromptAXCooldownPreservation?
-    private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
-    private var personalCaptureLastSnapshot: FocusedTextSnapshot?
-    private var lastFocusedTextChangeAt: Date?
-    private var lastRequestedTextBeforeCursor: String?
-    private var manualSuggestionRequestPending = false
-    private var manualSuggestionRetryTask: Task<Void, Never>?
+    private var currentFieldIdentity: FocusedFieldIdentity? {
+        get { focusedTextSessionStateHost.currentFieldIdentity }
+        set { focusedTextSessionStateHost.currentFieldIdentity = newValue }
+    }
+    private var currentProfile: CompatibilityProfile? {
+        get { focusedTextSessionStateHost.currentProfile }
+        set { focusedTextSessionStateHost.currentProfile = newValue }
+    }
+    private var lastTextSnapshot: FocusedTextSnapshot? {
+        get { focusedTextSessionStateHost.lastTextSnapshot }
+        set { focusedTextSessionStateHost.lastTextSnapshot = newValue }
+    }
+    private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot? {
+        get { focusedTextSessionStateHost.lastTrustedObsidianEndOfDocumentSnapshot }
+        set { focusedTextSessionStateHost.lastTrustedObsidianEndOfDocumentSnapshot = newValue }
+    }
+    var lastFocusedTextChangeAt: Date? {
+        get { focusedTextSessionStateHost.lastFocusedTextChangeAt }
+        set { focusedTextSessionStateHost.lastFocusedTextChangeAt = newValue }
+    }
+    private var lastRequestedTextBeforeCursor: String? {
+        get { focusedTextSessionStateHost.lastRequestedTextBeforeCursor }
+        set { focusedTextSessionStateHost.lastRequestedTextBeforeCursor = newValue }
+    }
+    private let manualSuggestionRequestHost = ManualSuggestionRequestHost()
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
-    private var disabledBundleIdentifiers: Set<String> = []
-    private var debounceTask: Task<Void, Never>?
-    private var debounceTaskSuggestionID: String?
-    private var codexPromptPresentationRetryTask: Task<Void, Never>?
-    private var insertionVerificationTask: Task<Void, Never>?
-    private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
+    private var disabledBundleIdentifiers: Set<String> {
+        get { appEnablementHost.disabledBundleIdentifiers }
+        set { appEnablementHost.disabledBundleIdentifiers = newValue }
+    }
+    private let suggestionRequestScheduler = SuggestionRequestScheduler()
+    private let codexPromptPresentationRetryHost = CodexPromptPresentationRetryHost()
+    private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
+    private let deferredTerminalHostAcceptanceHost = DeferredTerminalHostAcceptanceHost()
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
-    private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
-    private var pauseExpirationTask: Task<Void, Never>?
+    private let acceptanceSurvivalTaskHost = AcceptanceSurvivalTaskHost()
+    private lazy var suggestionRequestCancellationHost = SuggestionRequestCancellationHost(
+        dependencies: SuggestionRequestCancellationHostDependencies(
+            clearCooldownPreservation: { [weak self] in
+                self?.codexPromptTargetContinuityHost.clearCooldownPreservation()
+            },
+            hasScheduledPresentationRetry: { [weak self] in
+                self?.codexPromptPresentationRetryHost.hasScheduledRetry == true
+            },
+            cancelPresentationRetry: { [weak self] in
+                self?.codexPromptPresentationRetryHost.cancel()
+            },
+            cancelPendingRequest: { [weak self] in
+                self?.suggestionRequestScheduler.cancelPendingRequest() ?? false
+            },
+            clearStreamingPresentations: { [weak self] in
+                self?.suggestionOrchestrator.clearStreamingPresentations()
+            },
+            invalidateRequest: { [weak self] in
+                self?.suggestionOrchestrator.invalidate()
+            }
+        )
+    )
+    private lazy var suggestionRequestPreparationHost = SuggestionRequestPreparationHost(
+        dependencies: SuggestionRequestPreparationHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            acceptedTextStyleSketch: { [weak self] key in
+                self?.acceptedTextStyleMemory.sketch(for: key)
+            },
+            personalizationCoordinator: personalizationCoordinator,
+            isPersonalCaptureEnabled: { [weak self] in
+                self?.appSettings.personalCaptureEnabled ?? false
+            },
+            maxVisibleWords: { [weak self] requestMode, profile in
+                self?.maxVisibleWords(for: requestMode, profile: profile)
+                    ?? CompletionModelPolicy.mvp.maxVisibleWords
+            },
+            suggestionTuning: { [weak self] in
+                self?.suggestionTuning ?? SuggestionTuning()
+            },
+            triggerTiming: suggestionSessionBehaviors.triggerTiming
+        )
+    )
+    private lazy var suggestionStreamingPartialHost = SuggestionStreamingPartialHost(
+        dependencies: SuggestionStreamingPartialHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            presentSuggestion: { [weak self] suggestion, presentation in
+                self?.presentSuggestion(
+                    suggestion,
+                    suggestionID: presentation.suggestionID,
+                    request: presentation.request,
+                    context: presentation.context,
+                    profile: presentation.profile,
+                    fieldIdentity: presentation.fieldIdentity,
+                    renderMode: presentation.renderMode,
+                    latencyMilliseconds: presentation.latencyMilliseconds,
+                    triggerReason: "model-stream",
+                    requestTicket: presentation.requestTicket,
+                    candidateSelectionMetadata: presentation.candidateSelectionMetadata
+                )
+            }
+        )
+    )
+    private lazy var suggestionContinuationFailureHost = SuggestionContinuationFailureHost(
+        dependencies: SuggestionContinuationFailureHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
+            hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
+        )
+    )
+    private lazy var suggestionModelResultHost = SuggestionModelResultHost(
+        dependencies: SuggestionModelResultHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            triggerTiming: suggestionSessionBehaviors.triggerTiming,
+            currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            hideSuggestion: { [weak self] reason in
+                if let reason {
+                    self?.hideSuggestion(reason: reason)
+                } else {
+                    self?.hideSuggestion()
+                }
+            },
+            annoyanceContext: { [weak self] appBundleIdentifier, fieldIdentity, requestMode, fieldKind in
+                self?.annoyanceContext(
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentity,
+                    requestMode: requestMode,
+                    fieldKind: fieldKind
+                )
+            },
+            recordAnnoyanceSignal: { [weak self] signal, context, suggestionID, reason in
+                self?.recordAnnoyanceSignal(signal, context: context, suggestionID: suggestionID, reason: reason)
+            },
+            presentSuggestion: { [weak self] suggestion, presentation in
+                self?.presentSuggestion(
+                    suggestion,
+                    suggestionID: presentation.suggestionID,
+                    request: presentation.request,
+                    context: presentation.context,
+                    profile: presentation.profile,
+                    fieldIdentity: presentation.fieldIdentity,
+                    renderMode: presentation.renderMode,
+                    latencyMilliseconds: presentation.latencyMilliseconds,
+                    triggerReason: "model-result",
+                    requestTicket: presentation.requestTicket,
+                    candidateSelectionMetadata: presentation.candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: presentation.scheduledDelayMilliseconds
+                )
+            }
+        )
+    )
+    private lazy var suggestionTypingBurstSuppressionHost = SuggestionTypingBurstSuppressionHost(
+        dependencies: SuggestionTypingBurstSuppressionHostDependencies(
+            cancelIdleRetry: { [weak self] in self?.suggestionIdleRetryState.cancel() },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            showFieldStatusIndicator: { [weak self] state, context in
+                self?.showFieldStatusIndicator(state, context: context)
+            },
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(event, context: context, profile: profile, metadata: metadata)
+            },
+            recordBlockedSuggestionEvent: { [weak self] event, context, profile, fieldIdentity, metadata in
+                self?.recordBlockedSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    metadata: metadata
+                )
+            },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
+            noteTypingBurstSuppression: { [weak self] snapshot, nowMilliseconds, settleDelayMilliseconds in
+                self?.suggestionIdleRetryState.noteTypingBurstSuppression(
+                    snapshot: snapshot,
+                    nowMilliseconds: nowMilliseconds,
+                    settleDelayMilliseconds: settleDelayMilliseconds
+                )
+            },
+            hideSuggestion: { [weak self] reason, metadata in
+                self?.hideSuggestion(reason: reason, metadata: metadata)
+            }
+        )
+    )
+    private lazy var suggestionRequestExecutionHost = SuggestionRequestExecutionHost(
+        dependencies: SuggestionRequestExecutionHostDependencies(
+            scheduler: suggestionRequestScheduler,
+            suggestionOrchestrator: suggestionOrchestrator,
+            handlePartial: { [weak self] partialSuggestion, input in
+                self?.suggestionStreamingPartialHost.handle(
+                    partialSuggestion: partialSuggestion,
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    appBundleIdentifier: input.appBundleIdentifier,
+                    fieldIdentity: input.fieldIdentity,
+                    renderMode: input.renderMode,
+                    requestTicket: input.requestTicket,
+                    requestStartedAt: input.requestStartedAt
+                )
+            },
+            handleFinal: { [weak self] suggestion, input in
+                self?.suggestionModelResultHost.handle(suggestion: suggestion, input: input)
+            },
+            handleFailure: { [weak self] input in
+                self?.suggestionContinuationFailureHost.handle(
+                    suggestionID: input.suggestionID,
+                    requestTicket: input.requestTicket,
+                    fieldIdentity: input.fieldIdentity,
+                    context: input.context,
+                    profile: input.profile
+                )
+            }
+        )
+    )
+    private lazy var suggestionPresentationRefreshHost = SuggestionPresentationRefreshHost(
+        dependencies: SuggestionPresentationRefreshHostDependencies(
+            frontmostApplication: { [weak self] in self?.accessibilityClient.frontmostApplication() },
+            focusedTextContext: { [weak self] app, profile in
+                self?.accessibilityClient.focusedTextContext(
+                    for: app,
+                    allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+                    options: FocusedTextReadOptionsPolicy.options(for: app, profile: profile)
+                )
+            },
+            frontmostAppMatchesSuggestion: { [weak self] app, expectedBundleIdentifier, profile in
+                self?.frontmostAppMatchesSuggestion(
+                    app,
+                    expectedBundleIdentifier: expectedBundleIdentifier,
+                    profile: profile
+                ) ?? false
+            },
+            terminalHostProofBlockReason: { [weak self] app, context, profile in
+                self?.claudeCodeTerminalHostProofBlockReason(
+                    app: app,
+                    context: context,
+                    profile: profile
+                ) ?? "missing-app"
+            },
+            promptTextAreaMatch: { [weak self] bundleIdentifier, context in
+                guard let self else {
+                    return SuggestionPresentationPromptMatch(canSuggest: false, reason: "missing-app")
+                }
+                let match = self.promptTextAreaMatch(for: bundleIdentifier, context: context)
+                return SuggestionPresentationPromptMatch(canSuggest: match.canSuggest, reason: match.reason)
+            },
+            continuityHost: codexPromptTargetContinuityHost,
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            lastTextSnapshot: { [weak self] in self?.lastTextSnapshot },
+            cancelAndRearmCodexPromptTargetWork: { [weak self] app, context, profile, reason, source in
+                self?.cancelAndRearmCodexPromptTargetWork(
+                    app: app,
+                    context: context,
+                    profile: profile,
+                    promptBlockReason: reason,
+                    source: source
+                )
+            },
+            presentationAdjustedContext: { [weak self] context, app, profile, previousSnapshot in
+                self?.presentationAdjustedContext(
+                    context,
+                    app: app,
+                    profile: profile,
+                    previousSnapshot: previousSnapshot
+                )
+            },
+            fieldIdentity: { [weak self] app, context, profile in
+                self?.fieldIdentity(app: app, context: context, profile: profile)
+            },
+            canTrustPromptProofFieldIdentityRefresh: { [weak self] requestFieldIdentity, refreshedFieldIdentity, profile in
+                self?.canTrustPromptProofFieldIdentityRefresh(
+                    requestFieldIdentity: requestFieldIdentity,
+                    refreshedFieldIdentity: refreshedFieldIdentity,
+                    profile: profile
+                ) ?? false
+            },
+            recordDiagnostic: { name, metadata in
+                DiagnosticsLog.shared.record(name, metadata: metadata)
+            }
+        )
+    )
+    private lazy var suggestionPresentationCommitHost = SuggestionPresentationCommitHost(
+        dependencies: SuggestionPresentationCommitHostDependencies(
+            suggestionSession: suggestionSession,
+            currentSuggestionState: currentSuggestionState,
+            targetFingerprint: { [weak self] context in
+                self?.targetFingerprint(context: context)
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            activateKeyboardCapture: { [weak self] in
+                guard let self else { return false }
+                return self.keyboardEventCaptureHost.activateForSuggestionPresentation(
+                    isTrustedForAccessibility: self.accessibilityClient.isTrusted,
+                    hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
+                    controlState: self.suggestionControlState,
+                    snapshot: self.keyboardEventTapSnapshot()
+                )
+            },
+            handleKeyboardCaptureUnavailable: { [weak self] in
+                self?.setSuggestionDecision("Blocked: keyboard capture unavailable")
+                self?.hideSuggestion(reason: "keyboard-capture-unavailable")
+            },
+            cacheProofOnlyAcceptRecentSuggestion: { [weak self] input, acceptanceSnapshot, presentedAt in
+                self?.cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+                    suggestion: input.suggestion,
+                    suggestionID: input.suggestionID,
+                    appBundleIdentifier: input.request.appBundleIdentifier ?? input.profile.bundleIdentifier,
+                    fieldIdentity: input.fieldIdentity,
+                    requestMode: input.request.mode,
+                    textBeforeCursor: input.request.textBeforeCursor,
+                    acceptanceSnapshot: acceptanceSnapshot,
+                    displayedText: input.suggestion.visibleText,
+                    fieldClassification: input.displayFieldClassification,
+                    presentedAt: presentedAt,
+                    displayScoreFinal: input.displayScoreFinal
+                )
+            },
+            recordGeometry: { [weak self] input in
+                self?.lastCaretRect = input.deliveredPlacement.anchorRect
+                self?.lastTextLineRect = input.deliveredPlacement.textLineRect
+                self?.lastClippingRect = input.deliveredPlacement.clippingRect
+                self?.lastTextStyle = input.context.textStyle
+                self?.lastRenderMode = input.deliveredPlacement.renderMode
+                self?.lastVisibleSuggestionGeometrySnapshot = self?.visibleGeometrySnapshot(
+                    context: input.context,
+                    fieldIdentity: input.fieldIdentity,
+                    placement: input.deliveredPlacement
+                )
+            },
+            screenshotCapture: traceScreenshotCaptureCoordinator,
+            compatibilityLearningStore: compatibilityLearningStore,
+            presentationDelivery: suggestionChromeHost.presentationDelivery,
+            recordPersonalCaptureEpisodePresented: { [weak self] input, screenshotCapture, payload in
+                self?.recordPersonalCaptureSuggestionEpisodePresented(
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    fieldIdentity: input.fieldIdentity,
+                    fieldClassification: input.rawDisplayFieldClassification,
+                    suggestion: input.suggestion,
+                    latencyMilliseconds: input.latencyMilliseconds,
+                    triggerReason: input.triggerReason,
+                    placement: input.deliveredPlacement,
+                    panelRect: input.panelRect,
+                    screenshotPath: screenshotCapture.path,
+                    metadata: payload.rawTraceMetadata
+                )
+            },
+            recordSuggestionEvent: { [weak self] input, payload in
+                self?.recordSuggestionEvent(
+                    "suggestion-presented",
+                    context: input.context,
+                    profile: input.profile,
+                    metadata: payload.diagnosticsMetadata
+                )
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() }
+        )
+    )
+    private lazy var suggestionPresentationSuppressionTraceHost = SuggestionPresentationSuppressionTraceHost(
+        dependencies: SuggestionPresentationSuppressionTraceHostDependencies(
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+            }
+        )
+    )
+    private lazy var suggestionPresentationDeliveryHost = SuggestionPresentationDeliveryHost(
+        dependencies: SuggestionPresentationDeliveryHostDependencies(
+            presentationDelivery: suggestionChromeHost.presentationDelivery,
+            suppressionTraceHost: suggestionPresentationSuppressionTraceHost,
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
+        )
+    )
+    private lazy var suggestionPresentationPreparationHost = SuggestionPresentationPreparationHost(
+        dependencies: SuggestionPresentationPreparationHostDependencies(
+            compatibilityLearningStore: compatibilityLearningStore,
+            visualTrustContext: { [weak self] context, bundleIdentifier in
+                self?.compatibilityLearningVisualTrustContext(
+                    for: context,
+                    bundleIdentifier: bundleIdentifier
+                ) ?? CompatibilityLearningVisualTrustContext()
+            },
+            placementHealthPlan: { [weak self] context, profile, adjustment, screenshotTracingEnabled in
+                guard let self else {
+                    return .suppress(
+                        PlacementHealthSuppression(
+                            requestedRenderMode: adjustment.effectiveRenderMode,
+                            reason: .disabled
+                        )
+                    )
+                }
+                return self.suggestionOrchestrator.placementHealthPlan(
+                    context: context,
+                    profile: profile,
+                    learningAdjustment: adjustment,
+                    screenshotTracingEnabled: screenshotTracingEnabled
+                )
+            }
+        )
+    )
+    private lazy var suggestionPresentationPlacementHost = SuggestionPresentationPlacementHost(
+        dependencies: SuggestionPresentationPlacementHostDependencies(
+            suppressionTraceHost: suggestionPresentationSuppressionTraceHost,
+            recordPlacementUncertainty: { [weak self] input, reason, metadata in
+                self?.recordPlacementUncertainty(
+                    suggestionID: input.suggestionID,
+                    appBundleIdentifier: input.request.appBundleIdentifier ?? input.profile.bundleIdentifier,
+                    fieldIdentity: input.fieldIdentity,
+                    requestMode: input.request.mode,
+                    context: input.context,
+                    reason: reason,
+                    metadata: metadata
+                )
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason in self?.hideSuggestion(reason: reason) }
+        )
+    )
+    private lazy var suggestionTriggerTimingHost = SuggestionTriggerTimingHost(
+        dependencies: SuggestionTriggerTimingHostDependencies(
+            triggerTiming: suggestionSessionBehaviors.triggerTiming,
+            triggerPolicy: { [weak self] profile in
+                self?.triggerPolicy(for: profile) ?? SuggestionTriggerPolicy()
+            },
+            consumeManualSuggestionRequest: { [weak self] in
+                self?.manualSuggestionRequestHost.consumePendingRequest() == true
+            },
+            hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            showFieldStatusIndicator: { [weak self] state, context in
+                self?.showFieldStatusIndicator(state, context: context)
+            },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+            },
+            hideSuggestion: { [weak self] in self?.hideSuggestion() },
+            scheduleSuggestion: { [weak self] schedule in
+                self?.scheduleSuggestion(
+                    context: schedule.context,
+                    profile: schedule.profile,
+                    appBundleIdentifier: schedule.suggestionAppBundleIdentifier,
+                    fieldIdentity: schedule.fieldIdentity,
+                    fieldClassification: schedule.fieldClassification,
+                    renderMode: schedule.renderMode,
+                    delayMilliseconds: schedule.delayMilliseconds,
+                    timingLane: schedule.timingLane,
+                    requestMode: schedule.requestMode,
+                    typingBurstDecision: schedule.typingBurstDecision,
+                    visiblePageContext: schedule.visiblePageContext,
+                    triggerReason: schedule.triggerReason
+                )
+            }
+        )
+    )
+    private lazy var suggestionSchedulingHost = SuggestionSchedulingHost(
+        dependencies: SuggestionSchedulingHostDependencies(
+            cancelPrefixCooldownRetry: { [weak self] in self?.cancelPrefixCooldownRetry() },
+            cancelPendingSuggestionTask: { [weak self] reason in
+                self?.cancelPendingSuggestionTask(reason: reason)
+            },
+            setLastRequestedTextBeforeCursor: { [weak self] text in
+                self?.lastRequestedTextBeforeCursor = text
+            },
+            suggestionRequestPreparationHost: suggestionRequestPreparationHost,
+            suggestionOrchestrator: suggestionOrchestrator,
+            runtimeProofOptions: runtimeProofOptions,
+            activeAppProofBundleIdentifiers: activeAppProofBundleIdentifiers,
+            recentWordMemoryWords: { [weak self] scope in
+                self?.recentWordMemory.words(for: scope) ?? []
+            },
+            suggestionSession: suggestionSession,
+            currentSuggestionID: { [weak self] in self?.currentSuggestionState.id },
+            acceptedAndKeptSignal: { [unowned self] request, fieldClassification, profile in
+                self.acceptedAndKeptSignal(
+                    request: request,
+                    fieldClassification: fieldClassification,
+                    profile: profile
+                )
+            },
+            acceptedAndKeptLearning: { [weak self] in
+                self?.acceptedAndKeptLearning ?? AcceptedAndKeptLearningStore()
+            },
+            shouldAskModelForWordCompletionFallback: { [unowned self] visiblePageContext in
+                self.shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext)
+            },
+            shouldUsePredictiveWordFallback: { [unowned self] profile, visiblePageContext in
+                self.shouldUsePredictiveWordFallback(
+                    profile: profile,
+                    visiblePageContext: visiblePageContext
+                )
+            },
+            shouldUsePredictivePhraseFallback: { [unowned self] profile, behaviorProfileID, visiblePageContext in
+                self.shouldUsePredictivePhraseFallback(
+                    profile: profile,
+                    behaviorProfileID: behaviorProfileID,
+                    visiblePageContext: visiblePageContext
+                )
+            },
+            triggerPolicy: { [unowned self] profile in self.triggerPolicy(for: profile) },
+            suggestionTypingBurstSuppressionHost: suggestionTypingBurstSuppressionHost,
+            suggestionRequestExecutionHost: suggestionRequestExecutionHost,
+            suggestionIdleRetryState: suggestionIdleRetryState,
+            recordSuggestionEvent: { [weak self] event, context, profile, metadata in
+                self?.recordSuggestionEvent(
+                    event,
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+            },
+            recordAnnoyanceSignal: { [weak self] signal, context, suggestionID, reason, metadata in
+                self?.recordAnnoyanceSignal(
+                    signal,
+                    context: context,
+                    suggestionID: suggestionID,
+                    reason: reason,
+                    metadata: metadata
+                )
+            },
+            annoyanceContext: { [unowned self] appBundleIdentifier, fieldIdentity, requestMode, fieldKind in
+                self.annoyanceContext(
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentity,
+                    requestMode: requestMode,
+                    fieldKind: fieldKind
+                )
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            hideSuggestion: { [weak self] in self?.hideSuggestion() },
+            presentSuggestion: { [weak self] suggestion, suggestionID, request, context, profile, fieldIdentity, renderMode, latencyMilliseconds, triggerReason, requestTicket, candidateSelectionMetadata, refreshBeforePresenting in
+                self?.presentSuggestion(
+                    suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    renderMode: renderMode,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    requestTicket: requestTicket,
+                    candidateSelectionMetadata: candidateSelectionMetadata,
+                    refreshBeforePresenting: refreshBeforePresenting
+                )
+            }
+        )
+    )
+    private lazy var suggestionPresentationOrchestrationHost = SuggestionPresentationOrchestrationHost(
+        dependencies: SuggestionPresentationOrchestrationHostDependencies(
+            codexPromptTargetContinuityHost: codexPromptTargetContinuityHost,
+            suggestionOrchestrator: suggestionOrchestrator,
+            suggestionSession: suggestionSession,
+            currentSuggestionState: currentSuggestionState,
+            currentFieldIdentity: { [weak self] in self?.currentFieldIdentity },
+            lastTextSnapshot: { [weak self] in self?.lastTextSnapshot },
+            displayScorePolicy: displayScorePolicy,
+            suggestionTuning: { [unowned self] in self.suggestionTuning },
+            suggestionReplacementVisibilityPolicy: suggestionReplacementVisibilityPolicy,
+            maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds,
+            suggestionPresentationPreparationHost: suggestionPresentationPreparationHost,
+            suggestionPresentationSuppressionTraceHost: suggestionPresentationSuppressionTraceHost,
+            suggestionPresentationPlacementHost: suggestionPresentationPlacementHost,
+            suggestionPresentationDeliveryHost: suggestionPresentationDeliveryHost,
+            suggestionPresentationCommitHost: suggestionPresentationCommitHost,
+            codexPromptAXCooldownPresentationDelayMilliseconds: { [unowned self] profile, fieldIdentity in
+                self.codexPromptAXCooldownPresentationDelayMilliseconds(
+                    profile: profile,
+                    fieldIdentity: fieldIdentity
+                )
+            },
+            scheduleCodexPromptPresentationRefreshRetry: { [weak self] input in
+                self?.scheduleCodexPromptPresentationRefreshRetry(
+                    input.suggestion,
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    fieldIdentity: input.fieldIdentity,
+                    renderMode: input.renderMode,
+                    latencyMilliseconds: input.latencyMilliseconds,
+                    triggerReason: input.triggerReason,
+                    requestTicket: input.requestTicket,
+                    candidateSelectionMetadata: input.candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: input.scheduledDelayMilliseconds,
+                    retry: input.retry
+                )
+            },
+            scheduleCodexPromptPresentationAfterAXCooldown: { [weak self] input in
+                self?.scheduleCodexPromptPresentationAfterAXCooldown(
+                    input.suggestion,
+                    suggestionID: input.suggestionID,
+                    request: input.request,
+                    context: input.context,
+                    profile: input.profile,
+                    fieldIdentity: input.fieldIdentity,
+                    renderMode: input.renderMode,
+                    latencyMilliseconds: input.latencyMilliseconds,
+                    triggerReason: input.triggerReason,
+                    requestTicket: input.requestTicket,
+                    candidateSelectionMetadata: input.candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: input.scheduledDelayMilliseconds,
+                    presentationRefreshAttempt: input.presentationRefreshAttempt,
+                    delayMilliseconds: input.delayMilliseconds
+                )
+            },
+            refreshedPresentationContext: { [unowned self] request, requestContext, profile, fieldIdentity in
+                self.refreshedPresentationContext(
+                    for: request,
+                    requestContext: requestContext,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity
+                )
+            },
+            traceGeometryMetadata: { [unowned self] context, renderMode in
+                self.traceGeometryMetadata(context: context, renderMode: renderMode)
+            },
+            traceRequestMetadata: { [unowned self] request, context in
+                self.traceRequestMetadata(request: request, context: context)
+            },
+            traceRequestMetadataForField: { [unowned self] request, fieldClassification in
+                self.traceRequestMetadata(
+                    request: request,
+                    fieldClassification: fieldClassification
+                )
+            },
+            fieldClassification: { [unowned self] context in self.fieldClassification(for: context) },
+            effectiveSuggestionFieldClassification: { [unowned self] context, profile, raw in
+                self.effectiveSuggestionFieldClassificationForCurrentFrontmost(
+                    context: context,
+                    profile: profile,
+                    raw: raw
+                )
+            },
+            acceptedAndKeptSignal: { [unowned self] request, fieldClassification, profile in
+                self.acceptedAndKeptSignal(
+                    request: request,
+                    fieldClassification: fieldClassification,
+                    profile: profile
+                )
+            },
+            currentSuggestionAgeMilliseconds: { [unowned self] in self.currentSuggestionAgeMilliseconds() },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason, metadata in
+                self?.hideSuggestion(reason: reason, metadata: metadata)
+            },
+            showFieldStatusIndicator: { [weak self] state, context in
+                self?.showFieldStatusIndicator(state, context: context)
+            },
+            repositionVisibleSuggestion: { [weak self] context, profile in
+                self?.repositionVisibleSuggestion(context: context, profile: profile)
+            },
+            updateKeyboardEventTapSnapshot: { [weak self] in self?.updateKeyboardEventTapSnapshot() },
+            setLastCompatibilityLearningTrustContext: { [weak self] context in
+                self?.lastCompatibilityLearningTrustContext = context
+            },
+            cancelKeyboardEventTapIdleStop: { [weak self] in self?.cancelKeyboardEventTapIdleStop() }
+        )
+    )
+    private(set) lazy var suggestionInsertionHost = SuggestionInsertionHost(
+        dependencies: SuggestionInsertionHostDependencies(
+            currentProfile: { [unowned self] in self.currentProfile },
+            currentSuggestionState: currentSuggestionState,
+            currentFieldIdentity: { [unowned self] in self.currentFieldIdentity },
+            acceptedTextSafetyPolicy: acceptedTextSafetyPolicy,
+            setSuggestionDecision: { [unowned self] decision in self.setSuggestionDecision(decision) },
+            hideSuggestion: { [unowned self] reason in self.hideSuggestion(reason: reason) },
+            suppressPassthroughObservation: { [weak self] until in
+                self?.keyboardEventTap?.suppressPassthroughObservation(until: until)
+            },
+            shouldUseClaudeCodeTerminalHostProofDirectInsertion: { [unowned self] profile, action in
+                self.shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action)
+            },
+            shouldUseCodexProofDirectInsertion: { [unowned self] profile in
+                self.shouldUseCodexProofDirectInsertion(profile: profile)
+            },
+            shouldUseClaudeDesktopProofDirectInsertion: { [unowned self] profile in
+                self.shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
+            },
+            shouldUseObsidianDirectValueInsertion: { [unowned self] profile, action in
+                self.shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
+            },
+            shouldUseObsidianSystemEventsInsertion: { [unowned self] profile in
+                self.shouldUseObsidianSystemEventsInsertion(profile: profile)
+            },
+            insertCodexProofText: { [unowned self] acceptedText in self.insertCodexProofText(acceptedText) },
+            insertClaudeCodeTerminalHostProofText: { [unowned self] acceptedText in
+                self.insertClaudeCodeTerminalHostProofText(acceptedText)
+            },
+            insertClaudeDesktopProofText: { [unowned self] acceptedText in
+                self.insertClaudeDesktopProofText(acceptedText)
+            },
+            insertObsidianDirectValueText: { [unowned self] acceptedText, profile in
+                self.insertObsidianDirectValueText(acceptedText, profile: profile)
+            },
+            insertObsidianSystemEventsPasteText: { [unowned self] acceptedText in
+                self.insertObsidianSystemEventsPasteText(acceptedText)
+            },
+            repairObsidianFullAcceptCaret: { [unowned self] profile, action in
+                self.repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
+            },
+            defaultInsertion: { [unowned self] acceptedText, profile, expectedFieldIdentity, skippedModes in
+                self.insertionEngine.insert(
+                    acceptedText,
+                    profile: profile,
+                    expectedFieldIdentity: expectedFieldIdentity,
+                    skipping: skippedModes
+                )
+            },
+            pausePolling: { [unowned self] durationMilliseconds in
+                self.suggestionPipeline.pausePolling(now: Date(), durationMilliseconds: durationMilliseconds)
+            },
+            postInsertionPollPauseMilliseconds: postInsertionPollPauseMilliseconds
+        )
+    )
+    private lazy var insertionVerificationBaselineHost = InsertionVerificationBaselineHost(
+        dependencies: InsertionVerificationBaselineHostDependencies(
+            currentFieldIdentity: { [unowned self] in self.currentFieldIdentity },
+            lastTextSnapshot: { [unowned self] in self.lastTextSnapshot },
+            currentSuggestionState: currentSuggestionState,
+            currentProfile: { [unowned self] in self.currentProfile },
+            currentBehaviorProfileID: { [unowned self] in
+                self.suggestionOrchestrator.currentRequest?.behaviorProfile.id
+            }
+        )
+    )
+    private lazy var suggestionAcceptanceHost = SuggestionAcceptanceHost(
+        dependencies: SuggestionAcceptanceHostDependencies(
+            keyboardShortcutConfiguration: { [unowned self] in self.keyboardShortcutConfiguration },
+            suggestionSession: suggestionSession,
+            currentSuggestionState: currentSuggestionState,
+            currentProfile: { [weak self] in self?.currentProfile },
+            keyboardCaptureSafetyPolicy: keyboardCaptureSafetyPolicy,
+            suggestionOrchestrator: suggestionOrchestrator,
+            requestSuggestionNow: { [weak self] source in self?.requestSuggestionNow(source: source) },
+            undoAcceptedInsertion: { [weak self] in self?.undoAcceptedInsertion() == true },
+            acceptedInsertionUndoIsActive: { [weak self] in self?.acceptedInsertionUndoIsActive() == true },
+            clearPendingAcceptedInsertionUndo: { [weak self] reason in
+                self?.clearPendingAcceptedInsertionUndo(reason: reason)
+            },
+            preserveClaudeCodeTerminalHostProofSuggestionAfterPassthrough: { [unowned self] source in
+                self.preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: source)
+            },
+            suppressKey: { [weak self] key in self?.suppressKey(key) },
+            clearKeySuppression: { [weak self] key in self?.suppressKeyUntil[key] = nil },
+            setPreservesResidualSuggestionAfterNextWordAccept: { [weak self] value in
+                self?.preservesResidualSuggestionAfterNextWordAccept = value
+            },
+            shouldSuppressKey: { [unowned self] key, isAutorepeat in
+                self.shouldSuppressKey(key, isAutorepeat: isAutorepeat)
+            },
+            focusedFieldMatchesCurrentSuggestion: { [unowned self] terminalFastPath, codexFastPath, obsidianFastPath in
+                self.focusedFieldMatchesCurrentSuggestion(
+                    allowTerminalHostProofSnapshotFastPath: terminalFastPath,
+                    allowCodexProofSnapshotFastPath: codexFastPath,
+                    allowObsidianSnapshotFastPath: obsidianFastPath
+                )
+            },
+            recordClaudeCodeTerminalHostProofKeyboardProgress: { [unowned self] stage, key, action, metadata in
+                self.recordClaudeCodeTerminalHostProofKeyboardProgress(
+                    stage: stage,
+                    key: key,
+                    action: action,
+                    metadata: metadata
+                )
+            },
+            setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
+            hideSuggestion: { [weak self] reason, metadata in
+                self?.hideSuggestion(reason: reason, metadata: metadata)
+            },
+            recordKeyboardAction: { [unowned self] key, action, handled, reason in
+                self.recordKeyboardAction(key: key, action: action, handled: handled, reason: reason)
+            },
+            currentSuggestionAcceptanceDecision: { [unowned self] codexFastPath, obsidianFastPath in
+                self.currentSuggestionAcceptanceDecision(
+                    allowCodexProofSnapshotFastPath: codexFastPath,
+                    allowObsidianSnapshotFastPath: obsidianFastPath
+                )
+            },
+            recordAcceptanceGuardBlock: { [unowned self] reason in self.recordAcceptanceGuardBlock(reason: reason) },
+            insertionVerificationBaseline: { [unowned self] acceptanceID, acceptedAt, action, acceptMode in
+                self.insertionVerificationBaselineHost.baseline(
+                    acceptanceID: acceptanceID,
+                    acceptedAt: acceptedAt,
+                    action: action,
+                    acceptMode: acceptMode
+                )
+            },
+            acceptedTextForCurrentAcceptance: { [unowned self] acceptedText, action in
+                self.acceptedTextForCurrentAcceptance(acceptedText, action: action)
+            },
+            suggestionAcceptanceProof: { [unowned self] action, acceptedText in
+                self.suggestionAcceptanceProof(action: action, acceptedText: acceptedText)
+            },
+            scheduleDeferredAcceptance: { [weak self] input in
+                self?.scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
+                    acceptedText: input.acceptedText,
+                    acceptanceID: input.acceptanceID,
+                    acceptedAt: input.acceptedAt,
+                    action: input.action,
+                    acceptanceProof: input.acceptanceProof,
+                    verificationBaseline: input.verificationBaseline
+                ) ?? false
+            },
+            insertAcceptedText: { [weak self] acceptedText, action in
+                self?.suggestionInsertionHost.insertAcceptedText(acceptedText, action: action) ?? false
+            },
+            suppressCurrentFieldAfterInsertionFailure: { [weak self] reason in
+                self?.suppressCurrentFieldAfterInsertionFailure(reason: reason)
+            },
+            completeNextWordAcceptance: { [unowned self] input in
+                self.completeNextWordAcceptance(
+                    acceptedText: input.acceptedText,
+                    acceptanceID: input.acceptanceID,
+                    acceptedAt: input.acceptedAt,
+                    action: input.action,
+                    acceptanceProof: input.acceptanceProof,
+                    verificationBaseline: input.verificationBaseline
+                )
+            },
+            armAcceptedInsertionUndo: { [unowned self] acceptedText, acceptanceID, acceptedAt, acceptMode in
+                self.armAcceptedInsertionUndo(
+                    acceptedText: acceptedText,
+                    acceptanceID: acceptanceID,
+                    acceptedAt: acceptedAt,
+                    acceptMode: acceptMode
+                )
+            },
+            recordAcceptedText: { [unowned self] acceptedText in self.recordAcceptedText(acceptedText) },
+            armObsidianPostAcceptanceSuppressionIfNeeded: { [unowned self] in
+                self.armObsidianPostAcceptanceSuppressionIfNeeded()
+            },
+            recordRawAcceptance: { [unowned self] action, acceptedText, acceptanceID, acceptanceProof in
+                self.recordRawAcceptance(
+                    action: action,
+                    acceptedText: acceptedText,
+                    acceptanceID: acceptanceID,
+                    acceptanceProof: acceptanceProof
+                )
+            },
+            currentAnnoyanceContext: { [weak self] in self?.currentAnnoyanceContext() },
+            recordAnnoyanceSignal: { [unowned self] signal, context, suggestionID, reason, metadata in
+                self.recordAnnoyanceSignal(
+                    signal,
+                    context: context,
+                    suggestionID: suggestionID,
+                    reason: reason,
+                    metadata: metadata
+                )
+            },
+            scheduleInsertionVerification: { [unowned self] acceptedText, baseline in
+                self.scheduleInsertionVerification(acceptedText: acceptedText, baseline: baseline)
+            },
+            currentSuggestionLifetimeMetadata: { [unowned self] in self.currentSuggestionLifetimeMetadata() },
+            currentPrefixFamilyCooldownInput: { [unowned self] in self.currentPrefixFamilyCooldownInput() },
+            recordPrefixFamilyCooldown: { [unowned self] reason, input in
+                self.recordPrefixFamilyCooldown(reason, input: input)
+            },
+            suppressCurrentField: { [unowned self] reason in self.suppressCurrentField(reason: reason) }
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
-    private var focusedTextAXHealthState = FocusedTextAXHealthState()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
-    private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-    private let typingBurstPolicy = TypingBurstPolicy()
-    private var typingBurstState = TypingBurstState()
-    private var suggestionIdleRetryState = SuggestionIdleRetryState()
-    private var currentSuggestionState = CurrentSuggestionState()
+    private let typingBurstStateHost = TypingBurstStateHost()
+    private let suggestionIdleRetryState = SuggestionIdleRetryStateHost()
+    private let currentSuggestionState = CurrentSuggestionStateHost()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
     private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
     private var preservesResidualSuggestionAfterNextWordAccept = false
@@ -553,220 +1343,107 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
-    private var acceptedInsertionUndoExpirationTask: Task<Void, Never>?
+    private let acceptedInsertionUndoExpirationHost = AcceptedInsertionUndoExpirationHost()
     private let acceptedInsertionUndoRecoveryMode = AcceptedInsertionUndoRecoveryMode.fromEnvironment()
-    private var lastStatusLine: String?
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastClaudeCodeTerminalProofInputSignature: String?
     private var claudeCodeTerminalScreenPromptAnchorCache = ClaudeCodeTerminalScreenPromptAnchorCache()
     private var lastTextContextRepairDiagnosticSignature: String?
-    private var lastEligibleTargetApp: RunningApplicationInfo?
-    private var lastObservedSettingsApp: RunningApplicationInfo?
-    private var lastFieldControlTarget: FieldControlTarget?
-    private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
-    private var hasSurfacedModelSetupUI = false
-    private var automaticTerminationActivity: NSObjectProtocol?
-    private var didDisableAutomaticTermination = false
-    private var modelInstallStatusText: String?
-    private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
     private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
     private let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds = 5_000
-    private var suggestionsPaused = false
-    private var suggestionsPausedUntil: Date?
-    private var appEnablementSetupCompleted = true
-    private var keyboardShortcutConfiguration = KeyboardShortcutConfiguration.default
-    private var suggestionTuning = SuggestionTuning()
-    private var visiblePageContextEnabled = false
+    private var suggestionsPaused: Bool {
+        suggestionPauseStateHost.isPaused
+    }
+    private var suggestionsPausedUntil: Date? {
+        suggestionPauseStateHost.pausedUntil
+    }
+    private var appEnablementSetupCompleted: Bool {
+        get { appEnablementHost.setupCompleted }
+        set { appEnablementHost.setupCompleted = newValue }
+    }
+    private var keyboardShortcutConfiguration: KeyboardShortcutConfiguration {
+        get { appPreferencePersistenceHost.keyboardShortcutConfiguration }
+        set { appPreferencePersistenceHost.keyboardShortcutConfiguration = newValue }
+    }
+    private var suggestionTuning: SuggestionTuning {
+        get { appPreferencePersistenceHost.suggestionTuning }
+        set { appPreferencePersistenceHost.suggestionTuning = newValue }
+    }
+    private var visiblePageContextEnabled: Bool {
+        get { appPreferencePersistenceHost.visiblePageContextEnabled }
+        set { appPreferencePersistenceHost.visiblePageContextEnabled = newValue }
+    }
+    private var acceptedAndKeptLearning: AcceptedAndKeptLearningStore {
+        get { appPreferencePersistenceHost.acceptedAndKeptLearning }
+        set { appPreferencePersistenceHost.acceptedAndKeptLearning = newValue }
+    }
+    private var acceptedTextStyleMemory: AcceptedTextStyleMemoryStore {
+        get { appPreferencePersistenceHost.acceptedTextStyleMemory }
+        set { appPreferencePersistenceHost.acceptedTextStyleMemory = newValue }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        keepProcessResident()
-        NSApp.setActivationPolicy(.accessory)
-        loadPauseState()
-        loadDisabledApps()
-        loadKeyboardShortcutConfiguration()
-        loadSuggestionTuning()
-        loadVisiblePageContextEnabled()
-        loadAcceptedAndKeptLearning()
-        loadAcceptedTextStyleMemory()
-        personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
-        loadProofModeOverrides()
-        startProofOnlyAcceptCommandObserver()
-        configureStatusItem()
-        DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
-        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
-        if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
-            isTrusted: accessibilityClient.isTrusted
-        ) {
-            accessibilityClient.requestPermissionIfNeeded()
-        }
-        warmModelRuntime()
-        startSuggestionSummonHotKey()
-        if shouldShowSettingsForCurrentReadiness {
-            showSettings()
-        }
-        startWorkspaceFocusObservers()
-        startScreenGeometryObserver()
-        suggestionPipeline.startPolling()
-        startResourceDiagnostics()
-        DispatchQueue.main.async { [weak self] in
-            self?.keepProcessResident()
-        }
+        appLifecycleHost.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        DiagnosticsLog.shared.record("terminate")
-        if let automaticTerminationActivity {
-            ProcessInfo.processInfo.endActivity(automaticTerminationActivity)
-            self.automaticTerminationActivity = nil
+        appLifecycleHost.stop()
+    }
+
+    func prepareForAppLaunch() {
+        suggestionPauseStateHost.load()
+        loadDisabledApps()
+        appPreferencePersistenceHost.load()
+        personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
+        loadProofModeOverrides()
+    }
+
+    func recordAppLaunchDiagnostics() {
+        DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
+        DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
+    }
+
+    func requestAccessibilityPermissionIfNeededAtLaunch() {
+        if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
+            isTrusted: accessibilityPermissionHost.isTrusted
+        ) {
+            accessibilityPermissionHost.requestPermissionIfNeeded()
         }
-        debounceTask?.cancel()
-        pauseExpirationTask?.cancel()
-        keyboardEventTapStopTask?.cancel()
-        insertionVerificationTask?.cancel()
-        deferredTerminalHostAcceptanceTask?.cancel()
-        acceptedInsertionUndoExpirationTask?.cancel()
+    }
+
+    func showSettingsIfNeededAtLaunch() {
+        if shouldShowSettingsForCurrentReadiness {
+            showSettings()
+        }
+    }
+
+    func stopForAppTermination() {
+        DiagnosticsLog.shared.record("terminate")
+        cancelPendingSuggestionTask(reason: "terminate")
+        suggestionPauseStateHost.stop()
+        keyboardEventCaptureHost.cancelIdleStop()
+        insertionVerificationHost.cancel()
+        deferredTerminalHostAcceptanceHost.cancel()
+        acceptedInsertionUndoExpirationHost.cancel()
         modelRuntimeWarmHost.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         suggestionPipeline.stopPolling()
-        resourceDiagnosticsTimer?.invalidate()
+        resourceDiagnosticsHost.stop()
         personalizationCoordinator.stop()
-        suggestionSummonHotKey.stop()
-        manualSuggestionRetryTask?.cancel()
-        stopWorkspaceFocusObservers()
-        stopScreenGeometryObserver()
+        suggestionSummonHotKeyHost.stop()
+        manualSuggestionRequestHost.cancelRetry()
+        workspaceObserverHost.stop()
         stopProofOnlyAcceptCommandObserver()
         stopKeyboardEventTapNow(reason: "terminate")
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
     }
 
-    private func keepProcessResident() {
-        if !didDisableAutomaticTermination {
-            ProcessInfo.processInfo.disableAutomaticTermination(AppResidencyPolicy.automaticTerminationReason)
-            didDisableAutomaticTermination = true
-        }
-        if automaticTerminationActivity == nil {
-            automaticTerminationActivity = ProcessInfo.processInfo.beginActivity(
-                options: AppResidencyPolicy.activityOptions,
-                reason: AppResidencyPolicy.automaticTerminationReason
-            )
-        }
-    }
-
-    private func startWorkspaceFocusObservers() {
-        guard workspaceFocusObservers.isEmpty else {
-            return
-        }
-
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceFocusObservers = [
-            center.addObserver(
-                forName: NSWorkspace.didActivateApplicationNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                let bundleIdentifier = (
-                    notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                )?.bundleIdentifier
-                Task { @MainActor in
-                    self?.handleWorkspaceFocusChange(
-                        reason: "workspace-app-activated",
-                        kind: .activated,
-                        bundleIdentifier: bundleIdentifier
-                    )
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.didDeactivateApplicationNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                let bundleIdentifier = (
-                    notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                )?.bundleIdentifier
-                Task { @MainActor in
-                    self?.handleWorkspaceFocusChange(
-                        reason: "workspace-app-deactivated",
-                        kind: .deactivated,
-                        bundleIdentifier: bundleIdentifier
-                    )
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.willSleepNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.systemWillSleep)
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.didWakeNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.systemDidWake)
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.screensDidSleepNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.displaysDidSleep)
-                }
-            },
-            center.addObserver(
-                forName: NSWorkspace.screensDidWakeNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleSuggestionInterruption(.displaysDidWake)
-                }
-            }
-        ]
-    }
-
-    private func stopWorkspaceFocusObservers() {
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceFocusObservers.forEach { center.removeObserver($0) }
-        workspaceFocusObservers.removeAll()
-    }
-
-    private func startScreenGeometryObserver() {
-        guard screenGeometryObserver == nil else {
-            return
-        }
-
-        screenGeometryObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleScreenGeometryChange()
-            }
-        }
-    }
-
-    private func stopScreenGeometryObserver() {
-        guard let observer = screenGeometryObserver else {
-            return
-        }
-
-        NotificationCenter.default.removeObserver(observer)
-        screenGeometryObserver = nil
-    }
-
-    private func startProofOnlyAcceptCommandObserver() {
+    func startProofOnlyAcceptCommandObserver() {
         guard ProofOnlyAcceptCommand.isEnabled(),
               proofOnlyAcceptCommandObserver == nil else {
             return
@@ -866,7 +1543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextStyle = recentSuggestion.textStyle
         lastRenderMode = recentSuggestion.renderMode
         lastVisibleSuggestionGeometrySnapshot = recentSuggestion.geometrySnapshot
-        cancelKeyboardEventTapIdleStop()
+        keyboardEventCaptureHost.cancelIdleStop()
         updateKeyboardEventTapSnapshot()
 
         DiagnosticsLog.shared.record(
@@ -998,7 +1675,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleScreenGeometryChange() {
+    func handleScreenGeometryChange() {
         let currentFingerprint = currentScreenLayoutFingerprint()
         let shouldInvalidate = suggestionGeometryChangePolicy.shouldInvalidateSuggestionState(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
@@ -1020,14 +1697,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(geometryTraceMetadata()) { current, _ in current }
         hideSuggestion(reason: "stale-geometry-screen-layout-changed", metadata: metadata)
         stopKeyboardEventTapNow(reason: interruption.keyboardCaptureStopReason)
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
             interruption.diagnosticEvent,
             metadata: metadata
         )
     }
 
-    private func handleSuggestionInterruption(_ kind: SuggestionInterruptionKind) {
+    func handleSuggestionInterruption(_ kind: SuggestionInterruptionKind) {
         let decision = suggestionInterruptionPolicy.decision(for: kind)
 
         setSuggestionDecision(decision.decisionText)
@@ -1046,7 +1723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stopKeyboardEventTapNow(reason: decision.keyboardCaptureStopReason)
         }
         if decision.shouldHideFieldStatus {
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
         }
         DiagnosticsLog.shared.record(
             decision.diagnosticEvent,
@@ -1054,7 +1731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleWorkspaceFocusChange(
+    func handleWorkspaceFocusChange(
         reason: String,
         kind: WorkspaceFocusChangePolicy.ChangeKind,
         bundleIdentifier: String?
@@ -1062,7 +1739,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard suggestionSession.hasVisibleSuggestion
             || suggestionOrchestrator.currentRequest != nil
             || currentFieldIdentity != nil
-            || fieldStatusIndicator.isVisible else {
+            || suggestionChromeHost.isFieldStatusIndicatorVisible else {
             return
         }
 
@@ -1100,140 +1777,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func configureStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        configureStatusButton(item.button, configuration: .autocompleteLab)
-
-        let menu = NSMenu()
-
-        // A single, calm status line. The full decision + model detail lives in its tooltip.
-        let statusMenu = NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: "")
-        menu.addItem(statusMenu)
-        menu.addItem(NSMenuItem.separator())
-
-        let suggestNowItem = NSMenuItem(
-            title: "Ask for a Suggestion",
-            action: #selector(suggestNowFromMenu),
-            keyEquivalent: "`"
-        )
-        suggestNowItem.keyEquivalentModifierMask = [.control]
-        suggestNowItem.toolTip = "\(SuggestionSummonHotKeyDescriptor.controlBacktick.displayName) asks for one suggestion without changing Tab."
-        menu.addItem(suggestNowItem)
-
-        // Pause options live in one submenu so the top level stays uncluttered.
-        let pauseParentItem = NSMenuItem(title: "Pause Suggestions", action: nil, keyEquivalent: "")
-        let pauseMenu = NSMenu()
-        let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
-        pauseMenu.addItem(pauseItem)
-        pauseMenu.addItem(NSMenuItem.separator())
-        pauseMenu.addItem(NSMenuItem(title: "For 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: ""))
-        pauseMenu.addItem(NSMenuItem(title: "For 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: ""))
-        pauseMenu.addItem(NSMenuItem(title: "Until Tomorrow", action: #selector(pauseSuggestionsUntilTomorrowFromControl), keyEquivalent: ""))
-        menu.setSubmenu(pauseMenu, for: pauseParentItem)
-        menu.addItem(pauseParentItem)
-
-        let toggleItem = NSMenuItem(title: "Pause Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
-        menu.addItem(toggleItem)
-        let silenceFieldItem = NSMenuItem(
-            title: "Silence This Field",
-            action: #selector(silenceCurrentField),
-            keyEquivalent: "s"
-        )
-        menu.addItem(silenceFieldItem)
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ","))
-        let feedbackItem = NSMenuItem(
-            title: BetaFeedbackLink.menuTitle,
-            action: #selector(openFeedbackForm),
-            keyEquivalent: ""
-        )
-        feedbackItem.toolTip = BetaFeedbackLink.privacyNote
-        menu.addItem(feedbackItem)
-
-        // Developer tools stay hidden unless explicitly enabled, so everyday users never see them.
-        if developerMenuEnabled {
-            let debugMenuItem = NSMenuItem(title: "Developer", action: nil, keyEquivalent: "")
-            let debugMenu = NSMenu()
-            debugMenu.addItem(NSMenuItem(title: "Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
-            debugMenu.addItem(NSMenuItem(title: "Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
-            debugMenu.addItem(NSMenuItem(title: "Writing Journal Folder", action: #selector(revealPersonalCaptureFolder), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem.separator())
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
-            debugMenu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
-            menu.setSubmenu(debugMenu, for: debugMenuItem)
-            menu.addItem(debugMenuItem)
-        }
-
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit SteadyType", action: #selector(quit), keyEquivalent: "q"))
-
-        item.menu = menu
-        statusItem = item
-        statusMenuItem = statusMenu
-        suggestionDecisionMenuItem = nil
-        runtimeMenuItem = nil
-        pauseSuggestionsMenuItem = pauseItem
-        silenceFieldMenuItem = silenceFieldItem
-        toggleAppMenuItem = toggleItem
-        refreshRuntimeChrome()
-    }
-
-    private func configureStatusButton(
-        _ button: NSStatusBarButton?,
-        configuration: MenuBarStatusItemConfiguration
-    ) {
-        guard let button else {
-            return
-        }
-
-        if let image = NSImage(
-            systemSymbolName: configuration.symbolName,
-            accessibilityDescription: configuration.accessibilityLabel
-        ) {
-            image.isTemplate = true
-            button.image = image
-            button.title = ""
-        } else {
-            button.title = configuration.fallbackTitle
-        }
-        button.toolTip = configuration.accessibilityLabel
-    }
-
-    private func startResourceDiagnostics() {
-        recordResourceDiagnostics(reason: "launch")
-
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.recordResourceDiagnostics(reason: "periodic")
-            }
-        }
-        timer.tolerance = 1
-        RunLoop.main.add(timer, forMode: .common)
-        resourceDiagnosticsTimer = timer
-    }
-
-    private func startSuggestionSummonHotKey() {
-        let didStart = suggestionSummonHotKey.start()
+    func startSuggestionSummonHotKey() {
+        let didStart = suggestionSummonHotKeyHost.start()
         DiagnosticsLog.shared.record(
             didStart ? "suggestion-summon-hotkey-started" : "suggestion-summon-hotkey-start-failed",
             metadata: [
-                "shortcut": suggestionSummonHotKey.descriptor.diagnosticName,
+                "shortcut": suggestionSummonHotKeyHost.descriptor.diagnosticName,
                 "safetyFailure": String(!didStart)
             ]
         )
     }
 
-    private func recordResourceDiagnostics(reason: String) {
-        var metadata = resourceDiagnosticsSampler.sample()
-        metadata["reason"] = reason
-        DiagnosticsLog.shared.record("runtime-resource-sample", metadata: metadata)
-    }
-
-    private func warmModelRuntime() {
+    func warmModelRuntime() {
         let candidate = modelRuntimeBundle.activeCandidate
         modelRuntimeWarmHost.start(
             runtime: modelRuntime,
@@ -1242,46 +1797,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             unavailableReason: modelRuntimeBundle.bootstrapPlan.unavailableReason,
             modelDirectoryPath: modelRuntimeBundle.modelDirectoryURL.path,
             applyState: { [weak self] state in
-                self?.applyRuntimeState(state)
+                self?.runtimeStatusHost.apply(state)
             }
         )
     }
 
-    private func applyRuntimeState(_ state: LocalRuntimeState) {
-        let wasReadyForSuggestions = runtimeReadinessReport.allowsSuggestions
-        currentRuntimeState = refreshModelAssetStateIfNeeded(for: state)
-        refreshRuntimeChrome()
-        let report = runtimeReadinessReport
-        if report.allowsSuggestions,
-           !modelInstallHost.isInstalling,
-           modelInstallStatusText != nil {
-            modelInstallStatusText = "Model install: ready"
-            refreshRuntimeChrome()
-        }
-        if !wasReadyForSuggestions && report.allowsSuggestions {
-            rearmFocusedTextAfterRuntimeReady()
-        }
-        if report.stage == .failed || report.action == .repairModel {
-            showSettings()
-        } else if report.stage == .downloadNeeded, !hasSurfacedModelSetupUI {
-            // A missing model must not be a silent no-op: without this, a first
-            // run with no model asset is a menu bar icon that never suggests
-            // anything and never says why. Surface Settings once per launch.
-            hasSurfacedModelSetupUI = true
-            showSettings()
-        }
-        DiagnosticsLog.shared.record(
-            "runtime",
-            metadata: [
-                "state": state.statusSummary,
-                "completionLength": completionLengthConfiguration.displaySummary,
-                "readinessStage": report.stage.rawValue,
-                "readinessAction": report.action.rawValue
-            ]
-        )
-    }
-
-    private func refreshModelAssetStateIfNeeded(for state: LocalRuntimeState) -> LocalRuntimeState {
+    func refreshModelAssetState(for state: LocalRuntimeState) -> LocalRuntimeState {
         guard case let .failed(candidate, reason) = state,
               RuntimeBootstrapPlan.isRepairableModelAssetFailure(reason) else {
             return state
@@ -1309,15 +1830,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func rearmFocusedTextAfterRuntimeReady() {
+    func rearmFocusedTextAfterRuntimeReady() {
         guard currentFieldIdentity != nil else {
             return
         }
 
         cancelPrefixCooldownRetry()
         lastTextSnapshot = nil
-        lastTrustedCodexPromptTargetContinuityAnchor = nil
-        codexPromptAXCooldownPreservation = nil
+        codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
@@ -1331,31 +1851,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func refreshRuntimeChrome() {
-        runtimeMenuItem?.title = "Model: \(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(runtimeReadinessReport.summary) • \(completionLengthConfiguration.displaySummary)"
-        if settingsWindow.isShowing {
-            settingsWindow.refresh(
-                isTrusted: accessibilityClient.isTrusted,
-                suggestionsPaused: suggestionsPaused,
-                suggestionsPausedUntil: suggestionsPausedUntil,
-                runtimeReport: runtimeReadinessReport,
-                runtimeTargetSummary: runtimeTargetSummary,
-                modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: modelInstallStatusText,
-                isModelInstallInProgress: modelInstallHost.isInstalling,
-                currentApp: settingsCurrentAppState,
-                fieldControl: settingsFieldControlState,
-                practice: settingsPracticeState,
-                privacy: settingsPrivacyState,
-                keyboardShortcuts: settingsKeyboardShortcutState,
-                suggestionAggressiveness: settingsSuggestionAggressivenessState,
-                lastSuggestionDecision: lastSuggestionDecision
-            )
-        }
+    func refreshRuntimeChrome() {
+        settingsStateHost.refreshIfShowing(
+            settingsWindow: settingsWindow,
+            lastSuggestionDecision: lastSuggestionDecision
+        )
     }
 
     private var runtimeReadinessReport: RuntimeReadinessReport {
-        modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
+        runtimeStatusHost.runtimeReadinessReport
     }
 
     private var modelDirectoryPath: String {
@@ -1363,141 +1867,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var settingsCurrentAppState: SettingsCurrentAppState {
-        guard let app = appForSettingsState else {
-            return SettingsCurrentAppState(
-                displayName: "None",
-                bundleIdentifier: nil,
-                supportStatus: .unsupported,
-                isEnabled: false,
-                disabledAppCount: disabledBundleIdentifiers.count,
-                renderModeOverride: nil
-            )
-        }
-
-        return SettingsCurrentAppState(
-            displayName: app.localizedName,
-            bundleIdentifier: app.bundleIdentifier,
-            supportStatus: profileStore.supportStatus(for: app.bundleIdentifier),
-            isEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier),
-            disabledAppCount: disabledBundleIdentifiers.count,
-            renderModeOverride: compatibilityLearningStore.profile(for: app.bundleIdentifier)?.renderModeOverride
-        )
+        settingsStateHost.currentAppState
     }
 
     private var settingsFieldControlState: SettingsFieldControlState {
-        guard let target = fieldControlTarget else {
-            return SettingsFieldControlState(
-                appDisplayName: nil,
-                hasFieldTarget: false,
-                isCurrentField: false,
-                isSilenced: false
-            )
-        }
-
-        return SettingsFieldControlState(
-            appDisplayName: target.appDisplayName,
-            hasFieldTarget: true,
-            isCurrentField: target.fieldIdentity == currentFieldIdentity,
-            isSilenced: suppressedFieldIdentities.contains(target.fieldIdentity)
-        )
+        settingsStateHost.fieldControlState
     }
 
     private var settingsPracticeState: SettingsPracticeState {
-        SettingsPracticeState(
-            isTrusted: accessibilityClient.isTrusted,
-            suggestionsPaused: suggestionsPaused,
-            runtimeReport: runtimeReadinessReport,
-            isModelInstallInProgress: modelInstallHost.isInstalling,
-            isTextEditEnabled: !disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
-        )
+        settingsStateHost.practiceState
     }
 
     private var fieldControlTarget: FieldControlTarget? {
-        if let currentFieldIdentity,
-           let target = lastFieldControlTarget,
-           target.fieldIdentity == currentFieldIdentity {
-            return target
-        }
-
-        return lastFieldControlTarget
+        appTargetStateHost.fieldControlTarget(currentFieldIdentity: currentFieldIdentity)
     }
 
     private var appForSettingsState: RunningApplicationInfo? {
-        if let app = accessibilityClient.frontmostApplication(),
-           app.bundleIdentifier != Bundle.main.bundleIdentifier {
-            return app
-        }
-
-        return lastObservedSettingsApp ?? targetAppForControls()
+        appTargetStateHost.appForSettingsState(
+            frontmostApplication: accessibilityClient.frontmostApplication()
+        )
     }
 
     private func targetAppForControls() -> RunningApplicationInfo? {
-        if let app = accessibilityClient.frontmostApplication(),
-           profileStore.allows(bundleIdentifier: app.bundleIdentifier) {
-            rememberEligibleTargetApp(app)
-            return app
-        }
-
-        guard let app = lastEligibleTargetApp,
-              profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
-            return nil
-        }
-
-        return app
-    }
-
-    private func rememberEligibleTargetApp(_ app: RunningApplicationInfo) {
-        guard profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
-            return
-        }
-
-        lastEligibleTargetApp = app
-    }
-
-    private func rememberFieldControlTarget(
-        app: RunningApplicationInfo,
-        fieldIdentity: FocusedFieldIdentity,
-        requestMode: CompletionRequestMode?,
-        fieldKind: AXFieldKind
-    ) {
-        lastFieldControlTarget = FieldControlTarget(
-            appBundleIdentifier: app.bundleIdentifier,
-            appDisplayName: app.localizedName,
-            fieldIdentity: fieldIdentity,
-            requestMode: requestMode,
-            fieldKind: fieldKind
+        appTargetStateHost.targetAppForControls(
+            frontmostApplication: accessibilityClient.frontmostApplication()
         )
     }
 
     private var settingsPrivacyState: SettingsPrivacyState {
-        SettingsPrivacyState(
-            tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
-            rawContentTracingEnabled: RawAutocompleteTraceLog.shared.rawContentTracingEnabled,
-            rawContentTracingExpiresAt: RawAutocompleteTraceLog.shared.rawContentTracingExpiresAt,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled,
-            screenshotTracingExpiresAt: RawAutocompleteTraceLog.shared.screenshotTracingExpiresAt,
-            visiblePageContextEnabled: visiblePageContextEnabled,
-            personalCaptureEnabled: appSettings.personalCaptureEnabled,
-            screenCaptureAccessGranted: CGPreflightScreenCaptureAccess(),
-            diagnosticsPath: DiagnosticsLog.shared.path,
-            tracePath: RawAutocompleteTraceLog.shared.path,
-            personalCapturePath: personalCaptureJournal.folderPath
-        )
+        settingsStateHost.privacyState
     }
 
     private var settingsKeyboardShortcutState: SettingsKeyboardShortcutState {
-        SettingsKeyboardShortcutState(
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
-            currentApp: settingsCurrentAppState
-        )
+        settingsStateHost.keyboardShortcutState
     }
 
     private var settingsSuggestionAggressivenessState: SettingsSuggestionAggressivenessState {
-        SettingsSuggestionAggressivenessState(tuning: suggestionTuning)
+        settingsStateHost.suggestionAggressivenessState
     }
 
     private var runtimeTargetSummary: String {
-        "\(modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue) • \(completionLengthConfiguration.displaySummary) • \(suggestionTuning.displayName.lowercased()) • showing up to \(suggestionTuning.maxVisibleWords) • page context \(visiblePageContextEnabled ? "on" : "off")"
+        settingsStateHost.runtimeTargetSummary
     }
 
     private var shouldShowSettingsForCurrentReadiness: Bool {
@@ -1508,7 +1918,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private var pauseSuggestionsTitle: String {
+    var pauseSuggestionsTitle: String {
         pauseControlState.toggleTitle
     }
 
@@ -1523,7 +1933,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var pauseControlState: ControlPauseState {
-        expireTimedPauseIfNeeded(now: Date())
+        suggestionPauseStateHost.expireTimedPauseIfNeeded(now: Date())
         return ControlPauseState(
             isPaused: suggestionsPaused,
             pausedUntil: suggestionsPausedUntil
@@ -1531,11 +1941,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var suggestionControlState: SuggestionControlState {
-        expireTimedPauseIfNeeded(now: Date())
-        return suggestionControlPolicy.state(isPaused: suggestionsPaused)
+        suggestionPauseStateHost.controlState
     }
 
-    private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
+    func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
         if let terminalProofProfile = claudeCodeTerminalHostProofProfile(for: app) {
             return terminalProofProfile
         }
@@ -1583,7 +1992,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
     }
 
-    private func isSuggestionEnabled(
+    func isSuggestionEnabled(
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> Bool {
@@ -1623,8 +2032,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
     }
 
-    private func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
-        if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
+    func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
+        if case let .blocked(reason) = suggestionSessionBehaviors.control.suggestionAvailability(for: suggestionControlState) {
             if appSettings.personalCaptureEnabled,
                pollPersonalCaptureOnly(startedAt: startedAt, completesAsync: &completesAsync, reason: reason.hideReason) {
                 setSuggestionDecision("Capture: suggestions paused")
@@ -1640,7 +2049,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? false
             )
             hideSuggestion(reason: reason.hideReason)
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
 
@@ -1668,11 +2077,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Blocked: unsupported app")
             updateStatusMenu(app: activeApp, profile: nil, appEnabled: false)
             hideSuggestion()
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
 
-        rememberEligibleTargetApp(frontmostApp)
+        appTargetStateHost.rememberEligibleTargetApp(frontmostApp)
         let appEnabled = isSuggestionEnabled(for: frontmostApp, profile: profile)
         currentProfile = profile
         updateStatusMenu(app: frontmostApp, profile: profile, appEnabled: appEnabled)
@@ -1744,11 +2153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         startedAt: UInt64
     ) async {
-        let pollStartedWithManualSuggestionRequest = manualSuggestionRequestPending
+        let pollStartedWithManualSuggestionRequest = manualSuggestionRequestHost.isPending
         var latencySummarySuppressionReason: String?
         defer {
-            if pollStartedWithManualSuggestionRequest && manualSuggestionRequestPending {
-                manualSuggestionRequestPending = false
+            if pollStartedWithManualSuggestionRequest && manualSuggestionRequestHost.isPending {
+                manualSuggestionRequestHost.clearPendingRequest()
             }
             suggestionPipeline.finishPoll(
                 startedAt: startedAt,
@@ -1807,12 +2216,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               activeApp.processIdentifier == result.app.processIdentifier else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
 
         if result.context == nil {
-            recordMissingFocusedContextDiagnostics(app: result.app, profile: profile)
+            focusedTextContextDiagnosticsHost.recordMissingContext(
+                app: result.app,
+                diagnostics: accessibilityClient.focusedTextDiagnostics(
+                    for: result.app,
+                    allowDescendantTextFallback: profile.allowsDescendantTextFallback
+                )
+            )
         }
 
         guard let rawContext = result.context else {
@@ -1923,12 +2338,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let activeApp = accessibilityClient.frontmostApplication(),
               activeApp.bundleIdentifier == result.app.bundleIdentifier,
               activeApp.processIdentifier == result.app.processIdentifier else {
-            personalCaptureLastSnapshot = nil
+            personalCaptureHost.resetSnapshot()
             return
         }
 
         guard let context = result.context, !context.isSecure else {
-            personalCaptureLastSnapshot = nil
+            personalCaptureHost.resetSnapshot()
             return
         }
 
@@ -1951,53 +2366,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: fieldClassification,
             snapshot: snapshot,
             source: "capture-only:\(reason)"
-        )
-    }
-
-    private func recordMissingFocusedContextDiagnostics(
-        app: RunningApplicationInfo,
-        profile: CompatibilityProfile
-    ) {
-        guard let diagnostics = accessibilityClient.focusedTextDiagnostics(
-            for: app,
-            allowDescendantTextFallback: profile.allowsDescendantTextFallback
-        ) else {
-            DiagnosticsLog.shared.record(
-                "focused-text-context-missing",
-                metadata: [
-                    "app": app.bundleIdentifier,
-                    "diagnostics": "unavailable"
-                ]
-            )
-            return
-        }
-
-        let searchable = diagnostics.fingerprint.searchableText
-        DiagnosticsLog.shared.record(
-            "focused-text-context-missing",
-            metadata: [
-                "app": app.bundleIdentifier,
-                "role": diagnostics.role ?? "none",
-                "subrole": diagnostics.subrole ?? "none",
-                "selectedRange": diagnostics.selectedRangeDescription,
-                "isSecure": String(diagnostics.isSecure),
-                "beforeChars": String(diagnostics.textBeforeCursorLength),
-                "afterChars": String(diagnostics.textAfterCursorLength),
-                "hasCaretRect": String(diagnostics.caretRect != nil),
-                "hasElementRect": String(diagnostics.elementRect != nil),
-                "hasWindowRect": String(diagnostics.windowRect != nil),
-                "canReadValue": String(diagnostics.capabilities.canReadValue),
-                "canReadRange": String(diagnostics.capabilities.canReadSelectedTextRange),
-                "canReadBounds": String(diagnostics.capabilities.canReadBoundsForRange),
-                "canSetSelectedText": String(diagnostics.capabilities.canSetSelectedText),
-                "chromeSmokeHint": String(searchable.contains("autocomplete lab chrome")
-                    && searchable.contains("smoke")),
-                "monacoHint": String(searchable.contains("monaco")),
-                "prosemirrorHint": String(searchable.contains("prosemirror")),
-                "attributeNames": diagnostics.attributeDump.attributes
-                    .map(\.name)
-                    .joined(separator: ",")
-            ]
         )
     }
 
@@ -2037,19 +2405,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: frontmostApp.bundleIdentifier,
             context: rawContext
         )
-        if !promptMatch.canSuggest,
-           shouldDeferCodexPromptTargetInvalidation(
+        let promptTargetInvalidationResolution = codexPromptTargetInvalidationResolution(
             app: frontmostApp,
             context: rawContext,
             promptBlockReason: promptMatch.reason
-           ) {
+        )
+        if !promptMatch.canSuggest,
+           promptTargetInvalidationResolution == .preserveWork {
             let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
             setSuggestionDecision(
                 hasVisibleSuggestion
                     ? "Shown: preserving current suggestion"
                     : "Waiting: Codex prompt refresh"
             )
-            fieldStatusIndicator.hide()
+            suggestionChromeHost.hideFieldStatusIndicator()
             DiagnosticsLog.shared.record(
                 "codex-prompt-target-refresh-deferred",
                 metadata: [
@@ -2064,6 +2433,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if hasVisibleSuggestion {
                 updateKeyboardEventTapSnapshot()
             }
+            return
+        }
+        if !promptMatch.canSuggest,
+           promptTargetInvalidationResolution == .cancelAndRetry {
+            cancelAndRearmCodexPromptTargetWork(
+                app: frontmostApp,
+                context: rawContext,
+                profile: profile,
+                promptBlockReason: promptMatch.reason,
+                source: "prompt-validation"
+            )
+            setSuggestionDecision("Waiting: Codex prompt refresh")
+            suggestionChromeHost.hideFieldStatusIndicator()
             return
         }
         guard promptMatch.canSuggest else {
@@ -2183,7 +2565,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             raw: fieldClassification
         )
-        rememberFieldControlTarget(
+        appTargetStateHost.rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
             requestMode: nil,
@@ -2199,7 +2581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
-        lastTrustedCodexPromptTargetContinuityAnchor = codexPromptTargetContinuityPolicy.anchor(
+        codexPromptTargetContinuityHost.rememberAnchor(
             appBundleIdentifier: frontmostApp.bundleIdentifier,
             fieldIdentity: fieldIdentity,
             context: context
@@ -2287,7 +2669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancelPrefixCooldownRetry()
         let typingBurstDecision: TypingBurstDecision
         if let idleRetryReason {
-            typingBurstState.reset()
+            typingBurstStateHost.reset()
             typingBurstDecision = .idle
             suggestionBlockLogGate.reset()
             DiagnosticsLog.shared.record(
@@ -2410,7 +2792,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             fieldKind: suggestionFieldClassification.kind
         )
-        rememberFieldControlTarget(
+        appTargetStateHost.rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
             requestMode: activationDecision.requestMode,
@@ -2655,105 +3037,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let currentLineStructure = CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
         let suggestionAppBundleIdentifier = suggestionBundleIdentifier(for: frontmostApp, profile: profile)
-        let triggerBehaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: suggestionAppBundleIdentifier,
-            fieldKind: suggestionFieldClassification.kind,
-            currentLineStructure: currentLineStructure
-        ))
-        let triggerDecision = triggerPolicy(for: profile).decision(
-            previousTextBeforeCursor: lastRequestedTextBeforeCursor,
-            currentTextBeforeCursor: context.textBeforeCursor,
-            lineStartBehavior: SuggestionLineStartBehavior.behavior(
-                for: triggerBehaviorProfile.id,
-                currentLineStructure: currentLineStructure
-            ),
-            behaviorProfileID: triggerBehaviorProfile.id,
-            requestMode: requestMode
-        )
-        let isManualSuggestionRequest = manualSuggestionRequestPending
-        if isManualSuggestionRequest {
-            manualSuggestionRequestPending = false
-        }
-
-        let delayMilliseconds: Int
-        let timingLane: SuggestionTimingLane
-        if isManualSuggestionRequest {
-            delayMilliseconds = 0
-            if case let .request(_, policyTimingLane) = triggerDecision {
-                timingLane = policyTimingLane
-            } else {
-                timingLane = switch requestMode {
-                case .wordCompletion:
-                    .instantWord
-                case .sentenceContinuation:
-                    .longPauseThought
-                case .phraseContinuation:
-                    .pausePhrase
-                }
-            }
-        } else if idleRetryReason != nil {
-            delayMilliseconds = 0
-            timingLane = switch requestMode {
-            case .wordCompletion:
-                .instantWord
-            case .sentenceContinuation:
-                .longPauseThought
-            case .phraseContinuation:
-                .pausePhrase
-            }
-        } else if case let .request(policyDelayMilliseconds, policyTimingLane) = triggerDecision {
-            delayMilliseconds = policyDelayMilliseconds
-            timingLane = policyTimingLane
-        } else {
-            if suggestionSession.hasVisibleSuggestion {
-                setSuggestionDecision("Shown: waiting for cadence")
-                showFieldStatusIndicator(.shown, context: context)
-                repositionVisibleSuggestion(context: context, profile: profile)
-                return
-            }
-
-            setSuggestionDecision("Waiting: cadence policy")
-            showFieldStatusIndicator(.waiting.withReason("typing cadence"), context: context)
-            recordSuggestionEvent(
-                "suggestion-trigger-skipped",
+        suggestionTriggerTimingHost.handle(
+            input: SuggestionTriggerTimingHostInput(
                 context: context,
                 profile: profile,
-                metadata: [
-                    "reason": "cadence-policy"
-                ]
+                suggestionAppBundleIdentifier: suggestionAppBundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                fieldClassification: suggestionFieldClassification,
+                renderMode: renderMode,
+                requestMode: requestMode,
+                previousTextBeforeCursor: lastRequestedTextBeforeCursor,
+                idleRetryReason: idleRetryReason,
+                typingBurstDecision: typingBurstDecision,
+                visiblePageContext: cachedVisiblePageContext(
+                    context: context,
+                    appBundleIdentifier: frontmostApp.bundleIdentifier
+                )
             )
-            hideSuggestion()
-            return
-        }
-
-        setSuggestionDecision(
-            isManualSuggestionRequest
-                ? "Queued: asked once \(timingLane.rawValue)"
-                : "Queued: \(requestMode.rawValue) \(timingLane.rawValue)"
-        )
-        showFieldStatusIndicator(.thinking, context: context)
-        scheduleSuggestion(
-            context: context,
-            profile: profile,
-            appBundleIdentifier: suggestionAppBundleIdentifier,
-            fieldIdentity: fieldIdentity,
-            fieldClassification: suggestionFieldClassification,
-            renderMode: renderMode,
-            delayMilliseconds: delayMilliseconds,
-            timingLane: timingLane,
-            requestMode: requestMode,
-            typingBurstDecision: typingBurstDecision,
-            visiblePageContext: cachedVisiblePageContext(
-                context: context,
-                appBundleIdentifier: frontmostApp.bundleIdentifier
-            ),
-            triggerReason: isManualSuggestionRequest
-                ? "manual-summon"
-                : idleRetryReason != nil
-                    ? "idle-retry"
-                    : "poll"
         )
     }
 
@@ -2969,13 +3270,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func allowFocusedTextAXRead(for app: RunningApplicationInfo) -> Bool {
-        switch focusedTextAXHealthPolicy.pollDecision(
+        switch focusedTextAXHealthHost.pollDecision(
             for: app.bundleIdentifier,
-            now: Date(),
-            state: &focusedTextAXHealthState
+            now: Date()
         ) {
         case let .allowed(recovery?):
-            codexPromptAXCooldownPreservation = nil
+            codexPromptTargetContinuityHost.clearCooldownPreservation()
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-recovered",
                 metadata: [
@@ -2986,26 +3286,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return true
         case .allowed(nil):
-            codexPromptAXCooldownPreservation = nil
+            codexPromptTargetContinuityHost.clearCooldownPreservation()
             return true
         case let .coolingDown(cooldown):
-            let hasActiveSuggestionWork = debounceTask != nil
-                || codexPromptPresentationRetryTask != nil
+            let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
+                || codexPromptPresentationRetryHost.hasScheduledRetry
                 || suggestionSession.hasVisibleSuggestion
                 || suggestionIdleRetryState.hasPendingRetry
-                || manualSuggestionRequestPending
-            let shouldPreservePendingRequest = codexPromptTargetContinuityPolicy
+                || manualSuggestionRequestHost.isPending
+            let shouldPreservePendingRequest = codexPromptTargetContinuityHost
                 .canPreserveDuringAXCooldown(
-                    appBundleIdentifier: app.bundleIdentifier,
-                    processIdentifier: app.processIdentifier,
+                    app: app,
                     currentFieldIdentity: currentFieldIdentity,
                     currentSnapshot: lastTextSnapshot,
-                    trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
-                    preservation: codexPromptAXCooldownPreservation,
                     hasActiveSuggestionWork: hasActiveSuggestionWork
                 )
             if !shouldPreservePendingRequest {
-                codexPromptAXCooldownPreservation = nil
+                codexPromptTargetContinuityHost.clearCooldownPreservation()
             }
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-cooldown",
@@ -3027,13 +3324,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyFocusedTextAXHealthObservation(_ result: FocusedTextAXReadResult) -> Bool {
-        let observation = focusedTextAXHealthPolicy.recordRead(
+        let observation = focusedTextAXHealthHost.recordRead(
             bundleIdentifier: result.app.bundleIdentifier,
             queueDelayMilliseconds: result.queueDelayMilliseconds,
             readDurationMilliseconds: result.readDurationMilliseconds,
             hasContext: result.context != nil,
-            now: Date(),
-            state: &focusedTextAXHealthState
+            now: Date()
         )
 
         guard observation.didStartCooldown,
@@ -3041,28 +3337,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let hasActiveSuggestionWork = debounceTask != nil
-            || codexPromptPresentationRetryTask != nil
+        let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
+            || codexPromptPresentationRetryHost.hasScheduledRetry
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
-            || manualSuggestionRequestPending
-        let shouldPreservePendingRequest = result.context.map {
-            codexPromptTargetContinuityPolicy.canBeginAXCooldownPreservation(
-                appBundleIdentifier: result.app.bundleIdentifier,
-                processIdentifier: result.app.processIdentifier,
+            || manualSuggestionRequestHost.isPending
+        let promptTargetInvalidationResolution = result.context.map {
+            codexPromptTargetContinuityHost.axHealthInvalidationResolution(
+                app: result.app,
                 currentFieldIdentity: currentFieldIdentity,
                 currentSnapshot: lastTextSnapshot,
-                trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
-                observedContext: $0,
-                hasActiveSuggestionWork: hasActiveSuggestionWork
+                observedContext: $0
             )
-        } ?? false
-        codexPromptAXCooldownPreservation = shouldPreservePendingRequest
-            ? codexPromptTargetContinuityPolicy.axCooldownPreservation(
-                trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
-                cooldownMilliseconds: cooldown.cooldownMilliseconds
+        } ?? .reject
+        let rearmedTransientRequest: Bool
+        if hasActiveSuggestionWork,
+           promptTargetInvalidationResolution == .cancelAndRetry,
+           let context = result.context,
+           let profile = effectiveProfile(for: result.app) {
+            rearmedTransientRequest = cancelAndRearmCodexPromptTargetWork(
+                app: result.app,
+                context: context,
+                profile: profile,
+                promptBlockReason: promptTextAreaMatch(
+                    for: result.app.bundleIdentifier,
+                    context: context
+                ).reason,
+                source: "ax-health"
             )
-            : nil
+        } else {
+            rearmedTransientRequest = false
+        }
+        let shouldPreservePendingRequest: Bool
+        if hasActiveSuggestionWork,
+           promptTargetInvalidationResolution == .preserveWork {
+            shouldPreservePendingRequest = result.context.map {
+                codexPromptTargetContinuityHost.beginAXCooldownPreservation(
+                    app: result.app,
+                    currentFieldIdentity: currentFieldIdentity,
+                    currentSnapshot: lastTextSnapshot,
+                    observedContext: $0,
+                    hasActiveSuggestionWork: hasActiveSuggestionWork,
+                    cooldownMilliseconds: cooldown.cooldownMilliseconds
+                )
+            } ?? false
+        } else if rearmedTransientRequest {
+            shouldPreservePendingRequest = codexPromptTargetContinuityHost
+                .preserveDuringAXCooldown(forMilliseconds: cooldown.cooldownMilliseconds)
+        } else {
+            shouldPreservePendingRequest = false
+        }
 
         DiagnosticsLog.shared.record(
             "focused-text-ax-health-cooldown-started",
@@ -3090,7 +3414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source: String,
         preservePendingRequest: Bool = false
     ) {
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         if !preservePendingRequest {
             invalidatePendingSuggestionRequest()
         }
@@ -3127,7 +3451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @discardableResult
-    private func applyFocusedTextPollingThrottleIfNeeded(
+    func applyFocusedTextPollingThrottleIfNeeded(
         _ recommendation: FocusedTextPollingThrottleRecommendation
     ) -> Bool {
         guard recommendation.shouldThrottle,
@@ -3680,29 +4004,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return PromptTextAreaMatch(canSuggest: decision.canSuggest, reason: decision.reason)
     }
 
-    private func shouldDeferCodexPromptTargetInvalidation(
+    private func codexPromptTargetInvalidationResolution(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
         promptBlockReason: String
-    ) -> Bool {
-        let hasActiveSuggestionWork = debounceTask != nil
-            || codexPromptPresentationRetryTask != nil
+    ) -> CodexPromptTargetInvalidationResolution {
+        let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
+            || codexPromptPresentationRetryHost.hasScheduledRetry
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
-            || manualSuggestionRequestPending
+            || manualSuggestionRequestHost.isPending
         guard hasActiveSuggestionWork else {
-            return false
+            return .reject
         }
 
-        return codexPromptTargetContinuityPolicy.canDeferInvalidation(
-            appBundleIdentifier: app.bundleIdentifier,
-            processIdentifier: app.processIdentifier,
+        return codexPromptTargetContinuityHost.invalidationResolution(
+            app: app,
             promptBlockReason: promptBlockReason,
             currentFieldIdentity: currentFieldIdentity,
             currentSnapshot: lastTextSnapshot,
-            trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
-            observedContext: context
+            observedContext: context,
+            hasActiveSuggestionWork: hasActiveSuggestionWork
         )
+    }
+
+    @discardableResult
+    private func cancelAndRearmCodexPromptTargetWork(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        promptBlockReason: String,
+        source: String
+    ) -> Bool {
+        guard let snapshot = lastTextSnapshot else {
+            return false
+        }
+
+        let shouldArmRetry = suggestionRequestScheduler.hasPendingRequest
+            || codexPromptPresentationRetryHost.hasScheduledRetry
+            || suggestionSession.hasVisibleSuggestion
+            || manualSuggestionRequestHost.isPending
+        let cancelledPendingRequest = invalidatePendingSuggestionRequest()
+        suggestionIdleRetryState.noteTextChange(
+            snapshot: snapshot,
+            cancelledPendingRequest: cancelledPendingRequest || shouldArmRetry,
+            nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+            settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+        )
+        hideSuggestion(reason: "codex-prompt-target-transient")
+        DiagnosticsLog.shared.record(
+            "codex-prompt-target-refresh-quarantined",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "reason": promptBlockReason,
+                "role": context.role ?? "unknown",
+                "beforeChars": String(context.textBeforeCursor.count),
+                "afterChars": String(context.textAfterCursor.count),
+                "requestCancelled": String(cancelledPendingRequest),
+                "retryArmed": String(suggestionIdleRetryState.hasPendingRetry),
+                "source": source
+            ]
+        )
+        return suggestionIdleRetryState.hasPendingRetry
     }
 
     private func syntheticTextAreaCaretRect(
@@ -4019,60 +4382,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func startKeyboardEventTapIfPossible() -> Bool {
-        cancelKeyboardEventTapIdleStop()
-
-        guard keyboardEventTap == nil else {
-            return true
-        }
-
-        guard keyboardCapturePolicy.shouldCaptureKeys(
+        keyboardEventCaptureHost.startIfPossible(
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            controlState: suggestionControlState
-        ) else {
-            return false
-        }
-
-        let eventTap = KeyboardEventTap(
-            handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
-                self?.handleAutocompleteKey(
-                    key,
-                    isAutorepeat: isAutorepeat,
-                    didObservePassthroughKeyDown: didObservePassthroughKeyDown
-                ) ?? .replayOriginalKey(.noVisibleSuggestion)
-            },
-            passthroughKeyDownObserver: { [weak self] in
-                self?.observePassthroughTypingKeyDown()
-            },
-            passthroughTypingMatchObserver: { [weak self] transition in
-                self?.observeOptimisticTypeThrough(transition)
-            },
-            disabledObserver: { [weak self] reason in
-                self?.handleKeyboardEventTapDisabled(reason: reason)
-            }
+            controlState: suggestionControlState,
+            snapshot: keyboardEventTapSnapshot()
         )
-        eventTap.updateSnapshot(keyboardEventTapSnapshot())
-
-        if eventTap.start() {
-            keyboardEventTap = eventTap
-            DiagnosticsLog.shared.record(
-                "keyboard-event-tap-started",
-                metadata: [
-                    "diagnosticLayer": "keyCapture",
-                    "tapLocation": eventTap.tapPlacement.rawValue
-                ]
-            )
-            return true
-        }
-
-        DiagnosticsLog.shared.record(
-            "keyboard-event-tap-start-failed",
-            metadata: [
-                "diagnosticLayer": "keyCapture",
-                "safetyFailure": "true"
-            ]
-        )
-        return false
     }
 
     private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
@@ -4103,7 +4418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateKeyboardEventTapSnapshot() {
-        keyboardEventTap?.updateSnapshot(keyboardEventTapSnapshot())
+        keyboardEventCaptureHost.updateSnapshot(keyboardEventTapSnapshot())
     }
 
     private func handleKeyboardEventTapDisabled(reason: String) {
@@ -4123,48 +4438,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleKeyboardEventTapStopIfIdle() {
-        guard keyboardEventTap != nil else {
-            return
-        }
-
-        keyboardEventTapStopTask?.cancel()
-        let idleStopDelayMilliseconds = keyboardEventTapIdleStopDelayMilliseconds
-        keyboardEventTapStopTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(idleStopDelayMilliseconds))
-            guard !Task.isCancelled,
-                  let self,
-                  self.keyboardEventTapIdleStopPolicy.shouldStopKeyboardCapture(
-                      hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion,
-                      isSuggestionPanelVisible: self.suggestionPanel.isVisible,
-                      hasPendingAcceptedInsertionUndo: self.acceptedInsertionUndoIsActive()
-                  ) else {
-                return
-            }
-
-            self.stopKeyboardEventTapNow(reason: "idle")
-        }
+        keyboardEventCaptureHost.scheduleStopIfIdle()
     }
 
     private func cancelKeyboardEventTapIdleStop() {
-        keyboardEventTapStopTask?.cancel()
-        keyboardEventTapStopTask = nil
+        keyboardEventCaptureHost.cancelIdleStop()
     }
 
     private func stopKeyboardEventTapNow(reason: String) {
-        cancelKeyboardEventTapIdleStop()
-
-        guard let keyboardEventTap else {
-            return
-        }
-
-        keyboardEventTap.stop(reason: reason)
-        self.keyboardEventTap = nil
-        DiagnosticsLog.shared.record(
-            "keyboard-event-tap-stopped",
-            metadata: [
-                "reason": reason
-            ]
-        )
+        keyboardEventCaptureHost.stopNow(reason: reason)
     }
 
     private func observePassthroughTypingKeyDown() {
@@ -4278,319 +4560,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isAutorepeat: Bool = false,
         didObservePassthroughKeyDown: Bool = false
     ) -> KeyboardEventTapHandlingResult {
-        if didObservePassthroughKeyDown {
-            if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
-                preservesResidualSuggestionAfterNextWordAccept = false
-            } else {
-                currentSuggestionState.invalidatedByUserKeyDown = true
-                preservesResidualSuggestionAfterNextWordAccept = false
-                clearPendingAcceptedInsertionUndo(reason: "typing")
-            }
-        }
-
-        let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
-            for: key,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
+        suggestionAcceptanceHost.handleAutocompleteKey(
+            key,
+            isAutorepeat: isAutorepeat,
+            didObservePassthroughKeyDown: didObservePassthroughKeyDown
         )
-
-        if action == .requestSuggestionNow {
-            requestSuggestionNow(source: "key-tap")
-            suppressKey(key)
-            recordKeyboardAction(
-                key: key,
-                action: action,
-                handled: true,
-                reason: "requested"
-            )
-            return .handled
-        }
-
-        if action == .undoAcceptedInsertion {
-            let handled = undoAcceptedInsertion()
-            if handled {
-                suppressKey(key)
-            }
-            recordKeyboardAction(
-                key: key,
-                action: action,
-                handled: handled,
-                reason: handled ? "accepted-insertion-undone" : "undo-unavailable"
-            )
-            return handled ? .handled : .replayOriginalKey(.undoUnavailable)
-        }
-
-        guard suggestionSession.hasVisibleSuggestion else {
-            suppressKeyUntil[key] = nil
-            return .replayOriginalKey(.noVisibleSuggestion)
-        }
-
-        recordClaudeCodeTerminalHostProofKeyboardProgress(
-            stage: "focus-check-start",
-            key: key,
-            action: action
-        )
-        guard focusedFieldMatchesCurrentSuggestion(
-            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action.insertsSuggestionText,
-            allowObsidianSnapshotFastPath: action.insertsSuggestionText
-        ) else {
-            setSuggestionDecision("Blocked: focus changed")
-            hideSuggestion(reason: "focus-changed")
-            recordKeyboardAction(
-                key: key,
-                action: .passThrough,
-                handled: false,
-                reason: "focus-changed"
-            )
-            return keyboardCaptureSafetyPolicy.handlingResultForFocusMismatch(key: key)
-        }
-        recordClaudeCodeTerminalHostProofKeyboardProgress(
-            stage: "focus-check-passed",
-            key: key,
-            action: action
-        )
-
-        if currentSuggestionState.invalidatedByUserKeyDown {
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "blocked-stale-after-keydown",
-                key: key,
-                action: action
-            )
-            setSuggestionDecision("Blocked: stale suggestion passed through")
-            hideSuggestion(reason: "stale-after-keydown")
-            recordKeyboardAction(
-                key: key,
-                action: .passThrough,
-                handled: false,
-                reason: "stale-after-keydown"
-            )
-            return .replayOriginalKey(.staleAfterTyping)
-        }
-
-        if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "suppressed-autorepeat",
-                key: key,
-                action: action
-            )
-            recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
-            return .handled
-        }
-
-        switch action {
-        case .requestSuggestionNow:
-            return .replayOriginalKey(.passThroughAction)
-
-        case .undoAcceptedInsertion:
-            return .replayOriginalKey(.undoUnavailable)
-
-        case .acceptNextWord:
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-entered",
-                key: key,
-                action: action
-            )
-            guard currentProfile?.supportsOneWordAcceptance == true else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
-                return .replayOriginalKey(.unsupportedAction)
-            }
-            if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true,
-                allowObsidianSnapshotFastPath: true
-            ).blockReason {
-                recordAcceptanceGuardBlock(reason: blockReason)
-                setSuggestionDecision("Blocked: \(blockReason.rawValue)")
-                hideSuggestion(reason: blockReason.rawValue)
-                recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason, key: key)
-            }
-
-            let acceptanceID = UUID().uuidString
-            let acceptedAt = Date()
-            let verificationBaseline = insertionVerificationBaseline(
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptMode: action.diagnosticName
-            )
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-baseline-ready",
-                key: key,
-                action: action,
-                metadata: [
-                    "hasBaseline": String(verificationBaseline != nil)
-                ]
-            )
-            guard let rawAcceptedText = suggestionSession.nextWordAcceptance() else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
-            }
-            let acceptedText = acceptedTextForCurrentAcceptance(rawAcceptedText, action: action)
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-text-ready",
-                key: key,
-                action: action,
-                metadata: [
-                    "acceptedChars": String(acceptedText.count),
-                    "rawAcceptedChars": String(rawAcceptedText.count)
-                ]
-            )
-            guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
-            }
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-proof-ready",
-                key: key,
-                action: action,
-                metadata: acceptanceProof.traceMetadata
-            )
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-insert-start",
-                key: key,
-                action: action
-            )
-            if scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptanceProof: acceptanceProof,
-                verificationBaseline: verificationBaseline
-            ) {
-                suppressKey(key)
-                recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted-deferred-insert-scheduled")
-                return .handled
-            }
-            guard insertAcceptedText(acceptedText, action: action) else {
-                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
-            }
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-insert-succeeded",
-                key: key,
-                action: action
-            )
-
-            completeNextWordAcceptance(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptanceProof: acceptanceProof,
-                verificationBaseline: verificationBaseline
-            )
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return .handled
-
-        case .acceptAllVisible:
-            guard currentProfile?.supportsFullAcceptance == true else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
-                return .replayOriginalKey(.unsupportedAction)
-            }
-            if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true,
-                allowObsidianSnapshotFastPath: true
-            ).blockReason {
-                recordAcceptanceGuardBlock(reason: blockReason)
-                setSuggestionDecision("Blocked: \(blockReason.rawValue)")
-                hideSuggestion(reason: blockReason.rawValue)
-                recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason, key: key)
-            }
-
-            let acceptanceID = UUID().uuidString
-            let acceptedAt = Date()
-            let verificationBaseline = insertionVerificationBaseline(
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptMode: action.diagnosticName
-            )
-            guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
-            }
-            guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
-            }
-            guard insertAcceptedText(acceptedText, action: action) else {
-                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
-            }
-
-            armAcceptedInsertionUndo(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                acceptMode: action.diagnosticName
-            )
-            suggestionSession.commitAllVisibleAcceptance(acceptedText)
-            recordAcceptedText(acceptedText)
-            armObsidianPostAcceptanceSuppressionIfNeeded()
-            suggestionRepetitionSuppressor.recordAcceptance(
-                acceptedText,
-                mode: currentSuggestionState.requestMode,
-                scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
-            )
-            recordRawAcceptance(
-                action: action,
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptanceProof: acceptanceProof
-            )
-            recordAnnoyanceSignal(
-                .accepted,
-                context: currentAnnoyanceContext(),
-                suggestionID: currentSuggestionState.id ?? "",
-                reason: action.diagnosticName
-            )
-            setSuggestionDecision("Accepted: full suggestion")
-            hideSuggestion(reason: "accepted-all")
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
-            return .handled
-
-        case .dismiss:
-            var metadata = currentSuggestionLifetimeMetadata()
-            metadata["escapeDismissalInsertedText"] = String(action.insertsSuggestionText)
-            metadata["escapeDismissalInsertedTextChars"] = "0"
-            if let input = currentPrefixFamilyCooldownInput() {
-                metadata.merge(recordPrefixFamilyCooldown(.escapeDismissal, input: input)) { current, _ in current }
-            }
-            recordAnnoyanceSignal(
-                .rapidEscDismissal,
-                context: currentAnnoyanceContext(),
-                suggestionID: currentSuggestionState.id ?? "",
-                reason: "escape",
-                metadata: metadata
-            )
-            suppressCurrentField(reason: "escape")
-            hideSuggestion(
-                reason: "escape",
-                metadata: [
-                    "escapeDismissalInsertedText": String(action.insertsSuggestionText),
-                    "escapeDismissalInsertedTextChars": "0"
-                ]
-            )
-            suppressKey(key)
-            recordKeyboardAction(key: key, action: action, handled: true, reason: "dismissed")
-            return .handled
-
-        case .passThrough:
-            if key != .other {
-                recordKeyboardAction(key: key, action: action, handled: false, reason: "pass-through")
-            }
-            return .replayOriginalKey(.passThroughAction)
-        }
     }
-
     private func acceptedTextForCurrentAcceptance(
         _ acceptedText: String,
         action: KeyboardAction
@@ -4639,7 +4614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .block(blockReason ?? .missingCurrentSnapshot)
         }
 
-        return suggestionAcceptanceGuard.decision(
+        return suggestionSessionBehaviors.acceptanceGuard.decision(
             shown: shownSnapshot,
             current: currentSnapshot
         )
@@ -5348,12 +5323,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleAcceptedInsertionUndoExpiration(acceptanceID: String, expiresAt: Date) {
-        acceptedInsertionUndoExpirationTask?.cancel()
-        acceptedInsertionUndoExpirationTask = Task { @MainActor [weak self] in
-            let delay = max(0, expiresAt.timeIntervalSinceNow)
-            try? await Task.sleep(for: .milliseconds(Int(delay * 1_000)))
-            guard !Task.isCancelled,
-                  let self,
+        acceptedInsertionUndoExpirationHost.schedule(expiresAt: expiresAt) { [weak self] in
+            guard let self,
                   self.pendingAcceptedInsertionUndo?.acceptanceID == acceptanceID else {
                 return
             }
@@ -5383,7 +5354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scheduledFieldIdentity = currentSuggestionState.fieldIdentity
         let scheduledRequestMode = currentSuggestionState.requestMode
         let delayMilliseconds = deferredGhosttyInsertionProbeDelayMilliseconds()
-        deferredTerminalHostAcceptanceTask?.cancel()
+        deferredTerminalHostAcceptanceHost.cancel()
         suggestionPipeline.pausePolling(
             now: Date(),
             durationMilliseconds: delayMilliseconds + postInsertionPollPauseMilliseconds
@@ -5401,13 +5372,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        deferredTerminalHostAcceptanceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            guard !Task.isCancelled,
-                  let self else {
+        deferredTerminalHostAcceptanceHost.schedule(afterMilliseconds: delayMilliseconds) { [weak self] in
+            guard let self else {
                 return
             }
-            self.deferredTerminalHostAcceptanceTask = nil
             guard self.suggestionSession.hasVisibleSuggestion,
                   self.currentSuggestionState.id == scheduledSuggestionID,
                   self.currentSuggestionState.fieldIdentity == scheduledFieldIdentity,
@@ -5430,7 +5398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "suggestionID": scheduledSuggestionID ?? ""
                 ]
             )
-            guard self.insertAcceptedText(acceptedText, action: action) else {
+            guard self.suggestionInsertionHost.insertAcceptedText(acceptedText, action: action) else {
                 self.suppressCurrentFieldAfterInsertionFailure(reason: "ghostty-deferred-insert-failed")
                 self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
                     stage: "insert-failed",
@@ -5506,7 +5474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recordAcceptedText(acceptedText)
         armObsidianPostAcceptanceSuppressionIfNeeded()
         advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
-        suggestionRepetitionSuppressor.recordAcceptance(
+        suggestionOrchestrator.recordRepetitionAcceptance(
             acceptedText,
             mode: currentSuggestionState.requestMode,
             scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -5535,8 +5503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        acceptedInsertionUndoExpirationTask?.cancel()
-        acceptedInsertionUndoExpirationTask = nil
+        acceptedInsertionUndoExpirationHost.cancel()
         self.pendingAcceptedInsertionUndo = nil
         DiagnosticsLog.shared.record(
             "accepted-insertion-undo-cleared",
@@ -5647,8 +5614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func clearAcceptanceSurvivalForAcceptedInsertionUndo(_ undo: AcceptedInsertionUndo) {
-        acceptanceSurvivalTasks[undo.acceptanceID]?.cancel()
-        acceptanceSurvivalTasks[undo.acceptanceID] = nil
+        acceptanceSurvivalTaskHost.cancel(acceptanceID: undo.acceptanceID)
 
         Task { @MainActor [weak self] in
             guard let self,
@@ -5682,352 +5648,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func insertionVerificationBaseline(
-        acceptanceID: String,
-        acceptedAt: Date,
-        action: KeyboardAction?,
-        acceptMode: String
-    ) -> InsertionVerificationBaseline? {
-        guard let currentFieldIdentity,
-              let lastTextSnapshot,
-              lastTextSnapshot.fieldIdentity == currentFieldIdentity,
-              let currentSuggestionAcceptanceSnapshot = currentSuggestionState.acceptanceSnapshot,
-              let profile = currentProfile else {
-            return nil
-        }
-        let fieldClassification = currentSuggestionState.fieldClassification
-        let fieldKind = fieldClassification?.kind ?? .unknown
-        let behaviorProfileID = suggestionOrchestrator.currentRequest?.behaviorProfile.id
-            ?? AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldKind: fieldKind,
-                currentLineStructure: CurrentLineStructure.from(textBeforeCursor: lastTextSnapshot.textBeforeCursor)
-            )).id
-
-        return InsertionVerificationBaseline(
-            fieldIdentity: currentFieldIdentity,
-            targetFingerprint: currentSuggestionAcceptanceSnapshot.targetFingerprint.postInsertionScope,
-            previousTextBeforeCursor: lastTextSnapshot.textBeforeCursor,
-            previousTextAfterCursor: lastTextSnapshot.textAfterCursor,
-            profile: profile,
-            suggestionID: currentSuggestionState.id,
-            requestMode: currentSuggestionState.requestMode,
-            acceptanceID: acceptanceID,
-            acceptedAt: acceptedAt,
-            action: action,
-            acceptMode: acceptMode,
-            fieldKind: fieldKind,
-            fieldKindReason: fieldClassification?.reason ?? "unknown",
-            behaviorProfileID: behaviorProfileID,
-            retryCount: 0
-        )
-    }
-
     private func scheduleInsertionVerification(
         acceptedText: String,
         baseline: InsertionVerificationBaseline?
     ) {
-        guard let baseline else {
-            return
-        }
-
-        insertionVerificationTask?.cancel()
-        insertionVerificationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(
-                insertionVerificationTimingPolicy.delayMilliseconds(
-                    for: baseline.profile,
-                    retryCount: baseline.retryCount
-                )
-            ))
-            guard !Task.isCancelled else {
-                return
-            }
-
-            let verificationContextRead = focusedInsertionVerificationContext(
-                for: baseline,
-                acceptedText: acceptedText
-            )
-            guard case let .ready(context: verificationContext) = verificationContextRead else {
-                recordInsertionVerificationContextFailure(
-                    verificationContextRead,
-                    acceptedText: acceptedText,
-                    baseline: baseline
-                )
-                return
-            }
-
-            var context = verificationContext
-            var result = insertionVerification.verify(
-                previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                acceptedText: acceptedText,
-                currentTextBeforeCursor: context.textBeforeCursor,
-                previousTextAfterCursor: baseline.previousTextAfterCursor,
-                currentTextAfterCursor: context.textAfterCursor
-            )
-
-            DiagnosticsLog.shared.record(
-                "insert-verification",
-                metadata: [
-                    "app": baseline.profile.bundleIdentifier,
-                    "result": String(describing: result),
-                    "acceptedChars": String(acceptedText.count),
-                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                    "currentBeforeChars": String(context.textBeforeCursor.count),
-                    "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                    "currentAfterChars": String(context.textAfterCursor.count)
-                ]
-            )
-
-            if baseline.profile.bundleIdentifier == "md.obsidian",
-               obsidianInsertionVerificationFastPathPolicy.canVerifyLengthMatchedSuffix(
-                   previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                   acceptedText: acceptedText,
-                   currentTextBeforeCursor: context.textBeforeCursor,
-                   previousTextAfterCursor: baseline.previousTextAfterCursor,
-                   currentTextAfterCursor: context.textAfterCursor,
-                   verificationResult: result
-               ) {
-                result = .verified
-                DiagnosticsLog.shared.record(
-                    "obsidian-length-matched-insert-verification-fast-path",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "acceptedChars": String(acceptedText.count),
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count),
-                        "reason": "length-matched-suffix"
-                    ]
-                )
-                DiagnosticsLog.shared.record(
-                    "insert-verification",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": String(describing: result),
-                        "acceptedChars": String(acceptedText.count),
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count),
-                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                        "currentAfterChars": String(context.textAfterCursor.count),
-                        "source": "obsidian-length-matched-suffix"
-                    ]
-                )
-            }
-
-            if !result.isVerified,
-               let recheckDelayMilliseconds = insertionVerificationTimingPolicy.readOnlyRecheckDelayMilliseconds(
-                   for: baseline.profile,
-                   result: result,
-                   retryCount: baseline.retryCount
-               ) {
-                try? await Task.sleep(for: .milliseconds(recheckDelayMilliseconds))
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                if case let .ready(context: recheckContext) = focusedInsertionVerificationContext(
-                    for: baseline,
-                    acceptedText: acceptedText
-                ) {
-                    context = recheckContext
-                    result = insertionVerification.verify(
-                        previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                        acceptedText: acceptedText,
-                        currentTextBeforeCursor: context.textBeforeCursor,
-                        previousTextAfterCursor: baseline.previousTextAfterCursor,
-                        currentTextAfterCursor: context.textAfterCursor
-                    )
-                    DiagnosticsLog.shared.record(
-                        "insert-verification",
-                        metadata: [
-                            "app": baseline.profile.bundleIdentifier,
-                            "result": String(describing: result),
-                            "acceptedChars": String(acceptedText.count),
-                            "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                            "currentBeforeChars": String(context.textBeforeCursor.count),
-                            "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                            "currentAfterChars": String(context.textAfterCursor.count),
-                            "source": "read-only-recheck",
-                            "recheckDelayMilliseconds": String(recheckDelayMilliseconds)
-                        ]
-                    )
-                }
-            }
-
-            guard result.isVerified else {
-                if insertionRetryPolicy.shouldRetry(
-                    result: result,
-                    insertionMode: baseline.profile.insertionMode,
-                    retryCount: baseline.retryCount
-                ) {
-                    DiagnosticsLog.shared.record(
-                        "insert-verification-retry",
-                        metadata: [
-                            "app": baseline.profile.bundleIdentifier,
-                            "acceptedChars": String(acceptedText.count),
-                            "retryCount": String(baseline.retryCount + 1),
-                            "result": String(describing: result)
-                        ]
-                    )
-
-                    let skippedModes = insertionRetrySkippedModes(
-                        result: result,
-                        profile: baseline.profile,
-                        retryCount: baseline.retryCount
-                    )
-                    if insertAcceptedText(
-                        acceptedText,
-                        skippingInsertionModes: skippedModes,
-                        action: baseline.action
-                    ) {
-                        let retryBaseline = InsertionVerificationBaseline(
-                            fieldIdentity: baseline.fieldIdentity,
-                            targetFingerprint: baseline.targetFingerprint,
-                            previousTextBeforeCursor: baseline.previousTextBeforeCursor,
-                            previousTextAfterCursor: baseline.previousTextAfterCursor,
-                            profile: baseline.profile,
-                            suggestionID: baseline.suggestionID,
-                            requestMode: baseline.requestMode,
-                            acceptanceID: baseline.acceptanceID,
-                            acceptedAt: baseline.acceptedAt,
-                            action: baseline.action,
-                            acceptMode: baseline.acceptMode,
-                            fieldKind: baseline.fieldKind,
-                            fieldKindReason: baseline.fieldKindReason,
-                            behaviorProfileID: baseline.behaviorProfileID,
-                            retryCount: baseline.retryCount + 1
-                        )
-                        scheduleInsertionVerification(acceptedText: acceptedText, baseline: retryBaseline)
-                        return
-                    }
-                }
-
-                DiagnosticsLog.shared.record(
-                    "insert-verification-final-failure",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "result": String(describing: result),
-                        "acceptedChars": String(acceptedText.count),
-                        "retryCount": String(baseline.retryCount)
-                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
-                )
-                RawAutocompleteTraceLog.shared.record(
-                    type: .insertionFailed,
-                    suggestionID: baseline.suggestionID ?? "",
-                    appBundleIdentifier: baseline.profile.bundleIdentifier,
-                    fieldIdentity: baseline.fieldIdentity.traceDescription,
-                    requestMode: baseline.requestMode?.rawValue ?? "",
-                    acceptedText: acceptedText,
-                    outcome: String(describing: result),
-                    reason: "insert-verification-failed",
-                    metadata: [
-                        "acceptanceID": baseline.acceptanceID,
-                        "acceptMode": baseline.acceptMode,
-                        "fieldKind": baseline.fieldKind.rawValue,
-                        "fieldKindReason": baseline.fieldKindReason,
-                        "behaviorProfile": baseline.behaviorProfileID.rawValue,
-                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
-                        "currentBeforeChars": String(context.textBeforeCursor.count),
-                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
-                        "currentAfterChars": String(context.textAfterCursor.count)
-                    ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
-                )
-                recordPersonalCaptureSuggestionEpisodeInsertionFailed(
-                    baseline: baseline,
-                    outcome: String(describing: result),
-                    reason: "insert-verification-failed"
-                )
-                recordAnnoyanceSignal(
-                    .wrongInsertion,
-                    context: annoyanceContext(
-                        appBundleIdentifier: baseline.profile.bundleIdentifier,
-                        fieldIdentity: baseline.fieldIdentity,
-                        requestMode: baseline.requestMode,
-                        fieldKind: baseline.fieldKind
-                    ),
-                    suggestionID: baseline.suggestionID ?? "",
-                    reason: "insert-verification-failed",
-                    metadata: [
-                        "acceptanceID": baseline.acceptanceID,
-                        "acceptMode": baseline.acceptMode,
-                        "insertionResult": String(describing: result)
-                    ]
-                )
-                if baseline.profile.suppressesAfterInsertionFailure {
-                    suppressField(
-                        baseline.fieldIdentity,
-                        profile: baseline.profile,
-                        reason: "insert-verification-failed"
-                    )
-                }
-                hideSuggestion(reason: "insert-verification-failed")
-                return
-            }
-
-            if baseline.retryCount > 0 {
-                DiagnosticsLog.shared.record(
-                    "insert-verification-recovered",
-                    metadata: [
-                        "app": baseline.profile.bundleIdentifier,
-                        "acceptedChars": String(acceptedText.count),
-                        "retryCount": String(baseline.retryCount)
-                    ]
-                )
-            }
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionVerified,
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity.traceDescription,
-                requestMode: baseline.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                outcome: "verified",
-                metadata: [
-                    "acceptanceID": baseline.acceptanceID,
-                    "acceptMode": baseline.acceptMode,
-                    "fieldKind": baseline.fieldKind.rawValue,
-                    "fieldKindReason": baseline.fieldKindReason,
-                    "behaviorProfile": baseline.behaviorProfileID.rawValue
-                ]
-            )
-            recordPersonalCaptureSuggestionEpisodeAction(
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                outcome: .accepted,
-                reason: "insertion-verified",
-                acceptedText: acceptedText,
-                metadata: [
-                    "acceptanceID": baseline.acceptanceID,
-                    "acceptMode": baseline.acceptMode,
-                    "fieldKind": baseline.fieldKind.rawValue,
-                    "fieldKindReason": baseline.fieldKindReason,
-                    "behaviorProfile": baseline.behaviorProfileID.rawValue
-                ]
-            )
-            recordPersonalCaptureAcceptedSuggestion(
-                acceptedText: acceptedText,
-                baseline: baseline
-            )
-            let tracker = AcceptanceSurvivalTracker(
-                acceptanceID: baseline.acceptanceID,
-                suggestionID: baseline.suggestionID ?? "",
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity,
-                requestMode: baseline.requestMode?.rawValue ?? "",
-                acceptMode: baseline.acceptMode,
-                acceptedText: acceptedText,
-                textBeforeCursorAtAccept: baseline.previousTextBeforeCursor,
-                expectedInsertionUTF16Offset: baseline.previousTextBeforeCursor.utf16.count,
-                acceptedAt: baseline.acceptedAt,
-                profile: baseline.profile,
-                fieldKind: baseline.fieldKind,
-                fieldKindReason: baseline.fieldKindReason,
-                behaviorProfileID: baseline.behaviorProfileID
-            )
-            startAcceptanceSurvivalTracking(tracker)
-        }
+        guard let baseline else { return }
+        insertionVerificationHost.schedule(acceptedText: acceptedText, baseline: baseline)
     }
 
-    private func recordInsertionVerificationContextFailure(
+    func handleInsertionVerificationContextFailure(
         _ contextRead: FocusedInsertionVerificationContext,
         acceptedText: String,
         baseline: InsertionVerificationBaseline
@@ -6098,7 +5727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func focusedInsertionVerificationContext(
+    func focusedInsertionVerificationContext(
         for baseline: InsertionVerificationBaseline,
         acceptedText: String
     ) -> FocusedInsertionVerificationContext {
@@ -6535,34 +6164,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return target.context
     }
 
-    private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
-        acceptanceSurvivalTasks[tracker.acceptanceID]?.cancel()
-        acceptanceSurvivalTasks[tracker.acceptanceID] = Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
-
-            await self.acceptanceSurvivalChecker.beginTracking(tracker)
-            let checkpoints: [(AcceptanceSurvivalCheckpoint, Duration)] = [
-                (.twoSeconds, .seconds(2)),
-                (.tenSeconds, .seconds(8)),
-                (.thirtySeconds, .seconds(20)),
-                (.oneMinute, .seconds(30)),
-                (.fiveMinutes, .seconds(240))
-            ]
-
-            for (checkpoint, delay) in checkpoints {
-                try? await Task.sleep(for: delay)
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                await self.measureAcceptanceSurvival(
+    func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
+        acceptanceSurvivalTaskHost.schedule(
+            acceptanceID: tracker.acceptanceID,
+            start: { [weak self] in
+                await self?.acceptanceSurvivalChecker.beginTracking(tracker)
+            },
+            measure: { [weak self] checkpoint in
+                await self?.measureAcceptanceSurvival(
                     acceptanceID: tracker.acceptanceID,
                     checkpoint: checkpoint
                 )
             }
-        }
+        )
     }
 
     private func measureAcceptanceSurvival(
@@ -6575,7 +6189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let currentTextWindow = currentTextWindow(for: tracker) else {
             if checkpoint.isTerminalMetricCheckpoint {
-                acceptanceSurvivalTasks[acceptanceID] = nil
+                acceptanceSurvivalTaskHost.finish(acceptanceID: acceptanceID)
                 _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
             }
             return
@@ -6591,7 +6205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         recordAcceptanceSurvivalResult(result)
         if result.shouldFinish {
-            acceptanceSurvivalTasks[acceptanceID] = nil
+            acceptanceSurvivalTaskHost.finish(acceptanceID: acceptanceID)
             _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
         }
     }
@@ -6625,8 +6239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for result in results {
                 self.recordAcceptanceSurvivalResult(result)
                 if result.shouldFinish {
-                    self.acceptanceSurvivalTasks[result.tracker.acceptanceID]?.cancel()
-                    self.acceptanceSurvivalTasks[result.tracker.acceptanceID] = nil
+                    self.acceptanceSurvivalTaskHost.cancel(acceptanceID: result.tracker.acceptanceID)
                     _ = await self.acceptanceSurvivalChecker.finishTracking(
                         acceptanceID: result.tracker.acceptanceID
                     )
@@ -6781,9 +6394,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     behaviorProfileID: result.tracker.behaviorProfileID
                 )
             )
-            persistAcceptedTextStyleMemory()
+            appPreferencePersistenceHost.persistAcceptedTextStyleMemory()
         }
-        persistAcceptedAndKeptLearning()
+        appPreferencePersistenceHost.persistAcceptedAndKeptLearning()
         return signal
     }
 
@@ -6810,7 +6423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfileID: behaviorProfileID
             )
         )
-        persistAcceptedAndKeptLearning()
+        appPreferencePersistenceHost.persistAcceptedAndKeptLearning()
         var metadata = signal.traceMetadata
         metadata["typeThroughConfidenceCredited"] = "true"
         return metadata
@@ -6930,7 +6543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return metadata
     }
 
-    private func insertionFailureRecoverabilityMetadata(
+    func insertionFailureRecoverabilityMetadata(
         baseline: InsertionVerificationBaseline
     ) -> [String: String] {
         let rollbackAvailable = pendingAcceptedInsertionUndo?.acceptanceID == baseline.acceptanceID
@@ -6959,881 +6572,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         visiblePageContext: VisiblePageContext?,
         triggerReason: String = "poll"
     ) {
-        cancelPrefixCooldownRetry()
-        cancelPendingSuggestionTask(reason: "new-request")
-        lastRequestedTextBeforeCursor = context.textBeforeCursor
-
-        let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
-            appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldClassification.kind,
-            textBeforeCursor: context.textBeforeCursor
-        )
-        let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
-            for: acceptedTextStyleKey
-        )
-        let personalization = personalizationCoordinator.selection(isEnabled: appSettings.personalCaptureEnabled, context: context, appBundleIdentifier: appBundleIdentifier, fieldClassification: fieldClassification, requestMode: requestMode)
-        let orchestration = suggestionOrchestrator.beginRequest(SuggestionRequestInput(
+        suggestionSchedulingHost.scheduleSuggestion(
             context: context,
+            profile: profile,
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
-            acceptedTextStyleSketch: acceptedTextStyleSketch,
-            personalContext: personalization.context,
-            personalWritingMemory: personalization.memory,
-            visiblePageContext: visiblePageContext,
-            maxVisibleWords: maxVisibleWords(for: requestMode, profile: profile),
-            requestMode: requestMode,
-            suggestionTuning: suggestionTuning
-        ))
-        let request = orchestration.request
-        let suggestionID = orchestration.suggestionID
-        let fieldIdentityDescription = orchestration.fieldIdentityDescription
-        let requestMetadata = orchestration.requestMetadata
-            .merging(timingLane.traceMetadata) { current, _ in current }
-        suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
-        let requestTicket = orchestration.ticket
-        let requestStartedAt = orchestration.startedAt
-        let requestSchedule = suggestionRequestSchedulingPolicy.schedule(
-            policyDelayMilliseconds: delayMilliseconds,
+            renderMode: renderMode,
+            delayMilliseconds: delayMilliseconds,
             timingLane: timingLane,
-            requestMode: request.mode,
-            renderMode: renderMode
+            requestMode: requestMode,
+            typingBurstDecision: typingBurstDecision,
+            visiblePageContext: visiblePageContext,
+            triggerReason: triggerReason
         )
-        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
-            ? [:]
-            : typingBurstDecision.traceMetadata
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .suggestionRequested,
-            suggestionID: suggestionID,
-            appBundleIdentifier: appBundleIdentifier,
-            fieldIdentity: fieldIdentityDescription,
-            requestMode: request.mode.rawValue,
-            triggerReason: triggerReason,
-            textBeforeCursor: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor,
-            metadata: [
-                "renderMode": renderMode.rawValue
-            ]
-            .merging(typingBurstMetadata) { current, _ in current }
-            .merging(requestSchedule.traceMetadata) { current, _ in current }
-            .merging(requestMetadata) { current, _ in current }
-        )
-
-        let disablesFastWordCompletionForProof = runtimeProofOptions.disablesFastWordCompletion(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-        let disablesWordCompletionForProof = runtimeProofOptions.disablesWordCompletion(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-        let disablesPhraseContinuationForProof = runtimeProofOptions.disablesPhraseContinuation(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-        let disablesFastPhraseFallbackForProof = runtimeProofOptions.disablesFastPhraseFallback(
-            appBundleIdentifier: appBundleIdentifier,
-            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
-        )
-
-        if requestMode == .wordCompletion,
-           disablesWordCompletionForProof {
-            DiagnosticsLog.shared.record(
-                "word-completion-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "proof-word-completion-disabled",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "proof-word-completion-disabled",
-                metadata: [
-                    "renderMode": renderMode.rawValue,
-                    "proofDisableReason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
-                ]
-                .merging(requestMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": "proof-word-completion-disabled"
-                ]
-            )
-            setSuggestionDecision("Blocked: proof word completion disabled")
-            hideSuggestion()
-            return
-        }
-
-        if requestMode == .wordCompletion,
-           !disablesFastWordCompletionForProof {
-            let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
-                + (visiblePageContext?.completionCandidateWords ?? [])
-            let allowPredictiveFallback = shouldUsePredictiveWordFallback(
-                profile: profile,
-                visiblePageContext: visiblePageContext
-            )
-            let fastSelection = suggestionOrchestrator.fastWordSelection(
-                for: context.textBeforeCursor,
-                recentWords: candidateWords,
-                allowPredictiveFallback: allowPredictiveFallback
-            )
-            let fastSelectionMetadata = fastSelection.traceMetadata
-                .merging(timingLane.traceMetadata) { current, _ in current }
-            if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionRepetitionSuppressor.shouldSuppress(
-                    fastSuggestion.visibleText,
-                    mode: request.mode,
-                    scope: appBundleIdentifier
-                ) else {
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "fast-word-completion",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: fastSuggestion.visibleText,
-                        displayedText: fastSuggestion.visibleText,
-                        latencyMilliseconds: 0,
-                        reason: "repeated-miss",
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastSelectionMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": "repeated-miss",
-                            "triggerReason": "fast-word-completion"
-                        ]
-                    )
-                    recordAnnoyanceSignal(
-                        .repeatedRejection,
-                        context: annoyanceContext(
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            requestMode: request.mode,
-                            fieldKind: fieldClassification.kind
-                        ),
-                        suggestionID: suggestionID,
-                        reason: "repeated-miss"
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                    hideSuggestion()
-                    return
-                }
-
-                presentSuggestion(
-                    fastSuggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: 0,
-                    triggerReason: "fast-word-completion",
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: fastSelectionMetadata,
-                    refreshBeforePresenting: false
-                )
-                return
-            }
-
-            if timingLane == .instantWord {
-                let reason = "instant-word-no-local-candidate"
-                RawAutocompleteTraceLog.shared.record(
-                    type: .suggestionSuppressed,
-                    suggestionID: suggestionID,
-                    appBundleIdentifier: appBundleIdentifier,
-                    fieldIdentity: fieldIdentityDescription,
-                    requestMode: request.mode.rawValue,
-                    triggerReason: "fast-word-completion",
-                    textBeforeCursor: request.textBeforeCursor,
-                    textAfterCursor: request.textAfterCursor,
-                    reason: reason,
-                    metadata: [
-                        "renderMode": renderMode.rawValue
-                    ]
-                    .merging(timingLane.traceMetadata) { current, _ in current }
-                    .merging(fastSelectionMetadata) { current, _ in current }
-                    .merging(requestMetadata) { current, _ in current }
-                )
-                if suggestionSession.hasVisibleSuggestion {
-                    setSuggestionDecision("Shown: no instant word replacement")
-                    repositionVisibleSuggestion(context: context, profile: profile)
-                    return
-                }
-
-                setSuggestionDecision("Waiting: no instant word match")
-                hideSuggestion()
-                return
-            }
-
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "fast-word-completion",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "no-fast-word-candidate",
-                metadata: [
-                    "renderMode": renderMode.rawValue
-                ]
-                .merging(fastSelectionMetadata) { current, _ in current }
-                .merging(requestMetadata) { current, _ in current }
-            )
-            if shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext) {
-                setSuggestionDecision("Queued: model word completion")
-            } else if suggestionSession.hasVisibleSuggestion {
-                setSuggestionDecision("Shown: no fast word replacement")
-                repositionVisibleSuggestion(context: context, profile: profile)
-                return
-            } else {
-                setSuggestionDecision(SuggestionStatusText.notShown(reason: "no-fast-word-candidate"))
-                hideSuggestion()
-                return
-            }
-        } else if requestMode == .wordCompletion,
-                  disablesFastWordCompletionForProof {
-            DiagnosticsLog.shared.record(
-                "fast-word-completion-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disableFastWordCompletionEnvironmentKey
-                ]
-            )
-            setSuggestionDecision("Queued: proof model word completion")
-        }
-
-        if requestMode == .phraseContinuation,
-           disablesPhraseContinuationForProof {
-            DiagnosticsLog.shared.record(
-                "phrase-continuation-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disablePhraseContinuationEnvironmentKey
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "proof-phrase-continuation-disabled",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "proof-phrase-continuation-disabled",
-                metadata: [
-                    "renderMode": renderMode.rawValue,
-                    "proofDisableReason": RuntimeProofOptions.disablePhraseContinuationEnvironmentKey
-                ]
-                .merging(requestMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": "proof-phrase-continuation-disabled"
-                ]
-            )
-            setSuggestionDecision("Blocked: proof phrase continuation disabled")
-            hideSuggestion()
-            return
-        }
-
-        var fastPhraseFallbackMetadata: [String: String] = [:]
-        var didPresentFastPhraseFallback = false
-        if requestMode == .phraseContinuation,
-           !disablesFastPhraseFallbackForProof {
-            let allowsClaudeCodeProofPromptPrediction =
-                appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
-            let allowsPredictivePhraseFallback =
-                allowsClaudeCodeProofPromptPrediction
-                || shouldUsePredictivePhraseFallback(
-                    profile: profile,
-                    behaviorProfileID: request.behaviorProfileID,
-                    visiblePageContext: visiblePageContext
-                )
-            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
-                for: context.textBeforeCursor,
-                docLocalContextTexts: orchestration.docLocalContextTexts,
-                personalWritingMemory: orchestration.personalWritingMemory,
-                behaviorProfileID: request.behaviorProfileID,
-                maxVisibleWords: request.maxVisibleWords,
-                allowPredictiveFallback: allowsPredictivePhraseFallback,
-                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
-            )
-            let fastSelectionMetadata = fastSelection.traceMetadata
-                .merging(timingLane.traceMetadata) { current, _ in current }
-            if let fastSuggestion = fastSelection.suggestion {
-                guard !suggestionRepetitionSuppressor.shouldSuppress(
-                    fastSuggestion.visibleText,
-                    mode: request.mode,
-                    scope: appBundleIdentifier
-                ) else {
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: fastSuggestion.visibleText,
-                        displayedText: fastSuggestion.visibleText,
-                        latencyMilliseconds: 0,
-                        reason: "repeated-miss",
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastSelectionMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": "repeated-miss",
-                            "triggerReason": "canned-bridge"
-                        ]
-                    )
-                    recordAnnoyanceSignal(
-                        .repeatedRejection,
-                        context: annoyanceContext(
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentity,
-                            requestMode: request.mode,
-                            fieldKind: fieldClassification.kind
-                        ),
-                        suggestionID: suggestionID,
-                        reason: "repeated-miss"
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                    hideSuggestion()
-                    return
-                }
-
-                let acceptedAndKeptSignal = acceptedAndKeptSignal(
-                    request: request,
-                    fieldClassification: fieldClassification,
-                    profile: profile
-                )
-                let learningDecision = suggestionOrchestrator.fastPhraseFallbackLearningDecision(
-                    acceptedAndKeptSignal: acceptedAndKeptSignal,
-                    probabilityThreshold: acceptedAndKeptLearning.probabilityThreshold(for: request.mode)
-                )
-                let fastPresentationMetadata = fastSelectionMetadata
-                    .merging(learningDecision.metadata) { current, _ in current }
-                if learningDecision.shouldSuppress {
-                    let reason = learningDecision.reason ?? "fast-phrase-learning-restraint"
-                    fastPhraseFallbackMetadata = [
-                        "fastPhraseFallbackChecked": "true",
-                        "fastPhraseFallbackOutcome": reason
-                    ]
-                    .merging(fastPresentationMetadata) { current, _ in current }
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .suggestionSuppressed,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        latencyMilliseconds: 0,
-                        reason: reason,
-                        metadata: [
-                            "renderMode": renderMode.rawValue
-                        ]
-                        .merging(fastPresentationMetadata) { current, _ in current }
-                        .merging(requestMetadata) { current, _ in current }
-                    )
-                    recordSuggestionEvent(
-                        "suggestion-blocked",
-                        context: context,
-                        profile: profile,
-                        metadata: [
-                            "reason": reason,
-                            "triggerReason": "canned-bridge"
-                        ]
-                        .merging(learningDecision.metadata) { current, _ in current }
-                    )
-                    setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-                } else {
-                    presentSuggestion(
-                        fastSuggestion,
-                        suggestionID: suggestionID,
-                        request: request,
-                        context: context,
-                        profile: profile,
-                        fieldIdentity: fieldIdentity,
-                        renderMode: renderMode,
-                        latencyMilliseconds: 0,
-                        triggerReason: "canned-bridge",
-                        requestTicket: requestTicket,
-                        candidateSelectionMetadata: fastPresentationMetadata,
-                        refreshBeforePresenting: false
-                    )
-                    didPresentFastPhraseFallback = suggestionSession.hasVisibleSuggestion
-                        && currentSuggestionState.id == suggestionID
-                    fastPhraseFallbackMetadata = [
-                        "fastPhraseFallbackChecked": "true",
-                        "fastPhraseFallbackOutcome": didPresentFastPhraseFallback
-                            ? "shown-then-model"
-                            : "presentation-blocked-model-only",
-                        "fastPhraseFallbackVisibleWords": String(fastSuggestion.visibleWordCount)
-                    ]
-                    .merging(fastPresentationMetadata) { current, _ in current }
-                    if didPresentFastPhraseFallback {
-                        setSuggestionDecision("Shown: instant phrase; refining with model")
-                    }
-                }
-            }
-
-            let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
-            if fastPhraseFallbackMetadata.isEmpty {
-                fastPhraseFallbackMetadata = [
-                    "fastPhraseFallbackChecked": "true",
-                    "fastPhraseFallbackOutcome": fastPhraseFallbackOutcome
-                ]
-                .merging(fastSelectionMetadata) { current, _ in current }
-                setSuggestionDecision("Queued: model phrase after instant \(fastPhraseFallbackOutcome)")
-            }
-        } else if requestMode == .phraseContinuation,
-                  disablesFastPhraseFallbackForProof {
-            DiagnosticsLog.shared.record(
-                "fast-phrase-fallback-disabled",
-                metadata: [
-                    "app": appBundleIdentifier,
-                    "reason": RuntimeProofOptions.disableFastPhraseFallbackEnvironmentKey
-                ]
-            )
-            setSuggestionDecision("Queued: proof model phrase continuation")
-        }
-
-        if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
-            if didPresentFastPhraseFallback {
-                suggestionIdleRetryState.cancel()
-                let metadata = [
-                    "renderMode": renderMode.rawValue,
-                    "reason": "typing-burst-model-continuation-kept-fast-phrase"
-                ]
-                .merging(fieldClassification.traceMetadata) { current, _ in current }
-                .merging(typingBurstMetadata) { current, _ in current }
-                .merging(fastPhraseFallbackMetadata) { current, _ in current }
-                .merging(requestMetadata) { current, _ in current }
-                setSuggestionDecision("Shown: instant phrase while typing fast")
-                showFieldStatusIndicator(.shown, context: context)
-                RawAutocompleteTraceLog.shared.record(
-                    type: .suggestionSuppressed,
-                    suggestionID: suggestionID,
-                    appBundleIdentifier: appBundleIdentifier,
-                    fieldIdentity: fieldIdentityDescription,
-                    requestMode: request.mode.rawValue,
-                    triggerReason: "typing-burst-policy",
-                    textBeforeCursor: request.textBeforeCursor,
-                    textAfterCursor: request.textAfterCursor,
-                    reason: "typing-burst-model-continuation-kept-fast-phrase",
-                    metadata: metadata
-                )
-                recordSuggestionEvent(
-                    "suggestion-blocked",
-                    context: context,
-                    profile: profile,
-                    metadata: metadata
-                )
-                repositionVisibleSuggestion(context: context, profile: profile)
-                updateKeyboardEventTapSnapshot()
-                return
-            }
-
-            let metadata = [
-                "renderMode": renderMode.rawValue,
-                "reason": "typing-burst-model-continuation"
-            ]
-            .merging(fieldClassification.traceMetadata) { current, _ in current }
-            .merging(typingBurstMetadata) { current, _ in current }
-            .merging(fastPhraseFallbackMetadata) { current, _ in current }
-            .merging(requestMetadata) { current, _ in current }
-            setSuggestionDecision("Waiting: fast typing")
-            showFieldStatusIndicator(.waiting, context: context)
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "typing-burst-policy",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "typing-burst-model-continuation",
-                metadata: metadata
-            )
-            recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: metadata
-            )
-            suggestionIdleRetryState.noteTypingBurstSuppression(
-                snapshot: FocusedTextSnapshot(
-                    fieldIdentity: fieldIdentity,
-                    textBeforeCursor: context.textBeforeCursor,
-                    textAfterCursor: context.textAfterCursor
-                ),
-                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
-                settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
-            )
-            hideSuggestion(reason: "typing-burst", metadata: typingBurstMetadata)
-            return
-        }
-
-        recordSuggestionEvent(
-            "suggestion-request-scheduled",
-            context: context,
-            profile: profile,
-            metadata: [
-                "requestMode": request.mode.rawValue,
-                "triggerReason": triggerReason,
-                "traceID": String(suggestionID.prefix(8)),
-                "suggestionID": suggestionID
-            ]
-            .merging(typingBurstMetadata) { current, _ in current }
-            .merging(fastPhraseFallbackMetadata) { current, _ in current }
-            .merging(requestSchedule.traceMetadata) { current, _ in current }
-            .merging(requestMetadata) { current, _ in current }
-        )
-        suggestionIdleRetryState.cancel()
-        debounceTaskSuggestionID = suggestionID
-        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
-            try? await Task.sleep(for: .milliseconds(requestSchedule.scheduledDelayMilliseconds))
-            guard !Task.isCancelled else {
-                await MainActor.run {
-                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
-                }
-                return
-            }
-
-            do {
-                let suggestion = try await suggestionOrchestrator.suggestion(
-                    for: request,
-                    onPartialSuggestion: { partialSuggestion in
-                        Task { @MainActor in
-                            let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                            guard self.suggestionOrchestrator.allows(
-                                requestTicket,
-                                fieldIdentity: fieldIdentity,
-                                currentFieldIdentity: self.currentFieldIdentity
-                            ) else {
-                                return
-                            }
-
-                            guard !partialSuggestion.isEmpty,
-                                  !self.suggestionRepetitionSuppressor.shouldSuppress(
-                                      partialSuggestion.visibleText,
-                                      mode: request.mode,
-                                      scope: appBundleIdentifier
-                                  ) else {
-                                return
-                            }
-
-                            guard self.suggestionOrchestrator.shouldPresentStreamingPartial(
-                                partialSuggestion,
-                                suggestionID: suggestionID,
-                                mode: request.mode,
-                                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000),
-                                latencyMilliseconds: latencyMilliseconds
-                            ) else {
-                                return
-                            }
-
-                            self.presentSuggestion(
-                                partialSuggestion,
-                                suggestionID: suggestionID,
-                                request: request,
-                                context: context,
-                                profile: profile,
-                                fieldIdentity: fieldIdentity,
-                                renderMode: renderMode,
-                                latencyMilliseconds: latencyMilliseconds,
-                                triggerReason: "model-stream",
-                                requestTicket: requestTicket,
-                                candidateSelectionMetadata: self.suggestionOrchestrator
-                                    .streamingPresentationMetadata(suggestionID: suggestionID)
-                            )
-                        }
-                    }
-                )
-                await MainActor.run {
-                    let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
-                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
-                    guard self.suggestionOrchestrator.allows(
-                        requestTicket,
-                        fieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity
-                    ) else {
-                        return
-                    }
-
-                    if self.suggestionRequestSchedulingPolicy.shouldSuppressResult(
-                        latencyMilliseconds: latencyMilliseconds,
-                        schedule: requestSchedule
-                    ) {
-                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
-                            suggestionID: suggestionID,
-                            currentSuggestionID: self.currentSuggestionState.id,
-                            ticket: requestTicket,
-                            fieldIdentity: fieldIdentity,
-                            currentFieldIdentity: self.currentFieldIdentity,
-                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
-                        )
-                        let metadata = requestMetadata
-                            .merging(requestSchedule.traceMetadata) { current, _ in current }
-                            .merging([
-                                "resultLatencyBudgetExceeded": "true",
-                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
-                            ]) { current, _ in current }
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            cleanedVisibleText: suggestion?.visibleText ?? "",
-                            displayedText: suggestion?.visibleText ?? "",
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "latency-budget-exceeded",
-                            metadata: metadata
-                        )
-                        self.recordSuggestionEvent(
-                            "suggestion-blocked",
-                            context: context,
-                            profile: profile,
-                            metadata: [
-                                "reason": "latency-budget-exceeded"
-                            ].merging(metadata) { current, _ in current }
-                        )
-                        if shouldKeepStreamedSuggestion {
-                            self.setSuggestionDecision("Shown: kept streamed suggestion")
-                            self.repositionVisibleSuggestion(context: context, profile: profile)
-                            return
-                        }
-
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "latency-budget-exceeded"))
-                        self.hideSuggestion(reason: "latency-budget-exceeded")
-                        return
-                    }
-
-                    let anchorRect = RenderModePlan.anchorRect(
-                        for: renderMode,
-                        caretRect: context.caretRect,
-                        elementRect: context.elementRect,
-                        windowRect: context.windowRect
-                    )
-                    guard let suggestion, !suggestion.isEmpty else {
-                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
-                            suggestionID: suggestionID,
-                            currentSuggestionID: self.currentSuggestionState.id,
-                            ticket: requestTicket,
-                            fieldIdentity: fieldIdentity,
-                            currentFieldIdentity: self.currentFieldIdentity,
-                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
-                        )
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "empty-suggestion",
-                            metadata: requestMetadata.merging([
-                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
-                            ]) { current, _ in current }
-                        )
-                        self.recordSuggestionEvent(
-                            "suggestion-blocked",
-                            context: context,
-                            profile: profile,
-                            metadata: [
-                                "reason": "empty-suggestion"
-                            ]
-                        )
-                        if shouldKeepStreamedSuggestion {
-                            self.setSuggestionDecision("Shown: kept streamed suggestion")
-                            self.repositionVisibleSuggestion(context: context, profile: profile)
-                            return
-                        }
-
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "empty-suggestion"))
-                        self.hideSuggestion()
-                        return
-                    }
-
-                    guard anchorRect != nil else {
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            cleanedVisibleText: suggestion.visibleText,
-                            displayedText: suggestion.visibleText,
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "missing-anchor",
-                            metadata: requestMetadata
-                        )
-                        self.recordSuggestionEvent(
-                            "suggestion-blocked",
-                            context: context,
-                            profile: profile,
-                            metadata: [
-                                "reason": "missing-anchor"
-                            ]
-                        )
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "missing-anchor"))
-                        self.hideSuggestion()
-                        return
-                    }
-
-                    let appModelResultMetadata = self.suggestionOrchestrator.appModelResultCandidateSelectionMetadata(
-                        for: suggestion
-                    )
-                    RawAutocompleteTraceLog.shared.record(
-                        type: .modelResult,
-                        suggestionID: suggestionID,
-                        appBundleIdentifier: appBundleIdentifier,
-                        fieldIdentity: fieldIdentityDescription,
-                        requestMode: request.mode.rawValue,
-                        triggerReason: "model-result",
-                        textBeforeCursor: request.textBeforeCursor,
-                        textAfterCursor: request.textAfterCursor,
-                        cleanedVisibleText: suggestion.visibleText,
-                        displayedText: suggestion.visibleText,
-                        latencyMilliseconds: latencyMilliseconds,
-                        metadata: requestMetadata
-                            .merging(appModelResultMetadata) { current, _ in current }
-                    )
-                    guard !self.suggestionRepetitionSuppressor.shouldSuppress(
-                        suggestion.visibleText,
-                        mode: request.mode,
-                        scope: appBundleIdentifier
-                    ) else {
-                        RawAutocompleteTraceLog.shared.record(
-                            type: .suggestionSuppressed,
-                            suggestionID: suggestionID,
-                            appBundleIdentifier: appBundleIdentifier,
-                            fieldIdentity: fieldIdentityDescription,
-                            requestMode: request.mode.rawValue,
-                            triggerReason: "model-result",
-                            textBeforeCursor: request.textBeforeCursor,
-                            textAfterCursor: request.textAfterCursor,
-                            cleanedVisibleText: suggestion.visibleText,
-                            displayedText: suggestion.visibleText,
-                            latencyMilliseconds: latencyMilliseconds,
-                            reason: "repeated-miss",
-                            metadata: requestMetadata
-                        )
-                        self.recordAnnoyanceSignal(
-                            .repeatedRejection,
-                            context: self.annoyanceContext(
-                                appBundleIdentifier: appBundleIdentifier,
-                                fieldIdentity: fieldIdentity,
-                                requestMode: request.mode,
-                                fieldKind: fieldClassification.kind
-                            ),
-                            suggestionID: suggestionID,
-                            reason: "repeated-miss"
-                        )
-                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
-                        self.hideSuggestion()
-                        return
-                    }
-                    self.presentSuggestion(
-                        suggestion,
-                        suggestionID: suggestionID,
-                        request: request,
-                        context: context,
-                        profile: profile,
-                        fieldIdentity: fieldIdentity,
-                        renderMode: renderMode,
-                        latencyMilliseconds: latencyMilliseconds,
-                        triggerReason: "model-result",
-                        requestTicket: requestTicket,
-                        candidateSelectionMetadata: appModelResultMetadata,
-                        scheduledDelayMilliseconds: requestSchedule.scheduledDelayMilliseconds
-                    )
-                }
-                await MainActor.run {
-                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
-                }
-            } catch {
-                await MainActor.run {
-                    self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
-                    self.clearCompletedSuggestionTask(suggestionID: suggestionID)
-                    if self.suggestionOrchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
-                        suggestionID: suggestionID,
-                        currentSuggestionID: self.currentSuggestionState.id,
-                        ticket: requestTicket,
-                        fieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity,
-                        hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
-                    ) {
-                        self.setSuggestionDecision("Shown: kept instant phrase after model error")
-                        self.repositionVisibleSuggestion(context: context, profile: profile)
-                        self.updateKeyboardEventTapSnapshot()
-                        return
-                    }
-                    guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
-                        ticket: requestTicket,
-                        failedRequestFieldIdentity: fieldIdentity,
-                        currentFieldIdentity: self.currentFieldIdentity
-                    ) else {
-                        return
-                    }
-                    self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "engine-error"))
-                    self.hideSuggestion(reason: "engine-error")
-                }
-            }
-        }
     }
-
     private func presentSuggestion(
         _ suggestion: CompletionSuggestion,
         suggestionID: String,
@@ -7850,660 +6603,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduledDelayMilliseconds: Int = 0,
         presentationRefreshAttempt: Int = 0
     ) {
-        let originalContext = context
-        let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
-            && currentSuggestionState.id == suggestionID
-        let cooldownDelayMilliseconds = refreshBeforePresenting
-            ? codexPromptAXCooldownPresentationDelayMilliseconds(
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-            : 0
-        let refreshedContext: (context: FocusedTextContext?, reason: String?)
-        switch codexPromptPresentationPreparationPolicy.preparation(
-            refreshBeforePresenting: refreshBeforePresenting,
-            cooldownDelayMilliseconds: cooldownDelayMilliseconds
-        ) {
-        case let .deferForAXCooldown(delayMilliseconds):
-            scheduleCodexPromptPresentationAfterAXCooldown(
-                suggestion,
-                suggestionID: suggestionID,
-                request: request,
-                context: originalContext,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds,
-                triggerReason: triggerReason,
-                requestTicket: requestTicket,
-                candidateSelectionMetadata: candidateSelectionMetadata,
-                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                presentationRefreshAttempt: presentationRefreshAttempt,
-                delayMilliseconds: delayMilliseconds
-            )
-            return
-        case .refreshFocusedContext:
-            refreshedContext = refreshedPresentationContext(
-                for: request,
-                requestContext: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-        case .useOriginalContext:
-            refreshedContext = (context: context, reason: nil)
-        }
-        let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
-        let freshnessFieldIdentity = verifiedRefreshContext == nil
-            ? currentFieldIdentity
-            : fieldIdentity
-        let freshnessSnapshot = verifiedRefreshContext.map {
-            FocusedTextSnapshot(
-                fieldIdentity: fieldIdentity,
-                textBeforeCursor: $0.textBeforeCursor,
-                textAfterCursor: $0.textAfterCursor
-            )
-        } ?? lastTextSnapshot
-        if let suppressionReason = suggestionOrchestrator.presentationSuppressionReason(
-            requestTicket: requestTicket,
-            request: request,
-            fieldIdentity: fieldIdentity,
-            currentFieldIdentity: freshnessFieldIdentity,
-            currentSnapshot: freshnessSnapshot,
-            invalidatedByUserTyping: invalidatedByVisibleUserTyping
-        ) {
-            let reason = suppressionReason.rawValue
-            let metadata = traceGeometryMetadata(context: originalContext, renderMode: renderMode)
-                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging([
-                    "presentationFreshness": "stale",
-                    "presentationFreshnessReason": reason,
-                    "presentationFreshnessSource": verifiedRefreshContext == nil ? "cached-snapshot" : "live-refresh"
-                ]) { current, _ in current }
-            setSuggestionDecision("Blocked: \(reason)")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: metadata
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: originalContext,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
-                .merging(metadata) { current, _ in current }
-            )
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        guard let context = refreshedContext.context else {
-            let refreshReason = refreshedContext.reason ?? "stale-focused-context"
-            if refreshReason == "transient-codex-prompt-target",
-               let retry = codexPromptPresentationRefreshRetryPolicy.next(
-                after: presentationRefreshAttempt
-               ) {
-                scheduleCodexPromptPresentationRefreshRetry(
-                    suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: originalContext,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: candidateSelectionMetadata,
-                    scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                    retry: retry
-                )
-                return
-            }
-            let reason = refreshReason == "transient-codex-prompt-target"
-                ? "stale-prompt-target"
-                : refreshReason
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: originalContext, renderMode: renderMode)
-                    .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: originalContext,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
-                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-            )
-            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        let requestSnapshot = FocusedTextSnapshot(
-            fieldIdentity: fieldIdentity,
-            textBeforeCursor: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor
-        )
-        let currentSnapshot = FocusedTextSnapshot(
-            fieldIdentity: fieldIdentity,
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
-        )
-        let typedSinceRequest: String
-        switch LateResultContextValidator().validate(
-            requestSnapshot: requestSnapshot,
-            currentSnapshot: currentSnapshot,
-            latencyMilliseconds: latencyMilliseconds
-        ) {
-        case let .stillValid(typedDelta):
-            typedSinceRequest = typedDelta
-        case let .invalid(reason):
-            hideSuggestion(reason: "late-result-\(reason.rawValue)")
-            return
-        }
-        guard let suggestion = LateResultContextValidator().trimmedSuggestion(
+        suggestionPresentationOrchestrationHost.presentSuggestion(
             suggestion,
-            typedSinceRequest: typedSinceRequest
-        ) else {
-            hideSuggestion(reason: "typed-through-visible-prefix")
-            return
-        }
-
-        let storedLearningAdjustment = compatibilityLearningStore.engine().adjustment(
-            for: profile.bundleIdentifier,
-            profileRenderMode: renderMode
-        )
-        let visualTrustContext = compatibilityLearningVisualTrustContext(
-            for: context,
-            bundleIdentifier: profile.bundleIdentifier
-        )
-        let learningAdjustment = storedLearningAdjustment.trustedVisualOffsetOnly(context: visualTrustContext)
-        let placementPlan = suggestionOrchestrator.placementHealthPlan(
-            context: context,
-            profile: profile,
-            learningAdjustment: learningAdjustment,
-            screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
-        )
-
-        guard case let .present(placement) = placementPlan else {
-            let placementSuppression = suggestionOrchestrator.placementSuppressionResolution(
-                for: placementPlan,
-                requestedRenderMode: learningAdjustment.effectiveRenderMode,
-                profile: profile,
-                fieldKind: request.fieldKind
-            )
-            let suppression = placementSuppression.suppression
-            let commandFallbackMetadata = placementSuppression.metadata
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: suppression.reason.rawValue,
-                metadata: traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(commandFallbackMetadata) { current, _ in current }
-                    .merging(suppression.metadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": suppression.reason.rawValue
-                ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(commandFallbackMetadata) { current, _ in current }
-                .merging(suppression.metadata) { current, _ in current }
-            )
-            let placementMetadata = traceGeometryMetadata(context: context, renderMode: learningAdjustment.effectiveRenderMode)
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(commandFallbackMetadata) { current, _ in current }
-                .merging(suppression.metadata) { current, _ in current }
-            recordPlacementUncertainty(
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity,
-                requestMode: request.mode,
-                context: context,
-                reason: suppression.reason.rawValue,
-                metadata: placementMetadata
-            )
-            setSuggestionDecision("Blocked: placement \(suppression.reason.rawValue)\(placementSuppression.fallbackSuffix)")
-            hideSuggestion(reason: "placement-\(suppression.reason.rawValue)")
-            return
-        }
-
-        let rawDisplayFieldClassification = fieldClassification(for: context)
-        let displayFieldClassification = effectiveSuggestionFieldClassificationForCurrentFrontmost(
-            context: context,
-            profile: profile,
-            raw: rawDisplayFieldClassification
-        )
-        let displayRequestMetadata = traceRequestMetadata(
-            request: request,
-            fieldClassification: displayFieldClassification
-        )
-        let acceptedAndKeptSignal = acceptedAndKeptSignal(
-            request: request,
-            fieldClassification: displayFieldClassification,
-            profile: profile
-        )
-        let isRepeatedMiss = suggestionRepetitionSuppressor.shouldSuppress(
-            suggestion.visibleText,
-            mode: request.mode,
-            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
-        )
-        // A final model result is "first visible" when nothing is already on screen for the user
-        // to read — no instant local phrase and no streamed partial. In that case a slow result
-        // would paint cold and late, so displayScoreDecision applies a tighter latency ceiling.
-        // When a suggestion is already visible, the model result is a refinement and keeps the
-        // looser budget so good late refinements can still replace the instant phrase in place.
-        let modelIsFirstVisibleSuggestion = triggerReason == "model-result"
-            && !suggestionSession.hasVisibleSuggestion
-        let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
-            suggestion: suggestion,
-            request: request,
-            context: context,
-            fieldClassification: displayFieldClassification,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            triggerReason: triggerReason,
-            latencyMilliseconds: latencyMilliseconds,
-            acceptedAndKeptSignal: acceptedAndKeptSignal,
-            isRepeatedMiss: isRepeatedMiss,
-            displayScorePolicy: displayScorePolicy,
-            suggestionTuning: suggestionTuning,
-            modelIsFirstVisibleSuggestion: modelIsFirstVisibleSuggestion,
-            scheduledDelayMilliseconds: scheduledDelayMilliseconds
-        )
-        let displayScoreDecision = orchestratedDisplayDecision.decision
-        let displayScoreMetadata = orchestratedDisplayDecision.metadata
-        let displayScoreTrace = displayScoreDecision.trace
-        guard displayScoreDecision.shouldDisplay else {
-            let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
-            let displaySuppressionReason = DisplayScoreSuppressionReason(rawValue: reason)
-            let shouldKeepStreamedSuggestion: Bool
-            if displaySuppressionReason == .tooSlowToDisplay,
-               let requestTicket {
-                shouldKeepStreamedSuggestion = suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
-                    suggestionID: suggestionID,
-                    currentSuggestionID: currentSuggestionState.id,
-                    ticket: requestTicket,
-                    fieldIdentity: fieldIdentity,
-                    currentFieldIdentity: currentFieldIdentity,
-                    hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
-                )
-            } else {
-                shouldKeepStreamedSuggestion = false
-            }
-            let visibleSuggestionAction = suggestionReplacementVisibilityPolicy.action(
-                forDisplaySuppressionReason: displaySuppressionReason,
-                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-                currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown,
-                sameFieldAsCurrentSuggestion: currentSuggestionState.appBundleIdentifier == (request.appBundleIdentifier ?? profile.bundleIdentifier)
-                    && currentSuggestionState.fieldIdentity == fieldIdentity,
-                currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
-                maximumPreservedAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds
-            )
-            let shouldKeepCurrentVisibleSuggestion = shouldKeepStreamedSuggestion
-                || visibleSuggestionAction == .keepCurrentVisible
-            var lateSuggestionMetadata: [String: String] = [:]
-            if shouldKeepStreamedSuggestion {
-                lateSuggestionMetadata["keptVisibleStreamingSuggestion"] = "true"
-            }
-            if visibleSuggestionAction == .keepCurrentVisible {
-                lateSuggestionMetadata["keptVisibleSuggestionAfterLateSuppression"] = "true"
-                lateSuggestionMetadata["lateSuppressionPreservedAgeMilliseconds"] =
-                    currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
-            }
-            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-                    .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(lateSuggestionMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(lateSuggestionMetadata) { current, _ in current }
-            )
-            if shouldKeepCurrentVisibleSuggestion {
-                setSuggestionDecision(
-                    shouldKeepStreamedSuggestion
-                        ? "Shown: kept streamed suggestion"
-                        : "Shown: kept visible suggestion after late \(reason)"
-                )
-                showFieldStatusIndicator(.shown, context: context)
-                repositionVisibleSuggestion(context: context, profile: profile)
-                updateKeyboardEventTapSnapshot()
-                return
-            }
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        let replacementDecision = suggestionOrchestrator.replacementDecision(
-            currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
-            proposedVisibleText: suggestion.visibleText,
-            currentSuggestionID: currentSuggestionState.id,
-            proposedSuggestionID: suggestionID,
-            currentPresentedAt: currentSuggestionState.presentedAt,
-            currentScore: currentSuggestionState.displayScoreFinal,
-            proposedScore: displayScoreTrace.score.finalScore,
-            currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
-        )
-        let replacementMetadata = replacementDecision.metadata
-        let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
-            for: replacementDecision,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
-        )
-        guard replacementVisibilityAction == .presentProposed else {
-            let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"
-            setSuggestionDecision("Kept current suggestion: \(reason)")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-                    .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(replacementMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                .merging(replacementMetadata) { current, _ in current }
-            )
-
-            switch replacementVisibilityAction {
-            case .presentProposed:
-                break
-            case .keepCurrentVisible:
-                showFieldStatusIndicator(.shown, context: context)
-                repositionVisibleSuggestion(context: context, profile: profile)
-                updateKeyboardEventTapSnapshot()
-            case .hide:
-                hideSuggestion(reason: reason)
-            }
-            return
-        }
-
-        lastCompatibilityLearningTrustContext = visualTrustContext
-        cancelKeyboardEventTapIdleStop()
-        let presentationDeliveryRequest = SuggestionPresentationDeliveryRequest(
-            suggestion: suggestion,
             suggestionID: suggestionID,
-            completionRequest: request,
+            request: request,
             context: context,
             profile: profile,
             fieldIdentity: fieldIdentity,
-            placement: placement,
+            renderMode: renderMode,
             latencyMilliseconds: latencyMilliseconds,
-            requestMetadata: displayRequestMetadata,
-            geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
-            learningMetadata: learningAdjustment.metadata,
+            triggerReason: triggerReason,
+            requestTicket: requestTicket,
             candidateSelectionMetadata: candidateSelectionMetadata,
-            displayScoreMetadata: displayScoreMetadata,
-            replacementMetadata: replacementMetadata
+            refreshBeforePresenting: refreshBeforePresenting,
+            scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+            presentationRefreshAttempt: presentationRefreshAttempt
         )
-        let panelRect: CGRect
-        let deliveredPlacement: PlacementHealthPresentation
-        switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {
-        case let .success(delivery):
-            panelRect = delivery.panelRect
-            deliveredPlacement = delivery.placement
-        case let .failure(failure):
-            let reason = failure.reason
-            setSuggestionDecision("Blocked: \(reason)")
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: triggerReason,
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                displayedText: suggestion.visibleText,
-                latencyMilliseconds: latencyMilliseconds,
-                reason: reason,
-                metadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode)
-                    .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                    .merging(learningAdjustment.metadata) { current, _ in current }
-                    .merging(placement.metadata) { current, _ in current }
-                    .merging(candidateSelectionMetadata) { current, _ in current }
-                    .merging(displayScoreMetadata) { current, _ in current }
-                    .merging(replacementMetadata) { current, _ in current }
-            )
-            recordSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                metadata: [
-                    "reason": reason
-                ]
-                .merging(traceRequestMetadata(request: request, context: context)) { current, _ in current }
-                .merging(learningAdjustment.metadata) { current, _ in current }
-                .merging(placement.metadata) { current, _ in current }
-                .merging(candidateSelectionMetadata) { current, _ in current }
-                .merging(displayScoreMetadata) { current, _ in current }
-                .merging(replacementMetadata) { current, _ in current }
-            )
-            hideSuggestion(reason: reason)
-            return
-        }
-
-        lastCaretRect = deliveredPlacement.anchorRect
-        lastTextLineRect = deliveredPlacement.textLineRect
-        lastClippingRect = deliveredPlacement.clippingRect
-        lastTextStyle = context.textStyle
-        lastRenderMode = deliveredPlacement.renderMode
-        lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
-            context: context,
-            fieldIdentity: fieldIdentity,
-            placement: deliveredPlacement
-        )
-        suggestionSession.present(suggestion)
-        setSuggestionDecision(
-            SuggestionStatusText.shown(
-                mode: request.mode,
-                triggerReason: triggerReason,
-                latencyMilliseconds: latencyMilliseconds,
-                metadata: candidateSelectionMetadata
-            )
-        )
-        currentSuggestionState.id = suggestionID
-        currentSuggestionState.appBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        currentSuggestionState.fieldIdentity = fieldIdentity
-        currentSuggestionState.requestMode = request.mode
-        currentSuggestionState.textBeforeCursor = request.textBeforeCursor
-        let acceptanceSnapshot = SuggestionAcceptanceSnapshot(
-            fieldIdentity: fieldIdentity,
-            targetFingerprint: targetFingerprint(context: context),
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
-            selectedTextLength: context.selectedTextLength
-        )
-        currentSuggestionState.acceptanceSnapshot = acceptanceSnapshot
-        let presentedAt = Date()
-        currentSuggestionState.displayedText = suggestion.visibleText
-        currentSuggestionState.optimisticOriginalDisplayedText = suggestion.visibleText
-        currentSuggestionState.optimisticTypedPrefix = ""
-        currentSuggestionState.fieldClassification = displayFieldClassification
-        currentSuggestionState.presentedAt = presentedAt
-        currentSuggestionState.displayScoreFinal = displayScoreTrace.score.finalScore
-        currentSuggestionState.invalidatedByUserKeyDown = false
-        cacheProofOnlyAcceptRecentSuggestionIfNeeded(
-            suggestion: suggestion,
-            suggestionID: suggestionID,
-            appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity,
-            requestMode: request.mode,
-            textBeforeCursor: request.textBeforeCursor,
-            acceptanceSnapshot: acceptanceSnapshot,
-            displayedText: suggestion.visibleText,
-            fieldClassification: displayFieldClassification,
-            presentedAt: presentedAt,
-            displayScoreFinal: displayScoreTrace.score.finalScore
-        )
-        keyboardEventTap?.resetPassthroughObservation()
-        updateKeyboardEventTapSnapshot()
-        guard startKeyboardEventTapIfPossible() else {
-            setSuggestionDecision("Blocked: keyboard capture unavailable")
-            hideSuggestion(reason: "keyboard-capture-unavailable")
-            return
-        }
-        keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
-
-        let screenshotCapture = traceScreenshotCaptureCoordinator.capture(
-            TraceScreenshotCaptureRequest(
-                rects: [
-                    deliveredPlacement.anchorRect,
-                    deliveredPlacement.textLineRect,
-                    panelRect,
-                    deliveredPlacement.clippingRect
-                ].compactMap { $0 },
-                expectedSignalRect: traceScreenshotCaptureCoordinator.expectedSignalRect(
-                    panelRect: panelRect
-                ),
-                suggestionID: suggestionID,
-                bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-                triggerReason: triggerReason,
-                appScreenshotTracingEnabled: learningAdjustment.shouldCaptureScreenshot,
-                visualTrustContext: visualTrustContext
-            )
-        )
-        compatibilityLearningStore.recordObservation(
-            for: profile.bundleIdentifier,
-            reason: "suggestion-presented"
-        )
-        let presentationTracePayload = suggestionPresentationDelivery.tracePayload(
-            for: presentationDeliveryRequest,
-            placement: deliveredPlacement,
-            panelRect: panelRect,
-            screenshotCapture: screenshotCapture
-        )
-        RawAutocompleteTraceLog.shared.record(
-            type: .suggestionPresented,
-            suggestionID: suggestionID,
-            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            requestMode: request.mode.rawValue,
-            triggerReason: triggerReason,
-            textBeforeCursor: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor,
-            cleanedVisibleText: suggestion.visibleText,
-            displayedText: suggestion.visibleText,
-            latencyMilliseconds: latencyMilliseconds,
-            screenshotPath: screenshotCapture.path,
-            screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized,
-            metadata: presentationTracePayload.rawTraceMetadata
-        )
-        recordPersonalCaptureSuggestionEpisodePresented(
-            suggestionID: suggestionID,
-            request: request,
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            fieldClassification: rawDisplayFieldClassification,
-            suggestion: suggestion,
-            latencyMilliseconds: latencyMilliseconds,
-            triggerReason: triggerReason,
-            placement: deliveredPlacement,
-            panelRect: panelRect,
-            screenshotPath: screenshotCapture.path,
-            metadata: presentationTracePayload.rawTraceMetadata
-        )
-        recordSuggestionEvent(
-            "suggestion-presented",
-            context: context,
-            profile: profile,
-            metadata: presentationTracePayload.diagnosticsMetadata
-        )
-        updateKeyboardEventTapSnapshot()
     }
-
     private func scheduleCodexPromptPresentationRefreshRetry(
         _ suggestion: CompletionSuggestion,
         suggestionID: String,
@@ -8519,9 +6635,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduledDelayMilliseconds: Int,
         retry: CodexPromptPresentationRefreshRetry
     ) {
-        codexPromptPresentationRetryTask?.cancel()
         setSuggestionDecision("Waiting: Codex prompt refresh")
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
             "codex-prompt-target-refresh-retry-scheduled",
             metadata: [
@@ -8532,13 +6647,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "afterChars": String(request.textAfterCursor.count)
             ]
         )
-        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(retry.delayMilliseconds))
-            guard !Task.isCancelled, let self else {
+        codexPromptPresentationRetryHost.schedule(afterMilliseconds: retry.delayMilliseconds) { [weak self] in
+            guard let self else {
                 return
             }
 
-            self.codexPromptPresentationRetryTask = nil
             self.presentSuggestion(
                 suggestion,
                 suggestionID: suggestionID,
@@ -8574,9 +6687,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         presentationRefreshAttempt: Int,
         delayMilliseconds: Int
     ) {
-        codexPromptPresentationRetryTask?.cancel()
         setSuggestionDecision("Waiting: Codex AX cooldown")
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         DiagnosticsLog.shared.record(
             "codex-prompt-presentation-deferred-for-ax-cooldown",
             metadata: [
@@ -8586,13 +6698,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "afterChars": String(request.textAfterCursor.count)
             ]
         )
-        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            guard !Task.isCancelled, let self else {
+        codexPromptPresentationRetryHost.schedule(afterMilliseconds: delayMilliseconds) { [weak self] in
+            guard let self else {
                 return
             }
 
-            self.codexPromptPresentationRetryTask = nil
             self.presentSuggestion(
                 suggestion,
                 suggestionID: suggestionID,
@@ -8616,22 +6726,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         fieldIdentity: FocusedFieldIdentity
     ) -> Int {
-        let canPreserve = codexPromptTargetContinuityPolicy.canPreserveDuringAXCooldown(
-            appBundleIdentifier: profile.bundleIdentifier,
-            processIdentifier: fieldIdentity.processIdentifier,
+        let app = RunningApplicationInfo(
+            bundleIdentifier: profile.bundleIdentifier,
+            localizedName: profile.displayName,
+            processIdentifier: fieldIdentity.processIdentifier
+        )
+        let canPreserve = codexPromptTargetContinuityHost.canPreserveDuringAXCooldown(
+            app: app,
             currentFieldIdentity: currentFieldIdentity,
             currentSnapshot: lastTextSnapshot,
-            trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
-            preservation: codexPromptAXCooldownPreservation,
             hasActiveSuggestionWork: true
         )
         guard canPreserve else {
             return 0
         }
 
-        return codexPromptTargetContinuityPolicy.remainingAXCooldownMilliseconds(
-            preservation: codexPromptAXCooldownPreservation
-        )
+        return codexPromptTargetContinuityHost.remainingAXCooldownMilliseconds()
     }
 
     private func refreshedPresentationContext(
@@ -8640,109 +6750,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         fieldIdentity: FocusedFieldIdentity
     ) -> (context: FocusedTextContext?, reason: String?) {
-        let expectedBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
-        guard let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostAppMatchesSuggestion(
-                  frontmostApp,
-                  expectedBundleIdentifier: expectedBundleIdentifier,
-                  profile: profile
-              ) else {
-            return (nil, "stale-app")
-        }
-
-        guard let rawContext = accessibilityClient.focusedTextContext(
-            for: frontmostApp,
-            allowDescendantTextFallback: profile.allowsDescendantTextFallback,
-            options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
-        ), !rawContext.isSecure,
-           rawContext.selectedTextLength == 0 else {
-            return (nil, "stale-focused-context")
-        }
-
-        guard claudeCodeTerminalHostProofBlockReason(
-            app: frontmostApp,
-            context: rawContext,
-            profile: profile
-        ) == nil else {
-            return (nil, "stale-terminal-host-proof")
-        }
-
-        let promptMatch = promptTextAreaMatch(
-            for: frontmostApp.bundleIdentifier,
-            context: rawContext
-        )
-        if !promptMatch.canSuggest {
-            let requestMatchesCurrentSnapshot = lastTextSnapshot?.fieldIdentity == fieldIdentity
-                && lastTextSnapshot?.textBeforeCursor == request.textBeforeCursor
-                && lastTextSnapshot?.textAfterCursor == request.textAfterCursor
-            let resolution = requestMatchesCurrentSnapshot
-                ? codexPromptTargetContinuityPolicy.presentationRefreshResolution(
-                    appBundleIdentifier: frontmostApp.bundleIdentifier,
-                    processIdentifier: frontmostApp.processIdentifier,
-                    promptBlockReason: promptMatch.reason,
-                    currentFieldIdentity: currentFieldIdentity,
-                    currentSnapshot: lastTextSnapshot,
-                    trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
-                    observedContext: rawContext,
-                    trustedContext: requestContext
-                )
-                : .reject
-            guard resolution != .reject else {
-                return (nil, "stale-prompt-target")
-            }
-
-            DiagnosticsLog.shared.record(
-                resolution == .reuseTrustedTextAreaContext
-                    ? "codex-prompt-target-bounds-reused"
-                    : "codex-prompt-target-refresh-retry-needed",
-                metadata: [
-                    "app": frontmostApp.bundleIdentifier,
-                    "reason": promptMatch.reason,
-                    "role": rawContext.role ?? "unknown",
-                    "beforeChars": String(rawContext.textBeforeCursor.count),
-                    "afterChars": String(rawContext.textAfterCursor.count)
-                ]
-            )
-            return resolution == .reuseTrustedTextAreaContext
-                ? (requestContext, nil)
-                : (nil, "transient-codex-prompt-target")
-        }
-
-        let context = presentationAdjustedContext(
-            rawContext,
-            app: frontmostApp,
+        suggestionPresentationRefreshHost.refresh(
+            for: request,
+            requestContext: requestContext,
             profile: profile,
-            previousSnapshot: lastTextSnapshot
+            fieldIdentity: fieldIdentity
         )
-        guard context.textBeforeCursor == request.textBeforeCursor,
-              context.textAfterCursor == request.textAfterCursor else {
-            return (nil, "stale-text")
-        }
-
-        let refreshedFieldIdentity = self.fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: profile
-        )
-        if refreshedFieldIdentity != fieldIdentity {
-            if !canTrustPromptProofFieldIdentityRefresh(
-                requestFieldIdentity: fieldIdentity,
-                refreshedFieldIdentity: refreshedFieldIdentity,
-                profile: profile
-            ) {
-                return (nil, "stale-field")
-            }
-            DiagnosticsLog.shared.record(
-                "prompt-proof-field-identity-refresh-relaxed",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "requestFieldIdentity": fieldIdentity.traceDescription,
-                    "refreshedFieldIdentity": refreshedFieldIdentity.traceDescription
-                ]
-            )
-        }
-
-        return (context, nil)
     }
 
     private func canTrustPromptProofFieldIdentityRefresh(
@@ -9017,59 +7030,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         snapshot: FocusedTextSnapshot,
         source: String
     ) {
-        guard appSettings.personalCaptureEnabled else {
-            personalCaptureLastSnapshot = nil
-            return
-        }
-
-        let decision = personalCapturePolicy.decision(for: PersonalCaptureInput(
-            bundleIdentifier: app.bundleIdentifier,
-            role: context.role,
-            subrole: context.subrole,
-            fingerprint: context.fingerprint,
-            isSecure: context.isSecure,
-            fieldClassification: fieldClassification
-        ))
-
-        guard decision.canCapture else {
-            personalCaptureLastSnapshot = nil
-            DiagnosticsLog.shared.record(
-                "personal-capture-blocked",
-                metadata: decision.metadata.merging([
-                    "app": app.bundleIdentifier,
-                    "source": source,
-                    "textBeforeCursorChars": String(context.textBeforeCursor.count),
-                    "textAfterCursorChars": String(context.textAfterCursor.count)
-                ]) { current, _ in current }
-            )
-            return
-        }
-
-        personalCaptureJournal.recordSnapshotChange(
-            previous: personalCaptureLastSnapshot,
-            current: snapshot,
-            context: personalCaptureContext(
-                app: app,
-                fieldIdentity: fieldIdentity,
-                fieldClassification: fieldClassification,
-                source: source
-            )
-        )
-        personalCaptureLastSnapshot = snapshot
-    }
-
-    private func personalCaptureContext(
-        app: RunningApplicationInfo,
-        fieldIdentity: FocusedFieldIdentity,
-        fieldClassification: AXFieldClassification,
-        source: String
-    ) -> PersonalCaptureJournalContext {
-        PersonalCaptureJournalContext(
-            appDisplayName: app.localizedName,
-            appBundleIdentifier: app.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            fieldKind: fieldClassification.kind,
-            fieldKindReason: fieldClassification.reason,
+        personalCaptureHost.recordSnapshot(
+            context: context,
+            app: app,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
+            snapshot: snapshot,
             source: source
         )
     }
@@ -9089,79 +7055,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenshotPath: String,
         metadata: [String: String]
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !suggestionID.isEmpty else {
-            return
-        }
-
-        let decision = personalCapturePolicy.decision(for: PersonalCaptureInput(
-            bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            role: context.role,
-            subrole: context.subrole,
-            fingerprint: context.fingerprint,
-            isSecure: context.isSecure,
-            fieldClassification: fieldClassification
-        ))
-        guard decision.canCapture else {
-            DiagnosticsLog.shared.record(
-                "personal-capture-episode-blocked",
-                metadata: decision.metadata.merging([
-                    "app": request.appBundleIdentifier ?? profile.bundleIdentifier,
-                    "source": "suggestion-presented"
-                ]) { current, _ in current }
-            )
-            return
-        }
-
-        let runtimeMetadata = modelRuntimeBundle.diagnosticsMetadata
-        let candidateSource = metadata["candidateSelectionSource"] ?? triggerReason
-        let replyContext = request.visiblePageContext.flatMap(SuggestionEpisodeReplyContext.init(visiblePageContext:))
-        let record = SuggestionEpisodeRecord(
-            id: suggestionID,
-            createdAt: PersonalCaptureEpisodeStore.timestampString(from: Date()),
-            appDisplayName: profile.displayName,
-            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            fieldKind: fieldClassification.kind.rawValue,
-            fieldKindReason: fieldClassification.reason,
-            requestMode: request.mode.rawValue,
-            userTypedContext: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor,
-            replyContext: replyContext,
-            replayContext: request.visiblePageContext.map { SuggestionEpisodeReplayContext(visiblePageContext: $0, fingerprintSecret: tracePrivacySecretStore.secret(), includeText: true) },
-            suggestedText: suggestion.visibleText,
-            model: SuggestionEpisodeModelContext(
-                modelName: runtimeMetadata["model"] ?? CompletionModelPolicy.mvp.model.rawValue,
-                runtime: runtimeMetadata["activeCandidate"] ?? "unknown",
-                asset: runtimeMetadata["asset"] ?? "unknown",
-                promptVersion: runtimeMetadata["promptStyle"] ?? CompletionPromptBuilder.promptStyleIdentifier,
-                experimentArm: runtimeMetadata["experimentArm"] ?? "",
-                triggerReason: triggerReason,
-                candidateSource: candidateSource,
-                latencyMilliseconds: latencyMilliseconds,
-                firstTokenLatencyMilliseconds: Int(metadata["firstTokenLatencyMilliseconds"] ?? "")
-            ),
-            placement: SuggestionEpisodePlacementContext(
-                renderMode: placement.renderMode.rawValue,
-                anchorRect: compactRectDescription(placement.anchorRect),
-                textLineRect: placement.textLineRect.map(compactRectDescription) ?? "none",
-                panelRect: compactRectDescription(panelRect),
-                confidenceBand: metadata["placementConfidenceBand"] ?? "",
-                screenshotCaptured: !screenshotPath.isEmpty
-            ),
-            metadata: [
-                "candidateSource": candidateSource,
-                "triggerReason": triggerReason,
-                "visibleChars": String(suggestion.visibleText.count),
-                "visibleWords": String(suggestion.visibleWordCount)
-            ]
-            .merging(metadata) { current, _ in current }
+        personalCaptureHost.recordSuggestionEpisodePresented(
+            suggestionID: suggestionID,
+            request: request,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
+            suggestion: suggestion,
+            latencyMilliseconds: latencyMilliseconds,
+            triggerReason: triggerReason,
+            placement: placement,
+            panelRect: panelRect,
+            screenshotPath: screenshotPath,
+            metadata: metadata
         )
-
-        personalCaptureEpisodes.recordPresented(record)
     }
 
-    private func recordPersonalCaptureSuggestionEpisodeAction(
+    func recordPersonalCaptureSuggestionEpisodeAction(
         suggestionID: String,
         appBundleIdentifier: String,
         outcome: SuggestionEpisodeOutcome,
@@ -9169,12 +7080,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         acceptedText: String = "",
         metadata: [String: String] = [:]
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !suggestionID.isEmpty else {
-            return
-        }
-
-        personalCaptureEpisodes.recordAction(
+        personalCaptureHost.recordEpisodeAction(
             suggestionID: suggestionID,
             appBundleIdentifier: appBundleIdentifier,
             outcome: outcome,
@@ -9184,24 +7090,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func recordPersonalCaptureSuggestionEpisodeInsertionFailed(
+    func recordPersonalCaptureSuggestionEpisodeInsertionFailed(
         baseline: InsertionVerificationBaseline,
         outcome: String,
         reason: String
     ) {
-        recordPersonalCaptureSuggestionEpisodeAction(
-            suggestionID: baseline.suggestionID ?? "",
-            appBundleIdentifier: baseline.profile.bundleIdentifier,
-            outcome: .insertionFailed,
-            reason: reason,
-            metadata: [
-                "acceptanceID": baseline.acceptanceID,
-                "acceptMode": baseline.acceptMode,
-                "fieldKind": baseline.fieldKind.rawValue,
-                "fieldKindReason": baseline.fieldKindReason,
-                "behaviorProfile": baseline.behaviorProfileID.rawValue,
-                "insertionResult": outcome
-            ]
+        personalCaptureHost.recordEpisodeInsertionFailed(
+            baseline: baseline,
+            outcome: outcome,
+            reason: reason
         )
     }
 
@@ -9209,100 +7106,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ result: AcceptanceSurvivalCheckResult,
         metadata: [String: String]
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !result.tracker.suggestionID.isEmpty else {
-            return
-        }
-
-        personalCaptureEpisodes.recordSurvival(
-            suggestionID: result.tracker.suggestionID,
-            appBundleIdentifier: result.tracker.appBundleIdentifier,
-            acceptedText: result.tracker.acceptedText,
-            checkpoint: result.measurement.checkpoint.rawValue,
-            survivalClass: result.measurement.survivalClass.rawValue,
-            tokenRecall: result.measurement.tokenRecall,
-            normalizedEditDistance: result.measurement.normalizedEditDistance,
-            metadata: metadata
-        )
+        personalCaptureHost.recordEpisodeSurvival(result, metadata: metadata)
     }
 
     private func personalCaptureEpisodeOutcome(
         hiddenOutcome outcome: String,
         reason: String
     ) -> SuggestionEpisodeOutcome {
-        if reason == "escape" {
-            return .dismissed
-        }
-        if outcome == "accepted" {
-            return .unknown
-        }
-        if outcome == "typed-over" || reason == "typed-over" {
-            return .typedPast
-        }
-        if outcome == "typed-through" {
-            return .typedPast
-        }
-        if reason.contains("failed") || reason.contains("unsafe") {
-            return .insertionFailed
-        }
-        if outcome == "ignored" {
-            return .ignored
-        }
-        return .unknown
+        personalCaptureHost.episodeOutcome(hiddenOutcome: outcome, reason: reason)
     }
 
-    private func recordPersonalCaptureAcceptedSuggestion(
+    func recordPersonalCaptureAcceptedSuggestion(
         acceptedText: String,
         baseline: InsertionVerificationBaseline
     ) {
-        guard appSettings.personalCaptureEnabled,
-              !acceptedText.isEmpty,
-              !baseline.fieldKind.suppressesSuggestionsByDefault else {
-            return
-        }
-
-        personalCaptureJournal.recordAcceptedSuggestion(
+        personalCaptureHost.recordAcceptedSuggestion(
             acceptedText: acceptedText,
-            context: PersonalCaptureJournalContext(
-                appDisplayName: baseline.profile.displayName,
-                appBundleIdentifier: baseline.profile.bundleIdentifier,
-                fieldIdentity: baseline.fieldIdentity.traceDescription,
-                fieldKind: baseline.fieldKind,
-                fieldKindReason: baseline.fieldKindReason,
-                source: "insertion-verified"
-            ),
-            suggestionID: baseline.suggestionID ?? "",
-            acceptanceID: baseline.acceptanceID,
-            acceptMode: baseline.acceptMode
+            baseline: baseline
         )
     }
 
     private func recordPersonalCaptureAcceptanceSurvival(_ result: AcceptanceSurvivalCheckResult) {
-        guard appSettings.personalCaptureEnabled,
-              result.shouldRecordAcceptedAndKept || result.shouldRecordAcceptedThenDeleted,
-              !result.tracker.acceptedText.isEmpty,
-              !result.tracker.fieldKind.suppressesSuggestionsByDefault else {
-            return
-        }
-
-        personalCaptureJournal.recordAcceptanceSurvival(
-            acceptedText: result.tracker.acceptedText,
-            context: PersonalCaptureJournalContext(
-                appDisplayName: result.tracker.profile.displayName,
-                appBundleIdentifier: result.tracker.appBundleIdentifier,
-                fieldIdentity: result.tracker.fieldIdentity.traceDescription,
-                fieldKind: result.tracker.fieldKind,
-                fieldKindReason: result.tracker.fieldKindReason,
-                source: "acceptance-survival"
-            ),
-            suggestionID: result.tracker.suggestionID,
-            acceptanceID: result.tracker.acceptanceID,
-            acceptMode: result.tracker.acceptMode,
-            checkpoint: result.measurement.checkpoint.rawValue,
-            survivalClass: result.measurement.survivalClass.rawValue,
-            isStrongPositive: result.measurement.isStrongAcceptedAndKept
-                || result.measurement.isFinalAcceptedAndKept
-        )
+        personalCaptureHost.recordAcceptanceSurvival(result)
     }
 
     private func observeTypingBurst(
@@ -9311,15 +7136,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> TypingBurstDecision {
         guard let previousSnapshot,
               previousSnapshot.fieldIdentity == currentSnapshot.fieldIdentity else {
-            typingBurstState.reset()
+            typingBurstStateHost.reset()
             return .idle
         }
 
-        return typingBurstPolicy.observe(
+        return typingBurstStateHost.observe(
             previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
             currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
-            nowMilliseconds: Int(Date().timeIntervalSince1970 * 1_000),
-            state: &typingBurstState
+            nowMilliseconds: Int(Date().timeIntervalSince1970 * 1_000)
         )
     }
 
@@ -9423,7 +7247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "x=\(rect.x),y=\(rect.y),w=\(rect.width),h=\(rect.height)"
     }
 
-    private func insertionRetrySkippedModes(
+    func insertionRetrySkippedModes(
         result: InsertionVerificationResult,
         profile: CompatibilityProfile,
         retryCount: Int
@@ -9435,241 +7259,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return [profile.insertionMode]
-    }
-
-    private func insertAcceptedText(
-        _ acceptedText: String,
-        skippingInsertionModes skippedModes: Set<InsertionMode> = [],
-        action: KeyboardAction? = nil
-    ) -> Bool {
-        guard let profile = currentProfile else {
-            setSuggestionDecision("Blocked: missing compatibility profile")
-            DiagnosticsLog.shared.record(
-                "insert-blocked",
-                metadata: [
-                    "reason": "missing-compatibility-profile",
-                    "acceptedChars": String(acceptedText.count)
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionFailed,
-                suggestionID: currentSuggestionState.id ?? "",
-                appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? "",
-                fieldIdentity: currentSuggestionState.fieldIdentity?.traceDescription
-                    ?? currentFieldIdentity?.traceDescription
-                    ?? "",
-                requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                reason: "missing-compatibility-profile",
-                metadata: [
-                    "safetyGate": "compatibilityProfile"
-                ]
-            )
-            hideSuggestion(reason: "insert-missing-compatibility-profile")
-            return false
-        }
-
-        let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
-            acceptedText: acceptedText,
-            profile: profile,
-            allowsPromptActionWords: shouldUseClaudeCodeTerminalHostProofDirectInsertion(
-                profile: profile,
-                action: action
-            )
-        )
-        if let blockReason = acceptedTextDecision.blockReason {
-            setSuggestionDecision("Blocked: unsafe accepted text")
-            DiagnosticsLog.shared.record(
-                "insert-blocked",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "reason": blockReason,
-                    "acceptedChars": String(acceptedText.count),
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
-                ]
-            )
-            RawAutocompleteTraceLog.shared.record(
-                type: .insertionFailed,
-                suggestionID: currentSuggestionState.id ?? "",
-                appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? profile.bundleIdentifier,
-                fieldIdentity: currentSuggestionState.fieldIdentity?.traceDescription
-                    ?? currentFieldIdentity?.traceDescription
-                    ?? "",
-                requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
-                acceptedText: acceptedText,
-                reason: blockReason,
-                metadata: [
-                    "safetyGate": "acceptedText",
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue
-                ]
-            )
-            hideSuggestion(reason: "insert-unsafe-accepted-text")
-            return false
-        }
-
-        keyboardEventTap?.suppressPassthroughObservation(
-            until: Date().addingTimeInterval(
-                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action)
-                    || shouldUseCodexProofDirectInsertion(profile: profile)
-                    || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
-                    || shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
-                    || shouldUseObsidianSystemEventsInsertion(profile: profile) ? 0.75 : 0.25
-            )
-        )
-
-        if shouldUseCodexProofDirectInsertion(profile: profile) {
-            let succeeded = insertCodexProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action) {
-            let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseClaudeDesktopProofDirectInsertion(profile: profile) {
-            let succeeded = insertClaudeDesktopProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseObsidianDirectValueInsertion(profile: profile, action: action) {
-            let succeeded = insertObsidianDirectValueText(acceptedText, profile: profile)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseObsidianSystemEventsInsertion(profile: profile) {
-            let succeeded = insertObsidianSystemEventsPasteText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                suggestionPipeline.pausePolling(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
-
-        // Bind the Accessibility write to the field the suggestion was shown for, so focus
-        // stolen between the acceptance guard and the write cannot redirect the user's accepted
-        // text into another app/field. See docs/security/threat-model.md (F1).
-        let result = insertionEngine.insert(
-            acceptedText,
-            profile: profile,
-            expectedFieldIdentity: currentSuggestionState.fieldIdentity,
-            skipping: skippedModes
-        )
-        DiagnosticsLog.shared.record(
-            "insert",
-            metadata: [
-                "app": profile.bundleIdentifier,
-                "mode": result.mode.rawValue,
-                "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                "success": String(result.succeeded),
-                "skippedModes": skippedModes
-                    .map(\.rawValue)
-                    .sorted()
-                    .joined(separator: ",")
-            ]
-        )
-
-        if result.succeeded {
-            suggestionPipeline.pausePolling(
-                now: Date(),
-                durationMilliseconds: postInsertionPollPauseMilliseconds
-            )
-        }
-
-        return result.succeeded
     }
 
     private func repairObsidianFullAcceptCaretIfNeeded(
@@ -10234,7 +7823,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let acceptanceID = UUID().uuidString
         let acceptedAt = Date()
-        let verificationBaseline = insertionVerificationBaseline(
+        let verificationBaseline = insertionVerificationBaselineHost.baseline(
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
             action: action,
@@ -10285,7 +7874,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: previousSnapshot.textBeforeCursor + acceptedText,
             textAfterCursor: previousSnapshot.textAfterCursor
         )
-        suggestionRepetitionSuppressor.recordAcceptance(
+        suggestionOrchestrator.recordRepetitionAcceptance(
             acceptedText,
             mode: currentSuggestionState.requestMode,
             scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -17089,7 +14678,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             initialPlacement: initialPlacement,
             fallbackRenderMode: fallbackRenderMode
         ) { placement in
-            suggestionPanel.show(
+            suggestionChromeHost.showSuggestion(
                 text: suggestion.visibleText,
                 near: placement.anchorRect,
                 alignedTo: placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
@@ -17550,8 +15139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: originalTextBeforeCursor,
                 textAfterCursor: context.textAfterCursor
             )
-        let transition = typeThroughPrefixStateMachine.apply(
-            to: &suggestionSession,
+        let transition = suggestionSession.applyTypeThrough(
+            using: typeThroughPrefixStateMachine,
             input: TypeThroughPrefixInput(
                 baselineSnapshot: baselineSnapshot,
                 currentSnapshot: snapshot
@@ -17617,7 +15206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
-            suggestionRepetitionSuppressor.recordMiss(
+            suggestionOrchestrator.recordRepetitionMiss(
                 displayedText,
                 mode: currentSuggestionState.requestMode,
                 scope: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
@@ -17652,7 +15241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
-    private func hideSuggestion(
+    func hideSuggestion(
         reason: String = "hidden",
         metadata extraMetadata: [String: String] = [:]
     ) {
@@ -17668,7 +15257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var metadata = currentSuggestionLifetimeMetadata(lifetimeMilliseconds: lifetimeMilliseconds)
 
             if outcome == "ignored" {
-                let missRecord = suggestionRepetitionSuppressor.recordIgnored(
+                let missRecord = suggestionOrchestrator.recordIgnoredRepetition(
                     displayedText,
                     mode: currentSuggestionState.requestMode,
                     scope: appBundleIdentifier,
@@ -17734,7 +15323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastRenderMode = nil
         lastCompatibilityLearningTrustContext = nil
         lastVisibleSuggestionGeometrySnapshot = nil
-        suggestionPanel.hide()
+        suggestionChromeHost.hideSuggestion()
         updateKeyboardEventTapSnapshot()
         scheduleKeyboardEventTapStopIfIdle()
     }
@@ -17743,19 +15332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ state: FieldStatusIndicatorState,
         context: FocusedTextContext
     ) {
-        guard let anchorRect = context.caretRect
-            ?? context.textLineRect
-            ?? context.elementRect
-            ?? context.windowRect else {
-            fieldStatusIndicator.hide()
-            return
-        }
-
-        fieldStatusIndicator.show(
-            state: state,
-            near: anchorRect,
-            fieldRect: context.elementRect
-        )
+        suggestionChromeHost.showFieldStatusIndicator(state, context: context)
     }
 
     private func updateStatusMenu(
@@ -17765,7 +15342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         if let app,
            app.bundleIdentifier != Bundle.main.bundleIdentifier {
-            lastObservedSettingsApp = app
+            appTargetStateHost.noteObservedSettingsApp(app)
         }
 
         let permission = accessibilityClient.isTrusted ? "AX ok" : "AX missing"
@@ -17805,56 +15382,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldControlState.statusText
         ].joined(separator: "|")
 
-        let decisionPresentation = SuggestionDecisionPresentation(lastSuggestionDecision)
-        statusMenuItem?.title = statusLine
-        statusMenuItem?.toolTip = lastSuggestionDecision
-        suggestionDecisionMenuItem?.title = decisionPresentation.menuTitle
-        suggestionDecisionMenuItem?.toolTip = lastSuggestionDecision
-        pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
-        silenceFieldMenuItem?.title = fieldControlState.buttonTitle
-        silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
-        silenceFieldMenuItem?.toolTip = fieldControlState.detailText
-        toggleAppMenuItem?.title = appControlState?.menuToggleTitle ?? "Pause Current App"
-        toggleAppMenuItem?.isEnabled = appControlState?.canToggle ?? false
-        toggleAppMenuItem?.toolTip = appControlState?.fallbackText
-        if settingsWindow.isShowing {
-            settingsWindow.refresh(
-                isTrusted: accessibilityClient.isTrusted,
-                suggestionsPaused: suggestionsPaused,
-                suggestionsPausedUntil: suggestionsPausedUntil,
-                runtimeReport: runtimeReadinessReport,
-                runtimeTargetSummary: runtimeTargetSummary,
-                modelDirectoryPath: modelDirectoryPath,
-                modelInstallStatusText: modelInstallStatusText,
-                isModelInstallInProgress: modelInstallHost.isInstalling,
-                currentApp: settingsCurrentAppState,
-                fieldControl: settingsFieldControlState,
-                practice: settingsPracticeState,
-                privacy: settingsPrivacyState,
-                keyboardShortcuts: settingsKeyboardShortcutState,
-                suggestionAggressiveness: settingsSuggestionAggressivenessState,
-                lastSuggestionDecision: lastSuggestionDecision
+        statusChromeHost.update(
+            StatusChromeUpdate(
+                statusLine: statusLine,
+                statusSignature: statusSignature,
+                lastSuggestionDecision: lastSuggestionDecision,
+                pauseSuggestionsTitle: pauseSuggestionsTitle,
+                silenceFieldTitle: fieldControlState.buttonTitle,
+                silenceFieldEnabled: fieldControlState.canSilence,
+                silenceFieldToolTip: fieldControlState.detailText,
+                toggleAppTitle: appControlState?.menuToggleTitle ?? "Pause Current App",
+                toggleAppEnabled: appControlState?.canToggle ?? false,
+                toggleAppToolTip: appControlState?.fallbackText ?? "",
+                settings: StatusChromeSettingsState(
+                    isTrusted: accessibilityClient.isTrusted,
+                    suggestionsPaused: suggestionsPaused,
+                    suggestionsPausedUntil: suggestionsPausedUntil,
+                    runtimeReport: runtimeReadinessReport,
+                    runtimeTargetSummary: runtimeTargetSummary,
+                    modelDirectoryPath: modelDirectoryPath,
+                    modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
+                    isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
+                    currentApp: settingsCurrentAppState,
+                    fieldControl: settingsFieldControlState,
+                    practice: settingsPracticeState,
+                    privacy: settingsPrivacyState,
+                    keyboardShortcuts: settingsKeyboardShortcutState,
+                    suggestionAggressiveness: settingsSuggestionAggressivenessState,
+                    lastSuggestionDecision: lastSuggestionDecision
+                ),
+                diagnosticsMetadata: [
+                    "accessibility": permission,
+                    "control": control,
+                    "app": appName,
+                    "profile": profileName,
+                    "enabled": enabled,
+                    "paused": String(suggestionsPaused),
+                    "decision": lastSuggestionDecision
+                ]
             )
-        }
-
-        guard lastStatusLine != statusSignature else {
-            return
-        }
-
-        lastStatusLine = statusSignature
-        DiagnosticsLog.shared.record(
-            "status",
-            metadata: [
-                "accessibility": permission,
-                "control": control,
-                "app": appName,
-                "profile": profileName,
-                "enabled": enabled,
-                "paused": String(suggestionsPaused),
-                "decision": lastSuggestionDecision,
-                "decisionKind": decisionPresentation.diagnosticsKind,
-                "decisionSummary": decisionPresentation.summary
-            ]
         )
     }
 
@@ -17921,7 +15487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suppressField(currentFieldIdentity, profile: currentProfile, reason: reason)
     }
 
-    private func suppressField(
+    func suppressField(
         _ fieldIdentity: FocusedFieldIdentity,
         profile: CompatibilityProfile,
         reason: String
@@ -17937,7 +15503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func annoyanceContext(
+    func annoyanceContext(
         appBundleIdentifier: String,
         fieldIdentity: FocusedFieldIdentity?,
         requestMode: CompletionRequestMode?,
@@ -18059,45 +15625,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for snapshot: FocusedTextSnapshot,
         cooldown: PrefixFamilyCooldown
     ) {
-        cancelPrefixCooldownRetry()
-        let delayMilliseconds = max(
-            0,
-            Int(cooldown.until.timeIntervalSinceNow * 1_000) + 25
-        )
         let reason = cooldown.reason.rawValue
-        prefixCooldownRetryTask = Task { [weak self, snapshot, reason, delayMilliseconds] in
-            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
-            guard !Task.isCancelled else {
+        prefixCooldownRetryHost.schedule(until: cooldown.until) { [weak self, snapshot, reason] in
+            guard let self,
+                  self.lastTextSnapshot == snapshot,
+                  !self.suggestionSession.hasVisibleSuggestion else {
                 return
             }
 
-            await MainActor.run {
-                guard let self,
-                      self.lastTextSnapshot == snapshot,
-                      !self.suggestionSession.hasVisibleSuggestion else {
-                    return
-                }
-
-                self.lastTextSnapshot = nil
-                self.lastTrustedCodexPromptTargetContinuityAnchor = nil
-                self.codexPromptAXCooldownPreservation = nil
-                self.lastRequestedTextBeforeCursor = nil
-                self.suggestionBlockLogGate.reset()
-                self.setSuggestionDecision("Ready: prefix \(reason) expired")
-                DiagnosticsLog.shared.record(
-                    "prefix-family-cooldown-expired",
-                    metadata: [
-                        "reason": reason,
-                        "fieldIdentity": snapshot.fieldIdentity.traceDescription
-                    ]
-                )
-            }
+            self.lastTextSnapshot = nil
+            self.codexPromptTargetContinuityHost.reset()
+            self.lastRequestedTextBeforeCursor = nil
+            self.suggestionBlockLogGate.reset()
+            self.setSuggestionDecision("Ready: prefix \(reason) expired")
+            DiagnosticsLog.shared.record(
+                "prefix-family-cooldown-expired",
+                metadata: [
+                    "reason": reason,
+                    "fieldIdentity": snapshot.fieldIdentity.traceDescription
+                ]
+            )
         }
     }
 
     private func cancelPrefixCooldownRetry() {
-        prefixCooldownRetryTask?.cancel()
-        prefixCooldownRetryTask = nil
+        prefixCooldownRetryHost.cancel()
     }
 
     private func recordPlacementUncertainty(
@@ -18135,7 +15687,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func recordAnnoyanceSignal(
+    func recordAnnoyanceSignal(
         _ signal: AnnoyanceSignal,
         context: AnnoyanceContext?,
         suggestionID: String = "",
@@ -18244,11 +15796,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentFieldIdentity = fieldIdentity
         lastTextSnapshot = nil
-        lastTrustedCodexPromptTargetContinuityAnchor = nil
-        codexPromptAXCooldownPreservation = nil
+        codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
-        typingBurstState.reset()
+        typingBurstStateHost.reset()
         suggestionIdleRetryState.cancel()
         suggestionBlockLogGate.reset()
     }
@@ -18273,13 +15824,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentFieldIdentity = nil
         lastTextSnapshot = nil
-        lastTrustedCodexPromptTargetContinuityAnchor = nil
-        codexPromptAXCooldownPreservation = nil
+        codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
-        typingBurstState.reset()
+        typingBurstStateHost.reset()
         suggestionIdleRetryState.cancel()
-        fieldStatusIndicator.hide()
+        suggestionChromeHost.hideFieldStatusIndicator()
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()
         }
@@ -18287,63 +15837,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func invalidatePendingSuggestionRequest() -> Bool {
-        let cancelledPendingRequest = cancelPendingSuggestionTask(reason: "invalidate")
-        suggestionOrchestrator.clearStreamingPresentations()
-        suggestionOrchestrator.invalidate()
-        return cancelledPendingRequest
+        suggestionRequestCancellationHost.invalidatePendingRequest()
     }
 
     @discardableResult
     private func cancelPendingSuggestionTask(reason: String) -> Bool {
-        codexPromptAXCooldownPreservation = nil
-        let cancelledPresentationRefreshRetry = codexPromptPresentationRetryTask != nil
-        codexPromptPresentationRetryTask?.cancel()
-        codexPromptPresentationRetryTask = nil
-        if cancelledPresentationRefreshRetry {
-            DiagnosticsLog.shared.record(
-                "codex-prompt-target-refresh-retry-cancelled",
-                metadata: ["reason": reason]
-            )
-        }
-
-        guard let debounceTask else {
-            return cancelledPresentationRefreshRetry
-        }
-
-        debounceTask.cancel()
-        self.debounceTask = nil
-        debounceTaskSuggestionID = nil
-        suggestionOrchestrator.clearStreamingPresentations()
-        DiagnosticsLog.shared.record(
-            "suggestion-request-cancelled",
-            metadata: [
-                "reason": reason
-            ]
-        )
-        return true
-    }
-
-    private func clearCompletedSuggestionTask(suggestionID: String) {
-        guard debounceTaskSuggestionID == suggestionID else {
-            return
-        }
-
-        debounceTask = nil
-        debounceTaskSuggestionID = nil
+        suggestionRequestCancellationHost.cancelPendingRequest(reason: reason)
     }
 
     @objc
-    private func requestAccessibilityPermission() {
-        accessibilityClient.requestPermissionIfNeeded()
+    func requestAccessibilityPermission() {
+        let isTrusted = accessibilityPermissionHost.requestPermission()
         settingsWindow.refresh(
-            isTrusted: accessibilityClient.isTrusted,
+            isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
             suggestionsPausedUntil: suggestionsPausedUntil,
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: modelInstallHost.isInstalling,
+            modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
+            isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
             practice: settingsPracticeState,
@@ -18355,12 +15868,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record("request-accessibility")
     }
 
-    @objc
-    private func suggestNowFromMenu() {
-        requestSuggestionNow(source: "menu")
-    }
-
-    private func requestSuggestionNow(source: String) {
+    func requestSuggestionNow(source: String) {
         guard accessibilityClient.isTrusted else {
             setSuggestionDecision("Blocked: Accessibility permission missing")
             showSettings()
@@ -18386,7 +15894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        manualSuggestionRequestPending = true
+        manualSuggestionRequestHost.request()
         lastRequestedTextBeforeCursor = nil
         suggestionPipeline.resetPollingPause()
         setSuggestionDecision("Queued: asked once")
@@ -18394,7 +15902,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "suggestion-summon-requested",
             metadata: [
                 "source": source,
-                "shortcut": suggestionSummonHotKey.descriptor.diagnosticName
+                "shortcut": suggestionSummonHotKeyHost.descriptor.diagnosticName
             ]
         )
         pollFocusedTextForManualSuggestion()
@@ -18415,33 +15923,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var completesAsync = false
         pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
         if !completesAsync {
-            manualSuggestionRequestPending = false
+            manualSuggestionRequestHost.clearPendingRequest()
             suggestionPipeline.finishPoll(startedAt: startedAt)
         }
     }
 
     private func scheduleManualSuggestionRetry() {
-        manualSuggestionRetryTask?.cancel()
-        manualSuggestionRetryTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 150_000_000)
-            guard let self, self.manualSuggestionRequestPending else {
-                return
-            }
-            self.pollFocusedTextForManualSuggestion()
+        manualSuggestionRequestHost.scheduleRetry { [weak self] in
+            self?.pollFocusedTextForManualSuggestion()
         }
     }
 
     @objc
-    private func openAccessibilitySettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        if let url, NSWorkspace.shared.open(url) {
+    func openAccessibilitySettings() {
+        if accessibilityPermissionHost.openAccessibilitySettings() {
             DiagnosticsLog.shared.record("open-accessibility-settings")
         } else {
             DiagnosticsLog.shared.record("open-accessibility-settings-failed")
         }
     }
 
-    private func startTextEditPractice() {
+    func startTextEditPractice() {
         guard accessibilityClient.isTrusted else {
             requestAccessibilityPermission()
             return
@@ -18537,7 +16039,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func showSettings() {
+    func showSettings() {
         settingsWindow.show(
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -18545,8 +16047,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeReport: runtimeReadinessReport,
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
-            modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: modelInstallHost.isInstalling,
+            modelInstallStatusText: runtimeStatusHost.modelInstallStatus,
+            isModelInstallInProgress: modelInstallLifecycleHost.isInstalling,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
             practice: settingsPracticeState,
@@ -18558,7 +16060,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func openFeedbackForm() {
+    func openFeedbackForm() {
         let link = BetaFeedbackLink()
         if NSWorkspace.shared.open(link.url) {
             DiagnosticsLog.shared.record(
@@ -18574,7 +16076,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func revealModelFolder() {
+    func revealModelFolder() {
         do {
             try FileManager.default.createDirectory(
                 at: modelRuntimeBundle.modelDirectoryURL,
@@ -18594,68 +16096,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startModelInstall() {
-        guard !modelInstallHost.isInstalling else {
-            return
-        }
-
-        let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
-        let destinationURL = modelRuntimeBundle.modelDirectoryURL
-        modelInstallStatusText = "Model install: preparing download"
-        refreshRuntimeChrome()
-        DiagnosticsLog.shared.record(
-            "model-install-start",
-            metadata: [
-                "model": manifest.model.rawValue,
-                "repoID": manifest.source?.repoID ?? "",
-                "target": destinationURL.path
-            ]
-        )
-
-        modelInstallHost.start(
-            manifest: manifest,
-            destinationURL: destinationURL,
-            onProgress: { [weak self] statusText in
-                self?.modelInstallStatusText = statusText
-                self?.refreshRuntimeChrome()
-            },
-            onSuccess: { [weak self] installedURL in
-                DiagnosticsLog.shared.record(
-                    "model-install-succeeded",
-                    metadata: [
-                        "model": manifest.model.rawValue,
-                        "target": installedURL.path
-                    ]
-                )
-                self?.modelInstallStatusText = "Model install: warming local runtime"
-                self?.reloadModelRuntimeAfterInstall()
-            },
-            onCancelled: { [weak self] in
-                DiagnosticsLog.shared.record(
-                    "model-install-canceled",
-                    metadata: [
-                        "model": manifest.model.rawValue
-                    ]
-                )
-                self?.modelInstallStatusText = "Model install canceled."
-                self?.refreshRuntimeChrome()
-                self?.showSettings()
-            },
-            onFailure: { [weak self] reason in
-                DiagnosticsLog.shared.record(
-                    "model-install-failed",
-                    metadata: [
-                        "model": manifest.model.rawValue,
-                        "reason": reason
-                    ]
-                )
-                self?.modelInstallStatusText = "Model install failed: \(reason)"
-                self?.refreshRuntimeChrome()
-                self?.showSettings()
-            }
-        )
+        modelInstallLifecycleHost.start()
     }
 
-    private func reloadModelRuntimeAfterInstall() {
+    func reloadModelRuntimeAfterInstall() {
         let previousRuntime = modelRuntime
         modelRuntimeWarmHost.cancel()
         invalidatePendingSuggestionRequest()
@@ -18663,26 +16107,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
         engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
         suggestionOrchestrator.updateEngine(engine)
-        currentRuntimeState = .unavailable(reason: "model install completed")
+        runtimeStatusHost.markRuntimeUnavailable(reason: "model install completed")
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         refreshRuntimeChrome()
         warmModelRuntime()
     }
 
     private func cancelModelInstall() {
-        guard modelInstallHost.isInstalling else {
-            return
-        }
-
-        modelInstallStatusText = "Model install: canceling"
-        DiagnosticsLog.shared.record(
-            "model-install-cancel-requested",
-            metadata: [
-                "model": modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue
-            ]
-        )
-        refreshRuntimeChrome()
-        modelInstallHost.cancel()
+        modelInstallLifecycleHost.cancel()
     }
 
     private func launchDiagnosticsMetadata() -> [String: String] {
@@ -18694,7 +16126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return metadata
     }
 
-    private func performRuntimeAction(_ action: RuntimeReadinessAction) {
+    func performRuntimeAction(_ action: RuntimeReadinessAction) {
         switch action {
         case .installModel, .repairModel:
             startModelInstall()
@@ -18710,7 +16142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func showDiagnostics() {
+    func showDiagnostics() {
         let app = targetAppForControls()
         let compatibilityStatus = app
             .map { profileStore.supportStatus(for: $0.bundleIdentifier) }
@@ -18719,7 +16151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appEnabled = app.map { !disabledBundleIdentifiers.contains($0.bundleIdentifier) } ?? false
         let bundleIdentifier = app?.bundleIdentifier ?? ""
 
-        diagnosticsWindow.show(
+        diagnosticsWindowHost.show(DiagnosticsWindowPresentation(
+            bundleIdentifier: bundleIdentifier,
             diagnostics: app.flatMap {
                 accessibilityClient.focusedTextDiagnostics(
                     for: $0,
@@ -18738,7 +16171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
             personalCaptureScorecard: appSettings.personalCaptureEnabled
-                ? personalCaptureEpisodes.currentScorecard()
+                ? personalCaptureHost.currentScorecard()
                 : nil,
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
@@ -18746,30 +16179,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             screenshotTracingEnabled: RawAutocompleteTraceLog.shared.screenshotTracingEnabled
                 || compatibilityLearningStore.profile(for: bundleIdentifier)?.screenshotTracingEnabled == true,
             compatibilityLearningPath: compatibilityLearningStore.path,
-            compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier),
-            refreshAction: { [weak self] in
-                self?.showDiagnostics()
-            },
-            toggleTracingAction: { [weak self] in
-                self?.toggleTracing()
-            },
-            toggleScreenshotTracingAction: { [weak self] in
-                self?.toggleScreenshotTracing(for: bundleIdentifier)
-            },
-            openTraceFolderAction: {
-                self.openTraceFolder()
-            },
-            exportReportAction: {
-                self.exportTraceReport()
-            },
-            deleteTracesAction: { [weak self] in
-                self?.deleteLocalPrivacyLogs(refreshSettings: false)
-                self?.showDiagnostics()
-            }
-        )
+            compatibilityLearningProfile: compatibilityLearningStore.profile(for: bundleIdentifier)
+        ))
     }
 
-    private func toggleTracing() {
+    func toggleTracing() {
         let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
         RawAutocompleteTraceLog.shared.setPaused(nextPaused)
         DiagnosticsLog.shared.record(
@@ -18779,7 +16193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showDiagnostics()
     }
 
-    private func toggleSettingsTracingPaused() {
+    func toggleSettingsTracingPaused() {
         let nextPaused = !RawAutocompleteTraceLog.shared.isPaused
         RawAutocompleteTraceLog.shared.setPaused(nextPaused)
         DiagnosticsLog.shared.record(
@@ -18792,7 +16206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func toggleRawContentTracing() {
+    func toggleRawContentTracing() {
         let nextEnabled = !RawAutocompleteTraceLog.shared.rawContentTracingEnabled
         RawAutocompleteTraceLog.shared.setRawContentTracingEnabled(nextEnabled)
         DiagnosticsLog.shared.record(
@@ -18805,7 +16219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func toggleGlobalScreenshotTracing() {
+    func toggleGlobalScreenshotTracing() {
         let nextEnabled = !RawAutocompleteTraceLog.shared.screenshotTracingEnabled
         RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(nextEnabled)
         DiagnosticsLog.shared.record(
@@ -18818,12 +16232,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func toggleVisiblePageContext() {
+    func toggleVisiblePageContext() {
         visiblePageContextEnabled.toggle()
         if !visiblePageContextEnabled {
             visiblePageContextProvider.clear()
         }
-        persistVisiblePageContextEnabled()
+        appPreferencePersistenceHost.persistVisiblePageContextEnabled()
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
         if suggestionSession.hasVisibleSuggestion {
@@ -18841,10 +16255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func togglePersonalCapture() {
+    func togglePersonalCapture() {
         appSettings.togglePersonalCapture()
         if !appSettings.personalCaptureEnabled {
-            personalCaptureLastSnapshot = nil
+            personalCaptureHost.resetSnapshot()
         }
         personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         DiagnosticsLog.shared.record(
@@ -18858,14 +16272,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func revealPersonalCaptureFolder() {
+    func revealPersonalCaptureFolder() {
         do {
             try FileManager.default.createDirectory(
-                at: URL(fileURLWithPath: personalCaptureJournal.folderPath),
+                at: URL(fileURLWithPath: personalCaptureHost.folderPath),
                 withIntermediateDirectories: true
             )
             NSWorkspace.shared.activateFileViewerSelecting([
-                URL(fileURLWithPath: personalCaptureJournal.folderPath)
+                URL(fileURLWithPath: personalCaptureHost.folderPath)
             ])
         } catch {
             DiagnosticsLog.shared.record(
@@ -18875,11 +16289,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func deletePersonalCapture() {
+    func deletePersonalCapture() {
         appSettings.personalCaptureEnabled = false
-        personalCaptureLastSnapshot = nil
-        personalCaptureJournal.deleteAll()
-        personalCaptureEpisodes.deleteAll()
+        personalCaptureHost.resetSnapshot()
+        personalCaptureHost.deleteAll()
         personalizationCoordinator.deleteAll()
         DiagnosticsLog.shared.record(
             "personal-capture-deleted",
@@ -18888,7 +16301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
+    func deleteLocalPrivacyLogs(refreshSettings: Bool = true) {
         RawAutocompleteTraceLog.shared.deleteAll()
         compatibilityLearningStore.deleteAll()
         DiagnosticsLog.shared.deleteAll()
@@ -18901,14 +16314,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func clearLearningData() {
+    func clearLearningData() {
         acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
         acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
         recentWordMemory = ScopedRecentWordMemory()
-        suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
-        suggestionOrchestrator.resetPrefixFamilyCooldownPolicy(makePrefixFamilyCooldownPolicy())
-        UserDefaults.standard.removeObject(forKey: Self.acceptedAndKeptLearningDefaultsKey)
-        UserDefaults.standard.removeObject(forKey: Self.acceptedTextStyleMemoryDefaultsKey)
+        suggestionOrchestrator.resetSuggestionAnnoyanceBackoffPolicy(
+            makeSuggestionAnnoyanceBackoffPolicy()
+        )
+        appPreferencePersistenceHost.clearLearningData()
         DiagnosticsLog.shared.record(
             "learning-data-cleared",
             metadata: ["surface": "settings"]
@@ -18916,12 +16329,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func cycleAcceptAllShortcut() {
+    func cycleAcceptAllShortcut() {
         setAcceptAllShortcut(keyboardShortcutConfiguration.acceptAllShortcut.next)
     }
 
-    private func makePrefixFamilyCooldownPolicy() -> PrefixFamilyCooldownPolicy {
-        PrefixFamilyCooldownPolicy(traceFingerprintSecret: tracePrivacySecretStore.secret())
+    private func makeSuggestionAnnoyanceBackoffPolicy() -> SuggestionAnnoyanceBackoffPolicy {
+        SuggestionAnnoyanceBackoffPolicy(
+            prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy(
+                traceFingerprintSecret: tracePrivacySecretStore.secret()
+            )
+        )
     }
 
     private func effectiveSuggestionPace(for profile: CompatibilityProfile) -> SuggestionPace {
@@ -18990,7 +16407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allowsUnknownFieldKind: profile.allowsUnknownFieldKind
         )
 
-        return proofActivationModePolicy.adjustedDecision(
+        return suggestionSessionBehaviors.safetyActivation.adjustedProofDecision(
             original: decision,
             wordFallback: wordFallbackDecision,
             disablesPhraseContinuation: true,
@@ -19051,9 +16468,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
+    func setAcceptAllShortcut(_ shortcut: AcceptAllShortcut) {
         keyboardShortcutConfiguration.acceptAllShortcut = shortcut
-        persistKeyboardShortcutConfiguration()
+        appPreferencePersistenceHost.persistKeyboardShortcutConfiguration()
         updateKeyboardEventTapSnapshot()
         DiagnosticsLog.shared.record(
             "keyboard-shortcut-control",
@@ -19065,116 +16482,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
     }
 
-    private func setSuggestionAggressivenessLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(aggressivenessLevel: level),
-            reason: "aggressiveness-changed"
-        )
+    func setSuggestionAggressivenessLevel(_ level: Int) {
+        suggestionTuningHost.setAggressivenessLevel(level)
     }
 
-    private func setSuggestionMaxVisibleWords(_ words: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(maxVisibleWords: words),
-            reason: "max-visible-words-changed"
-        )
+    func setSuggestionMaxVisibleWords(_ words: Int) {
+        suggestionTuningHost.setMaxVisibleWords(words)
     }
 
-    private func setSuggestionWordStartCharacters(_ characters: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(wordStartCharacters: characters),
-            reason: "word-start-characters-changed"
-        )
+    func setSuggestionWordStartCharacters(_ characters: Int) {
+        suggestionTuningHost.setWordStartCharacters(characters)
     }
 
-    private func setSuggestionPhraseStartWords(_ words: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(phraseStartWords: words),
-            reason: "phrase-start-words-changed"
-        )
+    func setSuggestionPhraseStartWords(_ words: Int) {
+        suggestionTuningHost.setPhraseStartWords(words)
     }
 
-    private func setSuggestionResponseSpeedLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(responseSpeedLevel: level),
-            reason: "response-speed-changed"
-        )
+    func setSuggestionResponseSpeedLevel(_ level: Int) {
+        suggestionTuningHost.setResponseSpeedLevel(level)
     }
 
-    private func setSuggestionConfidenceLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(confidenceLevel: level),
-            reason: "confidence-changed"
-        )
+    func setSuggestionConfidenceLevel(_ level: Int) {
+        suggestionTuningHost.setConfidenceLevel(level)
     }
 
-    private func setSuggestionLearningRestraintLevel(_ level: Int) {
-        setSuggestionTuning(
-            updatedSuggestionTuning(learningRestraintLevel: level),
-            reason: "learning-restraint-changed"
-        )
+    func setSuggestionLearningRestraintLevel(_ level: Int) {
+        suggestionTuningHost.setLearningRestraintLevel(level)
     }
 
-    private func resetSuggestionTuning() {
-        setSuggestionTuning(SuggestionTuning(), reason: "reset-tuning")
+    func resetSuggestionTuning() {
+        suggestionTuningHost.reset()
     }
 
-    private func updatedSuggestionTuning(
-        aggressivenessLevel: Int? = nil,
-        maxVisibleWords: Int? = nil,
-        wordStartCharacters: Int? = nil,
-        phraseStartWords: Int? = nil,
-        responseSpeedLevel: Int? = nil,
-        confidenceLevel: Int? = nil,
-        learningRestraintLevel: Int? = nil
-    ) -> SuggestionTuning {
-        SuggestionTuning(
-            aggressivenessLevel: aggressivenessLevel ?? suggestionTuning.aggressivenessLevel,
-            maxVisibleWords: maxVisibleWords ?? suggestionTuning.maxVisibleWords,
-            wordStartCharacters: wordStartCharacters ?? suggestionTuning.wordStartCharacters,
-            phraseStartWords: phraseStartWords ?? suggestionTuning.phraseStartWords,
-            responseSpeedLevel: responseSpeedLevel ?? suggestionTuning.responseSpeedLevel,
-            confidenceLevel: confidenceLevel ?? suggestionTuning.confidenceLevel,
-            learningRestraintLevel: learningRestraintLevel ?? suggestionTuning.learningRestraintLevel
-        )
-    }
-
-    private func setSuggestionTuning(_ next: SuggestionTuning, reason: String) {
-        guard next != suggestionTuning else {
-            refreshRuntimeChrome()
-            return
-        }
-
-        suggestionTuning = next
-        persistSuggestionTuning()
-        applySuggestionTuningChange(reason: reason)
-        DiagnosticsLog.shared.record(
-            "suggestion-tuning-control",
-            metadata: [
-                "surface": "settings",
-                "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
-                "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
-                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords),
-                "suggestionWordStartCharacters": String(suggestionTuning.wordStartCharacters),
-                "suggestionPhraseStartWords": String(suggestionTuning.phraseStartWords),
-                "suggestionResponseSpeedLevel": String(suggestionTuning.responseSpeedLevel),
-                "suggestionConfidenceLevel": String(suggestionTuning.confidenceLevel),
-                "suggestionLearningRestraintLevel": String(suggestionTuning.learningRestraintLevel),
-                "reason": reason
-            ]
-        )
-        refreshRuntimeChrome()
-    }
-
-    private func applySuggestionTuningChange(reason: String) {
-        lastRequestedTextBeforeCursor = nil
-        invalidatePendingSuggestionRequest()
-        if suggestionSession.hasVisibleSuggestion {
-            hideSuggestion(reason: reason)
-        }
-        setSuggestionDecision("Ready: \(suggestionTuning.displayName.lowercased()) suggestions")
-    }
-
-    private func toggleScreenshotTracing(for bundleIdentifier: String) {
+    func toggleScreenshotTracing(for bundleIdentifier: String) {
         guard !bundleIdentifier.isEmpty else {
             RawAutocompleteTraceLog.shared.setScreenshotTracingEnabled(!RawAutocompleteTraceLog.shared.screenshotTracingEnabled)
             showDiagnostics()
@@ -19194,22 +16534,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionUp() {
+    func nudgeCurrentAppSuggestionUp() {
         nudgeCurrentAppSuggestion(dx: 0, dy: -2)
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionDown() {
+    func nudgeCurrentAppSuggestionDown() {
         nudgeCurrentAppSuggestion(dx: 0, dy: 2)
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionLeft() {
+    func nudgeCurrentAppSuggestionLeft() {
         nudgeCurrentAppSuggestion(dx: -2, dy: 0)
     }
 
     @objc
-    private func nudgeCurrentAppSuggestionRight() {
+    func nudgeCurrentAppSuggestionRight() {
         nudgeCurrentAppSuggestion(dx: 2, dy: 0)
     }
 
@@ -19267,7 +16607,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func resetCurrentAppLearning() {
+    func resetCurrentAppLearning() {
         guard let bundleIdentifier = visibleSuggestionBundleIdentifier
                 ?? targetAppForControls()?.bundleIdentifier else {
             return
@@ -19280,7 +16620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func openTraceFolder() {
+    func openTraceFolder() {
         do {
             try FileManager.default.createDirectory(
                 at: RawAutocompleteTraceLog.shared.folderURL,
@@ -19295,7 +16635,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func exportTraceReport() {
+    func exportTraceReport() {
         guard let bundleURL = RawAutocompleteTraceLog.shared.exportPrivacyBundle() else {
             DiagnosticsLog.shared.record("trace-privacy-bundle-export-failed")
             showDiagnostics()
@@ -19311,7 +16651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func toggleCurrentApp() {
+    func toggleCurrentApp() {
         guard let app = targetAppForControls(),
               profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
             return
@@ -19368,7 +16708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func toggleCurrentAppMirrorMode() {
+    func toggleCurrentAppMirrorMode() {
         guard let app = targetAppForControls(),
               let profile = profileStore.profile(for: app.bundleIdentifier),
               profile.canPresentSuggestions,
@@ -19387,8 +16727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let suggestionID = currentSuggestionState.id ?? ""
         setSuggestionDecision("Ready: app mode \(overrideText)")
         lastTextSnapshot = nil
-        lastTrustedCodexPromptTargetContinuityAnchor = nil
-        codexPromptAXCooldownPreservation = nil
+        codexPromptTargetContinuityHost.reset()
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
@@ -19423,7 +16762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func startCurrentAppProof() {
+    func startCurrentAppProof() {
         guard let app = targetAppForControls(),
               let profile = profileStore.profile(for: app.bundleIdentifier),
               !profile.isSensitive else {
@@ -19547,7 +16886,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appProofModeCoordinator.end(for: bundleIdentifier, reason: reason)
     }
 
-    private func enableAllDisabledApps() {
+    func enableAllDisabledApps() {
         var selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
         guard !selection.isEmpty else {
             return
@@ -19575,7 +16914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func silenceCurrentField() {
+    func silenceCurrentField() {
         guard let target = fieldControlTarget else {
             setSuggestionDecision("Blocked: no current field")
             refreshRuntimeChrome()
@@ -19641,12 +16980,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func togglePauseSuggestions() {
-        let transition = suggestionControlPolicy.toggle(suggestionControlState)
-        suggestionsPaused = transition.nextState.isPaused
-        suggestionsPausedUntil = nil
-        pauseExpirationTask?.cancel()
-        pauseExpirationTask = nil
+    func togglePauseSuggestions() {
+        let transition = suggestionPauseStateHost.toggle()
 
         setSuggestionDecision(transition.decisionText)
 
@@ -19677,7 +17012,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stopKeyboardEventTapNow(reason: cleanupReason ?? "control-toggle")
         }
 
-        persistPauseState()
         DiagnosticsLog.shared.record(
             "suggestions-control",
             metadata: [
@@ -19693,17 +17027,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func pauseSuggestionsFor15Minutes() {
+    func pauseSuggestionsFor15Minutes() {
         pauseSuggestions(for: 15 * 60, label: "15 minutes")
     }
 
     @objc
-    private func pauseSuggestionsFor1Hour() {
+    func pauseSuggestionsFor1Hour() {
         pauseSuggestions(for: 60 * 60, label: "1 hour")
     }
 
     @objc
-    private func pauseSuggestionsUntilTomorrowFromControl() {
+    func pauseSuggestionsUntilTomorrowFromControl() {
         let state = suggestionPauseSchedulePolicy.pauseUntilTomorrow(now: Date())
         applyScheduledPause(
             state: state,
@@ -19734,8 +17068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         let context = currentAnnoyanceContext()
         let suggestionID = currentSuggestionState.id ?? ""
-        suggestionsPaused = state.isPaused
-        suggestionsPausedUntil = state.pausedUntil
+        suggestionPauseStateHost.applyScheduledPause(state)
         setSuggestionDecision(decisionText)
         clearFocusedFieldState(hideReason: reason)
         stopKeyboardEventTapNow(reason: reason)
@@ -19755,8 +17088,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: reason,
             metadata: metadata
         )
-        persistPauseState()
-        schedulePauseExpiration()
         DiagnosticsLog.shared.record(
             "suggestions-control",
             metadata: metadata.merging([
@@ -19773,84 +17104,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc
-    private func quit() {
+    func quit() {
         NSApp.terminate(nil)
     }
 }
 
 private extension AppDelegate {
-    static var disabledAppsDefaultsKey: String {
-        "DisabledBundleIdentifiers"
-    }
-
-    static var suggestionsPausedDefaultsKey: String {
-        "SuggestionsPaused"
-    }
-
-    static var suggestionsPausedUntilDefaultsKey: String {
-        "SuggestionsPausedUntil"
-    }
-
-    static var appEnablementSetupCompletedDefaultsKey: String {
-        "AppEnablementSetupCompleted"
-    }
-
-    static var acceptAllShortcutDefaultsKey: String {
-        "AcceptAllShortcut"
-    }
-
-    static var suggestionAggressivenessDefaultsKey: String {
-        "SuggestionAggressiveness"
-    }
-
-    static var suggestionAggressivenessLevelDefaultsKey: String {
-        "SuggestionAggressivenessLevel"
-    }
-
-    static var suggestionMaxVisibleWordsDefaultsKey: String {
-        "SuggestionMaxVisibleWords"
-    }
-
-    static var suggestionWordStartCharactersDefaultsKey: String {
-        "SuggestionWordStartCharacters"
-    }
-
-    static var suggestionPhraseStartWordsDefaultsKey: String {
-        "SuggestionPhraseStartWords"
-    }
-
-    static var suggestionResponseSpeedLevelDefaultsKey: String {
-        "SuggestionResponseSpeedLevel"
-    }
-
-    static var suggestionConfidenceLevelDefaultsKey: String {
-        "SuggestionConfidenceLevel"
-    }
-
-    static var suggestionLearningRestraintLevelDefaultsKey: String {
-        "SuggestionLearningRestraintLevel"
-    }
-
-    static var suggestionTuningDefaultsVersionDefaultsKey: String {
-        "SuggestionTuningDefaultsVersion"
-    }
-
-    static var currentSuggestionTuningDefaultsVersion: Int {
-        6
-    }
-
-    static var previousDefaultSuggestionAggressivenessLevel: Int {
-        SuggestionAggressiveness.normal.defaultTuningLevel
-    }
-
-    static var visiblePageContextEnabledDefaultsKey: String {
-        "VisiblePageContextEnabled"
-    }
-
-    static var temporarilyEnabledBundleIDsEnvironmentKey: String {
-        "AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
-    }
-
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
     }
@@ -19908,115 +17167,8 @@ private extension AppDelegate {
         """
     }
 
-    static var acceptedAndKeptLearningDefaultsKey: String {
-        "AcceptedAndKeptLearning"
-    }
-
-    static var acceptedTextStyleMemoryDefaultsKey: String {
-        "AcceptedTextStyleMemory"
-    }
-
-    func loadPauseState() {
-        let defaults = UserDefaults.standard
-        let pausedUntilValue = defaults.double(forKey: Self.suggestionsPausedUntilDefaultsKey)
-        let pausedUntil = pausedUntilValue > 0 ? Date(timeIntervalSince1970: pausedUntilValue) : nil
-        let persistedIsPaused = defaults.object(forKey: Self.suggestionsPausedDefaultsKey) as? Bool
-        let startupState = suggestionControlPolicy.startupState(persistedIsPaused: persistedIsPaused)
-        let state = suggestionPauseSchedulePolicy.normalizedState(
-            isPaused: startupState.isPaused,
-            pausedUntil: pausedUntil,
-            now: Date()
-        )
-        suggestionsPaused = state.isPaused
-        suggestionsPausedUntil = state.pausedUntil
-        persistPauseState()
-        schedulePauseExpiration()
-    }
-
-    func persistPauseState() {
-        let defaults = UserDefaults.standard
-        defaults.set(suggestionsPaused, forKey: Self.suggestionsPausedDefaultsKey)
-        if let suggestionsPausedUntil {
-            defaults.set(
-                suggestionsPausedUntil.timeIntervalSince1970,
-                forKey: Self.suggestionsPausedUntilDefaultsKey
-            )
-        } else {
-            defaults.removeObject(forKey: Self.suggestionsPausedUntilDefaultsKey)
-        }
-    }
-
-    func expireTimedPauseIfNeeded(now: Date) {
-        let state = suggestionPauseSchedulePolicy.normalizedState(
-            isPaused: suggestionsPaused,
-            pausedUntil: suggestionsPausedUntil,
-            now: now
-        )
-        guard state.isPaused != suggestionsPaused || state.pausedUntil != suggestionsPausedUntil else {
-            return
-        }
-
-        suggestionsPaused = state.isPaused
-        suggestionsPausedUntil = state.pausedUntil
-        persistPauseState()
-        if !suggestionsPaused {
-            pauseExpirationTask?.cancel()
-            pauseExpirationTask = nil
-            setSuggestionDecision("Ready: timed pause ended")
-            refreshRuntimeChrome()
-        }
-    }
-
-    func schedulePauseExpiration() {
-        pauseExpirationTask?.cancel()
-        pauseExpirationTask = nil
-
-        guard suggestionsPaused,
-              let suggestionsPausedUntil else {
-            return
-        }
-
-        let delay = max(0, suggestionsPausedUntil.timeIntervalSinceNow)
-        pauseExpirationTask = Task { [weak self, suggestionsPausedUntil] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await MainActor.run {
-                self?.expireTimedPauseIfNeeded(now: suggestionsPausedUntil)
-            }
-        }
-    }
-
     func loadDisabledApps() {
-        let defaults = UserDefaults.standard
-        let disabledAppsKeyExists = defaults.object(forKey: Self.disabledAppsDefaultsKey) != nil
-        let setupKeyExists = defaults.object(forKey: Self.appEnablementSetupCompletedDefaultsKey) != nil
-        let temporarilyEnabledBundleIDs = ProcessInfo.processInfo.environment[
-            Self.temporarilyEnabledBundleIDsEnvironmentKey
-        ]
-
-        if disabledAppsKeyExists {
-            let persisted = defaults.stringArray(forKey: Self.disabledAppsDefaultsKey) ?? []
-            var selection = DisabledAppSelection(
-                persistedBundleIdentifiers: persisted
-            )
-            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-            disabledBundleIdentifiers = selection.bundleIdentifiers
-            appEnablementSetupCompleted = setupKeyExists
-                ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
-                : true
-            defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-            return
-        }
-
-        var defaultOffSelection = DisabledAppSelection(
-            defaultOffProfileStore: profileStore
-        )
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
-        appEnablementSetupCompleted = false
-        defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-        persistDisabledApps()
-
-        defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+        appEnablementHost.load()
     }
 
     func loadProofModeOverrides() {
@@ -20024,209 +17176,16 @@ private extension AppDelegate {
     }
 
     func persistDisabledApps() {
-        let selection = DisabledAppSelection(bundleIdentifiers: disabledBundleIdentifiers)
-        UserDefaults.standard.set(
-            selection.persistedBundleIdentifiers,
-            forKey: Self.disabledAppsDefaultsKey
-        )
+        appEnablementHost.persist()
     }
 
     func markAppEnablementSetupCompleted() {
-        guard !appEnablementSetupCompleted else {
-            return
-        }
-
-        appEnablementSetupCompleted = true
-        UserDefaults.standard.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+        appEnablementHost.markSetupCompleted()
     }
 
-    func loadKeyboardShortcutConfiguration() {
-        keyboardShortcutConfiguration = KeyboardShortcutConfiguration(
-            persistedAcceptAllShortcutRawValue: UserDefaults.standard.string(forKey: Self.acceptAllShortcutDefaultsKey)
-        )
-    }
-
-    func persistKeyboardShortcutConfiguration() {
-        UserDefaults.standard.set(
-            keyboardShortcutConfiguration.acceptAllShortcut.rawValue,
-            forKey: Self.acceptAllShortcutDefaultsKey
-        )
-    }
-
-    func loadSuggestionTuning() {
-        let defaults = UserDefaults.standard
-        var level: Int
-        let hasStoredLevel = defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil
-        if defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil {
-            level = defaults.integer(forKey: Self.suggestionAggressivenessLevelDefaultsKey)
-        } else {
-            level = SuggestionAggressiveness
-                .parsed(defaults.string(forKey: Self.suggestionAggressivenessDefaultsKey))
-                .defaultTuningLevel
-        }
-        if defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) == nil,
-           hasStoredLevel,
-           level == Self.previousDefaultSuggestionAggressivenessLevel {
-            level = SuggestionTuning.defaultAggressivenessLevel
-        }
-
-        let storedTuningVersion = defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) as? Int
-        let shouldMigrateDailyDriverDefaults = (storedTuningVersion ?? 0) < Self.currentSuggestionTuningDefaultsVersion
-        if shouldMigrateDailyDriverDefaults,
-           level == 3 {
-            level = SuggestionTuning.defaultAggressivenessLevel
-        }
-
-        var maxVisibleWords: Int
-        if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
-            maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
-        } else {
-            maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
-        }
-
-        let wordStartCharacters = defaults.object(forKey: Self.suggestionWordStartCharactersDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionWordStartCharactersDefaultsKey)
-            : SuggestionTuning.defaultWordStartCharacters
-        var phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionPhraseStartWordsDefaultsKey)
-            : SuggestionTuning.defaultPhraseStartWords
-        var responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionResponseSpeedLevelDefaultsKey)
-            : SuggestionTuning.defaultResponseSpeedLevel
-        var confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionConfidenceLevelDefaultsKey)
-            : SuggestionTuning.defaultConfidenceLevel
-        var learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
-            ? defaults.integer(forKey: Self.suggestionLearningRestraintLevelDefaultsKey)
-            : SuggestionTuning.defaultLearningRestraintLevel
-
-        if shouldMigrateDailyDriverDefaults {
-            if maxVisibleWords == 3 || maxVisibleWords == 5 {
-                maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
-            }
-            if phraseStartWords == 3 {
-                phraseStartWords = SuggestionTuning.defaultPhraseStartWords
-            }
-            if responseSpeedLevel == 3 {
-                responseSpeedLevel = SuggestionTuning.defaultResponseSpeedLevel
-            }
-            if confidenceLevel == 3 {
-                confidenceLevel = SuggestionTuning.defaultConfidenceLevel
-            }
-            if learningRestraintLevel == 2 {
-                learningRestraintLevel = SuggestionTuning.defaultLearningRestraintLevel
-            }
-        }
-
-        suggestionTuning = SuggestionTuning(
-            aggressivenessLevel: level,
-            maxVisibleWords: maxVisibleWords,
-            wordStartCharacters: wordStartCharacters,
-            phraseStartWords: phraseStartWords,
-            responseSpeedLevel: responseSpeedLevel,
-            confidenceLevel: confidenceLevel,
-            learningRestraintLevel: learningRestraintLevel
-        )
-        persistSuggestionTuning()
-        defaults.set(
-            Self.currentSuggestionTuningDefaultsVersion,
-            forKey: Self.suggestionTuningDefaultsVersionDefaultsKey
-        )
-    }
-
-    func persistSuggestionTuning() {
-        let defaults = UserDefaults.standard
-        defaults.set(
-            suggestionTuning.legacyAggressiveness.rawValue,
-            forKey: Self.suggestionAggressivenessDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.aggressivenessLevel,
-            forKey: Self.suggestionAggressivenessLevelDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.maxVisibleWords,
-            forKey: Self.suggestionMaxVisibleWordsDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.wordStartCharacters,
-            forKey: Self.suggestionWordStartCharactersDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.phraseStartWords,
-            forKey: Self.suggestionPhraseStartWordsDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.responseSpeedLevel,
-            forKey: Self.suggestionResponseSpeedLevelDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.confidenceLevel,
-            forKey: Self.suggestionConfidenceLevelDefaultsKey
-        )
-        defaults.set(
-            suggestionTuning.learningRestraintLevel,
-            forKey: Self.suggestionLearningRestraintLevelDefaultsKey
-        )
-    }
-
-    func loadVisiblePageContextEnabled() {
-        visiblePageContextEnabled = UserDefaults.standard.bool(
-            forKey: Self.visiblePageContextEnabledDefaultsKey
-        )
-    }
-
-    func persistVisiblePageContextEnabled() {
-        UserDefaults.standard.set(
-            visiblePageContextEnabled,
-            forKey: Self.visiblePageContextEnabledDefaultsKey
-        )
-    }
-
-    func loadAcceptedAndKeptLearning() {
-        guard let data = UserDefaults.standard.data(forKey: Self.acceptedAndKeptLearningDefaultsKey),
-              let store = AcceptedAndKeptLearningStore(jsonData: data) else {
-            acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
-            return
-        }
-
-        acceptedAndKeptLearning = store
-    }
-
-    func persistAcceptedAndKeptLearning() {
-        guard let data = acceptedAndKeptLearning.jsonData() else {
-            return
-        }
-
-        UserDefaults.standard.set(
-            data,
-            forKey: Self.acceptedAndKeptLearningDefaultsKey
-        )
-    }
-
-    func loadAcceptedTextStyleMemory() {
-        guard let data = UserDefaults.standard.data(forKey: Self.acceptedTextStyleMemoryDefaultsKey),
-              let store = AcceptedTextStyleMemoryStore(jsonData: data) else {
-            acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
-            return
-        }
-
-        acceptedTextStyleMemory = store
-    }
-
-    func persistAcceptedTextStyleMemory() {
-        guard let data = acceptedTextStyleMemory.jsonData() else {
-            return
-        }
-
-        UserDefaults.standard.set(
-            data,
-            forKey: Self.acceptedTextStyleMemoryDefaultsKey
-        )
-    }
 }
 
-private struct InsertionVerificationBaseline: Equatable {
+struct InsertionVerificationBaseline: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let targetFingerprint: FocusedTargetFingerprint
     let previousTextBeforeCursor: String
@@ -20241,10 +17200,10 @@ private struct InsertionVerificationBaseline: Equatable {
     let fieldKind: AXFieldKind
     let fieldKindReason: String
     let behaviorProfileID: AutocompleteBehaviorProfileID
-    let retryCount: Int
+    var retryCount: Int
 }
 
-private enum FocusedInsertionVerificationContext {
+enum FocusedInsertionVerificationContext {
     case ready(context: FocusedTextContext)
     case missingContext
     case fieldChanged
@@ -20314,14 +17273,6 @@ private enum AcceptedInsertionUndoRecoveryMode: Equatable {
     }
 }
 
-private struct FieldControlTarget: Equatable {
-    let appBundleIdentifier: String
-    let appDisplayName: String
-    let fieldIdentity: FocusedFieldIdentity
-    let requestMode: CompletionRequestMode?
-    let fieldKind: AXFieldKind
-}
-
 private extension String {
     func trimmingTrailingWhitespace() -> String {
         var result = self
@@ -20362,44 +17313,5 @@ private extension CompletionActivationDecision {
         case let .block(reason):
             return reason.rawValue
         }
-    }
-}
-
-// MARK: - SuggestionPipelineHost
-
-extension AppDelegate: SuggestionPipelineHost {
-    /// App-computed cadence inputs for the polling driver (relocated from the former
-    /// `shouldRunFocusedTextPoll`); the pure cadence policy lives in `SuggestionPipelineController`.
-    func focusedTextPollCadenceSignals() -> FocusPollingCadenceSignals {
-        let activeApp = accessibilityClient.frontmostApplication()
-        let hasSupportedProfile = activeApp.flatMap { app -> Bool? in
-            guard let profile = effectiveProfile(for: app) else {
-                return false
-            }
-
-            return profile.canPresentSuggestions
-                && !profile.isSensitive
-                && isSuggestionEnabled(for: app, profile: profile)
-        } ?? false
-        return FocusPollingCadenceSignals(
-            isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasSupportedProfile: hasSupportedProfile,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasPersonalCapture: appSettings.personalCaptureEnabled,
-            lastFocusedTextChangeAt: lastFocusedTextChangeAt
-        )
-    }
-
-    /// Run one focused-text poll (Accessibility read + dispatch). Returns whether the read
-    /// completes asynchronously, in which case the controller defers `finishPoll` to the
-    /// async completion handler (`completeFocusedTextPoll`).
-    func executeFocusedTextPoll(startedAt: UInt64) -> Bool {
-        var completesAsync = false
-        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
-        return completesAsync
-    }
-
-    func applyFocusedTextPollingThrottle(_ recommendation: FocusedTextPollingThrottleRecommendation) {
-        applyFocusedTextPollingThrottleIfNeeded(recommendation)
     }
 }

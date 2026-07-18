@@ -137,6 +137,43 @@ struct SuggestionIdleRetryStateTests {
         #expect(!visibleState.hasPendingRetry)
     }
 
+    @Test("Quarantined AX cancellation follows the recovered final snapshot")
+    func axQuarantineCancellationFollowsRecoveredSnapshot() {
+        var state = SuggestionIdleRetryState(settleDelayMilliseconds: 240)
+        let partial = snapshot(String(repeating: "a", count: 15))
+        let recovered = snapshot(
+            String(repeating: "a", count: 15) + String(repeating: "b", count: 11)
+        )
+
+        state.noteTextChange(
+            snapshot: partial,
+            cancelledPendingRequest: true,
+            nowMilliseconds: 0
+        )
+        #expect(state.hasPendingRetry)
+
+        state.noteTextChange(
+            snapshot: recovered,
+            cancelledPendingRequest: false,
+            nowMilliseconds: 750
+        )
+        #expect(state.consumeRetryIfReady(
+            snapshot: recovered,
+            nowMilliseconds: 989,
+            hasVisibleSuggestion: false
+        ) == nil)
+        #expect(state.consumeRetryIfReady(
+            snapshot: recovered,
+            nowMilliseconds: 990,
+            hasVisibleSuggestion: false
+        ) == .requestCancelled)
+        #expect(state.consumeRetryIfReady(
+            snapshot: recovered,
+            nowMilliseconds: 1_500,
+            hasVisibleSuggestion: false
+        ) == nil)
+    }
+
     @Test("Explicit cancellation clears a pending retry")
     func explicitCancellationClearsPendingRetry() {
         var state = SuggestionIdleRetryState(settleDelayMilliseconds: 100)
