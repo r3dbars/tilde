@@ -22,10 +22,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-RELEASE_FLAG=()
+RELEASE_FLAG=""
 for arg in "$@"; do
   case "$arg" in
-    --release) RELEASE_FLAG=(--release) ;;
+    --release) RELEASE_FLAG="--release" ;;
     -h | --help)
       awk 'NR==1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
       exit 0
@@ -47,7 +47,11 @@ echo "== [1/4] build + verify app bundle =="
 
 echo
 echo "== [2/4] app bundle shape / signature =="
-./script/check_app_bundle.sh "${RELEASE_FLAG[@]}"
+if [ -n "$RELEASE_FLAG" ]; then
+  ./script/check_app_bundle.sh "$RELEASE_FLAG"
+else
+  ./script/check_app_bundle.sh
+fi
 
 echo
 echo "== [3/4] model asset =="
