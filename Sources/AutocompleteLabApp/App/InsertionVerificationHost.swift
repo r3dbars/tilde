@@ -106,8 +106,8 @@ final class InsertionVerificationHost {
                 context: context
             )
 
-            if baseline.profile.bundleIdentifier == "md.obsidian",
-               self.fastPathPolicy.canVerifyLengthMatchedSuffix(
+            if self.fastPathPolicy.canVerifyLengthMatchedSuffix(
+                   appBundleIdentifier: baseline.profile.bundleIdentifier,
                    previousTextBeforeCursor: baseline.previousTextBeforeCursor,
                    acceptedText: acceptedText,
                    currentTextBeforeCursor: context.textBeforeCursor,
