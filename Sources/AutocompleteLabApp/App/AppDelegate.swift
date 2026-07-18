@@ -493,6 +493,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
     )
+    private lazy var suggestionRequestPreparationHost = SuggestionRequestPreparationHost(
+        dependencies: SuggestionRequestPreparationHostDependencies(
+            suggestionOrchestrator: suggestionOrchestrator,
+            acceptedTextStyleSketch: { [weak self] key in
+                self?.acceptedTextStyleMemory.sketch(for: key)
+            },
+            personalizationCoordinator: personalizationCoordinator,
+            isPersonalCaptureEnabled: { [weak self] in
+                self?.appSettings.personalCaptureEnabled ?? false
+            },
+            maxVisibleWords: { [weak self] requestMode, profile in
+                self?.maxVisibleWords(for: requestMode, profile: profile)
+                    ?? CompletionModelPolicy.mvp.maxVisibleWords
+            },
+            suggestionTuning: { [weak self] in
+                self?.suggestionTuning ?? SuggestionTuning()
+            },
+            triggerTiming: suggestionSessionBehaviors.triggerTiming
+        )
+    )
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
@@ -6135,62 +6155,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancelPendingSuggestionTask(reason: "new-request")
         lastRequestedTextBeforeCursor = context.textBeforeCursor
 
-        let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
-            appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldClassification.kind,
-            textBeforeCursor: context.textBeforeCursor
-        )
-        let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
-            for: acceptedTextStyleKey
-        )
-        let personalization = personalizationCoordinator.selection(isEnabled: appSettings.personalCaptureEnabled, context: context, appBundleIdentifier: appBundleIdentifier, fieldClassification: fieldClassification, requestMode: requestMode)
-        let orchestration = suggestionOrchestrator.beginRequest(SuggestionRequestInput(
+        let preparation = suggestionRequestPreparationHost.prepare(
             context: context,
+            profile: profile,
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
-            acceptedTextStyleSketch: acceptedTextStyleSketch,
-            personalContext: personalization.context,
-            personalWritingMemory: personalization.memory,
-            visiblePageContext: visiblePageContext,
-            maxVisibleWords: maxVisibleWords(for: requestMode, profile: profile),
+            renderMode: renderMode,
+            delayMilliseconds: delayMilliseconds,
+            timingLane: timingLane,
             requestMode: requestMode,
-            suggestionTuning: suggestionTuning
-        ))
+            typingBurstDecision: typingBurstDecision,
+            visiblePageContext: visiblePageContext,
+            triggerReason: triggerReason
+        )
+        let orchestration = preparation.orchestration
         let request = orchestration.request
         let suggestionID = orchestration.suggestionID
         let fieldIdentityDescription = orchestration.fieldIdentityDescription
-        let requestMetadata = orchestration.requestMetadata
-            .merging(timingLane.traceMetadata) { current, _ in current }
-        suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
+        let requestMetadata = preparation.requestMetadata
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
-        let requestSchedule = suggestionSessionBehaviors.triggerTiming.schedule(
-            policyDelayMilliseconds: delayMilliseconds,
-            timingLane: timingLane,
-            requestMode: request.mode,
-            renderMode: renderMode
-        )
+        let requestSchedule = preparation.requestSchedule
         let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
             ? [:]
             : typingBurstDecision.traceMetadata
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .suggestionRequested,
-            suggestionID: suggestionID,
-            appBundleIdentifier: appBundleIdentifier,
-            fieldIdentity: fieldIdentityDescription,
-            requestMode: request.mode.rawValue,
-            triggerReason: triggerReason,
-            textBeforeCursor: request.textBeforeCursor,
-            textAfterCursor: request.textAfterCursor,
-            metadata: [
-                "renderMode": renderMode.rawValue
-            ]
-            .merging(typingBurstMetadata) { current, _ in current }
-            .merging(requestSchedule.traceMetadata) { current, _ in current }
-            .merging(requestMetadata) { current, _ in current }
-        )
 
         let disablesFastWordCompletionForProof = runtimeProofOptions.disablesFastWordCompletion(
             appBundleIdentifier: appBundleIdentifier,
