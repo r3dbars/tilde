@@ -5150,6 +5150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard currentSuggestionState.appBundleIdentifier == bundleIdentifier,
               let currentProfile,
               currentProfile.bundleIdentifier == bundleIdentifier,
+              currentProfile.insertionMode == .axValueReplacement,
+              currentProfile.fallbackInsertionMode == nil,
               let currentSuggestionFieldIdentity = currentSuggestionState.fieldIdentity,
               let lastTextSnapshot,
               let frontmostApp = accessibilityClient.frontmostApplication(),
@@ -5194,13 +5196,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        return codexPromptTargetContinuityPolicy.canAcceptStablePrompt(
-            appBundleIdentifier: bundleIdentifier,
-            processIdentifier: frontmostApp.processIdentifier,
+        return codexPromptTargetContinuityHost.canAcceptStablePrompt(
+            app: frontmostApp,
             currentFieldIdentity: currentSuggestionFieldIdentity,
             currentSnapshot: lastTextSnapshot,
             shownSnapshot: shownSnapshot,
-            trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
             observedContext: context
         )
     }
