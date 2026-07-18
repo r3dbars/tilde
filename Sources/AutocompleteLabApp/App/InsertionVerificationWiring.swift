@@ -15,7 +15,7 @@ extension AppDelegate: InsertionVerificationHandling {
         skippingInsertionModes: Set<InsertionMode>,
         action: KeyboardAction?
     ) -> Bool {
-        insertAcceptedText(
+        suggestionInsertionHost.insertAcceptedText(
             acceptedText,
             skippingInsertionModes: skippingInsertionModes,
             action: action
