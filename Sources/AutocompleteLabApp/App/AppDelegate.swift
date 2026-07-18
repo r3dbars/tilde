@@ -2032,12 +2032,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: frontmostApp.bundleIdentifier,
             context: rawContext
         )
-        if !promptMatch.canSuggest,
-           shouldDeferCodexPromptTargetInvalidation(
+        let promptTargetInvalidationResolution = codexPromptTargetInvalidationResolution(
             app: frontmostApp,
             context: rawContext,
             promptBlockReason: promptMatch.reason
-           ) {
+        )
+        if !promptMatch.canSuggest,
+           promptTargetInvalidationResolution == .preserveWork {
             let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
             setSuggestionDecision(
                 hasVisibleSuggestion
@@ -2059,6 +2060,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if hasVisibleSuggestion {
                 updateKeyboardEventTapSnapshot()
             }
+            return
+        }
+        if !promptMatch.canSuggest,
+           promptTargetInvalidationResolution == .cancelAndRetry {
+            cancelAndRearmCodexPromptTargetWork(
+                app: frontmostApp,
+                context: rawContext,
+                profile: profile,
+                promptBlockReason: promptMatch.reason,
+                source: "prompt-validation"
+            )
+            setSuggestionDecision("Waiting: Codex prompt refresh")
+            fieldStatusIndicator.hide()
             return
         }
         guard promptMatch.canSuggest else {
@@ -3038,16 +3052,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
             || manualSuggestionRequestPending
-        let shouldPreservePendingRequest = result.context.map {
-            codexPromptTargetContinuityHost.beginAXCooldownPreservation(
+        let promptTargetInvalidationResolution = result.context.map {
+            codexPromptTargetContinuityHost.axHealthInvalidationResolution(
                 app: result.app,
                 currentFieldIdentity: currentFieldIdentity,
                 currentSnapshot: lastTextSnapshot,
-                observedContext: $0,
-                hasActiveSuggestionWork: hasActiveSuggestionWork,
-                cooldownMilliseconds: cooldown.cooldownMilliseconds
+                observedContext: $0
             )
-        } ?? false
+        } ?? .reject
+        let rearmedTransientRequest: Bool
+        if hasActiveSuggestionWork,
+           promptTargetInvalidationResolution == .cancelAndRetry,
+           let context = result.context,
+           let profile = effectiveProfile(for: result.app) {
+            rearmedTransientRequest = cancelAndRearmCodexPromptTargetWork(
+                app: result.app,
+                context: context,
+                profile: profile,
+                promptBlockReason: promptTextAreaMatch(
+                    for: result.app.bundleIdentifier,
+                    context: context
+                ).reason,
+                source: "ax-health"
+            )
+        } else {
+            rearmedTransientRequest = false
+        }
+        let shouldPreservePendingRequest: Bool
+        if hasActiveSuggestionWork,
+           promptTargetInvalidationResolution == .preserveWork {
+            shouldPreservePendingRequest = result.context.map {
+                codexPromptTargetContinuityHost.beginAXCooldownPreservation(
+                    app: result.app,
+                    currentFieldIdentity: currentFieldIdentity,
+                    currentSnapshot: lastTextSnapshot,
+                    observedContext: $0,
+                    hasActiveSuggestionWork: hasActiveSuggestionWork,
+                    cooldownMilliseconds: cooldown.cooldownMilliseconds
+                )
+            } ?? false
+        } else if rearmedTransientRequest {
+            shouldPreservePendingRequest = codexPromptTargetContinuityHost
+                .preserveDuringAXCooldown(forMilliseconds: cooldown.cooldownMilliseconds)
+        } else {
+            shouldPreservePendingRequest = false
+        }
 
         DiagnosticsLog.shared.record(
             "focused-text-ax-health-cooldown-started",
@@ -3665,21 +3714,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return PromptTextAreaMatch(canSuggest: decision.canSuggest, reason: decision.reason)
     }
 
-    private func shouldDeferCodexPromptTargetInvalidation(
+    private func codexPromptTargetInvalidationResolution(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
         promptBlockReason: String
-    ) -> Bool {
+    ) -> CodexPromptTargetInvalidationResolution {
         let hasActiveSuggestionWork = debounceTask != nil
             || codexPromptPresentationRetryTask != nil
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
             || manualSuggestionRequestPending
         guard hasActiveSuggestionWork else {
-            return false
+            return .reject
         }
 
-        return codexPromptTargetContinuityHost.canDeferInvalidation(
+        return codexPromptTargetContinuityHost.invalidationResolution(
             app: app,
             promptBlockReason: promptBlockReason,
             currentFieldIdentity: currentFieldIdentity,
@@ -3687,6 +3736,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             observedContext: context,
             hasActiveSuggestionWork: hasActiveSuggestionWork
         )
+    }
+
+    @discardableResult
+    private func cancelAndRearmCodexPromptTargetWork(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        promptBlockReason: String,
+        source: String
+    ) -> Bool {
+        guard let snapshot = lastTextSnapshot else {
+            return false
+        }
+
+        let shouldArmRetry = debounceTask != nil
+            || codexPromptPresentationRetryTask != nil
+            || suggestionSession.hasVisibleSuggestion
+            || manualSuggestionRequestPending
+        let cancelledPendingRequest = invalidatePendingSuggestionRequest()
+        suggestionIdleRetryState.noteTextChange(
+            snapshot: snapshot,
+            cancelledPendingRequest: cancelledPendingRequest || shouldArmRetry,
+            nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+            settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+        )
+        hideSuggestion(reason: "codex-prompt-target-transient")
+        DiagnosticsLog.shared.record(
+            "codex-prompt-target-refresh-quarantined",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "reason": promptBlockReason,
+                "role": context.role ?? "unknown",
+                "beforeChars": String(context.textBeforeCursor.count),
+                "afterChars": String(context.textAfterCursor.count),
+                "requestCancelled": String(cancelledPendingRequest),
+                "retryArmed": String(suggestionIdleRetryState.hasPendingRetry),
+                "source": source
+            ]
+        )
+        return suggestionIdleRetryState.hasPendingRetry
     }
 
     private func syntheticTextAreaCaretRect(
@@ -8598,6 +8687,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : .reject
             guard resolution != .reject else {
                 return (nil, "stale-prompt-target")
+            }
+            if resolution == .cancelAndRetry {
+                cancelAndRearmCodexPromptTargetWork(
+                    app: frontmostApp,
+                    context: rawContext,
+                    profile: profile,
+                    promptBlockReason: promptMatch.reason,
+                    source: "presentation-refresh"
+                )
+                return (nil, "quarantined-codex-prompt-target")
             }
 
             DiagnosticsLog.shared.record(
