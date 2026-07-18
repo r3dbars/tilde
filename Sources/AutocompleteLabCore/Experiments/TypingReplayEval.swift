@@ -342,7 +342,8 @@ public struct TypingReplayScorecard: Codable, Equatable, Sendable {
         suffixEnabled: Bool? = nil,
         fewShotSource: String? = nil,
         decodingVariant: String? = nil,
-        endToEndP95LatencyMs: Double? = nil
+        endToEndP95LatencyMs: Double? = nil,
+        userFeel: TypingReplayUserFeelScorecard? = nil
     ) -> TypingReplayTrendRow {
         TypingReplayTrendRow(
             dateISO: dateISO,
@@ -366,7 +367,8 @@ public struct TypingReplayScorecard: Codable, Equatable, Sendable {
             wordPrefixAccuracy4: wordPrefixAccuracy4,
             suggestionRate: suggestionRate,
             wrongFirstWordRate: wrongFirstWordRate,
-            endToEndP95LatencyMs: endToEndP95LatencyMs
+            endToEndP95LatencyMs: endToEndP95LatencyMs,
+            userFeel: userFeel
         )
     }
 
@@ -381,6 +383,162 @@ public struct TypingReplayScorecard: Codable, Equatable, Sendable {
     private static func decimal(_ value: Double) -> String {
         String(format: "%.2f", value)
     }
+}
+
+/// Aggregate-only user-feel measurements for synthetic replay cases. Samples are
+/// evaluated in memory and never encoded, logged, or retained in the scorecard.
+public struct TypingReplayUserFeelSample: Sendable {
+    public let replayCase: TypingReplayCase
+    public let visibleSuggestionText: String?
+    public let modelLatencyMilliseconds: Int
+
+    public init(
+        replayCase: TypingReplayCase,
+        visibleSuggestionText: String?,
+        modelLatencyMilliseconds: Int = 0
+    ) {
+        self.replayCase = replayCase
+        self.visibleSuggestionText = visibleSuggestionText
+        self.modelLatencyMilliseconds = max(0, modelLatencyMilliseconds)
+    }
+}
+
+public struct TypingReplayUserFeelScorecard: Codable, Equatable, Sendable {
+    public let caseCount: Int
+    public let eligiblePauseCount: Int
+    public let visibleEligiblePauseCount: Int
+    public let eligiblePauseSuggestionVisibleRate: Double
+    public let pauseToSuggestionLatencyP50Milliseconds: Int?
+    public let pauseToSuggestionLatencyP95Milliseconds: Int?
+    public let stabilitySampleCount: Int
+    public let stableTypingSampleCount: Int
+    public let suggestionStabilityRate: Double
+    public let acceptanceQualityRate: Double
+
+    public init(
+        samples: [TypingReplayUserFeelSample],
+        triggerPolicy: SuggestionTriggerPolicy = SuggestionTriggerPolicy(),
+        schedulingPolicy: SuggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
+    ) {
+        caseCount = samples.count
+        let timing = SuggestionTriggerTimingPolicy(requestSchedulingPolicy: schedulingPolicy)
+        let scorer = TypingReplayScorer()
+        var eligible = 0
+        var visible = 0
+        var pauseLatencies: [Int] = []
+        var stabilitySamples = 0
+        var stableSamples = 0
+        var acceptanceSamples = 0
+        var acceptedSamples = 0
+
+        for sample in samples {
+            let previousText = Self.previousTextBeforePause(for: sample.replayCase.contextBefore)
+            guard case let .request(delayMilliseconds, lane) = timing.decision(
+                using: triggerPolicy,
+                previousTextBeforeCursor: previousText,
+                currentTextBeforeCursor: sample.replayCase.contextBefore,
+                behaviorProfileID: .docsProse,
+                requestMode: .phraseContinuation
+            ) else {
+                continue
+            }
+
+            eligible += 1
+            let schedule = timing.schedule(
+                policyDelayMilliseconds: delayMilliseconds,
+                timingLane: lane,
+                requestMode: .phraseContinuation,
+                renderMode: .inlineAdjacent
+            )
+            guard let visibleSuggestionText = sample.visibleSuggestionText,
+                  !visibleSuggestionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+
+            visible += 1
+            pauseLatencies.append(schedule.scheduledDelayMilliseconds + sample.modelLatencyMilliseconds)
+            let score = scorer.score(suggestionText: visibleSuggestionText, for: sample.replayCase)
+            acceptanceSamples += 1
+            if score.exactWordPrefix(n: 1) {
+                acceptedSamples += 1
+            }
+
+            let typedCharacters = min(3, sample.replayCase.actualContinuation.count)
+            var caseIsStable = true
+            var observedTyping = false
+            if typedCharacters > 0 {
+                for characterCount in 1...typedCharacters {
+                    let typedSuffix = String(sample.replayCase.actualContinuation.prefix(characterCount))
+                    let progress = SuggestionTypingProgressPolicy().progress(
+                        originalTextBeforeCursor: sample.replayCase.contextBefore,
+                        displayedText: suggestion.visibleText,
+                        newTextBeforeCursor: sample.replayCase.contextBefore + typedSuffix
+                    )
+                    switch progress {
+                    case .typedThroughVisiblePrefix:
+                        observedTyping = true
+                    case .typedOver:
+                        observedTyping = true
+                        caseIsStable = false
+                    case .unchanged:
+                        break
+                    }
+                }
+            }
+            if observedTyping {
+                stabilitySamples += 1
+                if caseIsStable { stableSamples += 1 }
+            }
+        }
+
+        eligiblePauseCount = eligible
+        visibleEligiblePauseCount = visible
+        eligiblePauseSuggestionVisibleRate = Self.rate(visible, over: eligible)
+        pauseToSuggestionLatencyP50Milliseconds = Self.percentile(0.50, in: pauseLatencies)
+        pauseToSuggestionLatencyP95Milliseconds = Self.percentile(0.95, in: pauseLatencies)
+        stabilitySampleCount = stabilitySamples
+        stableTypingSampleCount = stableSamples
+        suggestionStabilityRate = Self.rate(stableSamples, over: stabilitySamples)
+        acceptanceQualityRate = Self.rate(acceptedSamples, over: acceptanceSamples)
+    }
+
+    public var markdown: String {
+        """
+        ### User-feel metrics
+
+        - Eligible pauses: \(eligiblePauseCount)
+        - Eligible-pause suggestion-visible rate: \(Self.percent(eligiblePauseSuggestionVisibleRate))
+        - Pause-to-suggestion latency p50/p95: \(Self.milliseconds(pauseToSuggestionLatencyP50Milliseconds)) / \(Self.milliseconds(pauseToSuggestionLatencyP95Milliseconds))
+        - Suggestion stability while typing: \(Self.percent(suggestionStabilityRate)) (\(stableTypingSampleCount)/\(stabilitySampleCount) samples)
+        - Completion acceptance quality: \(Self.percent(acceptanceQualityRate))
+        """
+    }
+
+    private static func previousTextBeforePause(for text: String) -> String? {
+        guard text.count > 4 else { return nil }
+        let dropCount = min(4, text.count)
+        return String(text.dropLast(dropCount))
+    }
+
+    private static func rate(_ numerator: Int, over denominator: Int) -> Double {
+        denominator == 0 ? 0 : Double(numerator) / Double(denominator)
+    }
+
+    private static func percentile(_ fraction: Double, in values: [Int]) -> Int? {
+        guard !values.isEmpty else { return nil }
+        let ordered = values.sorted()
+        let index = Int((Double(ordered.count - 1) * fraction).rounded())
+        return ordered[min(ordered.count - 1, max(0, index))]
+    }
+
+    private static func percent(_ value: Double) -> String {
+        String(format: "%.1f%%", value * 100)
+    }
+
+    private static func milliseconds(_ value: Int?) -> String {
+        value.map { "\($0) ms" } ?? "—"
+    }
+
 }
 
 /// Aggregate-only storage shape. It deliberately has no corpus, prompt, suggestion, or continuation text.
@@ -407,6 +565,11 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
     public let suggestionRate: Double
     public let wrongFirstWordRate: Double
     public let endToEndP95LatencyMs: Double?
+    public let pauseToSuggestionP50LatencyMs: Double?
+    public let pauseToSuggestionP95LatencyMs: Double?
+    public let eligiblePauseSuggestionVisibleRate: Double?
+    public let suggestionStabilityRate: Double?
+    public let acceptanceQualityRate: Double?
     public let acceptedAndKeptRate: Double?
     public let acceptRate: Double?
 
@@ -433,6 +596,7 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
         suggestionRate: Double,
         wrongFirstWordRate: Double,
         endToEndP95LatencyMs: Double? = nil,
+        userFeel: TypingReplayUserFeelScorecard? = nil,
         acceptedAndKeptRate: Double? = nil,
         acceptRate: Double? = nil
     ) {
@@ -458,6 +622,11 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
         self.suggestionRate = suggestionRate
         self.wrongFirstWordRate = wrongFirstWordRate
         self.endToEndP95LatencyMs = endToEndP95LatencyMs
+        self.pauseToSuggestionP50LatencyMs = userFeel?.pauseToSuggestionLatencyP50Milliseconds.map(Double.init)
+        self.pauseToSuggestionP95LatencyMs = userFeel?.pauseToSuggestionLatencyP95Milliseconds.map(Double.init)
+        self.eligiblePauseSuggestionVisibleRate = userFeel?.eligiblePauseSuggestionVisibleRate
+        self.suggestionStabilityRate = userFeel?.suggestionStabilityRate
+        self.acceptanceQualityRate = userFeel?.acceptanceQualityRate
         self.acceptedAndKeptRate = acceptedAndKeptRate
         self.acceptRate = acceptRate
     }
@@ -487,6 +656,7 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
             wordPrefixAccuracy4: 0,
             suggestionRate: scorecard.total == 0 ? 0 : Double(scorecard.shown) / Double(scorecard.total),
             wrongFirstWordRate: 0,
+            userFeel: nil,
             acceptedAndKeptRate: scorecard.accepted == 0 ? 0 : Double(scorecard.kept) / Double(scorecard.accepted),
             acceptRate: scorecard.shown == 0 ? 0 : Double(scorecard.accepted) / Double(scorecard.shown)
         )

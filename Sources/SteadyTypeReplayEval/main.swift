@@ -285,7 +285,23 @@ private func runReplay(options: Options) async throws {
                 return scorer.score(rawSuggestionText: raw, gatedSuggestionText: gated, for: replayCase)
             }
             let scorecard = TypingReplayScorecard(scores: scores)
-            markdownSections.append("## \(promptFormat.rawValue) / \(variant.capitalized)\n\n" + scorecard.markdown)
+            let userFeel = TypingReplayUserFeelScorecard(samples: replayCases.map { replayCase in
+                let requestID = prefix + replayCase.id
+                let raw = suggestions[requestID]
+                let visible = raw.flatMap {
+                    gate.shouldDisplay(
+                        suggestionText: $0,
+                        replayCase: replayCase,
+                        latencyMilliseconds: latencies[requestID] ?? 0
+                    ) ? $0 : nil
+                }
+                return TypingReplayUserFeelSample(
+                    replayCase: replayCase,
+                    visibleSuggestionText: visible,
+                    modelLatencyMilliseconds: latencies[requestID] ?? 0
+                )
+            })
+            markdownSections.append("## \(promptFormat.rawValue) / \(variant.capitalized)\n\n" + scorecard.markdown + "\n" + userFeel.markdown)
             let formatLatencies = replayCases.compactMap { latencies[prefix + $0.id] }
             trendRows.append(scorecard.trendRow(
                 dateISO: now,
@@ -299,7 +315,8 @@ private func runReplay(options: Options) async throws {
                 suffixEnabled: options.promptConfiguration.includesTextAfterCursor,
                 fewShotSource: options.promptConfiguration.fewShotSource,
                 decodingVariant: options.decodingConfiguration.identifier,
-                endToEndP95LatencyMs: percentile95(formatLatencies)
+                endToEndP95LatencyMs: percentile95(formatLatencies),
+                userFeel: userFeel
             ))
         }
     }
