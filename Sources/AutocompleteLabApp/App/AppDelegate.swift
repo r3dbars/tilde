@@ -308,6 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
     private let modelRuntimeWarmHost = ModelRuntimeWarmHost()
+    private let modelInstallHost = ModelInstallHost()
     private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
@@ -567,9 +568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hasSurfacedModelSetupUI = false
     private var automaticTerminationActivity: NSObjectProtocol?
     private var didDisableAutomaticTermination = false
-    private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
-    private var isModelInstallCancelRequested = false
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
@@ -1254,7 +1253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimeChrome()
         let report = runtimeReadinessReport
         if report.allowsSuggestions,
-           modelInstallTask == nil,
+           !modelInstallHost.isInstalling,
            modelInstallStatusText != nil {
             modelInstallStatusText = "Model install: ready"
             refreshRuntimeChrome()
@@ -1343,7 +1342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
                 modelInstallStatusText: modelInstallStatusText,
-                isModelInstallInProgress: modelInstallTask != nil,
+                isModelInstallInProgress: modelInstallHost.isInstalling,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
                 practice: settingsPracticeState,
@@ -1408,7 +1407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isTrusted: accessibilityClient.isTrusted,
             suggestionsPaused: suggestionsPaused,
             runtimeReport: runtimeReadinessReport,
-            isModelInstallInProgress: modelInstallTask != nil,
+            isModelInstallInProgress: modelInstallHost.isInstalling,
             isTextEditEnabled: !disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier)
         )
     }
@@ -17754,7 +17753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 runtimeTargetSummary: runtimeTargetSummary,
                 modelDirectoryPath: modelDirectoryPath,
                 modelInstallStatusText: modelInstallStatusText,
-                isModelInstallInProgress: modelInstallTask != nil,
+                isModelInstallInProgress: modelInstallHost.isInstalling,
                 currentApp: settingsCurrentAppState,
                 fieldControl: settingsFieldControlState,
                 practice: settingsPracticeState,
@@ -18271,7 +18270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: modelInstallTask != nil,
+            isModelInstallInProgress: modelInstallHost.isInstalling,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
             practice: settingsPracticeState,
@@ -18474,7 +18473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtimeTargetSummary: runtimeTargetSummary,
             modelDirectoryPath: modelDirectoryPath,
             modelInstallStatusText: modelInstallStatusText,
-            isModelInstallInProgress: modelInstallTask != nil,
+            isModelInstallInProgress: modelInstallHost.isInstalling,
             currentApp: settingsCurrentAppState,
             fieldControl: settingsFieldControlState,
             practice: settingsPracticeState,
@@ -18522,13 +18521,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startModelInstall() {
-        guard modelInstallTask == nil else {
+        guard !modelInstallHost.isInstalling else {
             return
         }
 
         let manifest = modelRuntimeBundle.bootstrapPlan.preferredAsset
         let destinationURL = modelRuntimeBundle.modelDirectoryURL
-        isModelInstallCancelRequested = false
         modelInstallStatusText = "Model install: preparing download"
         refreshRuntimeChrome()
         DiagnosticsLog.shared.record(
@@ -18540,60 +18538,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
 
-        let installer = LocalModelAssetInstaller(
+        modelInstallHost.start(
             manifest: manifest,
-            destinationURL: destinationURL
-        )
-        modelInstallTask = Task { [weak self, installer] in
-            do {
-                let installedURL = try await installer.install { progress in
-                    self?.modelInstallStatusText = progress.userFacingText
-                    self?.refreshRuntimeChrome()
-                }
-
-                await MainActor.run {
-                    DiagnosticsLog.shared.record(
-                        "model-install-succeeded",
-                        metadata: [
-                            "model": manifest.model.rawValue,
-                            "target": installedURL.path
-                        ]
-                    )
-                    self?.modelInstallTask = nil
-                    self?.modelInstallStatusText = "Model install: warming local runtime"
-                    self?.reloadModelRuntimeAfterInstall()
-                }
-            } catch {
-                await MainActor.run {
-                    if error is CancellationError || self?.isModelInstallCancelRequested == true {
-                        DiagnosticsLog.shared.record(
-                            "model-install-canceled",
-                            metadata: [
-                                "model": manifest.model.rawValue
-                            ]
-                        )
-                        self?.modelInstallTask = nil
-                        self?.isModelInstallCancelRequested = false
-                        self?.modelInstallStatusText = "Model install canceled."
-                        self?.refreshRuntimeChrome()
-                        self?.showSettings()
-                        return
-                    }
-
-                    DiagnosticsLog.shared.record(
-                        "model-install-failed",
-                        metadata: [
-                            "model": manifest.model.rawValue,
-                            "reason": error.localizedDescription
-                        ]
-                    )
-                    self?.modelInstallTask = nil
-                    self?.modelInstallStatusText = "Model install failed: \(error.localizedDescription)"
-                    self?.refreshRuntimeChrome()
-                    self?.showSettings()
-                }
+            destinationURL: destinationURL,
+            onProgress: { [weak self] statusText in
+                self?.modelInstallStatusText = statusText
+                self?.refreshRuntimeChrome()
+            },
+            onSuccess: { [weak self] installedURL in
+                DiagnosticsLog.shared.record(
+                    "model-install-succeeded",
+                    metadata: [
+                        "model": manifest.model.rawValue,
+                        "target": installedURL.path
+                    ]
+                )
+                self?.modelInstallStatusText = "Model install: warming local runtime"
+                self?.reloadModelRuntimeAfterInstall()
+            },
+            onCancelled: { [weak self] in
+                DiagnosticsLog.shared.record(
+                    "model-install-canceled",
+                    metadata: [
+                        "model": manifest.model.rawValue
+                    ]
+                )
+                self?.modelInstallStatusText = "Model install canceled."
+                self?.refreshRuntimeChrome()
+                self?.showSettings()
+            },
+            onFailure: { [weak self] reason in
+                DiagnosticsLog.shared.record(
+                    "model-install-failed",
+                    metadata: [
+                        "model": manifest.model.rawValue,
+                        "reason": reason
+                    ]
+                )
+                self?.modelInstallStatusText = "Model install failed: \(reason)"
+                self?.refreshRuntimeChrome()
+                self?.showSettings()
             }
-        }
+        )
     }
 
     private func reloadModelRuntimeAfterInstall() {
@@ -18611,11 +18597,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func cancelModelInstall() {
-        guard let modelInstallTask else {
+        guard modelInstallHost.isInstalling else {
             return
         }
 
-        isModelInstallCancelRequested = true
         modelInstallStatusText = "Model install: canceling"
         DiagnosticsLog.shared.record(
             "model-install-cancel-requested",
@@ -18624,7 +18609,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         refreshRuntimeChrome()
-        modelInstallTask.cancel()
+        modelInstallHost.cancel()
     }
 
     private func launchDiagnosticsMetadata() -> [String: String] {
