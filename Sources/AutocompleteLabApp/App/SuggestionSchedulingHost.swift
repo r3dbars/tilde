@@ -17,6 +17,7 @@ struct SuggestionSchedulingHostDependencies {
     let shouldAskModelForWordCompletionFallback: (VisiblePageContext?) -> Bool
     let shouldUsePredictiveWordFallback: (CompatibilityProfile, VisiblePageContext?) -> Bool
     let shouldUsePredictivePhraseFallback: (CompatibilityProfile, AutocompleteBehaviorProfileID?, VisiblePageContext?) -> Bool
+    let rawEvaluationModeEnabled: () -> Bool
     let triggerPolicy: (CompatibilityProfile) -> SuggestionTriggerPolicy
     let suggestionRequestExecutionHost: SuggestionRequestExecutionHost
     let suggestionIdleRetryState: SuggestionIdleRetryStateHost
@@ -162,6 +163,10 @@ final class SuggestionSchedulingHost {
         visiblePageContext: VisiblePageContext?
     ) -> Bool {
         dependencies.shouldUsePredictivePhraseFallback(profile, behaviorProfileID, visiblePageContext)
+    }
+
+    private var rawEvaluationModeEnabled: Bool {
+        dependencies.rawEvaluationModeEnabled()
     }
 
     private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
@@ -504,9 +509,30 @@ final class SuggestionSchedulingHost {
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
                 allowPromptAppPrediction: allowsPromptAppPrediction
             )
-            let fastSelectionMetadata = fastSelection.traceMetadata
+            var effectiveFastSelection = fastSelection
+            if rawEvaluationModeEnabled,
+               effectiveFastSelection.suggestion == nil {
+                let candidateWords = dependencies.recentWordMemoryWords(appBundleIdentifier)
+                    + (visiblePageContext?.completionCandidateWords ?? [])
+                let wordSelection = suggestionOrchestrator.fastWordSelection(
+                    for: context.textBeforeCursor,
+                    recentWords: candidateWords,
+                    allowPredictiveFallback: true
+                )
+                if let wordSuggestion = wordSelection.suggestion {
+                    effectiveFastSelection = CommonPhraseContinuationSelection(
+                        suggestion: wordSuggestion,
+                        matchedContextSuffix: nil,
+                        score: wordSelection.topScore,
+                        suppressionReason: nil,
+                        candidateSelectionSource: wordSelection.selectionSource,
+                        matchMetadataKey: "instantWordMatch"
+                    )
+                }
+            }
+            let fastSelectionMetadata = effectiveFastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }
-            if let fastSuggestion = fastSelection.suggestion {
+            if let fastSuggestion = effectiveFastSelection.suggestion {
                 let fastPresentationMetadata = fastSelectionMetadata
                     .merging(["instantPhraseAlwaysOn": "true"]) { current, _ in current }
                 presentSuggestion(
@@ -538,7 +564,7 @@ final class SuggestionSchedulingHost {
                 }
             }
 
-            let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
+            let fastPhraseFallbackOutcome = effectiveFastSelection.suppressionReason ?? "no-suggestion"
             if fastPhraseFallbackMetadata.isEmpty {
                 fastPhraseFallbackMetadata = [
                     "fastPhraseFallbackChecked": "true",

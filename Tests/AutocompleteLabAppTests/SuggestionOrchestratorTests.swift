@@ -1596,6 +1596,53 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Instant local phrase display lowers thresholds without learned restraint")
+    func instantLocalPhraseDisplayBypassesProductRestraint() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "I just wanted to",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "instant-local"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " follow up", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "canned-bridge",
+            latencyMilliseconds: 0,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreLearningRestraintScale"] == "0.00")
+        #expect(display.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.00")
+    }
+
+    @MainActor
     @Test("Replacement decision uses visible age and score margin")
     func replacementDecisionUsesVisibleAgeAndScoreMargin() {
         let now = Date(timeIntervalSince1970: 10)

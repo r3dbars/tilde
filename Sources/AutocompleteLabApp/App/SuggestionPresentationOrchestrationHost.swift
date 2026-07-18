@@ -666,18 +666,16 @@ final class SuggestionPresentationOrchestrationHost {
             return
         }
 
-        let replacementDecision = rawEvaluationModeEnabled
-            ? SuggestionReplacementDecision(shouldPresent: true)
-            : suggestionOrchestrator.replacementDecision(
-                currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
-                proposedVisibleText: suggestion.visibleText,
-                currentSuggestionID: currentSuggestionState.id,
-                proposedSuggestionID: suggestionID,
-                currentPresentedAt: currentSuggestionState.presentedAt,
-                currentScore: currentSuggestionState.displayScoreFinal,
-                proposedScore: displayScoreTrace.score.finalScore,
-                currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
-            )
+        let replacementDecision = suggestionOrchestrator.replacementDecision(
+            currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
+            proposedVisibleText: suggestion.visibleText,
+            currentSuggestionID: currentSuggestionState.id,
+            proposedSuggestionID: suggestionID,
+            currentPresentedAt: currentSuggestionState.presentedAt,
+            currentScore: currentSuggestionState.displayScoreFinal,
+            proposedScore: displayScoreTrace.score.finalScore,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
+        )
         let replacementMetadata = replacementDecision.metadata
         let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
             for: replacementDecision,

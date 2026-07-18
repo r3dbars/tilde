@@ -74,7 +74,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         self.fileManager = fileManager
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.lengthConfiguration = lengthConfiguration
-        self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
+        self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(
+            maxVisibleWords: lengthConfiguration.maxVisibleWords,
+            includesBuiltInExamples: !RawSuggestionEvaluationMode().isEnabled,
+            usesCompactPhrasePrompt: RawSuggestionEvaluationMode().isEnabled
+        )
         self.promptTemplate = CompletionPromptTemplate.template(for: modelManifest?.model ?? CompletionModelPolicy.mvp.model)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.candidateRanker = candidateRanker

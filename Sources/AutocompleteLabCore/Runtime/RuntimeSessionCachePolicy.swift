@@ -82,7 +82,11 @@ public extension RuntimeSessionCacheKey {
 }
 
 public struct RuntimeSessionCachePolicy: Equatable, Sendable {
-    public init() {}
+    public let includesTextAfterCursor: Bool
+
+    public init(includesTextAfterCursor: Bool = false) {
+        self.includesTextAfterCursor = includesTextAfterCursor
+    }
 
     public func decision(
         previous: CompletionRequest?,
@@ -126,7 +130,7 @@ public struct RuntimeSessionCachePolicy: Equatable, Sendable {
             return .reset(.modeChanged)
         }
 
-        guard current.textAfterCursor == previous.textAfterCursor else {
+        guard !includesTextAfterCursor || current.textAfterCursor == previous.textAfterCursor else {
             return .reset(.textAfterCursorChanged)
         }
 

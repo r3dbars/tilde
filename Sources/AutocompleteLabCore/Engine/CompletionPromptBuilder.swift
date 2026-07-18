@@ -88,6 +88,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public let maxVisibleWords: Int
     public let includesBuiltInExamples: Bool
     public let includesTextAfterCursor: Bool
+    public let usesCompactPhrasePrompt: Bool
 
     public init(
         maxContextCharacters: Int = 360,
@@ -96,7 +97,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         maxCurrentSentenceCharacters: Int = 160,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
         includesBuiltInExamples: Bool = true,
-        includesTextAfterCursor: Bool = false
+        includesTextAfterCursor: Bool = false,
+        usesCompactPhrasePrompt: Bool = false
     ) {
         self.maxContextCharacters = max(80, maxContextCharacters)
         self.maxContextTokens = min(96, max(48, maxContextTokens))
@@ -105,6 +107,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         self.includesBuiltInExamples = includesBuiltInExamples
         self.includesTextAfterCursor = includesTextAfterCursor
+        self.usesCompactPhrasePrompt = usesCompactPhrasePrompt
     }
 
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
@@ -161,6 +164,13 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             for: request,
             behaviorProfile: behaviorProfile
         )
+        if usesCompactPhrasePrompt {
+            return compactPhraseContinuationSystemPrompt(
+                mode: request.mode,
+                behaviorProfile: behaviorProfile,
+                maxVisibleWords: effectiveMaxVisibleWords
+            )
+        }
         let candidateCountGuidance = candidateCountGuidance(forVisibleWords: effectiveMaxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
         let lengthGuidance = lengthGuidance(forVisibleWords: effectiveMaxVisibleWords)
@@ -240,6 +250,25 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Prefer concrete continuations about testing, using, building, debugging, logs, traces, placement, or app behavior.
         Never suggest pressing Enter/Return, sending/submitting the prompt, or running a command.
         Avoid vague product and productivity filler like "integrate it seamlessly", "enhance the experience", "boost productivity", "streamline the workflow", or "leverage the system".
+        """
+    }
+
+    private func compactPhraseContinuationSystemPrompt(
+        mode: CompletionRequestMode,
+        behaviorProfile: AutocompleteBehaviorProfile,
+        maxVisibleWords: Int
+    ) -> String {
+        let modeInstruction = mode == .sentenceContinuation
+            ? "Start the next sentence naturally."
+            : "Continue the current sentence."
+        return """
+        Inline autocomplete for \(behaviorProfile.id.rawValue) writing.
+        Return only the next \(maxVisibleWords) words or fewer after Before cursor.
+        \(modeInstruction)
+        Prefer the boring, obvious continuation the user was already likely to type.
+        Preserve the user's casing, tone, and direction. Never repeat Before cursor.
+        Do not answer the user, explain, reason, greet, issue an instruction, start a new topic, or mention keyboard shortcuts.
+        Return exactly \(Self.noSuggestionToken) when unsafe or when no natural continuation exists.
         """
     }
 
@@ -449,6 +478,10 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         }
 
         if mode == .sentenceContinuation {
+            return true
+        }
+
+        if usesCompactPhrasePrompt {
             return true
         }
 
