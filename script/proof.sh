@@ -7,9 +7,10 @@
 #
 # Every lane is BLOCKING and real:
 #   1. git diff --check            whitespace / conflict markers
-#   2. byte-compile script/*.py    all remaining python tooling parses
-#   3. harness self-tests          the latency/quality measurement tools work
-#   4. swift test (core)           the pure policy suite passes
+#   2. complexity budget           structural high-water marks stay bounded
+#   3. byte-compile script/*.py    all remaining python tooling parses
+#   4. harness self-tests          the latency/quality measurement tools work
+#   5. swift test (core)           the pure policy suite passes
 #
 # Environment:
 #   PROOF_SKIP_SWIFT=1      Skip the Swift test step. Swift is auto-skipped when
@@ -22,6 +23,11 @@
 #   PROOF_DIFF_BASE=<ref>   If set, run `git diff --check <ref>...HEAD` (catches
 #                           whitespace/conflict markers introduced by a PR);
 #                           otherwise the working tree is checked.
+#   PROOF_STRUCTURAL_CHANGE=1
+#                           Require the production Swift diff to be net-negative.
+#   PROOF_STRUCTURAL_LOC_EXCEPTION=1
+#                           Allow a non-negative structural diff only when the
+#                           PR description explains the justified exception.
 #
 # The release gate (app bundle, model asset, runtime network egress) lives in
 # script/release_check.sh — run it on macOS before cutting a release.
@@ -147,6 +153,8 @@ echo "SteadyType fast proof gate (mode: ${MODE})"
 echo "Repo: ${ROOT_DIR}"
 
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff
+run_blocking "complexity budget" bash script/check_complexity_budget.sh
+run_blocking "complexity budget self-test" bash script/check_complexity_budget_self_test.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "local completion runtime self-test" bash script/local_completion_runtime_self_test.sh
 run_blocking "local completion batch self-test" bash script/local_completion_batch_self_test.sh
