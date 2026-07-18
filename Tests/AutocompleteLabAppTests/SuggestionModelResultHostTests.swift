@@ -221,7 +221,7 @@ struct SuggestionModelResultHostTests {
         SuggestionModelResultHost(
             dependencies: SuggestionModelResultHostDependencies(
                 suggestionOrchestrator: orchestrator ?? SuggestionOrchestrator(engine: ModelResultTestCompletionEngine()),
-                triggerTiming: SuggestionTriggerTimingPolicy(),
+                requestSchedulingPolicy: SuggestionRequestSchedulingPolicy(),
                 currentSuggestionID: currentSuggestionID,
                 currentFieldIdentity: currentFieldIdentity,
                 hasVisibleSuggestion: hasVisibleSuggestion,

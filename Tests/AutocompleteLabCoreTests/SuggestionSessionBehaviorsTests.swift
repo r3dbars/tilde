@@ -15,7 +15,7 @@ struct SuggestionSessionBehaviorsTests {
             ) == .block(.missingShownSnapshot)
         )
         #expect(
-            behaviors.triggerTiming.schedule(
+            behaviors.requestSchedulingPolicy.schedule(
                 policyDelayMilliseconds: 0,
                 timingLane: .instantWord,
                 requestMode: .wordCompletion,
