@@ -148,9 +148,16 @@ struct PromptProofFieldIdentityRefreshPolicy {
         allowsFullAcceptNoSubmitProofProfile: Bool
     ) -> Bool {
         guard profile.promptAppSafetyMode == .wordOnly,
-              proofModeEnabled,
               requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier,
               requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier else {
+            return false
+        }
+
+        if profile.bundleIdentifier == "com.openai.codex" {
+            return true
+        }
+
+        guard proofModeEnabled else {
             return false
         }
 
@@ -2477,7 +2484,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: rawContext,
             profile: profile
         )
-        transitionToField(rawFieldIdentity)
+        if profile.bundleIdentifier != "com.openai.codex" {
+            transitionToField(rawFieldIdentity)
+        }
 
         let previousSnapshot = lastTextSnapshot
         let rawSnapshot = FocusedTextSnapshot(
@@ -2512,6 +2521,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile
         )
+        if profile.bundleIdentifier == "com.openai.codex" {
+            transitionToField(fieldIdentity)
+        }
         let fieldClassification = fieldClassification(for: context)
         let suggestionFieldClassification = effectiveSuggestionFieldClassification(
             app: frontmostApp,
