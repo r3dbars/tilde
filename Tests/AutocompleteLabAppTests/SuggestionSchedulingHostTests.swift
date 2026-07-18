@@ -21,6 +21,8 @@ struct SuggestionSchedulingHostTests {
         #expect(host.contains("disablesWordCompletionForProof"))
         #expect(host.contains("suggestionOrchestrator.fastWordSelection("))
         #expect(host.contains("suggestionOrchestrator.fastPhraseSelection("))
+        #expect(host.contains("request.behaviorProfileID == .aiChat && allowsPredictivePhraseFallback"))
+        #expect(host.contains("allowPromptAppPrediction: allowsPromptAppPrediction"))
         #expect(host.contains("suggestionRequestExecutionHost.schedule("))
     }
 }

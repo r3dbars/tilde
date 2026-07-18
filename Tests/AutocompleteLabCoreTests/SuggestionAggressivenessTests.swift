@@ -366,6 +366,16 @@ struct SuggestionAggressivenessTests {
             behaviorProfileID: .forms,
             visiblePageContextAvailable: false
         ))
+        #expect(!normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.openai.codex",
+            behaviorProfileID: .aiChat,
+            visiblePageContextAvailable: false
+        ))
+        #expect(SuggestionTuning(aggressivenessLevel: 3).allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.openai.codex",
+            behaviorProfileID: .aiChat,
+            visiblePageContextAvailable: false
+        ))
         #expect(SuggestionTuning(aggressivenessLevel: 3).allowsPredictivePhraseFallback(
             appBundleIdentifier: "com.apple.mail",
             behaviorProfileID: .email,
