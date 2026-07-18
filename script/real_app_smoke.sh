@@ -43,9 +43,23 @@ fail() {
   exit 1
 }
 
+wait_for_cleanup_process() {
+  local cleanup_pid="$1"
+  local cleanup_deadline=$((SECONDS + 3))
+  while kill -0 "$cleanup_pid" >/dev/null 2>&1 && ((SECONDS < cleanup_deadline)); do
+    sleep 0.1
+  done
+  if kill -0 "$cleanup_pid" >/dev/null 2>&1; then
+    kill "$cleanup_pid" >/dev/null 2>&1 || true
+    sleep 0.1
+    kill -KILL "$cleanup_pid" >/dev/null 2>&1 || true
+  fi
+  wait "$cleanup_pid" >/dev/null 2>&1 || true
+}
+
 cleanup() {
   if [[ -n "$TEXTEDIT_WINDOW_TITLE" ]]; then
-    local close_pid close_deadline
+    local close_pid
     osascript - "$TEXTEDIT_WINDOW_TITLE" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   set smokeWindowTitle to item 1 of argv
@@ -59,21 +73,12 @@ on run argv
 end run
 APPLESCRIPT
     close_pid=$!
-    close_deadline=$((SECONDS + 3))
-    while kill -0 "$close_pid" >/dev/null 2>&1 && ((SECONDS < close_deadline)); do
-      sleep 0.1
-    done
-    if kill -0 "$close_pid" >/dev/null 2>&1; then
-      kill "$close_pid" >/dev/null 2>&1 || true
-      sleep 0.1
-      kill -KILL "$close_pid" >/dev/null 2>&1 || true
-    fi
-    wait "$close_pid" >/dev/null 2>&1 || true
+    wait_for_cleanup_process "$close_pid"
   fi
 
   if [[ -n "$CHROME_PID" ]] && kill -0 "$CHROME_PID" >/dev/null 2>&1; then
     kill "$CHROME_PID" >/dev/null 2>&1 || true
-    wait "$CHROME_PID" >/dev/null 2>&1 || true
+    wait_for_cleanup_process "$CHROME_PID"
   fi
 
   if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then

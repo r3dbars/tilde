@@ -39,17 +39,19 @@ struct AppProofCommandRunnerTests {
         #expect(missingApp.standardError.hasPrefix("Usage: script/real_app_smoke.sh"))
     }
 
-    @Test("TextEdit cleanup bounds a hanging osascript without signaling unrelated work")
-    func textEditCleanupBoundsHangingOsaScriptWithoutSignalingUnrelatedWork() throws {
+    @Test("Cleanup bounds hanging child processes without signaling unrelated work")
+    func cleanupBoundsHangingChildProcessesWithoutSignalingUnrelatedWork() throws {
         let scriptURL = AppProofCommandPlan.proofEntryPointURL(sourceRootURL: repositoryRootURL())
         let script = try String(contentsOf: scriptURL, encoding: .utf8)
-        let cleanupStart = try #require(script.range(of: "cleanup() {")?.lowerBound)
+        let cleanupStart = try #require(
+            script.range(of: "wait_for_cleanup_process() {")?.lowerBound
+        )
         let cleanupEnd = try #require(
             script.range(of: "\ntrap cleanup", range: cleanupStart..<script.endIndex)?.lowerBound
         )
-        let cleanupFunction = String(script[cleanupStart..<cleanupEnd])
+        let cleanupFunctions = String(script[cleanupStart..<cleanupEnd])
         #expect(
-            cleanupFunction.contains(
+            cleanupFunctions.contains(
                 "osascript - \"$TEXTEDIT_WINDOW_TITLE\" <<'APPLESCRIPT' >/dev/null 2>&1 &"
             )
         )
@@ -58,13 +60,22 @@ struct AppProofCommandRunnerTests {
         set -euo pipefail
         osascript() { sleep 5; }
         TEXTEDIT_WINDOW_TITLE="steadytype-cleanup-fixture"
-        CHROME_PID=""
         TEMP_DIR=""
         LOCK_DIR=""
         LOCK_HELD=0
-        \(cleanupFunction)
+        \(cleanupFunctions)
         sleep 20 &
         unrelated_pid=$!
+        CHROME_PID=""
+        started_at=$SECONDS
+        cleanup
+        elapsed=$((SECONDS - started_at))
+        kill -0 "$unrelated_pid"
+        ((elapsed <= 4))
+        TEXTEDIT_WINDOW_TITLE=""
+        python3 -c 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(5)' &
+        CHROME_PID=$!
+        sleep 0.2
         started_at=$SECONDS
         cleanup
         elapsed=$((SECONDS - started_at))
