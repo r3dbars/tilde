@@ -30,6 +30,7 @@ struct SuggestionTriggerTimingSchedule {
 @MainActor
 struct SuggestionTriggerTimingHostDependencies {
     let triggerPolicy: (CompatibilityProfile) -> SuggestionTriggerPolicy
+    let rawEvaluationModeEnabled: () -> Bool
     let consumeManualSuggestionRequest: () -> Bool
     let hasVisibleSuggestion: () -> Bool
     let setSuggestionDecision: (String) -> Void
@@ -79,7 +80,10 @@ final class SuggestionTriggerTimingHost {
 
         let delayMilliseconds: Int
         let timingLane: SuggestionTimingLane
-        if isManualSuggestionRequest {
+        if dependencies.rawEvaluationModeEnabled() {
+            delayMilliseconds = 0
+            timingLane = defaultTimingLane(for: input.requestMode)
+        } else if isManualSuggestionRequest {
             delayMilliseconds = 0
             timingLane = requestedTimingLane(
                 from: triggerDecision,
@@ -131,6 +135,8 @@ final class SuggestionTriggerTimingHost {
                 visiblePageContext: input.visiblePageContext,
                 triggerReason: isManualSuggestionRequest
                     ? "manual-summon"
+                    : dependencies.rawEvaluationModeEnabled()
+                        ? "raw-evaluation"
                     : input.idleRetryReason != nil
                         ? "idle-retry"
                         : "poll"

@@ -46,6 +46,7 @@ struct SuggestionPresentationOrchestrationHostDependencies {
     let lastTextSnapshot: () -> FocusedTextSnapshot?
     let displayScorePolicy: DisplayScorePolicy
     let suggestionTuning: () -> SuggestionTuning
+    let rawEvaluationModeEnabled: () -> Bool
     let suggestionReplacementVisibilityPolicy: SuggestionReplacementVisibilityPolicy
     let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds: Int
     let suggestionPresentationPreparationHost: SuggestionPresentationPreparationHost
@@ -112,6 +113,10 @@ final class SuggestionPresentationOrchestrationHost {
 
     private var suggestionTuning: SuggestionTuning {
         dependencies.suggestionTuning()
+    }
+
+    private var rawEvaluationModeEnabled: Bool {
+        dependencies.rawEvaluationModeEnabled()
     }
 
     private var suggestionReplacementVisibilityPolicy: SuggestionReplacementVisibilityPolicy {
@@ -548,7 +553,7 @@ final class SuggestionPresentationOrchestrationHost {
             profile: profile
         )
         let isInstantLocalSuggestion = triggerReason == "canned-bridge"
-        let isRepeatedMiss = isInstantLocalSuggestion ? false : suggestionOrchestrator.shouldSuppressRepetition(
+        let isRepeatedMiss = (isInstantLocalSuggestion || rawEvaluationModeEnabled) ? false : suggestionOrchestrator.shouldSuppressRepetition(
             suggestion.visibleText,
             mode: request.mode,
             scope: request.appBundleIdentifier ?? profile.bundleIdentifier
@@ -573,6 +578,7 @@ final class SuggestionPresentationOrchestrationHost {
             isRepeatedMiss: isRepeatedMiss,
             displayScorePolicy: displayScorePolicy,
             suggestionTuning: suggestionTuning,
+            bypassProductHeuristics: rawEvaluationModeEnabled,
             modelIsFirstVisibleSuggestion: modelIsFirstVisibleSuggestion,
             scheduledDelayMilliseconds: scheduledDelayMilliseconds
         )
@@ -660,16 +666,18 @@ final class SuggestionPresentationOrchestrationHost {
             return
         }
 
-        let replacementDecision = suggestionOrchestrator.replacementDecision(
-            currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
-            proposedVisibleText: suggestion.visibleText,
-            currentSuggestionID: currentSuggestionState.id,
-            proposedSuggestionID: suggestionID,
-            currentPresentedAt: currentSuggestionState.presentedAt,
-            currentScore: currentSuggestionState.displayScoreFinal,
-            proposedScore: displayScoreTrace.score.finalScore,
-            currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
-        )
+        let replacementDecision = rawEvaluationModeEnabled
+            ? SuggestionReplacementDecision(shouldPresent: true)
+            : suggestionOrchestrator.replacementDecision(
+                currentVisibleText: suggestionSession.visibleSuggestion?.visibleText,
+                proposedVisibleText: suggestion.visibleText,
+                currentSuggestionID: currentSuggestionState.id,
+                proposedSuggestionID: suggestionID,
+                currentPresentedAt: currentSuggestionState.presentedAt,
+                currentScore: currentSuggestionState.displayScoreFinal,
+                proposedScore: displayScoreTrace.score.finalScore,
+                currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
+            )
         let replacementMetadata = replacementDecision.metadata
         let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
             for: replacementDecision,
