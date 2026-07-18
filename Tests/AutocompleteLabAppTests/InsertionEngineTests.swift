@@ -53,12 +53,10 @@ struct InsertionEngineTests {
     func electronKeyEventProfilesPreferHardwareEvents() throws {
         let obsidian = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
 
         #expect(InsertionEngine.prefersHardwareKeyEvents(for: obsidian))
         #expect(InsertionEngine.prefersHardwareKeyEvents(for: chrome))
-        #expect(InsertionEngine.prefersHardwareKeyEvents(for: codex))
         #expect(!InsertionEngine.prefersHardwareKeyEvents(for: textEdit))
     }
 

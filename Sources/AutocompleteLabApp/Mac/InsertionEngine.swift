@@ -130,9 +130,7 @@ final class InsertionEngine {
     }
 
     static func prefersHardwareKeyEvents(for profile: CompatibilityProfile) -> Bool {
-        profile.appFamily == .chromium
-            || profile.appFamily == .electron
-            || profile.bundleIdentifier == "com.openai.codex"
+        profile.appFamily == .chromium || profile.appFamily == .electron
     }
 
     private func insertWithUnicodeKeyEvents(_ text: String) -> Bool {
