@@ -14,14 +14,17 @@ blocked by the serialized merger hold before post-change Swift measurement.
 | 5 | suffix on | not run | — | — | merger hold |
 
 ## Metric
-- Added aggregate measurements for pause-to-suggestion p50/p95, eligible-pause visible rate, case-weighted typing stability, and exact next-word acceptance quality.
+- The scorecard now reports only directly observed model-result latency p50/p95 and visible completion acceptance quality.
+- Pause-to-suggestion presentation latency is not measured: the frozen fixture has no pause or presentation timestamps, so no policy-plus-model proxy is retained.
+- Suggestion replacement stability is not measured: the frozen fixture has one snapshot per case and no replacement/flicker sequence.
+- Existing replay metrics continue to report suggestion visibility and completion quality on the synthetic corpus.
 - Frozen evaluator and corpus: `docs/evals/typing-replay-fixture.jsonl`, existing replay scorer/gate, and fixed batch command in `resume.md`.
 - No raw typed text, prompts, model output, screenshots, paths, app names, or identifiers are written by the new scorecard.
 
 ## Baseline
 - Existing unmodified head: `99dc4fcb`.
 - Existing evaluator artifacts: `baseline-existing.md`, `baseline-batch.md`, and matching JSONL files in this run directory.
-- Cheap proof: Swift parse, `git diff --check`, Python compile, and replay-report privacy self-test passed.
+- Before the latest review fix, cheap proof included Swift parse, `git diff --check`, Python compile, and the replay-report privacy self-test. The latest Swift change remains uncompiled under the serialization hold.
 
 ## Risks and next run
 - Focused Swift test compilation was canceled before assertions by the explicit serialization hold; full Swift tests, `proof.sh fast`, and `build_and_run.sh --verify` were not run.
@@ -30,4 +33,4 @@ blocked by the serialized merger hold before post-change Swift measurement.
 
 ## Review
 - Independent static review: `/Users/redbars/.codex/maestro/runs/20260718T115020Z-steadytype-user-feel-static-review-claude`.
-- Review findings were applied: removed vacuous acceptance-proof metric and changed stability to one result per visible case.
+- Latest exact-head review found and drove removal of fabricated pause eligibility/latency and one-snapshot stability metrics, plus the undefined suggestion reference. The remaining metrics are aggregate-only and directly observed from replay inputs.

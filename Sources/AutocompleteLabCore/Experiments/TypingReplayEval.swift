@@ -405,119 +405,56 @@ public struct TypingReplayUserFeelSample: Sendable {
 
 public struct TypingReplayUserFeelScorecard: Codable, Equatable, Sendable {
     public let caseCount: Int
-    public let eligiblePauseCount: Int
-    public let visibleEligiblePauseCount: Int
-    public let eligiblePauseSuggestionVisibleRate: Double
-    public let pauseToSuggestionLatencyP50Milliseconds: Int?
-    public let pauseToSuggestionLatencyP95Milliseconds: Int?
-    public let stabilitySampleCount: Int
-    public let stableTypingSampleCount: Int
-    public let suggestionStabilityRate: Double
-    public let acceptanceQualityRate: Double
+    public let visibleSuggestionCount: Int
+    public let visibleSuggestionRate: Double
+    public let modelResultLatencyP50Milliseconds: Int?
+    public let modelResultLatencyP95Milliseconds: Int?
+    public let visibleCompletionAcceptanceQualityRate: Double
 
     public init(
-        samples: [TypingReplayUserFeelSample],
-        triggerPolicy: SuggestionTriggerPolicy = SuggestionTriggerPolicy(),
-        schedulingPolicy: SuggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
+        samples: [TypingReplayUserFeelSample]
     ) {
         caseCount = samples.count
-        let timing = SuggestionTriggerTimingPolicy(requestSchedulingPolicy: schedulingPolicy)
         let scorer = TypingReplayScorer()
-        var eligible = 0
         var visible = 0
-        var pauseLatencies: [Int] = []
-        var stabilitySamples = 0
-        var stableSamples = 0
+        var modelLatencies: [Int] = []
         var acceptanceSamples = 0
         var acceptedSamples = 0
 
         for sample in samples {
-            let previousText = Self.previousTextBeforePause(for: sample.replayCase.contextBefore)
-            guard case let .request(delayMilliseconds, lane) = timing.decision(
-                using: triggerPolicy,
-                previousTextBeforeCursor: previousText,
-                currentTextBeforeCursor: sample.replayCase.contextBefore,
-                behaviorProfileID: .docsProse,
-                requestMode: .phraseContinuation
-            ) else {
-                continue
+            if sample.modelLatencyMilliseconds > 0 {
+                modelLatencies.append(sample.modelLatencyMilliseconds)
             }
-
-            eligible += 1
-            let schedule = timing.schedule(
-                policyDelayMilliseconds: delayMilliseconds,
-                timingLane: lane,
-                requestMode: .phraseContinuation,
-                renderMode: .inlineAdjacent
-            )
             guard let visibleSuggestionText = sample.visibleSuggestionText,
                   !visibleSuggestionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 continue
             }
 
             visible += 1
-            pauseLatencies.append(schedule.scheduledDelayMilliseconds + sample.modelLatencyMilliseconds)
             let score = scorer.score(suggestionText: visibleSuggestionText, for: sample.replayCase)
             acceptanceSamples += 1
             if score.exactWordPrefix(n: 1) {
                 acceptedSamples += 1
             }
-
-            let typedCharacters = min(3, sample.replayCase.actualContinuation.count)
-            var caseIsStable = true
-            var observedTyping = false
-            if typedCharacters > 0 {
-                for characterCount in 1...typedCharacters {
-                    let typedSuffix = String(sample.replayCase.actualContinuation.prefix(characterCount))
-                    let progress = SuggestionTypingProgressPolicy().progress(
-                        originalTextBeforeCursor: sample.replayCase.contextBefore,
-                        displayedText: suggestion.visibleText,
-                        newTextBeforeCursor: sample.replayCase.contextBefore + typedSuffix
-                    )
-                    switch progress {
-                    case .typedThroughVisiblePrefix:
-                        observedTyping = true
-                    case .typedOver:
-                        observedTyping = true
-                        caseIsStable = false
-                    case .unchanged:
-                        break
-                    }
-                }
-            }
-            if observedTyping {
-                stabilitySamples += 1
-                if caseIsStable { stableSamples += 1 }
-            }
         }
 
-        eligiblePauseCount = eligible
-        visibleEligiblePauseCount = visible
-        eligiblePauseSuggestionVisibleRate = Self.rate(visible, over: eligible)
-        pauseToSuggestionLatencyP50Milliseconds = Self.percentile(0.50, in: pauseLatencies)
-        pauseToSuggestionLatencyP95Milliseconds = Self.percentile(0.95, in: pauseLatencies)
-        stabilitySampleCount = stabilitySamples
-        stableTypingSampleCount = stableSamples
-        suggestionStabilityRate = Self.rate(stableSamples, over: stabilitySamples)
-        acceptanceQualityRate = Self.rate(acceptedSamples, over: acceptanceSamples)
+        visibleSuggestionCount = visible
+        visibleSuggestionRate = Self.rate(visible, over: samples.count)
+        modelResultLatencyP50Milliseconds = Self.percentile(0.50, in: modelLatencies)
+        modelResultLatencyP95Milliseconds = Self.percentile(0.95, in: modelLatencies)
+        visibleCompletionAcceptanceQualityRate = Self.rate(acceptedSamples, over: acceptanceSamples)
     }
 
     public var markdown: String {
         """
         ### User-feel metrics
 
-        - Eligible pauses: \(eligiblePauseCount)
-        - Eligible-pause suggestion-visible rate: \(Self.percent(eligiblePauseSuggestionVisibleRate))
-        - Pause-to-suggestion latency p50/p95: \(Self.milliseconds(pauseToSuggestionLatencyP50Milliseconds)) / \(Self.milliseconds(pauseToSuggestionLatencyP95Milliseconds))
-        - Suggestion stability while typing: \(Self.percent(suggestionStabilityRate)) (\(stableTypingSampleCount)/\(stabilitySampleCount) samples)
-        - Completion acceptance quality: \(Self.percent(acceptanceQualityRate))
+        - Visible suggestion rate: \(Self.percent(visibleSuggestionRate)) (\(visibleSuggestionCount)/\(caseCount) cases)
+        - Model result latency p50/p95: \(Self.milliseconds(modelResultLatencyP50Milliseconds)) / \(Self.milliseconds(modelResultLatencyP95Milliseconds))
+        - Visible completion acceptance quality: \(Self.percent(visibleCompletionAcceptanceQualityRate))
+        - Pause-to-suggestion presentation latency: not measured; the fixture has no pause and presentation timestamps
+        - Suggestion replacement stability while typing: not measured; the fixture has one snapshot per case
         """
-    }
-
-    private static func previousTextBeforePause(for text: String) -> String? {
-        guard text.count > 4 else { return nil }
-        let dropCount = min(4, text.count)
-        return String(text.dropLast(dropCount))
     }
 
     private static func rate(_ numerator: Int, over denominator: Int) -> Double {
@@ -565,11 +502,8 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
     public let suggestionRate: Double
     public let wrongFirstWordRate: Double
     public let endToEndP95LatencyMs: Double?
-    public let pauseToSuggestionP50LatencyMs: Double?
-    public let pauseToSuggestionP95LatencyMs: Double?
-    public let eligiblePauseSuggestionVisibleRate: Double?
-    public let suggestionStabilityRate: Double?
-    public let acceptanceQualityRate: Double?
+    public let modelResultLatencyP50Ms: Double?
+    public let visibleCompletionAcceptanceQualityRate: Double?
     public let acceptedAndKeptRate: Double?
     public let acceptRate: Double?
 
@@ -622,11 +556,8 @@ public struct TypingReplayTrendRow: Codable, Equatable, Sendable {
         self.suggestionRate = suggestionRate
         self.wrongFirstWordRate = wrongFirstWordRate
         self.endToEndP95LatencyMs = endToEndP95LatencyMs
-        self.pauseToSuggestionP50LatencyMs = userFeel?.pauseToSuggestionLatencyP50Milliseconds.map(Double.init)
-        self.pauseToSuggestionP95LatencyMs = userFeel?.pauseToSuggestionLatencyP95Milliseconds.map(Double.init)
-        self.eligiblePauseSuggestionVisibleRate = userFeel?.eligiblePauseSuggestionVisibleRate
-        self.suggestionStabilityRate = userFeel?.suggestionStabilityRate
-        self.acceptanceQualityRate = userFeel?.acceptanceQualityRate
+        self.modelResultLatencyP50Ms = userFeel?.modelResultLatencyP50Milliseconds.map(Double.init)
+        self.visibleCompletionAcceptanceQualityRate = userFeel?.visibleCompletionAcceptanceQualityRate
         self.acceptedAndKeptRate = acceptedAndKeptRate
         self.acceptRate = acceptRate
     }

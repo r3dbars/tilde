@@ -32,11 +32,8 @@ ALLOWED_KEYS = {
     "suggestionRate",
     "wrongFirstWordRate",
     "endToEndP95LatencyMs",
-    "pauseToSuggestionP50LatencyMs",
-    "pauseToSuggestionP95LatencyMs",
-    "eligiblePauseSuggestionVisibleRate",
-    "suggestionStabilityRate",
-    "acceptanceQualityRate",
+    "modelResultLatencyP50Ms",
+    "visibleCompletionAcceptanceQualityRate",
     "suffixEnabled",
     "acceptedAndKeptRate",
     "acceptRate",
@@ -95,10 +92,10 @@ def render(rows: list[dict]) -> str:
     for (model, prompt_format, variant), group in sorted(grouped.items()):
         sections.append(f"## {model} / {prompt_format} / {variant}")
         sections.append(
-            "| Date | Engine | Corpus | Cases | Raw keys/case | Shown keys/case | Missed magic | Gen P95 ms | Pause p50/p95 ms | Eligible visible | Stability | Acceptance | Top-1 | Prefix 2/3/4 | Suggest | Wrong first | Accept | Accepted + kept |\n"
-            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+            "| Date | Engine | Corpus | Cases | Raw keys/case | Shown keys/case | Missed magic | Model p50/p95 ms | Visible completion quality | Top-1 | Prefix 2/3/4 | Suggest | Wrong first | Accept | Accepted + kept |\n"
+            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
             + "\n".join(
-                "| {date} | {engine} | {corpus} | {cases} | {keys:.2f} | {shown:.2f} | {missed} | {latency} | {pause} | {eligible} | {stability} | {acceptance} | {top1} | {prefixes} | {suggest} | {wrong} | {accept} | {kept} |".format(
+                "| {date} | {engine} | {corpus} | {cases} | {keys:.2f} | {shown:.2f} | {missed} | {latency} | {quality} | {top1} | {prefixes} | {suggest} | {wrong} | {accept} | {kept} |".format(
                     date=str(row.get("dateISO", "")),
                     engine=str(row.get("engine", "")),
                     corpus=str(row.get("corpusKind", "")),
@@ -106,14 +103,11 @@ def render(rows: list[dict]) -> str:
                     keys=float(row.get("keystrokesSavedPerCase", 0) or 0),
                     shown=float(row.get("shownKeystrokesSavedPerCase", 0) or 0),
                     missed=percent(row.get("missedMagicRate")),
-                    latency="—" if row.get("endToEndP95LatencyMs") is None else f"{float(row['endToEndP95LatencyMs']):.0f}",
-                    pause="{}/{}".format(
-                        "—" if row.get("pauseToSuggestionP50LatencyMs") is None else f"{float(row['pauseToSuggestionP50LatencyMs']):.0f}",
-                        "—" if row.get("pauseToSuggestionP95LatencyMs") is None else f"{float(row['pauseToSuggestionP95LatencyMs']):.0f}",
+                    latency="{}/{}".format(
+                        "—" if row.get("modelResultLatencyP50Ms") is None else f"{float(row['modelResultLatencyP50Ms']):.0f}",
+                        "—" if row.get("endToEndP95LatencyMs") is None else f"{float(row['endToEndP95LatencyMs']):.0f}",
                     ),
-                    eligible=percent(row.get("eligiblePauseSuggestionVisibleRate")) if row.get("eligiblePauseSuggestionVisibleRate") is not None else "—",
-                    stability=percent(row.get("suggestionStabilityRate")) if row.get("suggestionStabilityRate") is not None else "—",
-                    acceptance=percent(row.get("acceptanceQualityRate")) if row.get("acceptanceQualityRate") is not None else "—",
+                    quality=percent(row.get("visibleCompletionAcceptanceQualityRate")) if row.get("visibleCompletionAcceptanceQualityRate") is not None else "—",
                     top1=percent(row.get("top1WordAccuracy")),
                     prefixes="/".join(percent(row.get(key)) for key in ("wordPrefixAccuracy2", "wordPrefixAccuracy3", "wordPrefixAccuracy4")),
                     suggest=percent(row.get("suggestionRate")),
