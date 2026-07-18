@@ -2,6 +2,7 @@ public struct ObsidianInsertionVerificationFastPathPolicy: Equatable, Sendable {
     public init() {}
 
     public func canVerifyLengthMatchedSuffix(
+        appBundleIdentifier: String,
         previousTextBeforeCursor: String,
         acceptedText: String,
         currentTextBeforeCursor: String,
@@ -9,7 +10,8 @@ public struct ObsidianInsertionVerificationFastPathPolicy: Equatable, Sendable {
         currentTextAfterCursor: String,
         verificationResult: InsertionVerificationResult
     ) -> Bool {
-        guard verificationResult == .changedUnexpectedly,
+        guard appBundleIdentifier == "md.obsidian",
+              verificationResult == .changedUnexpectedly,
               !acceptedText.isEmpty,
               acceptedText.utf16.count <= 24,
               previousTextBeforeCursor.utf16.count >= 120,
