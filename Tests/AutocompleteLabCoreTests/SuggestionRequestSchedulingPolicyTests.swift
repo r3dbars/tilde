@@ -16,11 +16,11 @@ struct SuggestionRequestSchedulingPolicyTests {
 
         #expect(schedule.policyDelayMilliseconds == 40)
         #expect(schedule.scheduledDelayMilliseconds == 0)
-        #expect(schedule.resultLatencyBudgetMilliseconds == 450)
+        #expect(schedule.resultLatencyBudgetMilliseconds == 1_200)
         #expect(schedule.reason == "keystroke-instant-word")
         #expect(schedule.traceMetadata["scheduledDelayMilliseconds"] == "0")
         #expect(schedule.traceMetadata["requestSchedulingReason"] == "keystroke-instant-word")
-        #expect(schedule.traceMetadata["resultLatencyBudgetMilliseconds"] == "450")
+        #expect(schedule.traceMetadata["resultLatencyBudgetMilliseconds"] == "1200")
     }
 
     @Test("Floating continuation requests keep the overlay stability floor")
@@ -36,7 +36,7 @@ struct SuggestionRequestSchedulingPolicyTests {
 
         #expect(schedule.policyDelayMilliseconds == 20)
         #expect(schedule.scheduledDelayMilliseconds == 60)
-        #expect(schedule.resultLatencyBudgetMilliseconds == 750)
+        #expect(schedule.resultLatencyBudgetMilliseconds == 2_000)
         #expect(schedule.reason == "floating-overlay-floor")
     }
 

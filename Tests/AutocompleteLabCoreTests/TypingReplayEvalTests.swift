@@ -143,13 +143,15 @@ struct TypingReplayEvalTests {
         #expect(scorecard.shownKeystrokesSavedPerCase == 0)
     }
 
-    @Test("Replay gate uses the production confidence and display policies")
+    @Test("Replay gate uses the production confidence and display policies without vetoing short nubs")
     func replayGateUsesCorePolicies() {
         let replayCase = replay(actual: "alpha beta gamma")
         let gate = TypingReplayGateEvaluator()
 
         #expect(gate.shouldDisplay(suggestionText: "alpha beta gamma", replayCase: replayCase))
-        #expect(!gate.shouldDisplay(suggestionText: "alpha", replayCase: replayCase))
+        // #180 softens short-phrase penalties: a clean one-word continuation can display
+        // when the rest of the confidence and display gates are healthy.
+        #expect(gate.shouldDisplay(suggestionText: "alpha", replayCase: replayCase))
         #expect(!gate.shouldDisplay(
             suggestionText: "alpha beta gamma",
             replayCase: replayCase,
