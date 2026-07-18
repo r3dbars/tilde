@@ -10,14 +10,18 @@ struct WorkspaceObserverHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
+        let wiring = try String(
+            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/WorkspaceObserverWiring.swift"),
+            encoding: .utf8
+        )
         let host = try String(
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/WorkspaceObserverHost.swift"),
             encoding: .utf8
         )
 
         #expect(appDelegate.contains("WorkspaceObserverHost(handler: self)"))
-        #expect(appDelegate.contains("extension AppDelegate: WorkspaceObserverEventHandling"))
-        #expect(appDelegate.contains("handleWorkspaceObserverEvent(_ event: WorkspaceObserverEvent)"))
+        #expect(wiring.contains("extension AppDelegate: WorkspaceObserverEventHandling"))
+        #expect(wiring.contains("handleWorkspaceObserverEvent(_ event: WorkspaceObserverEvent)"))
         #expect(!appDelegate.contains("private func startWorkspaceFocusObservers()"))
         #expect(!appDelegate.contains("private func startScreenGeometryObserver()"))
         #expect(!appDelegate.contains("private var workspaceFocusObservers"))
