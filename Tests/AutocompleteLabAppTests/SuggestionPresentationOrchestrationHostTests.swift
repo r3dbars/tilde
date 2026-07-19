@@ -20,6 +20,8 @@ struct SuggestionPresentationOrchestrationHostTests {
         #expect(appDelegate.contains("suggestionPresentationOrchestrationHost.presentSuggestion("))
         #expect(host.contains("suggestionOrchestrator.displayScoreDecision("))
         #expect(host.contains("suggestionOrchestrator.replacementDecision("))
+        #expect(host.contains("currentSuggestionState.isActivelyTypingThrough"))
+        #expect(host.contains("Shown: typing through suggestion"))
         #expect(!host.contains("rawEvaluationModeEnabled\n            ? SuggestionReplacementDecision"))
         #expect(host.contains("suggestionPresentationCommitHost.commit("))
     }

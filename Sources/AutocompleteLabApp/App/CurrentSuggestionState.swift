@@ -28,6 +28,10 @@ struct CurrentSuggestionState {
     var firstWordCorrectionGraceUsed = false
     var invalidatedByUserKeyDown = false
 
+    var isActivelyTypingThrough: Bool {
+        !optimisticTypedPrefix.isEmpty && !invalidatedByUserKeyDown
+    }
+
     mutating func applyOptimisticTypeThrough(
         _ transition: KeyboardOptimisticTypeThroughTransition
     ) -> Bool {

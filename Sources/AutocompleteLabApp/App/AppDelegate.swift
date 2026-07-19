@@ -861,6 +861,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.manualSuggestionRequestHost.consumePendingRequest() == true
             },
             hasVisibleSuggestion: { [weak self] in self?.suggestionSession.hasVisibleSuggestion == true },
+            isActivelyTypingThrough: { [weak self] in
+                self?.currentSuggestionState.isActivelyTypingThrough == true
+            },
             setSuggestionDecision: { [weak self] decision in self?.setSuggestionDecision(decision) },
             showFieldStatusIndicator: { [weak self] state, context in
                 self?.showFieldStatusIndicator(state, context: context)

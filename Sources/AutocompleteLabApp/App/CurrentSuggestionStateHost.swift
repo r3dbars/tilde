@@ -76,6 +76,10 @@ final class CurrentSuggestionStateHost {
         set { state.invalidatedByUserKeyDown = newValue }
     }
 
+    var isActivelyTypingThrough: Bool {
+        state.isActivelyTypingThrough
+    }
+
     @discardableResult
     func applyOptimisticTypeThrough(
         _ transition: KeyboardOptimisticTypeThroughTransition

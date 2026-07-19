@@ -327,6 +327,13 @@ final class SuggestionPresentationOrchestrationHost {
         scheduledDelayMilliseconds: Int = 0,
         presentationRefreshAttempt: Int = 0
     ) {
+        if suggestionSession.hasVisibleSuggestion,
+           currentSuggestionState.isActivelyTypingThrough {
+            setSuggestionDecision("Shown: typing through suggestion")
+            updateKeyboardEventTapSnapshot()
+            return
+        }
+
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
             && currentSuggestionState.id == suggestionID
