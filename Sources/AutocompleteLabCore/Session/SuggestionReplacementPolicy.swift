@@ -11,17 +11,20 @@ public struct SuggestionReplacementDecision: Equatable, Sendable {
     public let reason: SuggestionReplacementSuppressionReason?
     public let currentAgeMilliseconds: Int?
     public let scoreMargin: Double?
+    public let usedFirstWordCorrectionGrace: Bool
 
     public init(
         shouldPresent: Bool,
         reason: SuggestionReplacementSuppressionReason? = nil,
         currentAgeMilliseconds: Int? = nil,
-        scoreMargin: Double? = nil
+        scoreMargin: Double? = nil,
+        usedFirstWordCorrectionGrace: Bool = false
     ) {
         self.shouldPresent = shouldPresent
         self.reason = reason
         self.currentAgeMilliseconds = currentAgeMilliseconds
         self.scoreMargin = scoreMargin
+        self.usedFirstWordCorrectionGrace = usedFirstWordCorrectionGrace
     }
 
     public var metadata: [String: String] {
@@ -37,20 +40,26 @@ public struct SuggestionReplacementDecision: Equatable, Sendable {
         if let scoreMargin {
             metadata["replacementScoreMargin"] = String(format: "%.2f", scoreMargin)
         }
+        if usedFirstWordCorrectionGrace {
+            metadata["replacementUsedFirstWordCorrectionGrace"] = "true"
+        }
         return metadata
     }
 }
 
 public struct SuggestionReplacementPolicy: Equatable, Sendable {
+    public let firstWordCorrectionGraceMilliseconds: Int
     public let minimumFreshLifetimeMilliseconds: Int
     public let staleLifetimeMilliseconds: Int
     public let minimumScoreMargin: Double
 
     public init(
+        firstWordCorrectionGraceMilliseconds: Int = 350,
         minimumFreshLifetimeMilliseconds: Int = 1_200,
         staleLifetimeMilliseconds: Int = 2_000,
         minimumScoreMargin: Double = 0.35
     ) {
+        self.firstWordCorrectionGraceMilliseconds = max(0, firstWordCorrectionGraceMilliseconds)
         self.minimumFreshLifetimeMilliseconds = max(0, minimumFreshLifetimeMilliseconds)
         self.staleLifetimeMilliseconds = max(
             self.minimumFreshLifetimeMilliseconds,
@@ -67,6 +76,7 @@ public struct SuggestionReplacementPolicy: Equatable, Sendable {
         currentAgeMilliseconds: Int?,
         currentScore: Double?,
         proposedScore: Double,
+        firstWordCorrectionGraceAlreadyUsed: Bool = false,
         currentSuggestionInvalidatedByUserTyping: Bool = false
     ) -> SuggestionReplacementDecision {
         if currentSuggestionInvalidatedByUserTyping {
@@ -90,6 +100,16 @@ public struct SuggestionReplacementPolicy: Equatable, Sendable {
 
         let scoreMargin = currentScore.map { proposedScore - $0 }
         if firstWord(in: currentText) != firstWord(in: proposedText) {
+            if currentSuggestionID == proposedSuggestionID,
+               !firstWordCorrectionGraceAlreadyUsed,
+               currentAgeMilliseconds <= firstWordCorrectionGraceMilliseconds {
+                return SuggestionReplacementDecision(
+                    shouldPresent: true,
+                    currentAgeMilliseconds: currentAgeMilliseconds,
+                    scoreMargin: scoreMargin,
+                    usedFirstWordCorrectionGrace: true
+                )
+            }
             return SuggestionReplacementDecision(
                 shouldPresent: false,
                 reason: .changedFirstWord,

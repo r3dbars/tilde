@@ -674,6 +674,9 @@ final class SuggestionPresentationOrchestrationHost {
             currentPresentedAt: currentSuggestionState.presentedAt,
             currentScore: currentSuggestionState.displayScoreFinal,
             proposedScore: displayScoreTrace.score.finalScore,
+            firstWordCorrectionGraceAlreadyUsed:
+                currentSuggestionState.id == suggestionID
+                    && currentSuggestionState.firstWordCorrectionGraceUsed,
             currentSuggestionInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown
         )
         let replacementMetadata = replacementDecision.metadata
@@ -777,7 +780,11 @@ final class SuggestionPresentationOrchestrationHost {
             presentationDeliveryRequest: presentationDeliveryRequest,
             visualTrustContext: visualTrustContext,
             learningAdjustment: learningAdjustment,
-            displayScoreFinal: displayScoreTrace.score.finalScore
+            displayScoreFinal: displayScoreTrace.score.finalScore,
+            firstWordCorrectionGraceUsed:
+                replacementDecision.usedFirstWordCorrectionGrace
+                    || (currentSuggestionState.id == suggestionID
+                        && currentSuggestionState.firstWordCorrectionGraceUsed)
         )
         _ = suggestionPresentationCommitHost.commit(input: presentationCommitInput)
         return

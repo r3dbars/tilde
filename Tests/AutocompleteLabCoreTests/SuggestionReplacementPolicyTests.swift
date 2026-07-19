@@ -56,6 +56,98 @@ struct SuggestionReplacementPolicyTests {
         #expect(decision.metadata["replacementScoreMargin"] == "0.60")
     }
 
+    @Test("Allows same request to correct the provisional first word")
+    func allowsProvisionalSameRequestFirstWordCorrection() {
+        let policy = SuggestionReplacementPolicy(firstWordCorrectionGraceMilliseconds: 350)
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "same",
+            proposedSuggestionID: "same",
+            currentAgeMilliseconds: 300,
+            currentScore: 1.20,
+            proposedScore: 1.23
+        )
+
+        #expect(decision.shouldPresent)
+        #expect(decision.reason == nil)
+        #expect(decision.usedFirstWordCorrectionGrace)
+        #expect(decision.metadata["replacementCurrentAgeMs"] == "300")
+        #expect(decision.metadata["replacementScoreMargin"] == "0.03")
+        #expect(decision.metadata["replacementUsedFirstWordCorrectionGrace"] == "true")
+    }
+
+    @Test("Allows one correction at the grace boundary")
+    func allowsOneCorrectionAtGraceBoundary() {
+        let policy = SuggestionReplacementPolicy(firstWordCorrectionGraceMilliseconds: 350)
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "same",
+            proposedSuggestionID: "same",
+            currentAgeMilliseconds: 350,
+            currentScore: 1.20,
+            proposedScore: 1.23
+        )
+
+        #expect(decision.shouldPresent)
+        #expect(decision.usedFirstWordCorrectionGrace)
+    }
+
+    @Test("Suppresses the first correction after the grace boundary")
+    func suppressesCorrectionAfterGraceBoundary() {
+        let policy = SuggestionReplacementPolicy(firstWordCorrectionGraceMilliseconds: 350)
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "same",
+            proposedSuggestionID: "same",
+            currentAgeMilliseconds: 351,
+            currentScore: 1.20,
+            proposedScore: 1.80
+        )
+
+        #expect(!decision.shouldPresent)
+        #expect(decision.reason == .changedFirstWord)
+        #expect(!decision.usedFirstWordCorrectionGrace)
+    }
+
+    @Test("Suppresses repeated same-request first-word corrections")
+    func suppressesRepeatedSameRequestFirstWordCorrections() {
+        let policy = SuggestionReplacementPolicy(firstWordCorrectionGraceMilliseconds: 350)
+        let decision = policy.decision(
+            currentVisibleText: " calm and steady",
+            proposedVisibleText: " clear and direct",
+            currentSuggestionID: "same",
+            proposedSuggestionID: "same",
+            currentAgeMilliseconds: 100,
+            currentScore: 1.23,
+            proposedScore: 1.40,
+            firstWordCorrectionGraceAlreadyUsed: true
+        )
+
+        #expect(!decision.shouldPresent)
+        #expect(decision.reason == .changedFirstWord)
+        #expect(!decision.usedFirstWordCorrectionGrace)
+    }
+
+    @Test("Does not let a different request change the provisional first word")
+    func suppressesDifferentRequestFirstWordCorrectionDuringGrace() {
+        let policy = SuggestionReplacementPolicy(firstWordCorrectionGraceMilliseconds: 350)
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "old",
+            proposedSuggestionID: "new",
+            currentAgeMilliseconds: 300,
+            currentScore: 1.20,
+            proposedScore: 1.80
+        )
+
+        #expect(!decision.shouldPresent)
+        #expect(decision.reason == .changedFirstWord)
+    }
+
     @Test("Allows stale replacements that keep the first visible word")
     func allowsStaleReplacementWhenFirstWordIsStable() {
         let policy = SuggestionReplacementPolicy()
