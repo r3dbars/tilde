@@ -42,6 +42,44 @@ struct SuggestionPresentationRefreshHostTests {
         ) == nil)
     }
 
+    @Test("Moves an optimistic type-through placement with the typed character")
+    func shiftsTypeThroughCaretForward() throws {
+        let result = ResidualSuggestionPlacement.shiftedCaretRect(
+            from: CGRect(x: 40, y: 20, width: 1, height: 18),
+            horizontalOffset: 9,
+            clippingRect: CGRect(x: 0, y: 0, width: 200, height: 80)
+        )
+
+        #expect(result == CGRect(x: 49, y: 20, width: 1, height: 18))
+    }
+
+    @Test("Moves an optimistic type-through placement back after Backspace")
+    func shiftsTypeThroughCaretBackward() throws {
+        let result = ResidualSuggestionPlacement.shiftedCaretRect(
+            from: CGRect(x: 49, y: 20, width: 1, height: 18),
+            horizontalOffset: -9,
+            clippingRect: CGRect(x: 0, y: 0, width: 200, height: 80)
+        )
+
+        #expect(result == CGRect(x: 40, y: 20, width: 1, height: 18))
+    }
+
+    @Test("Refuses an optimistic type-through shift outside clipping bounds")
+    func refusesTypeThroughCaretOutsideClippingBounds() throws {
+        let clippingRect = CGRect(x: 10, y: 0, width: 190, height: 80)
+
+        #expect(ResidualSuggestionPlacement.shiftedCaretRect(
+            from: CGRect(x: 14, y: 20, width: 1, height: 18),
+            horizontalOffset: -8,
+            clippingRect: clippingRect
+        ) == nil)
+        #expect(ResidualSuggestionPlacement.shiftedCaretRect(
+            from: CGRect(x: 196, y: 20, width: 1, height: 18),
+            horizontalOffset: 8,
+            clippingRect: clippingRect
+        ) == nil)
+    }
+
     @Test("Fails closed when the frontmost application is unavailable")
     func failsClosedWithoutFrontmostApplication() throws {
         let fixtures = Fixtures()

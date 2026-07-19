@@ -4492,6 +4492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationMilliseconds: visibleSuggestionTypingPollPauseMilliseconds
         )
         clearPendingAcceptedInsertionUndo(reason: "typing")
+        let previousTypedPrefix = currentSuggestionState.optimisticTypedPrefix
         guard suggestionSession.hasVisibleSuggestion,
               currentSuggestionState.applyOptimisticTypeThrough(transition) else {
             return
@@ -4513,8 +4514,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionState.displayedText = transition.remainingText
         currentSuggestionState.invalidatedByUserKeyDown = false
         setSuggestionDecision("Shown: typing through suggestion")
-        _ = refreshVisibleSuggestion()
+        _ = refreshVisibleSuggestion(
+            placement: optimisticTypeThroughPlacement(
+                previousTypedPrefix: previousTypedPrefix,
+                currentTypedPrefix: transition.typedPrefix
+            ),
+            fallbackRenderMode: currentProfile?.fallbackRenderMode
+        )
         updateKeyboardEventTapSnapshot()
+    }
+
+    private func optimisticTypeThroughPlacement(
+        previousTypedPrefix: String,
+        currentTypedPrefix: String
+    ) -> PlacementHealthPresentation? {
+        guard let caretRect = lastCaretRect,
+              let textStyle = lastTextStyle,
+              let renderMode = lastRenderMode else {
+            return nil
+        }
+
+        let horizontalOffset: CGFloat
+        if currentTypedPrefix.hasPrefix(previousTypedPrefix) {
+            let appendedText = String(currentTypedPrefix.dropFirst(previousTypedPrefix.count))
+            horizontalOffset = width(of: appendedText, font: textStyle.font)
+        } else if previousTypedPrefix.hasPrefix(currentTypedPrefix) {
+            let removedText = String(previousTypedPrefix.dropFirst(currentTypedPrefix.count))
+            horizontalOffset = -width(of: removedText, font: textStyle.font)
+        } else {
+            return nil
+        }
+
+        guard let shiftedCaretRect = ResidualSuggestionPlacement.shiftedCaretRect(
+            from: caretRect,
+            horizontalOffset: horizontalOffset,
+            clippingRect: lastClippingRect
+        ) else {
+            return nil
+        }
+
+        return PlacementHealthPresentation(
+            requestedRenderMode: renderMode,
+            renderMode: renderMode,
+            anchorRect: shiftedCaretRect,
+            anchorSource: .caret,
+            textLineRect: lastTextLineRect,
+            clippingRect: lastClippingRect,
+            reason: .healthy
+        )
     }
 
     private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: String) -> Bool {

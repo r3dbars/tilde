@@ -2,6 +2,24 @@ import AutocompleteLabCore
 import Foundation
 
 struct ResidualSuggestionPlacement {
+    static func shiftedCaretRect(
+        from caretRect: CGRect,
+        horizontalOffset: CGFloat,
+        clippingRect: CGRect?
+    ) -> CGRect? {
+        guard horizontalOffset != 0, horizontalOffset.isFinite else {
+            return nil
+        }
+
+        let shiftedCaretRect = caretRect.offsetBy(dx: horizontalOffset, dy: 0)
+        if let clippingRect,
+           (shiftedCaretRect.minX < clippingRect.minX
+               || shiftedCaretRect.maxX > clippingRect.maxX) {
+            return nil
+        }
+        return shiftedCaretRect
+    }
+
     static func advancedCaretRect(
         from caretRect: CGRect,
         acceptedTextWidth: CGFloat,
@@ -10,13 +28,11 @@ struct ResidualSuggestionPlacement {
         guard acceptedTextWidth > 0, acceptedTextWidth.isFinite else {
             return nil
         }
-
-        let advancedCaretRect = caretRect.offsetBy(dx: acceptedTextWidth, dy: 0)
-        if let clippingRect,
-           advancedCaretRect.maxX > clippingRect.maxX {
-            return nil
-        }
-        return advancedCaretRect
+        return shiftedCaretRect(
+            from: caretRect,
+            horizontalOffset: acceptedTextWidth,
+            clippingRect: clippingRect
+        )
     }
 }
 
