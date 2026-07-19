@@ -307,7 +307,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return .rejected(.adviceOrToneDrift)
         }
 
-        let normalizedSuggestion = mode == .wordCompletion ? candidateText : ensureLeadingSpace(candidateText)
+        let normalizedSuggestion = normalizedSuggestion(
+            candidateText,
+            after: textBeforeCursor,
+            mode: mode
+        )
         let trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
@@ -618,6 +622,28 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return " " + text
+    }
+
+    private func normalizedSuggestion(
+        _ text: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode
+    ) -> String {
+        guard mode != .wordCompletion else {
+            return text
+        }
+
+        guard let textBeforeCursor,
+              textBeforeCursor.last?.isLetter == true,
+              text.first?.isWhitespace != true,
+              let firstToken = text.split(whereSeparator: \.isWhitespace).first,
+              firstToken.count == 1,
+              firstToken.first?.isLowercase == true,
+              firstToken != "a" else {
+            return ensureLeadingSpace(text)
+        }
+
+        return text
     }
 
     private func isValidWordCompletion(

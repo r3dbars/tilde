@@ -65,6 +65,16 @@ struct SuggestionSessionTests {
         #expect(session.visibleSuggestion?.visibleText == "should ship")
     }
 
+    @Test("Tab completes a partial word without inserting an internal space")
+    func tabCompletesPartialWordWithoutInternalSpace() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "t the user's needs", maxVisibleWords: 8)
+        )
+
+        #expect(session.acceptNextWord() == "t ")
+        #expect(session.visibleSuggestion?.visibleText == "the user's needs")
+    }
+
     @Test("Repeated Tab accepts a long suggestion one word at a time")
     func repeatedTabAcceptsLongSuggestionOneWordAtATime() {
         var session = SuggestionSession(
