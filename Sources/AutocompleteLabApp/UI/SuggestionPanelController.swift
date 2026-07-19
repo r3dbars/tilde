@@ -144,7 +144,8 @@ final class SuggestionPanelController {
                 textLineRect: appKitTextLineRect,
                 textSize: size,
                 screenFrame: screenFrame,
-                clippingFrame: appKitClippingRect
+                clippingFrame: appKitClippingRect,
+                verticalAlignmentOffset: 3
             )
             guard SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame) else {
                 hide()
