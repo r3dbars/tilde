@@ -11,6 +11,24 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " keep moving today")
     }
 
+    @Test("Keeps a one-letter partial-word suffix attached to the typed word")
+    func keepsOneLetterPartialWordSuffixAttached() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean(
+            "t the user's needs",
+            after: "I want this app to predic"
+        )?.visibleText == "t the user's needs")
+    }
+
+    @Test("Keeps ordinary next words separated from completed text")
+    func keepsOrdinaryNextWordsSeparated() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("there friend", after: "Hey")?.visibleText == " there friend")
+        #expect(cleaner.clean("a little faster", after: "Make it")?.visibleText == " a little faster")
+    }
+
     @Test("Allows twenty visible words when the slider requests them")
     func allowsTwentyVisibleWordsWhenSliderRequestsThem() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 20)
