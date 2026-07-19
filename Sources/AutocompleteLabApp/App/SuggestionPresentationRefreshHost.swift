@@ -1,6 +1,25 @@
 import AutocompleteLabCore
 import Foundation
 
+struct ResidualSuggestionPlacement {
+    static func advancedCaretRect(
+        from caretRect: CGRect,
+        acceptedTextWidth: CGFloat,
+        clippingRect: CGRect?
+    ) -> CGRect? {
+        guard acceptedTextWidth > 0, acceptedTextWidth.isFinite else {
+            return nil
+        }
+
+        let advancedCaretRect = caretRect.offsetBy(dx: acceptedTextWidth, dy: 0)
+        if let clippingRect,
+           advancedCaretRect.maxX > clippingRect.maxX {
+            return nil
+        }
+        return advancedCaretRect
+    }
+}
+
 @MainActor
 struct SuggestionPresentationPromptMatch {
     let canSuggest: Bool
