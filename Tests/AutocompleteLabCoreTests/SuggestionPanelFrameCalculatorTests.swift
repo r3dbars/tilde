@@ -19,6 +19,37 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(SuggestionPanelFrameCalculator.isUsableInlineGhostFrame(frame))
     }
 
+    @Test("Lifts inline ghost text without changing its horizontal placement")
+    func liftsInlineGhostText() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 100, y: 800, width: 0, height: 20),
+            textLineRect: CGRect(x: 80, y: 790, width: 20, height: 20),
+            textSize: CGSize(width: 160, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+            verticalAlignmentOffset: 3
+        )
+
+        #expect(frame.minX == 100)
+        #expect(frame.minY == 793)
+        #expect(frame.width == 166)
+        #expect(frame.height == 20)
+    }
+
+    @Test("Lifts profile-routed inline ghost text inside its boundary")
+    func liftsProfileRoutedInlineGhostText() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            appBundleIdentifier: "com.openai.codex",
+            caretRect: CGRect(x: 100, y: 790, width: 0, height: 20),
+            boundaryFrame: CGRect(x: 20, y: 100, width: 800, height: 760),
+            textSize: CGSize(width: 160, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+            verticalAlignmentOffset: 3
+        )
+
+        #expect(frame.minX == 100)
+        #expect(frame.minY == 793)
+    }
+
     @Test("Keeps ghost text inside the screen")
     func keepsGhostTextInsideScreen() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
