@@ -56,5 +56,9 @@ struct CurrentSuggestionStateTests {
 
         #expect(advanced == current)
         #expect(SuggestionAcceptanceGuard().decision(shown: advanced, current: current) == .allow)
+        #expect(state.isActivelyTypingThrough)
+
+        state.invalidatedByUserKeyDown = true
+        #expect(!state.isActivelyTypingThrough)
     }
 }

@@ -33,6 +33,7 @@ struct SuggestionTriggerTimingHostDependencies {
     let rawEvaluationModeEnabled: () -> Bool
     let consumeManualSuggestionRequest: () -> Bool
     let hasVisibleSuggestion: () -> Bool
+    let isActivelyTypingThrough: () -> Bool
     let setSuggestionDecision: (String) -> Void
     let showFieldStatusIndicator: (FieldStatusIndicatorState, FocusedTextContext) -> Void
     let repositionVisibleSuggestion: (FocusedTextContext, CompatibilityProfile) -> Void
@@ -56,6 +57,18 @@ final class SuggestionTriggerTimingHost {
     }
 
     func handle(input: SuggestionTriggerTimingHostInput) {
+        if dependencies.hasVisibleSuggestion(), dependencies.isActivelyTypingThrough() {
+            dependencies.setSuggestionDecision("Shown: typing through suggestion")
+            dependencies.showFieldStatusIndicator(.shown, input.context)
+            dependencies.recordSuggestionEvent(
+                "suggestion-trigger-skipped",
+                input.context,
+                input.profile,
+                ["reason": "active-type-through"]
+            )
+            return
+        }
+
         let currentLineStructure = CurrentLineStructure.from(
             textBeforeCursor: input.context.textBeforeCursor
         )

@@ -24,6 +24,10 @@ struct CurrentSuggestionStateHostTests {
         #expect(host.displayedText == "difficult")
         #expect(host.optimisticOriginalDisplayedText == "difficult")
         #expect(host.optimisticTypedPrefix == "d")
+        #expect(host.isActivelyTypingThrough)
+
+        host.invalidatedByUserKeyDown = true
+        #expect(!host.isActivelyTypingThrough)
     }
 
     @Test("keeps invalidation state isolated to the host")
