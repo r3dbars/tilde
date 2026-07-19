@@ -14682,6 +14682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSuggestionTextBeforeCursor: currentSuggestionState.textBeforeCursor,
             currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
             isInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown,
+            optimisticTypedPrefix: currentSuggestionState.optimisticTypedPrefix,
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             promptProofModeEnabled: activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier),
@@ -14705,6 +14706,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if currentSuggestionState.textBeforeCursor.map({ context.textBeforeCursor + context.textAfterCursor == $0 }) == true {
             return "transient-same-text-geometry-split"
+        }
+
+        if !currentSuggestionState.optimisticTypedPrefix.isEmpty,
+           currentSuggestionState.textBeforeCursor?.hasPrefix(context.textBeforeCursor) == true {
+            return "optimistic-type-through-ax-lag"
         }
 
         return "transient-geometry-change"

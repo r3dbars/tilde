@@ -83,6 +83,7 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         currentSuggestionTextBeforeCursor: String?,
         currentSuggestionAgeMilliseconds: Int?,
         isInvalidatedByUserTyping: Bool,
+        optimisticTypedPrefix: String = "",
         textBeforeCursor: String,
         textAfterCursor: String,
         promptProofModeEnabled: Bool = false,
@@ -118,6 +119,15 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
             return false
         }
 
+        if shouldPreserveOptimisticTypeThroughAXLag(
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
+            optimisticTypedPrefix: optimisticTypedPrefix,
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+        ) {
+            return true
+        }
+
         if currentSuggestionAgeMilliseconds <= maximumSameTextMiddleSplitAgeMilliseconds,
            currentSuggestionTextBeforeCursor == textBeforeCursor,
            textAfterCursor.isEmpty {
@@ -143,6 +153,29 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor
         )
+    }
+
+    private func shouldPreserveOptimisticTypeThroughAXLag(
+        currentSuggestionTextBeforeCursor: String?,
+        optimisticTypedPrefix: String,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> Bool {
+        guard !optimisticTypedPrefix.isEmpty,
+              textAfterCursor.isEmpty,
+              let currentSuggestionTextBeforeCursor,
+              currentSuggestionTextBeforeCursor.hasSuffix(optimisticTypedPrefix) else {
+            return false
+        }
+
+        let baseline = String(currentSuggestionTextBeforeCursor.dropLast(optimisticTypedPrefix.count))
+        guard textBeforeCursor.count >= baseline.count,
+              textBeforeCursor.count <= currentSuggestionTextBeforeCursor.count else {
+            return false
+        }
+
+        return textBeforeCursor.hasPrefix(baseline)
+            && currentSuggestionTextBeforeCursor.hasPrefix(textBeforeCursor)
     }
 
     private func shouldPreserveObsidianDocumentStartTeleport(
