@@ -221,6 +221,82 @@ struct VisibleSuggestionPersistencePolicyTests {
         ))
     }
 
+    @Test("preserves matching optimistic type-through while AX text catches up")
+    func preservesOptimisticTypeThroughAXLag() {
+        let policy = VisibleSuggestionPersistencePolicy()
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: "com.apple.TextEdit",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.apple.TextEdit",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I can pred",
+            currentSuggestionAgeMilliseconds: 700,
+            isInvalidatedByUserTyping: false,
+            optimisticTypedPrefix: "ed",
+            textBeforeCursor: "I can pr",
+            textAfterCursor: ""
+        ))
+
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .textLineChanged,
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.apple.TextEdit",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I can pred",
+            currentSuggestionAgeMilliseconds: 700,
+            isInvalidatedByUserTyping: false,
+            optimisticTypedPrefix: "ed",
+            textBeforeCursor: "I can pre",
+            textAfterCursor: ""
+        ))
+    }
+
+    @Test("does not preserve divergent or invalidated optimistic typing")
+    func rejectsDivergentOptimisticTypeThrough() {
+        let policy = VisibleSuggestionPersistencePolicy()
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: "com.apple.TextEdit",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.apple.TextEdit",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I can pred",
+            currentSuggestionAgeMilliseconds: 700,
+            isInvalidatedByUserTyping: false,
+            optimisticTypedPrefix: "ed",
+            textBeforeCursor: "I can prox",
+            textAfterCursor: ""
+        ))
+
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.apple.TextEdit",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I can pred",
+            currentSuggestionAgeMilliseconds: 700,
+            isInvalidatedByUserTyping: true,
+            optimisticTypedPrefix: "ed",
+            textBeforeCursor: "I can pre",
+            textAfterCursor: ""
+        ))
+    }
+
     @Test("preserves active Codex proof suggestions through AX target churn")
     func preservesActiveCodexProofSuggestionsThroughAXTargetChurn() {
         let policy = VisibleSuggestionPersistencePolicy()
