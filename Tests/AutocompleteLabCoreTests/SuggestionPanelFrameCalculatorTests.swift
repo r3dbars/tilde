@@ -35,6 +35,34 @@ struct SuggestionPanelFrameCalculatorTests {
         #expect(frame.height == 20)
     }
 
+    @Test("Spaces inline ghost text away from a zero-width caret")
+    func spacesInlineGhostTextAfterCaret() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 100, y: 800, width: 0, height: 20),
+            textLineRect: CGRect(x: 80, y: 790, width: 20, height: 20),
+            textSize: CGSize(width: 160, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+            horizontalAlignmentOffset: 3
+        )
+
+        #expect(frame.minX == 103)
+        #expect(frame.minY == 790)
+        #expect(frame.width == 166)
+    }
+
+    @Test("Keeps horizontal ghost spacing inside clipping bounds")
+    func keepsHorizontalGhostSpacingInsideClippingBounds() {
+        let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(
+            caretRect: CGRect(x: 350, y: 240, width: 0, height: 20),
+            textSize: CGSize(width: 40, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 500, height: 500),
+            clippingFrame: CGRect(x: 20, y: 180, width: 380, height: 80),
+            horizontalAlignmentOffset: 3
+        )
+
+        #expect(frame.maxX <= 392)
+    }
+
     @Test("Lifts profile-routed inline ghost text inside its boundary")
     func liftsProfileRoutedInlineGhostText() {
         let frame = SuggestionPanelFrameCalculator.inlineGhostFrame(

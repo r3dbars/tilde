@@ -50,6 +50,7 @@ public enum SuggestionPanelFrameCalculator {
         clippingFrame: CGRect? = nil,
         minimumWidth: CGFloat = 40,
         maximumWidth: CGFloat = 420,
+        horizontalAlignmentOffset: CGFloat = 0,
         verticalAlignmentOffset: CGFloat = 0
     ) -> CGRect {
         if appBundleIdentifier != nil || boundaryFrame != nil {
@@ -63,8 +64,14 @@ public enum SuggestionPanelFrameCalculator {
                 minimumWidth: minimumWidth,
                 maximumWidth: maximumWidth
             ).frame
-            return verticallyAlignedInlineFrame(
+            let horizontallyAlignedFrame = horizontallyAlignedInlineFrame(
                 frame,
+                offset: horizontalAlignmentOffset,
+                screenFrame: screenFrame,
+                clippingFrame: boundaryFrame ?? clippingFrame
+            )
+            return verticallyAlignedInlineFrame(
+                horizontallyAlignedFrame,
                 offset: verticalAlignmentOffset,
                 screenFrame: screenFrame,
                 clippingFrame: boundaryFrame ?? clippingFrame
@@ -101,11 +108,40 @@ public enum SuggestionPanelFrameCalculator {
             width: width,
             height: height
         )
-        return verticallyAlignedInlineFrame(
+        let horizontallyAlignedFrame = horizontallyAlignedInlineFrame(
             frame,
+            offset: horizontalAlignmentOffset,
+            screenFrame: screenFrame,
+            clippingFrame: clippingFrame
+        )
+        return verticallyAlignedInlineFrame(
+            horizontallyAlignedFrame,
             offset: verticalAlignmentOffset,
             screenFrame: screenFrame,
             clippingFrame: clippingFrame
+        )
+    }
+
+    private static func horizontallyAlignedInlineFrame(
+        _ frame: CGRect,
+        offset: CGFloat,
+        screenFrame: CGRect,
+        clippingFrame: CGRect?
+    ) -> CGRect {
+        guard offset != 0 else {
+            return frame
+        }
+        let bounds = horizontalBounds(screenFrame: screenFrame, clippingFrame: clippingFrame)
+        return CGRect(
+            x: clampedOrigin(
+                preferred: frame.minX + offset,
+                length: frame.width,
+                lowerBound: bounds.lower,
+                upperBound: bounds.upper
+            ),
+            y: frame.minY,
+            width: frame.width,
+            height: frame.height
         )
     }
 
