@@ -631,6 +631,7 @@ final class SuggestionOrchestrator {
         currentPresentedAt: Date?,
         currentScore: Double?,
         proposedScore: Double,
+        firstWordCorrectionGraceAlreadyUsed: Bool = false,
         currentSuggestionInvalidatedByUserTyping: Bool = false,
         now: Date = Date()
     ) -> SuggestionReplacementDecision {
@@ -645,6 +646,7 @@ final class SuggestionOrchestrator {
             currentAgeMilliseconds: currentAgeMilliseconds,
             currentScore: currentScore,
             proposedScore: proposedScore,
+            firstWordCorrectionGraceAlreadyUsed: firstWordCorrectionGraceAlreadyUsed,
             currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserTyping
         )
     }

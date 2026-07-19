@@ -66,6 +66,11 @@ final class CurrentSuggestionStateHost {
         set { state.displayScoreFinal = newValue }
     }
 
+    var firstWordCorrectionGraceUsed: Bool {
+        get { state.firstWordCorrectionGraceUsed }
+        set { state.firstWordCorrectionGraceUsed = newValue }
+    }
+
     var invalidatedByUserKeyDown: Bool {
         get { state.invalidatedByUserKeyDown }
         set { state.invalidatedByUserKeyDown = newValue }

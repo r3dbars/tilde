@@ -25,6 +25,7 @@ struct CurrentSuggestionState {
     var fieldClassification: AXFieldClassification?
     var presentedAt: Date?
     var displayScoreFinal: Double?
+    var firstWordCorrectionGraceUsed = false
     var invalidatedByUserKeyDown = false
 
     mutating func applyOptimisticTypeThrough(

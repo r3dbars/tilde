@@ -19,6 +19,7 @@ struct SuggestionPresentationCommitInput {
     let visualTrustContext: CompatibilityLearningVisualTrustContext
     let learningAdjustment: CompatibilityLearningAdjustment
     let displayScoreFinal: Double
+    let firstWordCorrectionGraceUsed: Bool
 }
 
 @MainActor
@@ -98,6 +99,8 @@ final class SuggestionPresentationCommitHost {
         dependencies.currentSuggestionState.fieldClassification = input.displayFieldClassification
         dependencies.currentSuggestionState.presentedAt = presentedAt
         dependencies.currentSuggestionState.displayScoreFinal = input.displayScoreFinal
+        dependencies.currentSuggestionState.firstWordCorrectionGraceUsed =
+            input.firstWordCorrectionGraceUsed
         dependencies.currentSuggestionState.invalidatedByUserKeyDown = false
         dependencies.cacheProofOnlyAcceptRecentSuggestion(input, acceptanceSnapshot, presentedAt)
 
