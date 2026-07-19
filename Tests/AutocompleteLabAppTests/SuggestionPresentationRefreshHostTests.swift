@@ -7,6 +7,41 @@ import Testing
 @MainActor
 @Suite("Suggestion presentation refresh host")
 struct SuggestionPresentationRefreshHostTests {
+    @Test("Advances a residual suggestion to the optimistic post-accept caret")
+    func advancesResidualSuggestionCaret() throws {
+        let caretRect = CGRect(x: 40, y: 20, width: 1, height: 18)
+
+        let result = ResidualSuggestionPlacement.advancedCaretRect(
+            from: caretRect,
+            acceptedTextWidth: 32,
+            clippingRect: CGRect(x: 0, y: 0, width: 200, height: 80)
+        )
+
+        #expect(result == CGRect(x: 72, y: 20, width: 1, height: 18))
+    }
+
+    @Test("Refuses an optimistic residual placement that may wrap")
+    func refusesResidualSuggestionCaretBeyondClippingBounds() throws {
+        let result = ResidualSuggestionPlacement.advancedCaretRect(
+            from: CGRect(x: 180, y: 20, width: 1, height: 18),
+            acceptedTextWidth: 24,
+            clippingRect: CGRect(x: 0, y: 0, width: 200, height: 80)
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test("Refuses a residual placement without a measurable advance")
+    func refusesResidualSuggestionCaretWithoutAdvance() throws {
+        let caretRect = CGRect(x: 40, y: 20, width: 1, height: 18)
+
+        #expect(ResidualSuggestionPlacement.advancedCaretRect(
+            from: caretRect,
+            acceptedTextWidth: 0,
+            clippingRect: nil
+        ) == nil)
+    }
+
     @Test("Fails closed when the frontmost application is unavailable")
     func failsClosedWithoutFrontmostApplication() throws {
         let fixtures = Fixtures()

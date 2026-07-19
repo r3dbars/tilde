@@ -5512,6 +5512,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: action.diagnosticName
         )
         refreshAfterNextWordAcceptance(
+            acceptedText: acceptedText,
             residualReason: residualReason,
             emptyReason: emptyReason
         )
@@ -7707,6 +7708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: "obsidian-tab-passthrough-repaired"
         )
         refreshAfterNextWordAcceptance(
+            acceptedText: acceptedText,
             residualReason: "Accepted: repaired Obsidian Tab; showing remainder",
             emptyReason: "accepted-obsidian-tab-passthrough-repaired",
             emptyMetadata: [
@@ -14736,6 +14738,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshAfterNextWordAcceptance(
+        acceptedText: String,
         residualReason: String,
         emptyReason: String,
         emptyMetadata: [String: String] = [:]
@@ -14751,12 +14754,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setSuggestionDecision(residualReason)
         if let currentProfile {
             _ = refreshVisibleSuggestion(
-                placement: nil,
+                placement: optimisticResidualSuggestionPlacement(afterAccepting: acceptedText),
                 fallbackRenderMode: currentProfile.fallbackRenderMode
             )
         } else {
             updateKeyboardEventTapSnapshot()
         }
+    }
+
+    private func optimisticResidualSuggestionPlacement(
+        afterAccepting acceptedText: String
+    ) -> PlacementHealthPresentation? {
+        guard let caretRect = lastCaretRect,
+              let textStyle = lastTextStyle,
+              let renderMode = lastRenderMode,
+              let advancedCaretRect = ResidualSuggestionPlacement.advancedCaretRect(
+                  from: caretRect,
+                  acceptedTextWidth: width(of: acceptedText, font: textStyle.font),
+                  clippingRect: lastClippingRect
+              ) else {
+            return nil
+        }
+
+        return PlacementHealthPresentation(
+            requestedRenderMode: renderMode,
+            renderMode: renderMode,
+            anchorRect: advancedCaretRect,
+            anchorSource: .caret,
+            textLineRect: lastTextLineRect,
+            clippingRect: lastClippingRect,
+            reason: .healthy
+        )
     }
 
     private func armObsidianPostAcceptanceSuppressionIfNeeded() {
