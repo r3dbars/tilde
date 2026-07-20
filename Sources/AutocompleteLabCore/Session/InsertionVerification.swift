@@ -7,11 +7,16 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case duplicateText
     case literalTab
     case selectionChangedUnexpectedly
+    case acceptedAfterContinuedTyping
     case insertedAtWrongLocation
     case changedUnexpectedly
 
     public var isVerified: Bool {
         self == .verified
+    }
+
+    public var shouldSuppressField: Bool {
+        self != .acceptedAfterContinuedTyping
     }
 }
 
@@ -92,6 +97,12 @@ public struct InsertionVerification: Equatable, Sendable {
         if !acceptedText.isEmpty,
            currentTextBeforeCursor.hasSuffix(acceptedText) {
             let insertionPrefix = currentTextBeforeCursor.dropLast(acceptedText.count)
+
+            if insertionPrefix.hasPrefix(previousTextBeforeCursor),
+               insertionPrefix.count > previousTextBeforeCursor.count,
+               !textAfterCursorChanged {
+                return .acceptedAfterContinuedTyping
+            }
 
             if insertionPrefix != previousTextBeforeCursor,
                previousTextBeforeCursor.hasPrefix(insertionPrefix)
