@@ -67,6 +67,23 @@ public struct InsertionVerification: Equatable, Sendable {
             return .duplicateText
         }
 
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor) {
+            if textAfterCursorChanged {
+                return .selectionChangedUnexpectedly
+            }
+            return .verified
+        }
+
+        if !acceptedText.isEmpty,
+           normalizeRichEditorWhitespace(currentTextBeforeCursor)
+               .hasPrefix(normalizeRichEditorWhitespace(expectedTextBeforeCursor)) {
+            if textAfterCursorChanged {
+                return .selectionChangedUnexpectedly
+            }
+            return .verified
+        }
+
         if expectedTextBeforeCursor.hasPrefix(currentTextBeforeCursor),
            currentTextBeforeCursor.count > previousTextBeforeCursor.count {
             return .partial
