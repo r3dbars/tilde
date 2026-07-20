@@ -26,11 +26,11 @@ struct SuggestionPanelFrameCalculatorTests {
             textLineRect: CGRect(x: 80, y: 790, width: 20, height: 20),
             textSize: CGSize(width: 160, height: 20),
             screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
-            verticalAlignmentOffset: 3
+            verticalAlignmentOffset: 7
         )
 
         #expect(frame.minX == 100)
-        #expect(frame.minY == 793)
+        #expect(frame.minY == 797)
         #expect(frame.width == 166)
         #expect(frame.height == 20)
     }
@@ -71,11 +71,11 @@ struct SuggestionPanelFrameCalculatorTests {
             boundaryFrame: CGRect(x: 20, y: 100, width: 800, height: 760),
             textSize: CGSize(width: 160, height: 20),
             screenFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
-            verticalAlignmentOffset: 3
+            verticalAlignmentOffset: 7
         )
 
         #expect(frame.minX == 100)
-        #expect(frame.minY == 793)
+        #expect(frame.minY == 797)
     }
 
     @Test("Keeps ghost text inside the screen")
