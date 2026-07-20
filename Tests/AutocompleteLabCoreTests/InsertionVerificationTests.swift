@@ -22,6 +22,25 @@ struct InsertionVerificationTests {
         ) == .verified)
     }
 
+    @Test("Verifies accepted text when the user keeps typing before the delayed check")
+    func verifiesAcceptedTextWithTrailingUserTyping() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make this feel faster"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make this feel faster",
+            previousTextAfterCursor: " today",
+            currentTextAfterCursor: " today"
+        ) == .verified)
+    }
+
     @Test("Verifies rich editor whitespace equivalents")
     func verifiesRichEditorWhitespaceEquivalents() {
         let verifier = InsertionVerification()
