@@ -4485,8 +4485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentSuggestionState.invalidatedByUserKeyDown = true
         invalidatePendingSuggestionRequest()
-        setSuggestionDecision("Shown: tracking typing")
-        updateKeyboardEventTapSnapshot()
+        hideSuggestion(reason: "optimistic-type-through-mismatch")
     }
 
     private func observeOptimisticTypeThrough(_ transition: KeyboardOptimisticTypeThroughTransition) {

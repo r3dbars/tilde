@@ -64,6 +64,10 @@ struct LiveSuggestionWiringTests {
         try require(suggestionPresentationWiring, contains: "reason: \"survived_typethrough\"")
         try require(suggestionPresentationWiring, contains: "passthroughTypingMatchObserver:")
         try require(suggestionPresentationWiring, contains: "observeOptimisticTypeThrough(transition)")
+        try require(
+            suggestionPresentationWiring,
+            contains: "hideSuggestion(reason: \"optimistic-type-through-mismatch\")"
+        )
         try require(suggestionPresentationWiring, contains: "currentSuggestionState.invalidatedByUserKeyDown = false")
         try require(suggestionPresentationWiring, contains: "validator.validate(")
         try require(suggestionPresentationWiring, contains: "validator.trimmedSuggestion(")
