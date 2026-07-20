@@ -39,6 +39,20 @@ struct InsertionVerificationTests {
             previousTextAfterCursor: " today",
             currentTextAfterCursor: " today"
         ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make this feel faster"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make this feel faster",
+            previousTextAfterCursor: " today",
+            currentTextAfterCursor: " later"
+        ) == .selectionChangedUnexpectedly)
     }
 
     @Test("Verifies rich editor whitespace equivalents")
