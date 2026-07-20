@@ -562,27 +562,56 @@ private final class GhostTextView: NSView {
             .foregroundColor: color,
             .paragraphStyle: paragraphStyle
         ]
-        let textSize = text.size(withAttributes: attributes)
+        let lineLayout = GhostTextLineLayout.resolve(
+            boundsHeight: bounds.height,
+            fontAscender: font.ascender,
+            fontDescender: font.descender,
+            fontLeading: font.leading,
+            minimumTopInset: textInsets.top
+        )
         let point = NSPoint(
             x: textInsets.left,
-            y: max(textInsets.top, (bounds.height - textSize.height) / 2)
+            y: lineLayout.originY
         )
 
-        text.draw(
-            with: NSRect(
-                x: point.x,
-                y: point.y,
-                width: max(1, bounds.width - textInsets.left - textInsets.right),
-                height: textSize.height
-            ),
-            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
-            attributes: attributes
-        )
+        if renderMode == .inlineAdjacent {
+            text.draw(at: point, withAttributes: attributes)
+        } else {
+            text.draw(
+                with: NSRect(
+                    x: point.x,
+                    y: point.y,
+                    width: max(1, bounds.width - textInsets.left - textInsets.right),
+                    height: lineLayout.lineHeight
+                ),
+                options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+                attributes: attributes
+            )
+        }
     }
 
     private var paragraphStyle: NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         return style
+    }
+}
+
+struct GhostTextLineLayout: Equatable {
+    let originY: CGFloat
+    let lineHeight: CGFloat
+
+    static func resolve(
+        boundsHeight: CGFloat,
+        fontAscender: CGFloat,
+        fontDescender: CGFloat,
+        fontLeading: CGFloat,
+        minimumTopInset: CGFloat
+    ) -> Self {
+        let lineHeight = ceil(max(1, fontAscender - fontDescender + fontLeading))
+        return Self(
+            originY: max(minimumTopInset, floor((boundsHeight - lineHeight) / 2)),
+            lineHeight: lineHeight
+        )
     }
 }
