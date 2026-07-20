@@ -80,7 +80,8 @@ extension AppDelegate: InsertionVerificationHandling {
                 "insertionResult": resultDescription
             ]
         )
-        if baseline.profile.suppressesAfterInsertionFailure {
+        if baseline.profile.suppressesAfterInsertionFailure,
+           result.shouldSuppressField {
             suppressField(
                 baseline.fieldIdentity,
                 profile: baseline.profile,

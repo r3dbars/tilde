@@ -111,7 +111,23 @@ struct InsertionVerificationTests {
             previousTextBeforeCursor: "Can we",
             acceptedText: " make",
             currentTextBeforeCursor: "Can we later make"
-        ) == .insertedAtWrongLocation)
+        ) == .acceptedAfterContinuedTyping)
+    }
+
+    @Test("Continued typing races do not suppress future suggestions")
+    func continuedTypingRaceAllowsFieldRecovery() {
+        let verifier = InsertionVerification()
+        let result = verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we later make"
+        )
+
+        #expect(result == .acceptedAfterContinuedTyping)
+        #expect(!result.isVerified)
+        #expect(!result.shouldSuppressField)
+        #expect(InsertionVerificationResult.insertedAtWrongLocation.shouldSuppressField)
+        #expect(InsertionVerificationResult.selectionChangedUnexpectedly.shouldSuppressField)
     }
 
     @Test("Detects unexpected editor mutations")
