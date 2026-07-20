@@ -323,10 +323,15 @@ final class SuggestionAcceptanceHost {
     func handleAutocompleteKey(
         _ key: AutocompleteKey,
         isAutorepeat: Bool = false,
-        didObservePassthroughKeyDown: Bool = false
+        didObservePassthroughKeyDown: Bool = false,
+        didMatchVisibleSuggestion: Bool = false
     ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
-            if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
+            if didMatchVisibleSuggestion {
+                currentSuggestionState.invalidatedByUserKeyDown = false
+                dependencies.setPreservesResidualSuggestionAfterNextWordAccept(false)
+                clearPendingAcceptedInsertionUndo(reason: "typing")
+            } else if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
                 dependencies.setPreservesResidualSuggestionAfterNextWordAccept(false)
             } else {
                 currentSuggestionState.invalidatedByUserKeyDown = true

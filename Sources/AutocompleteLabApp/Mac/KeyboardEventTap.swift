@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 import Foundation
 
 final class KeyboardEventTap: @unchecked Sendable {
-    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> KeyboardEventTapHandlingResult
+    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool, Bool) -> KeyboardEventTapHandlingResult
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
     typealias PassthroughTypingMatchObserver = @MainActor @Sendable (KeyboardOptimisticTypeThroughTransition) -> Void
     typealias DisabledObserver = @MainActor @Sendable (_ reason: String) -> Void
@@ -30,6 +30,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var suppressKeyUntilNanos: [AutocompleteKey: UInt64] = [:]
     private var hasObservedPassthroughKeyDown = false
     private var passthroughObservationSuppressedUntilNanos: UInt64?
+    private var passthroughObservationMatchedVisibleSuggestion = false
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
     private var latencyStats = KeyboardEventTapLatencyStats()
     private var keyDownSuggestionIDs: [AutocompleteKey: String] = [:]
@@ -178,6 +179,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         hasObservedPassthroughKeyDown = false
         passthroughObservationAllowsAutocompleteKey = false
         passthroughObservationSuppressedUntilNanos = nil
+        passthroughObservationMatchedVisibleSuggestion = false
         passthroughLock.unlock()
     }
 
@@ -195,6 +197,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         )
         hasObservedPassthroughKeyDown = false
         passthroughObservationAllowsAutocompleteKey = false
+        passthroughObservationMatchedVisibleSuggestion = false
         passthroughLock.unlock()
     }
 
@@ -307,6 +310,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 event: event,
                 keyCode: keyCode
             ) {
+                markPassthroughMatchedVisibleSuggestion(!transition.remainingText.isEmpty)
                 if let passthroughTypingMatchObserver {
                     Task { @MainActor in
                         passthroughTypingMatchObserver(transition)
@@ -320,6 +324,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                     startedAt: startedAt
                 )
             }
+            markPassthroughMatchedVisibleSuggestion(false)
             markSnapshotInvalidatedByTyping()
             if let passthroughKeyDownObserver {
                 Task { @MainActor in
@@ -368,7 +373,12 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         Task { @MainActor in
-            let result = handler(key, isAutorepeat, passthroughObservation.observed)
+            let result = handler(
+                key,
+                isAutorepeat,
+                passthroughObservation.observed,
+                passthroughObservation.matchedVisibleSuggestion
+            )
             switch result {
             case .handled:
                 break
@@ -583,6 +593,12 @@ final class KeyboardEventTap: @unchecked Sendable {
         passthroughLock.unlock()
     }
 
+    private func markPassthroughMatchedVisibleSuggestion(_ matched: Bool) {
+        passthroughLock.lock()
+        passthroughObservationMatchedVisibleSuggestion = matched
+        passthroughLock.unlock()
+    }
+
     private func shouldSuppressPassthroughObservation(nowNanos: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
         passthroughLock.lock()
         defer { passthroughLock.unlock() }
@@ -601,15 +617,18 @@ final class KeyboardEventTap: @unchecked Sendable {
 
     private func consumePassthroughObservation() -> (
         observed: Bool,
-        allowsAutocompleteKey: Bool
+        allowsAutocompleteKey: Bool,
+        matchedVisibleSuggestion: Bool
     ) {
         passthroughLock.lock()
         let value = (
             observed: hasObservedPassthroughKeyDown,
-            allowsAutocompleteKey: passthroughObservationAllowsAutocompleteKey
+            allowsAutocompleteKey: passthroughObservationAllowsAutocompleteKey,
+            matchedVisibleSuggestion: passthroughObservationMatchedVisibleSuggestion
         )
         hasObservedPassthroughKeyDown = false
         passthroughObservationAllowsAutocompleteKey = false
+        passthroughObservationMatchedVisibleSuggestion = false
         passthroughLock.unlock()
         return value
     }

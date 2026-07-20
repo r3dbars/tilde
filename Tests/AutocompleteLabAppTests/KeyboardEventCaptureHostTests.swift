@@ -62,7 +62,7 @@ struct KeyboardEventCaptureHostTests {
 
     private func makeHost() -> KeyboardEventCaptureHost {
         KeyboardEventCaptureHost(
-            handler: { _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
+            handler: { _, _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
             passthroughKeyDownObserver: {},
             passthroughTypingMatchObserver: { _ in },
             disabledObserver: { _ in },
