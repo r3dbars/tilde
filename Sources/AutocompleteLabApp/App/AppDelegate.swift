@@ -332,11 +332,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private lazy var keyboardEventCaptureHost = KeyboardEventCaptureHost(
-        handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown in
+        handler: { [weak self] key, isAutorepeat, didObservePassthroughKeyDown, didMatchVisibleSuggestion in
             self?.handleAutocompleteKey(
                 key,
                 isAutorepeat: isAutorepeat,
-                didObservePassthroughKeyDown: didObservePassthroughKeyDown
+                didObservePassthroughKeyDown: didObservePassthroughKeyDown,
+                didMatchVisibleSuggestion: didMatchVisibleSuggestion
             ) ?? .replayOriginalKey(.noVisibleSuggestion)
         },
         passthroughKeyDownObserver: { [weak self] in
@@ -4621,12 +4622,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleAutocompleteKey(
         _ key: AutocompleteKey,
         isAutorepeat: Bool = false,
-        didObservePassthroughKeyDown: Bool = false
+        didObservePassthroughKeyDown: Bool = false,
+        didMatchVisibleSuggestion: Bool = false
     ) -> KeyboardEventTapHandlingResult {
         suggestionAcceptanceHost.handleAutocompleteKey(
             key,
             isAutorepeat: isAutorepeat,
-            didObservePassthroughKeyDown: didObservePassthroughKeyDown
+            didObservePassthroughKeyDown: didObservePassthroughKeyDown,
+            didMatchVisibleSuggestion: didMatchVisibleSuggestion
         )
     }
     private func acceptedTextForCurrentAcceptance(

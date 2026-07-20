@@ -219,7 +219,7 @@ struct KeyboardEventTapKeyCodeTests {
     func matchingKeydownBurstUsesOptimisticObserver() async throws {
         let observations = EventTapObserverState()
         let eventTap = KeyboardEventTap(
-            handler: { _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
+            handler: { _, _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
             passthroughKeyDownObserver: {
                 observations.recordInvalidation()
             },
@@ -254,11 +254,102 @@ struct KeyboardEventTapKeyCodeTests {
         #expect(observations.lastRemainingText == "iculty")
     }
 
+    @Test("Tab remains eligible immediately after matching type-through")
+    func tabRemainsEligibleAfterMatchingTypeThrough() async throws {
+        let observations = EventTapObserverState()
+        let eventTap = KeyboardEventTap(
+            handler: { key, _, didObservePassthrough, didMatchVisibleSuggestion in
+                observations.recordHandler(
+                    key: key,
+                    didObservePassthrough: didObservePassthrough,
+                    didMatchVisibleSuggestion: didMatchVisibleSuggestion
+                )
+                return .handled
+            }
+        )
+        eventTap.updateSnapshot(KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            visibleSuggestionID: "suggestion",
+            visibleSuggestionRemainingText: "difficulty"
+        ))
+
+        let matchingKey = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 2,
+            keyDown: true
+        ))
+        var utf16 = Array("d".utf16)
+        matchingKey.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+        _ = eventTap.handle(type: .keyDown, event: matchingKey)
+
+        let tab = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 48,
+            keyDown: true
+        ))
+        let tabResult = eventTap.handle(type: .keyDown, event: tab)
+        try await waitForEventTapObservation {
+            observations.handlerCount == 1
+        }
+
+        #expect(tabResult == nil)
+        #expect(observations.lastHandledKey == .tab)
+        #expect(observations.lastHandlerObservedPassthrough)
+        #expect(observations.lastHandlerMatchedVisibleSuggestion)
+    }
+
+    @Test("Mismatching type-through keeps Tab fail closed")
+    func mismatchingTypeThroughKeepsTabFailClosed() async throws {
+        let observations = EventTapObserverState()
+        let eventTap = KeyboardEventTap(
+            handler: { key, _, didObservePassthrough, didMatchVisibleSuggestion in
+                observations.recordHandler(
+                    key: key,
+                    didObservePassthrough: didObservePassthrough,
+                    didMatchVisibleSuggestion: didMatchVisibleSuggestion
+                )
+                return .handled
+            },
+            passthroughKeyDownObserver: {
+                observations.recordInvalidation()
+            }
+        )
+        eventTap.updateSnapshot(KeyboardEventTapSnapshot(
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            visibleSuggestionID: "suggestion",
+            visibleSuggestionRemainingText: "difficulty"
+        ))
+
+        let mismatchingKey = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 7,
+            keyDown: true
+        ))
+        var utf16 = Array("x".utf16)
+        mismatchingKey.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+        _ = eventTap.handle(type: .keyDown, event: mismatchingKey)
+
+        let tab = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 48,
+            keyDown: true
+        ))
+        let tabResult = eventTap.handle(type: .keyDown, event: tab)
+        try await waitForEventTapObservation {
+            observations.invalidationCount > 0
+        }
+
+        #expect(tabResult != nil)
+        #expect(observations.handlerCount == 0)
+    }
+
     @Test("Input-method snapshot disables optimistic matching")
     func inputMethodSnapshotDisablesOptimisticMatching() async throws {
         let observations = EventTapObserverState()
         let eventTap = KeyboardEventTap(
-            handler: { _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
+            handler: { _, _, _, _ in .replayOriginalKey(.noVisibleSuggestion) },
             passthroughKeyDownObserver: { observations.recordInvalidation() },
             passthroughTypingMatchObserver: { transition in
                 observations.recordMatch(remainingText: transition.remainingText)
@@ -304,10 +395,17 @@ private final class EventTapObserverState: @unchecked Sendable {
     private var matches = 0
     private var invalidations = 0
     private var remainingText: String?
+    private var handledKeys: [AutocompleteKey] = []
+    private var handlerObservedPassthrough = false
+    private var handlerMatchedVisibleSuggestion = false
 
     var matchCount: Int { withLock { matches } }
     var invalidationCount: Int { withLock { invalidations } }
     var lastRemainingText: String? { withLock { remainingText } }
+    var handlerCount: Int { withLock { handledKeys.count } }
+    var lastHandledKey: AutocompleteKey? { withLock { handledKeys.last } }
+    var lastHandlerObservedPassthrough: Bool { withLock { handlerObservedPassthrough } }
+    var lastHandlerMatchedVisibleSuggestion: Bool { withLock { handlerMatchedVisibleSuggestion } }
 
     func recordMatch(remainingText: String) {
         lock.lock()
@@ -319,6 +417,18 @@ private final class EventTapObserverState: @unchecked Sendable {
     func recordInvalidation() {
         lock.lock()
         invalidations += 1
+        lock.unlock()
+    }
+
+    func recordHandler(
+        key: AutocompleteKey,
+        didObservePassthrough: Bool,
+        didMatchVisibleSuggestion: Bool
+    ) {
+        lock.lock()
+        handledKeys.append(key)
+        handlerObservedPassthrough = didObservePassthrough
+        handlerMatchedVisibleSuggestion = didMatchVisibleSuggestion
         lock.unlock()
     }
 
