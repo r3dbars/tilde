@@ -7,11 +7,16 @@ public enum InsertionVerificationResult: Equatable, Sendable {
     case duplicateText
     case literalTab
     case selectionChangedUnexpectedly
+    case acceptedAfterContinuedTyping
     case insertedAtWrongLocation
     case changedUnexpectedly
 
     public var isVerified: Bool {
         self == .verified
+    }
+
+    public var shouldSuppressField: Bool {
+        self != .acceptedAfterContinuedTyping
     }
 }
 
@@ -67,6 +72,23 @@ public struct InsertionVerification: Equatable, Sendable {
             return .duplicateText
         }
 
+        if !acceptedText.isEmpty,
+           currentTextBeforeCursor.hasPrefix(expectedTextBeforeCursor) {
+            if textAfterCursorChanged {
+                return .selectionChangedUnexpectedly
+            }
+            return .verified
+        }
+
+        if !acceptedText.isEmpty,
+           normalizeRichEditorWhitespace(currentTextBeforeCursor)
+               .hasPrefix(normalizeRichEditorWhitespace(expectedTextBeforeCursor)) {
+            if textAfterCursorChanged {
+                return .selectionChangedUnexpectedly
+            }
+            return .verified
+        }
+
         if expectedTextBeforeCursor.hasPrefix(currentTextBeforeCursor),
            currentTextBeforeCursor.count > previousTextBeforeCursor.count {
             return .partial
@@ -75,6 +97,12 @@ public struct InsertionVerification: Equatable, Sendable {
         if !acceptedText.isEmpty,
            currentTextBeforeCursor.hasSuffix(acceptedText) {
             let insertionPrefix = currentTextBeforeCursor.dropLast(acceptedText.count)
+
+            if insertionPrefix.hasPrefix(previousTextBeforeCursor),
+               insertionPrefix.count > previousTextBeforeCursor.count,
+               !textAfterCursorChanged {
+                return .acceptedAfterContinuedTyping
+            }
 
             if insertionPrefix != previousTextBeforeCursor,
                previousTextBeforeCursor.hasPrefix(insertionPrefix)

@@ -22,6 +22,39 @@ struct InsertionVerificationTests {
         ) == .verified)
     }
 
+    @Test("Verifies accepted text when the user keeps typing before the delayed check")
+    func verifiesAcceptedTextWithTrailingUserTyping() {
+        let verifier = InsertionVerification()
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make this feel faster"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make this feel faster",
+            previousTextAfterCursor: " today",
+            currentTextAfterCursor: " today"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we\u{00A0}make this feel faster"
+        ) == .verified)
+
+        #expect(verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we make this feel faster",
+            previousTextAfterCursor: " today",
+            currentTextAfterCursor: " later"
+        ) == .selectionChangedUnexpectedly)
+    }
+
     @Test("Verifies rich editor whitespace equivalents")
     func verifiesRichEditorWhitespaceEquivalents() {
         let verifier = InsertionVerification()
@@ -78,7 +111,23 @@ struct InsertionVerificationTests {
             previousTextBeforeCursor: "Can we",
             acceptedText: " make",
             currentTextBeforeCursor: "Can we later make"
-        ) == .insertedAtWrongLocation)
+        ) == .acceptedAfterContinuedTyping)
+    }
+
+    @Test("Continued typing races do not suppress future suggestions")
+    func continuedTypingRaceAllowsFieldRecovery() {
+        let verifier = InsertionVerification()
+        let result = verifier.verify(
+            previousTextBeforeCursor: "Can we",
+            acceptedText: " make",
+            currentTextBeforeCursor: "Can we later make"
+        )
+
+        #expect(result == .acceptedAfterContinuedTyping)
+        #expect(!result.isVerified)
+        #expect(!result.shouldSuppressField)
+        #expect(InsertionVerificationResult.insertedAtWrongLocation.shouldSuppressField)
+        #expect(InsertionVerificationResult.selectionChangedUnexpectedly.shouldSuppressField)
     }
 
     @Test("Detects unexpected editor mutations")
