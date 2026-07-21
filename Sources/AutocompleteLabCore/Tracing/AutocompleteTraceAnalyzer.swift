@@ -523,11 +523,13 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let accepted = events.filter { $0.type == .suggestionAccepted }
         let presentedIDs = Set(firstPresentedByID.keys)
         let acceptedIDs = Set(accepted.map(\.suggestionID)).intersection(presentedIDs)
+        let typedOver = events.filter { $0.type == .suggestionTypedOver }
+        let typedOverIDs = Set(typedOver.map(\.suggestionID)).intersection(presentedIDs)
         let completedTypeThroughIDs = Set(events
             .filter { $0.type == .suggestionHidden && $0.outcome == "typed-through" }
             .map(\.suggestionID))
             .intersection(presentedIDs)
-        let typedThroughCharactersByID = maximumTypedThroughCharactersByID(
+        let typedThroughCharactersByID = typedThroughCharactersByID(
             events.filter { $0.type == .suggestionTypedThrough }
         )
         let typedThroughIDs = Set(typedThroughCharactersByID
@@ -535,8 +537,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .map(\.key))
             .union(completedTypeThroughIDs)
             .intersection(presentedIDs)
+            .subtracting(typedOverIDs)
         let usefulIDs = acceptedIDs.union(typedThroughIDs)
-        let typedOver = events.filter { $0.type == .suggestionTypedOver }
         let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let suppressed = events.filter { $0.type == .suggestionSuppressed }
         let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
@@ -590,7 +592,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             acceptedCount: accepted.count,
             typedThroughCount: typedThroughIDs.count,
             typedThroughCharacterCount: typedThroughCharactersByID
-                .filter { presentedIDs.contains($0.key) }
+                .filter { presentedIDs.contains($0.key) && !typedOverIDs.contains($0.key) }
                 .values
                 .reduce(0, +),
             typeThroughSurvivalRate: firstPresentedByID.isEmpty
@@ -831,7 +833,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         }
     }
 
-    private func maximumTypedThroughCharactersByID(
+    private func typedThroughCharactersByID(
         _ events: [AutocompleteTraceEvent]
     ) -> [String: Int] {
         events.reduce(into: [:]) { result, event in
@@ -839,7 +841,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                   let count = event.intMetadata("typedThroughChars") else {
                 return
             }
-            result[event.suggestionID] = max(result[event.suggestionID] ?? 0, count)
+            result[event.suggestionID, default: 0] += max(0, count)
         }
     }
 

@@ -62,13 +62,23 @@ struct AutocompleteTraceAnalyzerTests {
             event(
                 .suggestionTypedThrough,
                 suggestionID: "meaningful",
-                metadata: ["typedThroughChars": "5"]
+                metadata: ["typedThroughChars": "4"]
             ),
             event(.suggestionPresented, suggestionID: "brief"),
             event(
                 .suggestionTypedThrough,
                 suggestionID: "brief",
                 metadata: ["typedThroughChars": "2"]
+            ),
+            event(.suggestionPresented, suggestionID: "diverged"),
+            event(
+                .suggestionTypedThrough,
+                suggestionID: "diverged",
+                metadata: ["typedThroughChars": "4"]
+            ),
+            event(
+                .suggestionTypedOver,
+                suggestionID: "diverged"
             )
         ]
 
@@ -76,8 +86,9 @@ struct AutocompleteTraceAnalyzerTests {
 
         #expect(summary.typedThroughCount == 1)
         #expect(summary.typedThroughCharacterCount == 7)
-        #expect(summary.typeThroughSurvivalRate == 0.5)
-        #expect(summary.usefulRate == 0.5)
+        #expect(summary.typeThroughSurvivalRate == 1.0 / 3.0)
+        #expect(summary.usefulRate == 1.0 / 3.0)
+        #expect(summary.typedOverCount == 1)
     }
 
     @Test("counts wrong-app acceptance blocks as do-not-ship blockers")

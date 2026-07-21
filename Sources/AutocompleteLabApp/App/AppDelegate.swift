@@ -4495,10 +4495,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        recordTypeThroughProgress(
-            typedCharacterCount: transition.typedPrefix.count,
-            remainingVisibleCharacterCount: transition.remainingText.count
-        )
+        if case .matched = transition {
+            recordTypeThroughProgress(matchedCharacterCount: 1)
+        }
 
         if transition.remainingText.isEmpty {
             currentSuggestionState.invalidatedByUserKeyDown = false
@@ -6501,17 +6500,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return metadata
     }
 
-    private func recordTypeThroughProgress(
-        typedCharacterCount: Int,
-        remainingVisibleCharacterCount: Int
-    ) {
+    private func recordTypeThroughProgress(matchedCharacterCount: Int) {
         guard let suggestionID = currentSuggestionState.id else {
             return
         }
 
         let metadata = [
-            "typedThroughChars": String(max(0, typedCharacterCount)),
-            "remainingVisibleChars": String(max(0, remainingVisibleCharacterCount))
+            "typedThroughChars": String(max(0, matchedCharacterCount))
         ]
         .merging(currentSuggestionLifetimeMetadata()) { current, _ in current }
 
@@ -15007,10 +15002,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let survivalMetadata = survival.traceMetadata
                 .merging(learningMetadata) { current, _ in current }
-            recordTypeThroughProgress(
-                typedCharacterCount: survival.typedCharacterCount,
-                remainingVisibleCharacterCount: survival.remainingVisibleCharacterCount
-            )
+            if currentSuggestionState.optimisticTypedPrefix.isEmpty {
+                recordTypeThroughProgress(matchedCharacterCount: survival.typedCharacterCount)
+            }
             lastTextSnapshot = snapshot
             currentSuggestionState.textBeforeCursor = context.textBeforeCursor
             currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText
