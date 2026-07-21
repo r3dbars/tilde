@@ -278,7 +278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionAnnoyanceBackoffPolicy: makeSuggestionAnnoyanceBackoffPolicy()
     )
     private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()
-    private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionTuning.displayScorePolicy
     }
@@ -2682,11 +2681,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if idleRetryReason == nil {
-            recordTypedOverSuggestionIfNeeded(
-                newTextBeforeCursor: context.textBeforeCursor,
-                fieldIdentity: fieldIdentity,
-                profile: profile
-            )
             rememberTypedWordsIfNeeded(
                 previousSnapshot: previousSnapshot,
                 currentSnapshot: snapshot,
@@ -14975,58 +14969,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recentWordMemory.remember(words, scope: appBundleIdentifier)
     }
 
-    private func recordTypedOverSuggestionIfNeeded(
-        newTextBeforeCursor: String,
-        fieldIdentity: FocusedFieldIdentity,
-        profile: CompatibilityProfile
-    ) {
-        guard suggestionSession.hasVisibleSuggestion,
-              let suggestionID = currentSuggestionState.id,
-              let originalTextBeforeCursor = currentSuggestionState.textBeforeCursor,
-              let displayedText = currentSuggestionState.displayedText,
-              fieldIdentity == currentFieldIdentity,
-              newTextBeforeCursor.hasPrefix(originalTextBeforeCursor),
-              newTextBeforeCursor != originalTextBeforeCursor else {
-            return
-        }
-
-        let progress = suggestionTypingProgressPolicy.progress(
-            originalTextBeforeCursor: originalTextBeforeCursor,
-            displayedText: displayedText,
-            newTextBeforeCursor: newTextBeforeCursor
-        )
-
-        guard case let .typedOver(typedSuffix) = progress,
-              !shouldPreserveVisibleSuggestionWhileTyping(displayedText: displayedText) else {
-            return
-        }
-
-        let metadata = [
-            "typedSuffixChars": String(typedSuffix.count)
-        ]
-        .merging(currentSuggestionLifetimeMetadata()) { current, _ in current }
-
-        RawAutocompleteTraceLog.shared.record(
-            type: .suggestionTypedOver,
-            suggestionID: suggestionID,
-            appBundleIdentifier: profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity.traceDescription,
-            requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
-            textBeforeCursor: originalTextBeforeCursor,
-            displayedText: displayedText,
-            outcome: "typed-over",
-            reason: "typed-against-visible-suggestion",
-            metadata: metadata
-        )
-        recordPersonalCaptureSuggestionEpisodeAction(
-            suggestionID: suggestionID,
-            appBundleIdentifier: profile.bundleIdentifier,
-            outcome: .typedPast,
-            reason: "typed-against-visible-suggestion",
-            metadata: metadata
-        )
-    }
-
     private func advanceVisibleSuggestionForTypingProgressIfNeeded(
         context: FocusedTextContext,
         profile: CompatibilityProfile,
@@ -15117,6 +15059,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 updateKeyboardEventTapSnapshot()
                 return false
+            }
+
+            if let suggestionID = currentSuggestionState.id {
+                let metadata = [
+                    "typedSuffixChars": String(
+                        context.textBeforeCursor.dropFirst(originalTextBeforeCursor.count).count
+                    )
+                ]
+                .merging(currentSuggestionLifetimeMetadata()) { current, _ in current }
+
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionTypedOver,
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: profile.bundleIdentifier,
+                    fieldIdentity: fieldIdentity.traceDescription,
+                    requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
+                    textBeforeCursor: originalTextBeforeCursor,
+                    displayedText: displayedText,
+                    outcome: "typed-over",
+                    reason: "typed-against-visible-suggestion",
+                    metadata: metadata
+                )
+                recordPersonalCaptureSuggestionEpisodeAction(
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: profile.bundleIdentifier,
+                    outcome: .typedPast,
+                    reason: "typed-against-visible-suggestion",
+                    metadata: metadata
+                )
             }
 
             suggestionOrchestrator.recordRepetitionMiss(
