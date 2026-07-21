@@ -94,8 +94,8 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
 
     /// Decision-oriented per-app health rollup derived from the same summary. Surfaced in the
     /// report so a beta reviewer sees "is it good, and where is it not" alongside coverage.
-    public var betaAcceptanceScorecard: BetaAcceptanceScorecard {
-        BetaAcceptanceScorecard(summary: summary)
+    public var typingYieldScorecard: TypingYieldScorecard {
+        TypingYieldScorecard(summary: summary)
     }
 
     public var markdown: String {
@@ -141,7 +141,7 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         }
 
         lines.append("")
-        lines.append(betaAcceptanceScorecard.markdown)
+        lines.append(typingYieldScorecard.markdown)
 
         return lines.joined(separator: "\n")
     }
@@ -501,7 +501,8 @@ public struct AutocompleteTraceReplay: Sendable {
                     .acceptedTextEdited,
                     .caretGeometryFailed:
                 return true
-            case .suggestionTypedOver,
+            case .suggestionTypedThrough,
+                    .suggestionTypedOver,
                     .acceptanceRetentionCleared,
                     .appPaused,
                     .fieldPaused,

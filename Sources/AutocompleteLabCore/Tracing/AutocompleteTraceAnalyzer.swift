@@ -208,6 +208,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let presentedCount: Int
     public let acceptedCount: Int
     public let typedThroughCount: Int
+    public let typedThroughCharacterCount: Int
     public let typeThroughSurvivalRate: Double
     public let typedOverCount: Int
     public let ignoredCount: Int
@@ -308,6 +309,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         presentedCount: Int,
         acceptedCount: Int,
         typedThroughCount: Int,
+        typedThroughCharacterCount: Int = 0,
         typeThroughSurvivalRate: Double = 0,
         typedOverCount: Int,
         ignoredCount: Int,
@@ -407,6 +409,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.presentedCount = presentedCount
         self.acceptedCount = acceptedCount
         self.typedThroughCount = typedThroughCount
+        self.typedThroughCharacterCount = typedThroughCharacterCount
         self.typeThroughSurvivalRate = typeThroughSurvivalRate
         self.typedOverCount = typedOverCount
         self.ignoredCount = ignoredCount
@@ -520,9 +523,17 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let accepted = events.filter { $0.type == .suggestionAccepted }
         let presentedIDs = Set(firstPresentedByID.keys)
         let acceptedIDs = Set(accepted.map(\.suggestionID)).intersection(presentedIDs)
-        let typedThroughIDs = Set(events
+        let completedTypeThroughIDs = Set(events
             .filter { $0.type == .suggestionHidden && $0.outcome == "typed-through" }
             .map(\.suggestionID))
+            .intersection(presentedIDs)
+        let typedThroughCharactersByID = maximumTypedThroughCharactersByID(
+            events.filter { $0.type == .suggestionTypedThrough }
+        )
+        let typedThroughIDs = Set(typedThroughCharactersByID
+            .filter { $0.value >= TypeThroughPrefixSurvival.confidenceCreditCharacterThreshold }
+            .map(\.key))
+            .union(completedTypeThroughIDs)
             .intersection(presentedIDs)
         let usefulIDs = acceptedIDs.union(typedThroughIDs)
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
@@ -578,6 +589,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             presentedCount: firstPresentedByID.count,
             acceptedCount: accepted.count,
             typedThroughCount: typedThroughIDs.count,
+            typedThroughCharacterCount: typedThroughCharactersByID
+                .filter { presentedIDs.contains($0.key) }
+                .values
+                .reduce(0, +),
             typeThroughSurvivalRate: firstPresentedByID.isEmpty
                 ? 0
                 : Double(typedThroughIDs.count) / Double(firstPresentedByID.count),
@@ -813,6 +828,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     private func countsByReason(_ events: [AutocompleteTraceEvent]) -> [String: Int] {
         counts(events) { event in
             event.reason.isEmpty ? "unknown" : event.reason
+        }
+    }
+
+    private func maximumTypedThroughCharactersByID(
+        _ events: [AutocompleteTraceEvent]
+    ) -> [String: Int] {
+        events.reduce(into: [:]) { result, event in
+            guard !event.suggestionID.isEmpty,
+                  let count = event.intMetadata("typedThroughChars") else {
+                return
+            }
+            result[event.suggestionID] = max(result[event.suggestionID] ?? 0, count)
         }
     }
 

@@ -6,6 +6,7 @@ public enum AutocompleteTraceEventType: String, Codable, Equatable, Sendable {
     case suggestionPresented
     case suggestionHidden
     case suggestionAccepted
+    case suggestionTypedThrough
     case suggestionTypedOver
     case suggestionSuppressed
     case insertionVerified
