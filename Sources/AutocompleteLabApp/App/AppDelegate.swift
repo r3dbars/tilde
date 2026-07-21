@@ -16052,9 +16052,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
-            personalCaptureScorecard: appSettings.personalCaptureEnabled
-                ? personalCaptureHost.currentScorecard()
-                : nil,
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
             tracingPaused: RawAutocompleteTraceLog.shared.isPaused,

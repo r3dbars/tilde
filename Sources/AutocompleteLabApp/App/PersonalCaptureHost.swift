@@ -39,10 +39,6 @@ final class PersonalCaptureHost {
         lastSnapshot = nil
     }
 
-    func currentScorecard() -> SuggestionEpisodeScorecard {
-        episodes.currentScorecard()
-    }
-
     func deleteAll() {
         resetSnapshot()
         journal.deleteAll()

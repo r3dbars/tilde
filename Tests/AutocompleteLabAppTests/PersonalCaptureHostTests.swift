@@ -18,11 +18,10 @@ struct PersonalCaptureHostTests {
         #expect(host.episodeOutcome(hiddenOutcome: "ignored", reason: "") == .ignored)
     }
 
-    @Test("Disabled capture host exposes an empty local scorecard")
+    @Test("Disabled capture host does not write local data")
     func disabledHostHasNoCapturedEpisodes() {
         let host = makeHost(enabled: false)
 
-        #expect(host.currentScorecard().total == 0)
         host.recordSnapshot(
             context: makeContext(isSecure: false),
             app: makeApp(),

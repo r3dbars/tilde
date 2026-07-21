@@ -102,7 +102,6 @@ struct PersonalCaptureEpisodeStoreTests {
         let dashboard = try String(contentsOf: fixture.dashboardFileURL, encoding: .utf8)
         #expect(dashboard.contains("Episodes: 2"))
         #expect(dashboard.contains("Shown: 2"))
-        #expect(restartedStore.currentScorecard().total == 2)
     }
 
     @Test("Delete all removes local episode files")

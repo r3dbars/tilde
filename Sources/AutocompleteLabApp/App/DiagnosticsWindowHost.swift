@@ -15,7 +15,6 @@ struct DiagnosticsWindowPresentation {
     let modelDirectoryPath: String
     let recentEvents: [String]
     let traceSummary: AutocompleteTraceSummary
-    let personalCaptureScorecard: SuggestionEpisodeScorecard?
     let recentTraceEvents: [AutocompleteTraceEvent]
     let tracePath: String
     let tracingPaused: Bool
@@ -63,7 +62,6 @@ final class DiagnosticsWindowHost {
             modelDirectoryPath: presentation.modelDirectoryPath,
             recentEvents: presentation.recentEvents,
             traceSummary: presentation.traceSummary,
-            personalCaptureScorecard: presentation.personalCaptureScorecard,
             recentTraceEvents: presentation.recentTraceEvents,
             tracePath: presentation.tracePath,
             tracingPaused: presentation.tracingPaused,

@@ -104,12 +104,6 @@ final class PersonalCaptureEpisodeStore: @unchecked Sendable {
         }
     }
 
-    func currentScorecard() -> SuggestionEpisodeScorecard {
-        queue.sync {
-            scorecard(for: now())
-        }
-    }
-
     func deleteAll() {
         queue.sync {
             records.removeAll()
