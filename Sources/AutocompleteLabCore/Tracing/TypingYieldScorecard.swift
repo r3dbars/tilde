@@ -1,23 +1,26 @@
 import Foundation
 
-/// A compact, decision-oriented rollup of the rich `AutocompleteTraceSummary` into the few
-/// numbers a human reviewing a beta actually acts on: for each app, how often suggestions
-/// were shown, how often they were accepted, and — the north star — how often they were
-/// accepted *and kept*. Each app gets a one-word health verdict so a reviewer can tell where
-/// to look without reading the full analyzer dump.
+/// The small, privacy-safe answer to "does SteadyType help?" It keeps speed, yield,
+/// stability, placement, and safety separate so one good number cannot hide a bad experience.
 ///
 /// This type performs no I/O and stores no raw text; it consumes an already privacy-filtered
 /// `AutocompleteTraceSummary`. It is the "turn data into a decision" layer on top of
 /// `AutocompleteTraceAnalyzer`: the analyzer answers "what happened", this answers "is it good,
 /// and where is it not".
-public struct BetaAcceptanceScorecard: Equatable, Sendable {
+public struct TypingYieldScorecard: Equatable, Sendable {
     /// Per-app and overall health, in priority order of what a reviewer should fix first.
     public enum Verdict: String, Equatable, Sendable, CaseIterable {
         /// Not enough shown suggestions to judge.
         case insufficientData = "insufficient-data"
+        /// A wrong-field insert, duplicate, or other hard trust failure occurred.
+        case unsafe
+        /// The caret or panel geometry is unreliable.
+        case misplaced
+        /// Suggestions were stale or belonged to the wrong context.
+        case unstable
         /// Cold first-visible latency is over budget; feel is broken regardless of quality.
         case slow
-        /// Shown often but rarely accepted — interrupts without a payoff.
+        /// Shown often but rarely accepted or typed through — interrupts without a payoff.
         case noisy
         /// Accepted but frequently deleted right after — the completion was wrong/unwanted.
         case lowQuality = "low-quality"
@@ -27,8 +30,11 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
         public var headline: String {
             switch self {
             case .insufficientData: "Not enough data yet"
+            case .unsafe: "A hard trust failure occurred"
+            case .misplaced: "Ghost placement is unreliable"
+            case .unstable: "Suggestions are stale or unstable"
             case .slow: "Too slow to feel good"
-            case .noisy: "Shown a lot, accepted little"
+            case .noisy: "Shown a lot, helped little"
             case .lowQuality: "Accepted then deleted"
             case .healthy: "Healthy"
             }
@@ -38,31 +44,37 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
     public struct Thresholds: Equatable, Sendable {
         /// Minimum shown suggestions before an app (or the whole set) is judged.
         public let minimumSample: Int
-        /// Accept rate (accepted / shown) below this reads as noisy.
-        public let noisyAcceptRate: Double
+        /// Useful rate (accepted or typed through / shown) below this reads as noisy.
+        public let noisyUsefulRate: Double
         /// Fraction of accepted suggestions that must survive ("kept given accepted").
         /// Below this reads as low quality (accept-then-delete).
         public let keptGivenAcceptedFloor: Double
         /// p95 first-visible latency ceiling. Above this the overall verdict is `slow`.
         public let firstVisibleBudgetMilliseconds: Int
+        public let caretGeometryFailureRateCeiling: Double
+        public let staleOrWrongContextRateCeiling: Double
 
         public init(
             minimumSample: Int,
-            noisyAcceptRate: Double,
+            noisyUsefulRate: Double,
             keptGivenAcceptedFloor: Double,
-            firstVisibleBudgetMilliseconds: Int
+            firstVisibleBudgetMilliseconds: Int,
+            caretGeometryFailureRateCeiling: Double = 0.02,
+            staleOrWrongContextRateCeiling: Double = 0.01
         ) {
             self.minimumSample = max(1, minimumSample)
-            self.noisyAcceptRate = noisyAcceptRate
+            self.noisyUsefulRate = noisyUsefulRate
             self.keptGivenAcceptedFloor = keptGivenAcceptedFloor
             self.firstVisibleBudgetMilliseconds = max(1, firstVisibleBudgetMilliseconds)
+            self.caretGeometryFailureRateCeiling = max(0, caretGeometryFailureRateCeiling)
+            self.staleOrWrongContextRateCeiling = max(0, staleOrWrongContextRateCeiling)
         }
 
         /// Defaults tuned for a private beta. `firstVisibleBudgetMilliseconds` mirrors the
         /// cold first-visible model budget locked in `SuggestionRequestSchedulingPolicy`.
         public static let beta = Thresholds(
             minimumSample: 20,
-            noisyAcceptRate: 0.10,
+            noisyUsefulRate: 0.10,
             keptGivenAcceptedFloor: 0.50,
             firstVisibleBudgetMilliseconds: 450
         )
@@ -118,6 +130,14 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
     public let totalShown: Int
     public let overallAcceptRate: Double
     public let overallAcceptedAndKeptRate: Double
+    public let overallUsefulRate: Double
+    public let typeThroughRate: Double
+    public let matchedTypedCharacterCount: Int
+    public let typedOverRate: Double
+    public let dismissalRate: Double
+    public let staleOrWrongContextRate: Double
+    public let caretGeometryFailureRate: Double
+    public let doNotShipCount: Int
     public let p50LatencyMilliseconds: Int?
     public let p95LatencyMilliseconds: Int?
     public let rows: [AppRow]
@@ -138,6 +158,14 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
         self.totalShown = summary.presentedCount
         self.overallAcceptRate = summary.acceptRate
         self.overallAcceptedAndKeptRate = summary.acceptedAndKeptRateShown
+        self.overallUsefulRate = summary.usefulRate
+        self.typeThroughRate = summary.typeThroughSurvivalRate
+        self.matchedTypedCharacterCount = summary.typedThroughCharacterCount
+        self.typedOverRate = summary.typedOverRate
+        self.dismissalRate = summary.explicitDismissalsPerShown
+        self.staleOrWrongContextRate = summary.staleOrWrongContextRate
+        self.caretGeometryFailureRate = summary.caretGeometryFailureRate
+        self.doNotShipCount = summary.doNotShipCounters.values.reduce(0, +)
         self.p50LatencyMilliseconds = summary.p50LatencyMilliseconds
         self.p95LatencyMilliseconds = summary.p95LatencyMilliseconds
 
@@ -157,6 +185,7 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
                         shown: shown,
                         acceptRate: acceptRate,
                         acceptedAndKeptRate: acceptedAndKeptRate,
+                        usefulRate: usefulRate,
                         thresholds: thresholds
                     )
                 )
@@ -183,7 +212,11 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
             shown: summary.presentedCount,
             acceptRate: summary.acceptRate,
             acceptedAndKeptRate: summary.acceptedAndKeptRateShown,
+            usefulRate: summary.usefulRate,
             p95LatencyMilliseconds: summary.p95LatencyMilliseconds,
+            caretGeometryFailureRate: summary.caretGeometryFailureRate,
+            staleOrWrongContextRate: summary.staleOrWrongContextRate,
+            doNotShipCount: self.doNotShipCount,
             thresholds: thresholds
         )
     }
@@ -194,18 +227,18 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
         shown: Int,
         acceptRate: Double,
         acceptedAndKeptRate: Double,
+        usefulRate: Double,
         thresholds: Thresholds
     ) -> Verdict {
         guard shown >= thresholds.minimumSample else {
             return .insufficientData
         }
 
-        if acceptRate < thresholds.noisyAcceptRate {
+        if usefulRate < thresholds.noisyUsefulRate {
             return .noisy
         }
 
-        let keptGivenAccepted = acceptRate <= 0 ? 0 : acceptedAndKeptRate / acceptRate
-        if keptGivenAccepted < thresholds.keptGivenAcceptedFloor {
+        if acceptRate > 0, acceptedAndKeptRate / acceptRate < thresholds.keptGivenAcceptedFloor {
             return .lowQuality
         }
 
@@ -216,11 +249,27 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
         shown: Int,
         acceptRate: Double,
         acceptedAndKeptRate: Double,
+        usefulRate: Double,
         p95LatencyMilliseconds: Int?,
+        caretGeometryFailureRate: Double = 0,
+        staleOrWrongContextRate: Double = 0,
+        doNotShipCount: Int = 0,
         thresholds: Thresholds
     ) -> Verdict {
+        if doNotShipCount > 0 {
+            return .unsafe
+        }
+
         guard shown >= thresholds.minimumSample else {
             return .insufficientData
+        }
+
+        if caretGeometryFailureRate > thresholds.caretGeometryFailureRateCeiling {
+            return .misplaced
+        }
+
+        if staleOrWrongContextRate > thresholds.staleOrWrongContextRateCeiling {
+            return .unstable
         }
 
         // Latency dominates: if the cold first paint is over budget it does not matter how
@@ -233,21 +282,28 @@ public struct BetaAcceptanceScorecard: Equatable, Sendable {
             shown: shown,
             acceptRate: acceptRate,
             acceptedAndKeptRate: acceptedAndKeptRate,
+            usefulRate: usefulRate,
             thresholds: thresholds
         )
     }
 
     public var markdown: String {
         var lines: [String] = [
-            "## Beta Acceptance Scorecard",
+            "## Typing Yield Scorecard",
             "",
             "- overall: \(overallVerdict.rawValue) — \(overallVerdict.headline)",
             "- shown: \(totalShown)",
+            "- useful rate: \(Self.percent(overallUsefulRate)) (accepted or typed through)",
             "- accept rate: \(Self.percent(overallAcceptRate))",
+            "- typed-through rate: \(Self.percent(typeThroughRate)); matched characters: \(matchedTypedCharacterCount)",
             "- accepted-and-kept rate: \(Self.percent(overallAcceptedAndKeptRate)) "
                 + "(kept-given-accepted \(Self.percent(overallKeptGivenAccepted)))",
             "- latency: p50 \(Self.ms(p50LatencyMilliseconds)), p95 \(Self.ms(p95LatencyMilliseconds)) "
                 + "(budget \(thresholds.firstVisibleBudgetMilliseconds)ms)",
+            "- stability: typed-over \(Self.percent(typedOverRate)), dismissed \(Self.percent(dismissalRate)), "
+                + "stale/wrong-context \(Self.percent(staleOrWrongContextRate))",
+            "- placement: caret failures \(Self.percent(caretGeometryFailureRate))",
+            "- safety: do-not-ship events \(doNotShipCount)",
             "",
             "### By App"
         ]

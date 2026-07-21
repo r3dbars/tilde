@@ -50,6 +50,36 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
     }
 
+    @Test("counts meaningful partial type-through once and keeps only redacted character totals")
+    func countsPartialTypeThroughProgress() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "meaningful"),
+            event(
+                .suggestionTypedThrough,
+                suggestionID: "meaningful",
+                metadata: ["typedThroughChars": "1"]
+            ),
+            event(
+                .suggestionTypedThrough,
+                suggestionID: "meaningful",
+                metadata: ["typedThroughChars": "5"]
+            ),
+            event(.suggestionPresented, suggestionID: "brief"),
+            event(
+                .suggestionTypedThrough,
+                suggestionID: "brief",
+                metadata: ["typedThroughChars": "2"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.typedThroughCount == 1)
+        #expect(summary.typedThroughCharacterCount == 7)
+        #expect(summary.typeThroughSurvivalRate == 0.5)
+        #expect(summary.usefulRate == 0.5)
+    }
+
     @Test("counts wrong-app acceptance blocks as do-not-ship blockers")
     func countsWrongAppAcceptanceBlocksAsDoNotShipBlockers() {
         let events = [

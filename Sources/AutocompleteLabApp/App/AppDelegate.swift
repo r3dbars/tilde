@@ -4501,6 +4501,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        recordTypeThroughProgress(
+            typedCharacterCount: transition.typedPrefix.count,
+            remainingVisibleCharacterCount: transition.remainingText.count
+        )
+
         if transition.remainingText.isEmpty {
             currentSuggestionState.invalidatedByUserKeyDown = false
             setSuggestionDecision("Queued: refreshing after typed suggestion")
@@ -6500,6 +6505,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var metadata = signal.traceMetadata
         metadata["typeThroughConfidenceCredited"] = "true"
         return metadata
+    }
+
+    private func recordTypeThroughProgress(
+        typedCharacterCount: Int,
+        remainingVisibleCharacterCount: Int
+    ) {
+        guard let suggestionID = currentSuggestionState.id else {
+            return
+        }
+
+        let metadata = [
+            "typedThroughChars": String(max(0, typedCharacterCount)),
+            "remainingVisibleChars": String(max(0, remainingVisibleCharacterCount))
+        ]
+        .merging(currentSuggestionLifetimeMetadata()) { current, _ in current }
+
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionTypedThrough,
+            suggestionID: suggestionID,
+            appBundleIdentifier: currentSuggestionState.appBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "",
+            fieldIdentity: currentSuggestionState.fieldIdentity?.traceDescription ?? currentFieldIdentity?.traceDescription ?? "",
+            requestMode: currentSuggestionState.requestMode?.rawValue ?? "",
+            outcome: "matched",
+            reason: "survived_typethrough",
+            metadata: metadata
+        )
     }
 
     func insertionFailureRecoverabilityMetadata(
@@ -15034,6 +15065,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let survivalMetadata = survival.traceMetadata
                 .merging(learningMetadata) { current, _ in current }
+            recordTypeThroughProgress(
+                typedCharacterCount: survival.typedCharacterCount,
+                remainingVisibleCharacterCount: survival.remainingVisibleCharacterCount
+            )
             lastTextSnapshot = snapshot
             currentSuggestionState.textBeforeCursor = context.textBeforeCursor
             currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText

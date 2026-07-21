@@ -1,15 +1,22 @@
 import Testing
 @testable import AutocompleteLabCore
 
-@Suite("Beta acceptance scorecard")
-struct BetaAcceptanceScorecardTests {
+@Suite("Typing yield scorecard")
+struct TypingYieldScorecardTests {
     /// Builds a summary carrying only the fields the scorecard reads. Everything else uses the
     /// summary's own defaults.
     private func makeSummary(
         presentedCount: Int,
         acceptRate: Double,
         acceptedAndKeptRateShown: Double,
-        usefulRate: Double = 0,
+        usefulRate: Double? = nil,
+        typeThroughSurvivalRate: Double = 0,
+        typedThroughCharacterCount: Int = 0,
+        typedOverRate: Double = 0,
+        explicitDismissalsPerShown: Double = 0,
+        staleOrWrongContextRate: Double = 0,
+        caretGeometryFailureRate: Double = 0,
+        doNotShipCounters: [String: Int] = [:],
         p50: Int? = 100,
         p95: Int? = 300,
         acceptRateByApp: [String: Double] = [:],
@@ -24,12 +31,19 @@ struct BetaAcceptanceScorecardTests {
             presentedCount: presentedCount,
             acceptedCount: 0,
             typedThroughCount: 0,
+            typedThroughCharacterCount: typedThroughCharacterCount,
+            typeThroughSurvivalRate: typeThroughSurvivalRate,
             typedOverCount: 0,
             ignoredCount: 0,
             insertionFailureCount: 0,
             acceptedAndKeptRateShown: acceptedAndKeptRateShown,
+            doNotShipCounters: doNotShipCounters,
+            caretGeometryFailureRate: caretGeometryFailureRate,
+            explicitDismissalsPerShown: explicitDismissalsPerShown,
+            typedOverRate: typedOverRate,
+            staleOrWrongContextRate: staleOrWrongContextRate,
             acceptRate: acceptRate,
-            usefulRate: usefulRate,
+            usefulRate: usefulRate ?? acceptRate,
             p50LatencyMilliseconds: p50,
             p90LatencyMilliseconds: nil,
             p95LatencyMilliseconds: p95,
@@ -56,7 +70,7 @@ struct BetaAcceptanceScorecardTests {
             presentedByApp: ["com.apple.TextEdit": 100]
         )
 
-        let scorecard = BetaAcceptanceScorecard(summary: summary)
+        let scorecard = TypingYieldScorecard(summary: summary)
 
         #expect(scorecard.rows.count == 1)
         #expect(scorecard.rows[0].verdict == .healthy)
@@ -66,10 +80,11 @@ struct BetaAcceptanceScorecardTests {
 
     @Test("Low accept rate reads as noisy")
     func noisyApp() {
-        let verdict = BetaAcceptanceScorecard.appVerdict(
+        let verdict = TypingYieldScorecard.appVerdict(
             shown: 100,
             acceptRate: 0.05,
             acceptedAndKeptRate: 0.04,
+            usefulRate: 0.05,
             thresholds: .beta
         )
 
@@ -79,14 +94,66 @@ struct BetaAcceptanceScorecardTests {
     @Test("Accepted-then-deleted reads as low quality")
     func lowQualityApp() {
         // Accepted often, but only a quarter of accepts survive -> kept-given-accepted 0.25.
-        let verdict = BetaAcceptanceScorecard.appVerdict(
+        let verdict = TypingYieldScorecard.appVerdict(
             shown: 100,
             acceptRate: 0.40,
             acceptedAndKeptRate: 0.10,
+            usefulRate: 0.40,
             thresholds: .beta
         )
 
         #expect(verdict == .lowQuality)
+    }
+
+    @Test("Typing through a prediction is useful even without pressing Tab")
+    func typedThroughOnlyUsefulnessCanBeHealthy() {
+        let summary = makeSummary(
+            presentedCount: 100,
+            acceptRate: 0,
+            acceptedAndKeptRateShown: 0,
+            usefulRate: 0.35,
+            typeThroughSurvivalRate: 0.35,
+            typedThroughCharacterCount: 240,
+            usefulRateByApp: ["com.apple.TextEdit": 0.35],
+            presentedByApp: ["com.apple.TextEdit": 100]
+        )
+
+        let scorecard = TypingYieldScorecard(summary: summary)
+
+        #expect(scorecard.overallVerdict == .healthy)
+        #expect(scorecard.rows[0].verdict == .healthy)
+        #expect(scorecard.matchedTypedCharacterCount == 240)
+    }
+
+    @Test("Hard trust failures override healthy yield")
+    func safetyOverridesYield() {
+        let summary = makeSummary(
+            presentedCount: 100,
+            acceptRate: 0.40,
+            acceptedAndKeptRateShown: 0.35,
+            doNotShipCounters: ["wrong-field-insert": 1]
+        )
+
+        #expect(TypingYieldScorecard(summary: summary).overallVerdict == .unsafe)
+    }
+
+    @Test("Placement and stale context fail independently")
+    func placementAndStabilityStaySeparate() {
+        let misplaced = makeSummary(
+            presentedCount: 100,
+            acceptRate: 0.40,
+            acceptedAndKeptRateShown: 0.35,
+            caretGeometryFailureRate: 0.03
+        )
+        let unstable = makeSummary(
+            presentedCount: 100,
+            acceptRate: 0.40,
+            acceptedAndKeptRateShown: 0.35,
+            staleOrWrongContextRate: 0.02
+        )
+
+        #expect(TypingYieldScorecard(summary: misplaced).overallVerdict == .misplaced)
+        #expect(TypingYieldScorecard(summary: unstable).overallVerdict == .unstable)
     }
 
     @Test("Too few shown suggestions reads as insufficient data")
@@ -98,7 +165,7 @@ struct BetaAcceptanceScorecardTests {
             presentedByApp: ["com.example.app": 5]
         )
 
-        let scorecard = BetaAcceptanceScorecard(summary: summary)
+        let scorecard = TypingYieldScorecard(summary: summary)
 
         #expect(scorecard.rows[0].verdict == .insufficientData)
         #expect(scorecard.overallVerdict == .insufficientData)
@@ -113,10 +180,11 @@ struct BetaAcceptanceScorecardTests {
             p95: 900,
             acceptRateByApp: ["com.apple.TextEdit": 0.50],
             acceptedAndKeptRateByApp: ["com.apple.TextEdit": 0.40],
+            usefulRateByApp: ["com.apple.TextEdit": 0.50],
             presentedByApp: ["com.apple.TextEdit": 100]
         )
 
-        let scorecard = BetaAcceptanceScorecard(summary: summary)
+        let scorecard = TypingYieldScorecard(summary: summary)
 
         #expect(scorecard.overallVerdict == .slow)
         // The per-app row still reports its quality verdict (latency is judged overall only).
@@ -137,7 +205,7 @@ struct BetaAcceptanceScorecardTests {
             presentedByApp: ["com.apple.TextEdit": 100, "com.example.noisy": 50]
         )
 
-        let scorecard = BetaAcceptanceScorecard(summary: summary)
+        let scorecard = TypingYieldScorecard(summary: summary)
 
         // Sorted by shown descending.
         #expect(scorecard.rows.map(\.appBundleIdentifier) == ["com.apple.TextEdit", "com.example.noisy"])
@@ -148,9 +216,14 @@ struct BetaAcceptanceScorecardTests {
         #expect(scorecard.topSuppressionReasons.map(\.reason) == ["low-score", "cooldown"])
 
         let markdown = scorecard.markdown
-        #expect(markdown.contains("## Beta Acceptance Scorecard"))
+        #expect(markdown.contains("## Typing Yield Scorecard"))
         #expect(markdown.contains("com.apple.TextEdit: healthy"))
         #expect(markdown.contains("com.example.noisy: noisy"))
         #expect(markdown.contains("low-score: 40"))
+        #expect(markdown.contains("useful rate:"))
+        #expect(markdown.contains("matched characters:"))
+        #expect(markdown.contains("stability:"))
+        #expect(markdown.contains("placement:"))
+        #expect(markdown.contains("safety:"))
     }
 }
