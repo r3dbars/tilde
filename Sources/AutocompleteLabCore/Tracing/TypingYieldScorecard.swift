@@ -1,12 +1,7 @@
 import Foundation
 
-/// The small, privacy-safe answer to "does SteadyType help?" It keeps speed, yield,
-/// stability, placement, and safety separate so one good number cannot hide a bad experience.
-///
-/// This type performs no I/O and stores no raw text; it consumes an already privacy-filtered
-/// `AutocompleteTraceSummary`. It is the "turn data into a decision" layer on top of
-/// `AutocompleteTraceAnalyzer`: the analyzer answers "what happened", this answers "is it good,
-/// and where is it not".
+/// A privacy-safe decision layer over `AutocompleteTraceSummary` that keeps yield,
+/// speed, stability, placement, and safety separate.
 public struct TypingYieldScorecard: Equatable, Sendable {
     /// Per-app and overall health, in priority order of what a reviewer should fix first.
     public enum Verdict: String, Equatable, Sendable, CaseIterable {
@@ -91,7 +86,6 @@ public struct TypingYieldScorecard: Equatable, Sendable {
 
         public var id: String { appBundleIdentifier }
 
-        /// Fraction of accepted suggestions that survived ("kept given accepted").
         public var keptGivenAccepted: Double {
             acceptRate <= 0 ? 0 : min(1, acceptedAndKeptRate / acceptRate)
         }
@@ -144,7 +138,6 @@ public struct TypingYieldScorecard: Equatable, Sendable {
     public let topSuppressionReasons: [SuppressionReasonCount]
     public let overallVerdict: Verdict
 
-    /// Fraction of accepted suggestions that survived, across all apps.
     public var overallKeptGivenAccepted: Double {
         overallAcceptRate <= 0 ? 0 : min(1, overallAcceptedAndKeptRate / overallAcceptRate)
     }
@@ -272,8 +265,6 @@ public struct TypingYieldScorecard: Equatable, Sendable {
             return .unstable
         }
 
-        // Latency dominates: if the cold first paint is over budget it does not matter how
-        // good the completions are, so surface that first.
         if let p95 = p95LatencyMilliseconds, p95 > thresholds.firstVisibleBudgetMilliseconds {
             return .slow
         }
