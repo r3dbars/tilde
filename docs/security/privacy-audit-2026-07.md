@@ -45,7 +45,7 @@ Canonical privacy and no-leak guarantees live in the sentinel suites for [trace 
 - Personal journals, derived indexes, traces, and exports use `SecureLocalStorage` with owner-only directory and file permissions (`0700` and `0600`), including after atomic rewrites (`Sources/AutocompleteLabApp/Mac/SecureLocalStorage.swift:18-94`).
 - `UserDefaults` contains Personal Capture and other settings, not its journal text (`Sources/AutocompleteLabApp/App/AppSettings.swift:73-75`); accepted style memory persists aggregate counters (`Sources/AutocompleteLabCore/Session/AcceptedTextStyleMemory.swift:19-27`, `Sources/AutocompleteLabCore/Session/AcceptedTextStyleMemory.swift:110-132`). Model completion cache state is memory-only (`Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift:180-208`).
 - The production completion contract constructs an in-process MLX runtime from a local model directory (`Sources/AutocompleteLabApp/Runtime/AppModelRuntimeFactory.swift:67-100`); the scoped source sweep found no production upload, analytics SDK, crash reporter, or cloud completion call.
-- Production diagnostics metadata is redacted at its write boundary (`Sources/AutocompleteLabApp/Mac/DiagnosticsLog.swift:59-64`). The older `TraceLogger` has no production caller; its overlap with the active trace path is tracked as hardening in PA-05 (`Sources/AutocompleteLabApp/Mac/TraceLogger.swift:1`).
+- Production diagnostics metadata is redacted at its write boundary (`Sources/AutocompleteLabApp/Mac/DiagnosticsLog.swift:59-64`).
 
 ## Retention notes
 
