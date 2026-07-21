@@ -167,8 +167,8 @@ parent directory's mode. Adversary A2.
 **Fix:** New `Mac/SecureLocalStorage.swift` creates directories `0700` and files `0600`
 (and *tightens existing* artifacts on the next write, so an upgraded install migrates old
 world-readable files). Every local artifact writer now routes through it — the five above plus
-`Mac/TraceLogger.swift` (the `raw-traces.jsonl` dogfood lane), `Mac/LocalReportExporter.swift`
-(export/privacy bundles incl. the raw-derived `survival-inspector-debug.json`), and
+`Mac/LocalReportExporter.swift` (export/privacy bundles incl. the raw-derived
+`survival-inspector-debug.json`), and
 `Mac/CompatibilityLearningStore.swift`. `screencapture` output and atomic `Data.write` outputs
 are re-tightened after creation. Tests:
 `Tests/AutocompleteLabAppTests/SecureLocalStorageTests.swift` and
@@ -303,7 +303,7 @@ Availability/footprint issue, not a disclosure one (contents are redacted via
 | `Sources/AutocompleteLabApp/Mac/AccessibilityClient.swift` | Re-derive live identity and fail closed before AX writes (F1) |
 | `Sources/AutocompleteLabApp/Mac/InsertionEngine.swift` + `App/AppDelegate.swift` | Thread `expectedFieldIdentity` from acceptance into the write (F1) |
 | `Sources/AutocompleteLabApp/Mac/SecureLocalStorage.swift` | New helper: `0700` dirs / `0600` files, tighten-on-write migration (F2) |
-| `RawAutocompleteTraceLog`, `DiagnosticsLog`, `PersonalCaptureJournalWriter`, `PersonalCaptureEpisodeStore`, `ScreenshotTraceCapture`, `TraceLogger`, `LocalReportExporter`, `CompatibilityLearningStore` | Route artifact creation through `SecureLocalStorage` (F2) |
+| `RawAutocompleteTraceLog`, `DiagnosticsLog`, `PersonalCaptureJournalWriter`, `PersonalCaptureEpisodeStore`, `ScreenshotTraceCapture`, `LocalReportExporter`, `CompatibilityLearningStore` | Route artifact creation through `SecureLocalStorage` (F2) |
 | `Runtime/ModelAssetInstaller.swift`, `Runtime/LocalModelAssetInstaller.swift` | Create the model directory `0700` (F4 partial) |
 
 Regression tests: `InsertionTargetIdentityGuardTests` (core), `InsertionEngineTests` (forwarding),
