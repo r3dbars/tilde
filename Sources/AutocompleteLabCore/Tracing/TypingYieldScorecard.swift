@@ -214,8 +214,7 @@ public struct TypingYieldScorecard: Equatable, Sendable {
         )
     }
 
-    /// Quality-only verdict for a single app. Latency is judged once, at the overall level,
-    /// because the summary does not carry per-app latency percentiles.
+    /// Per-app quality only; safety, placement, stability, and latency are overall-only.
     static func appVerdict(
         shown: Int,
         acceptRate: Double,
