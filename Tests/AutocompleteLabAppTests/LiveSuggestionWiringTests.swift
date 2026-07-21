@@ -123,16 +123,24 @@ struct LiveSuggestionWiringTests {
     @Test("Typing past an instant suggestion records the outcome without silencing future suggestions")
     func typedOverDoesNotCreateLiveSuppression() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
-        let start = try #require(appDelegate.range(of: "private func recordTypedOverSuggestionIfNeeded("))
+        let start = try #require(appDelegate.range(
+            of: "private func advanceVisibleSuggestionForTypingProgressIfNeeded("
+        ))
         let end = try #require(appDelegate.range(
-            of: "private func advanceVisibleSuggestionForTypingProgressIfNeeded(",
+            of: "private func shouldPreserveVisibleSuggestionWhileTyping(",
             range: start.upperBound..<appDelegate.endIndex
         ))
         let typedOverHandler = appDelegate[start.lowerBound..<end.lowerBound]
+        let mismatchStart = try #require(typedOverHandler.range(of: "case .invalidated(.mismatch):"))
+        let mismatchEnd = try #require(typedOverHandler.range(
+            of: "case let .invalidated(reason):",
+            range: mismatchStart.upperBound..<typedOverHandler.endIndex
+        ))
+        let mismatchHandler = typedOverHandler[mismatchStart.lowerBound..<mismatchEnd.lowerBound]
 
-        #expect(typedOverHandler.contains("suggestionTypedOver"))
-        #expect(!typedOverHandler.contains("recordPrefixFamilyCooldown"))
-        #expect(!typedOverHandler.contains("recordAnnoyanceSignal"))
+        #expect(mismatchHandler.contains("suggestionTypedOver"))
+        #expect(!mismatchHandler.contains("recordPrefixFamilyCooldown"))
+        #expect(!mismatchHandler.contains("recordAnnoyanceSignal"))
     }
 
     @Test("Dogfood composers measure synthetic carets with the focused text style")

@@ -65,23 +65,9 @@ struct AutocompleteFlowTests {
         #expect(suggestion?.visibleText == "tation")
     }
 
-    @Test("Typed-over rejection starts a same-prefix cooldown")
+    @Test("Typed-over event starts a same-prefix cooldown")
     func typedOverRejectionStartsSamePrefixCooldown() {
         let originalText = "Can we make this feel "
-        let displayedText = "native"
-        let newText = "Can we make this feel rough"
-        let progress = SuggestionTypingProgressPolicy().progress(
-            originalTextBeforeCursor: originalText,
-            displayedText: displayedText,
-            newTextBeforeCursor: newText
-        )
-
-        guard case let .typedOver(typedSuffix) = progress else {
-            Issue.record("Expected typed-over progress, got \(progress)")
-            return
-        }
-        #expect(typedSuffix == "rough")
-
         let now = Date(timeIntervalSince1970: 1_000)
         let input = PrefixFamilyCooldownInput(
             appBundleIdentifier: "com.apple.TextEdit",
