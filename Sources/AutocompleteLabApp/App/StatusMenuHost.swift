@@ -23,7 +23,7 @@ enum StatusMenuAction {
 /// status text and handles product behavior through the action surface.
 @MainActor
 final class StatusMenuHost: NSObject {
-    private unowned let appDelegate: AppDelegate
+    private weak var appDelegate: AppDelegate?
     private let developerMenuEnabled: Bool
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
@@ -188,7 +188,7 @@ final class StatusMenuHost: NSObject {
     }
 
     private func send(_ action: StatusMenuAction) {
-        appDelegate.handleStatusMenuAction(action)
+        appDelegate?.handleStatusMenuAction(action)
     }
 
     @objc private func handleSuggestNow() { send(.suggestNow) }
