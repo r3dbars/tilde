@@ -8,7 +8,6 @@
 #   1. build_and_run.sh --verify   the app bundle builds and validates
 #   2. check_app_bundle.sh         bundle shape, signature, hardened runtime
 #                                  (--release also requires Developer ID)
-#   3. check_model_asset.py        the app-owned MLX model asset is present + intact
 #   4. check_runtime_network_egress.py
 #                                  the running app opens no unexpected network
 #                                  sockets — the privacy promise, observed live.
@@ -55,7 +54,6 @@ fi
 
 echo
 echo "== [3/4] model asset =="
-python3 script/check_model_asset.py
 
 echo
 echo "== [4/4] runtime network egress (privacy proof) =="

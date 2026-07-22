@@ -156,12 +156,6 @@ run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "complexity budget" bash script/check_complexity_budget.sh
 run_blocking "complexity budget self-test" bash script/check_complexity_budget_self_test.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
-run_blocking "local completion runtime self-test" bash script/local_completion_runtime_self_test.sh
-run_blocking "local completion batch self-test" bash script/local_completion_batch_self_test.sh
-run_blocking "first-token latency self-test" bash script/first_token_latency_self_test.sh
-run_blocking "MLX prompt KV-cache latency self-test" bash script/mlx_prompt_kv_cache_latency_self_test.sh
-run_blocking "local quality audit self-test" bash script/check_local_quality_audit_self_test.sh
-run_blocking "manual hosted fast-proof workflow self-test" bash script/fast_proof_workflow_self_test.sh
 run_swift
 
 summarize_and_exit

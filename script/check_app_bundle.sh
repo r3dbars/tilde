@@ -36,7 +36,6 @@ done
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 EXECUTABLE="$APP_BUNDLE/Contents/MacOS/SteadyType"
 APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
-MLX_METALLIB="$APP_BUNDLE/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
 ICON_TMP_DIR="$(mktemp -d)"
 ENTITLEMENTS_TMP="$ICON_TMP_DIR/entitlements.plist"
 trap 'rm -rf "$ICON_TMP_DIR"' EXIT

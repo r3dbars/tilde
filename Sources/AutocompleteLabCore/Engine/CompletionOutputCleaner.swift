@@ -56,32 +56,8 @@ public enum CompletionCleanResult: Equatable, Sendable {
     }
 }
 
-public struct CompletionCleanCandidatesResult: Equatable, Sendable {
-    public let suggestions: [CompletionSuggestion]
-    public let rejectionReasonCounts: [CompletionCleanRejectionReason: Int]
-
-    public init(
-        suggestions: [CompletionSuggestion],
-        rejectionReasonCounts: [CompletionCleanRejectionReason: Int]
-    ) {
-        self.suggestions = suggestions
-        self.rejectionReasonCounts = rejectionReasonCounts
-    }
-
-    public var traceMetadata: [String: String] {
-        let reasons = rejectionReasonCounts
-            .sorted { $0.key.rawValue < $1.key.rawValue }
-            .map { "\($0.key.rawValue):\($0.value)" }
-            .joined(separator: ",")
-        return [
-            "completionCleanRejectionCount": String(rejectionReasonCounts.values.reduce(0, +)),
-            "completionCleanRejectionReasons": reasons.isEmpty ? "none" : reasons
-        ]
-    }
-}
-
 public struct CompletionOutputCleaner: Equatable, Sendable {
-    private static let noSuggestionToken = CompletionPromptBuilder.noSuggestionToken.lowercased()
+    private static let noSuggestionToken = "<no_suggestion>"
 
     public let minimumVisibleWords: Int
     public let maxVisibleWords: Int
@@ -100,80 +76,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
         cleanWithReason(rawOutput, after: textBeforeCursor).suggestion
-    }
-
-    public func cleanCandidates(
-        _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode,
-        limit: Int = 3
-    ) -> [CompletionSuggestion] {
-        cleanCandidatesWithReasons(
-            rawOutput,
-            after: textBeforeCursor,
-            mode: mode,
-            limit: limit
-        ).suggestions
-    }
-
-    public func cleanCandidatesWithReasons(
-        _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode,
-        limit: Int = 3
-    ) -> CompletionCleanCandidatesResult {
-        let maxCandidateCount = max(1, limit)
-        var seen: Set<String> = []
-        var suggestions: [CompletionSuggestion] = []
-        var rejectionReasonCounts: [CompletionCleanRejectionReason: Int] = [:]
-
-        for candidateLine in candidateLines(from: rawOutput) {
-            let result = cleanWithReason(candidateLine, after: textBeforeCursor, mode: mode)
-            guard let suggestion = result.suggestion else {
-                if let reason = result.rejectionReason {
-                    rejectionReasonCounts[reason, default: 0] += 1
-                }
-                continue
-            }
-
-            let key = normalizedCandidateKey(suggestion.visibleText)
-            guard seen.insert(key).inserted else {
-                rejectionReasonCounts[.duplicateCandidate, default: 0] += 1
-                continue
-            }
-
-            suggestions.append(suggestion)
-            if suggestions.count >= maxCandidateCount {
-                break
-            }
-        }
-
-        return CompletionCleanCandidatesResult(
-            suggestions: suggestions,
-            rejectionReasonCounts: rejectionReasonCounts
-        )
-    }
-
-    public func cleanBestCandidate(
-        _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode,
-        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
-        limit: Int = 3,
-        ranker: CompletionCandidateRanker = CompletionCandidateRanker()
-    ) -> CompletionCandidateSelection {
-        let candidates = cleanCandidates(
-            rawOutput,
-            after: textBeforeCursor,
-            mode: mode,
-            limit: limit
-        )
-        return ranker.selection(
-            candidates,
-            mode: mode,
-            textBeforeCursor: textBeforeCursor,
-            behaviorProfileID: behaviorProfileID
-        )
     }
 
     public func clean(
@@ -920,8 +822,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let noSuggestionWrapperCharacters = CharacterSet(charactersIn: "\"'`")
 
-    private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
-        .union(lowValueSingleWordPhrases)
+    // Inlined from the deleted WordCompletionCandidateRanker's default word list.
+    private static let commonWholeWords = Set([
+        "about", "accurate", "actually", "again", "also", "always", "app",
+        "application", "around", "available", "because",
+        "before", "being", "better", "between", "bring", "build", "change",
+        "computer", "context", "conversation", "could",
+        "decent", "decently", "definitely", "dictation", "different",
+        "document", "everything", "fast",
+        "first", "going", "hello", "help", "hey", "important",
+        "instant", "interesting", "kind", "language", "launch",
+        "make", "meaning", "need", "notes",
+        "option", "people", "really",
+        "reliable", "right", "should", "slow", "something",
+        "system", "their", "there", "these", "thing",
+        "think", "this", "trying", "typing", "understand", "want",
+        "what", "when", "where", "which", "while", "window",
+        "without", "working", "would", "writing",
+    ]).union(lowValueSingleWordPhrases)
 
     private static let visibleUIChromeTokens: Set<String> = [
         "automations",

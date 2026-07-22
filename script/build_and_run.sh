@@ -22,7 +22,6 @@ ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
 GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
-MLX_METALLIB="$SWIFT_BUILD_ROOT/mlx-metal/default.metallib"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
@@ -479,11 +478,9 @@ swift_build_bin_path() {
 }
 
 run_swift_package_resolve
-./script/patch_mlx_swift_lm.sh
 run_swift_build
 BUILD_BINARY="$(swift_build_bin_path)/$APP_NAME"
 
-build_mlx_metallib_if_needed() {
   if [[ -f "$MLX_METALLIB" ]]; then
     return 0
   fi
@@ -554,16 +551,12 @@ build_mlx_metallib_if_needed() {
     air_files+=("$air_file")
   done
 
-  xcrun -sdk macosx metallib "${air_files[@]}" -o "$MLX_METALLIB"
 }
 
-build_mlx_metallib_if_needed
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS"
-mkdir -p "$APP_RESOURCES/mlx-swift_Cmlx.bundle"
 cp "$BUILD_BINARY" "$APP_BINARY"
-cp "$MLX_METALLIB" "$APP_RESOURCES/mlx-swift_Cmlx.bundle/default.metallib"
 cp "$GENERATED_APP_ICON" "$APP_ICON"
 chmod +x "$APP_BINARY"
 

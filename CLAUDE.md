@@ -20,8 +20,6 @@ SwiftPM (`swift-tools 6.2`). The app cannot build on Linux; the pure
 - All tests: `swift test --jobs 1`
 - Core (pure) tests: `swift test --jobs 1 --filter AutocompleteLabCoreTests`
 - One test: `swift test --jobs 1 --filter AutocompleteLabCoreTests.<Suite>/<test>`
-- MLX patch (after `swift package resolve`, before building the app):
-  `./script/patch_mlx_swift_lm.sh` — idempotent.
 - Pre-merge gate (CI runs exactly this): `./script/proof.sh fast`
 - Release gate (macOS, manual): `./script/release_check.sh`
 
@@ -29,23 +27,23 @@ SwiftPM (`swift-tools 6.2`). The app cannot build on Linux; the pure
 
 Three parts; the split is load-bearing:
 
-- `Sources/AutocompleteLabCore/` — pure deterministic policy types. Every
-  decision about when to request, show, accept, or suppress a suggestion.
-- `Sources/AutocompleteLabApp/` — native shell: `Mac/AccessibilityClient` +
-  `SerialFocusedTextAXReader` read the focused field; `App/SuggestionOrchestrator`
-  drives the request lifecycle over predictor layers (doc-local n-gram, common
-  phrase, word ranking, MLX model via the `CompletionEngine` protocol);
-  `UI/SuggestionPanelController` renders ghost text; `Mac/KeyboardEventTap` +
-  `Mac/InsertionEngine` handle Tab/Shift-Tab/Esc and insertion. Also hosts
-  `App/GhostBrainServerHost`: a local unix socket serving MLX completions to
-  the input method.
-- `Sources/InlineGhostIME/` — the input method (the product direction since
-  2026-07-22): renders suggestions inside the focused app's own text via IMKit
-  marked text. Instant local predictors upgraded async by the app's MLX brain
-  over the socket (Apple FoundationModels as fallback). Its `README.md` records
-  the non-obvious deployment facts (bundle-id rule, mandatory notarization,
-  TIS registration). The AX + overlay stack above is legacy pending this path
-  maturing.
+- `Sources/AutocompleteLabCore/` — pure policy: `CompletionRequest`/engine
+  protocol, `RawContinuationPrompt` + `ContinuationRegister` (the prompt recipe
+  and per-app voice), `CompletionOutputCleaner` (output discipline: persona/echo
+  filters, sentinel handling), `VisiblePageContext`.
+- `Sources/AutocompleteLabApp/` — the menu-bar brain (~15 files):
+  `GhostBrainServerHost` (unix socket the keyboard talks to),
+  `LlamaServerProcessHost` + `LlamaCompletionEngine` (app-managed llama.cpp
+  child serving Gemma; llama-only — MLX was removed 2026-07-22, see
+  docs/ime-tuning-log.md before considering readding anything),
+  `GhostScreenContextBridge` + `VisiblePageContextProvider` (event-driven
+  screen OCR context), `GhostKeyboardInstallerHost` (installs the keyboard),
+  `StatusMenuHost` (minimal menu), login item, single-instance guard.
+- `Sources/InlineGhostIME/` — the input method: renders suggestions inside the
+  focused app's own text via IMKit marked text; instant dictionary layer for
+  words, brain socket for phrases, Apple FoundationModels only when the app is
+  down. Its `README.md` records the non-obvious deployment facts (bundle-id
+  rule, mandatory notarization, TIS registration).
 
 ## Rules
 
