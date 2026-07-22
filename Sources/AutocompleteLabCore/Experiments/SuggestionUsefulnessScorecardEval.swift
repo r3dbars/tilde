@@ -73,7 +73,7 @@ struct SuggestionUsefulnessScorecardCaseResult: Equatable, Sendable {
             return normalizedPhrase(visibleText) == normalizedPhrase(expectedVisibleText)
         }
 
-        let outputWords = Set(normalizedWords(visibleText))
+        let outputWords = Set(evaluationNormalizedWords(visibleText))
         let requiredHits = min(2, evalCase.expectedMeaningTerms.count)
         let hits = evalCase.expectedMeaningTerms
             .map { $0.lowercased() }
@@ -94,7 +94,7 @@ struct SuggestionUsefulnessScorecardCaseResult: Equatable, Sendable {
             return !trimmed.contains(where: \.isWhitespace) && trimmed.count <= 12
         }
 
-        let wordCount = normalizedWords(visibleText).count
+        let wordCount = evaluationNormalizedWords(visibleText).count
         return (1...evalCase.maxVisibleWords).contains(wordCount)
     }
 
@@ -106,7 +106,7 @@ struct SuggestionUsefulnessScorecardCaseResult: Equatable, Sendable {
             return false
         }
 
-        let outputWords = normalizedWords(visibleText)
+        let outputWords = evaluationNormalizedWords(visibleText)
         guard !outputWords.isEmpty else {
             return false
         }
@@ -117,14 +117,14 @@ struct SuggestionUsefulnessScorecardCaseResult: Equatable, Sendable {
             return true
         }
 
-        let contextWords = normalizedWords(evalCase.textBeforeCursor)
+        let contextWords = evaluationNormalizedWords(evalCase.textBeforeCursor)
         let maximumLead = min(3, outputWords.count, contextWords.count)
         guard maximumLead >= 2 else {
             return true
         }
         for leadCount in stride(from: maximumLead, through: 2, by: -1) {
             let leadPhrase = Array(outputWords.prefix(leadCount))
-            if containsContiguous(leadPhrase, in: contextWords) {
+            if evaluationContainsContiguous(leadPhrase, in: contextWords) {
                 return false
             }
         }
@@ -173,7 +173,7 @@ struct SuggestionUsefulnessSourceSummary: Equatable, Sendable {
     let acceptWorthyCount: Int
 
     var passRate: Double {
-        scorecardRate(acceptWorthyCount, caseCount)
+        evaluationRate(acceptWorthyCount, caseCount)
     }
 }
 
@@ -192,7 +192,7 @@ struct SuggestionUsefulnessScorecardReport: Equatable, Sendable {
     var score: Double {
         let passed = totalSummary.acceptWorthyCount + gateResults.filter(\.passed).count
         let total = totalSummary.caseCount + gateResults.count
-        return (scorecardRate(passed, total) * 100).rounded()
+        return (evaluationRate(passed, total) * 100).rounded()
     }
 
     var markdown: String {
@@ -665,31 +665,5 @@ enum SuggestionUsefulnessScorecardEvaluator {
 }
 
 private func normalizedPhrase(_ text: String) -> String {
-    normalizedWords(text).joined(separator: " ")
-}
-
-private func normalizedWords(_ text: String) -> [String] {
-    text
-        .lowercased()
-        .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-        .map(String.init)
-}
-
-private func containsContiguous(_ needle: [String], in haystack: [String]) -> Bool {
-    guard !needle.isEmpty, haystack.count >= needle.count else {
-        return false
-    }
-    for startIndex in 0...(haystack.count - needle.count) {
-        if Array(haystack[startIndex..<(startIndex + needle.count)]) == needle {
-            return true
-        }
-    }
-    return false
-}
-
-private func scorecardRate(_ numerator: Int, _ denominator: Int) -> Double {
-    guard denominator > 0 else {
-        return 1
-    }
-    return Double(numerator) / Double(denominator)
+    evaluationNormalizedWords(text).joined(separator: " ")
 }

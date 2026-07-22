@@ -154,19 +154,19 @@ public struct DailyDriverPhraseQualitySurfaceSummary: Equatable, Sendable {
     public let expectedSilencePassCount: Int
 
     public var acceptWorthyRate: Double {
-        phraseRate(acceptWorthyCount, caseCount)
+        evaluationRate(acceptWorthyCount, caseCount)
     }
 
     public var phraseLengthRate: Double {
-        phraseRate(phraseLengthPassCount, displayEligibleCount)
+        evaluationRate(phraseLengthPassCount, displayEligibleCount)
     }
 
     public var relevanceRate: Double {
-        phraseRate(relevancePassCount, displayEligibleCount)
+        evaluationRate(relevancePassCount, displayEligibleCount)
     }
 
     public var expectedSilenceRate: Double {
-        phraseRate(expectedSilencePassCount, expectedSilenceCount)
+        evaluationRate(expectedSilencePassCount, expectedSilenceCount)
     }
 }
 
@@ -178,7 +178,7 @@ public struct DailyDriverPhraseQualityEvalReport: Equatable, Sendable {
 
     public var markdown: String {
         let rows = surfaceSummaries.map { summary in
-            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.displayEligibleCount) | \(phrasePercent(summary.phraseLengthRate, trials: summary.displayEligibleCount)) | \(phrasePercent(summary.relevanceRate, trials: summary.displayEligibleCount)) | \(summary.suffixNoiseFailureCount) | \(summary.expectedSilencePassCount)/\(summary.expectedSilenceCount) | \(phrasePercent(summary.acceptWorthyRate)) |"
+            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.displayEligibleCount) | \(evaluationPercent(summary.phraseLengthRate, trials: summary.displayEligibleCount)) | \(evaluationPercent(summary.relevanceRate, trials: summary.displayEligibleCount)) | \(summary.suffixNoiseFailureCount) | \(summary.expectedSilencePassCount)/\(summary.expectedSilenceCount) | \(evaluationPercent(summary.acceptWorthyRate)) |"
         }
         .joined(separator: "\n")
 
@@ -206,15 +206,15 @@ public struct DailyDriverPhraseQualityEvalReport: Equatable, Sendable {
         - Display-eligible rows: \(totalSummary.displayEligibleCount).
         - Suppressed/no-suggestion rows: \(totalSummary.expectedSilenceCount).
         - Accept-worthy rows: \(totalSummary.acceptWorthyCount)/\(totalSummary.caseCount).
-        - 3-8 word phrase rate: \(phrasePercent(totalSummary.phraseLengthRate, trials: totalSummary.displayEligibleCount)).
-        - Relevance score: \(phrasePercent(totalSummary.relevanceRate, trials: totalSummary.displayEligibleCount)).
+        - 3-8 word phrase rate: \(evaluationPercent(totalSummary.phraseLengthRate, trials: totalSummary.displayEligibleCount)).
+        - Relevance score: \(evaluationPercent(totalSummary.relevanceRate, trials: totalSummary.displayEligibleCount)).
         - Suffix-noise failures: \(totalSummary.suffixNoiseFailureCount).
         - Expected suppressions passed: \(totalSummary.expectedSilencePassCount)/\(totalSummary.expectedSilenceCount).
 
         | Surface | Shown | 3-8 words | Relevant | Suffix-noise failures | Silence exact | Would accept |
         | --- | ---: | ---: | ---: | ---: | ---: | ---: |
         \(rows)
-        | Total | \(totalSummary.shownCount)/\(totalSummary.displayEligibleCount) | \(phrasePercent(totalSummary.phraseLengthRate, trials: totalSummary.displayEligibleCount)) | \(phrasePercent(totalSummary.relevanceRate, trials: totalSummary.displayEligibleCount)) | \(totalSummary.suffixNoiseFailureCount) | \(totalSummary.expectedSilencePassCount)/\(totalSummary.expectedSilenceCount) | \(phrasePercent(totalSummary.acceptWorthyRate)) |
+        | Total | \(totalSummary.shownCount)/\(totalSummary.displayEligibleCount) | \(evaluationPercent(totalSummary.phraseLengthRate, trials: totalSummary.displayEligibleCount)) | \(evaluationPercent(totalSummary.relevanceRate, trials: totalSummary.displayEligibleCount)) | \(totalSummary.suffixNoiseFailureCount) | \(totalSummary.expectedSilencePassCount)/\(totalSummary.expectedSilenceCount) | \(evaluationPercent(totalSummary.acceptWorthyRate)) |
 
         ## Case Evidence
 
@@ -497,19 +497,4 @@ private func phraseContainsContiguous(_ needle: [String], in haystack: [String])
         }
     }
     return false
-}
-
-private func phraseRate(_ numerator: Int, _ denominator: Int) -> Double {
-    guard denominator > 0 else {
-        return 1
-    }
-    return Double(numerator) / Double(denominator)
-}
-
-private func phrasePercent(_ value: Double) -> String {
-    "\(Int((value * 100).rounded()))%"
-}
-
-private func phrasePercent(_ value: Double, trials: Int) -> String {
-    trials > 0 ? phrasePercent(value) : "n/a"
 }
