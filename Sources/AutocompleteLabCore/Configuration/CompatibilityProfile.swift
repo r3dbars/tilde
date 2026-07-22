@@ -861,6 +861,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         "com.lastpass.LastPass",
         "com.apple.systempreferences",
         "com.apple.systemsettings",
+        // Agent CLIs whose prompt support was removed: block rather than fall
+        // through to the permissive generic profile.
+        "com.openai.codex",
+        "com.anthropic.claude-code",
         // Terminal emulators: shell input can submit commands, so suggestions stay off.
         "com.apple.Terminal",
         "com.googlecode.iterm2",
