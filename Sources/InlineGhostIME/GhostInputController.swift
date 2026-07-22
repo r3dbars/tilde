@@ -255,20 +255,61 @@ final class GhostInputController: IMKInputController {
 
     /// Debounce: the ghost appears only after typing rests for a beat. Fresh
     /// keystrokes bump `generation`, so pending reveals cancel themselves.
-    /// Speed experiment (owner, 2026-07-22): mid-word 10ms / boundary 50ms —
-    /// near-instant ghosts for fast typists. Prior calmer settings were
-    /// 100/180ms; if this feels chaotic, these two numbers are the whole dial.
+    ///
+    /// Per-app rhythm: native text views keep the caret at the ghost's start,
+    /// so near-instant reveals (10ms mid-word / 50ms boundary — owner: "insane,
+    /// I want this speed to stay") are pure win. Chromium/Electron surfaces draw
+    /// the caret at the ghost's END, so instant reveals make the cursor
+    /// ping-pong mid-burst — those apps get calm reveals (120/200ms) that only
+    /// fire when the fingers genuinely rest.
     private func scheduleGhostAfterPause(_ client: IMKTextInput) {
         generation += 1
         let gen = generation
         let midWord = typedFallback.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
-        let delay: UInt64 = midWord ? 10_000_000 : 50_000_000
+        let jumpyCaret = hostAppHasJumpyCaret(client.bundleIdentifier())
+        let delay: UInt64
+        if jumpyCaret {
+            delay = midWord ? 120_000_000 : 200_000_000
+        } else {
+            delay = midWord ? 10_000_000 : 50_000_000
+        }
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard let self, self.generation == gen else { return }
             guard let liveClient = self.client() else { return }
             self.updateGhost(liveClient)
         }
+    }
+
+    private var caretJumpyByBundleID: [String: Bool] = [:]
+
+    /// Chromium-family detection at runtime: browsers by bundle-id prefix,
+    /// Electron apps by the framework inside their bundle — no app list to
+    /// maintain for the endless stream of Electron chat clients.
+    private func hostAppHasJumpyCaret(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        if let cached = caretJumpyByBundleID[bundleIdentifier] { return cached }
+        let jumpy = Self.isChromiumFamily(bundleIdentifier: bundleIdentifier)
+        caretJumpyByBundleID[bundleIdentifier] = jumpy
+        return jumpy
+    }
+
+    private static let chromiumBrowserPrefixes = [
+        "com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser",
+        "company.thebrowser.Browser", "com.openai.atlas",
+        "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
+    ]
+
+    private static func isChromiumFamily(bundleIdentifier: String) -> Bool {
+        if chromiumBrowserPrefixes.contains(where: bundleIdentifier.hasPrefix) {
+            return true
+        }
+        guard let app = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier).first,
+            let bundleURL = app.bundleURL else { return false }
+        let electronFramework = bundleURL
+            .appendingPathComponent("Contents/Frameworks/Electron Framework.framework")
+        return FileManager.default.fileExists(atPath: electronFramework.path)
     }
 
     private func updateGhost(_ client: IMKTextInput) {
