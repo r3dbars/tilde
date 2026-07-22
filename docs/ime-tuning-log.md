@@ -84,6 +84,29 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — screen context round, part 4 (the leak was the FALLBACK)
+
+- **Persona refusals persisted after part 3's fix — root cause found:** the
+  refusal ghosts were never Qwen. When the brain answers EMPTY (its confidence
+  gate choosing silence — very common in casual text), `GhostBrainClient`
+  returned nil, indistinguishable from "brain unreachable", so the IME fell
+  through to **Apple's FoundationModels fallback** — which had none of the
+  persona fixes and no cleaner. Fixes, all **KEEP**:
+  1. Wire semantics: an answered-but-empty response now returns "" (silence to
+     be respected); nil strictly means unreachable. **Apple fires only when the
+     app is actually down.**
+  2. Apple session instructions get the same identity anchor (user's own
+     voice, never a chatbot, questions continued not answered).
+  3. IME-side `cleanedModelOutput` now kills persona markers — insurance for
+     the Apple path, which bypasses the engine's cleaner.
+  LESSON: every model path needs the same output discipline — a fallback
+  without the filters becomes the loudest voice precisely when the main model
+  is being appropriately quiet.
+- **Model taste (owner):** Qwen judged "really horrible" for this use vs
+  Gemma's prose (Cotypist evidence). Deep-dive research into Gemma MLX quants
+  (HF) running — candidates must hit <400ms/suggestion and ideally have
+  copyable caches. Results to be recorded here.
+
 ## 2026-07-22 — screen context round, part 3 (persona-slip fix)
 
 - **Assistant-persona leak (dogfood catch, screenshot):** with an AI
