@@ -126,11 +126,11 @@ Negative / cost:
 `Tests/AutocompleteLabCoreTests/BreadthVsDepthADRTests.swift` fails if any of
 these drift from this ADR:
 
-- `AppCompatibilityProfile.fallback.defaultRung == .accept`
-- `CompatibilityRoutingSettings.mvp.enforceKnownApps == false`
-- `CompatibilityRoutingSettings.mvp.suppressSecureFields == true`
+- Unprofiled apps resolve to `CompatibilityProfileStore.defaultOnFallbackProfile`
+  (the default-on "Generic App" rung)
+- Secure fields are hard-blocked by `CompletionActivationPolicy` before any request
+- Sensitive apps (password managers, system settings, terminals) stay denylisted
 - Messages / Slack / Discord never carry `promptAppSafetyMode == .notPrompt`
-  (nor `HostCompatibilityPolicy.safetyMode == .notPrompt`)
 
 ## Revisiting this decision
 
