@@ -3,9 +3,7 @@ import AutocompleteLabCore
 @MainActor
 struct SuggestionSchedulingHostDependencies {
     let cancelPrefixCooldownRetry: () -> Void
-    let cancelPendingSuggestionTask: (String) -> Void
     let setLastRequestedTextBeforeCursor: (String?) -> Void
-    let suggestionRequestPreparationHost: SuggestionRequestPreparationHost
     let suggestionOrchestrator: SuggestionOrchestrator
     let runtimeProofOptions: RuntimeProofOptions
     let activeAppProofBundleIdentifiers: Set<String>
@@ -19,7 +17,6 @@ struct SuggestionSchedulingHostDependencies {
     let shouldUsePredictivePhraseFallback: (CompatibilityProfile, AutocompleteBehaviorProfileID?, VisiblePageContext?) -> Bool
     let triggerPolicy: (CompatibilityProfile) -> SuggestionTriggerPolicy
     let suggestionTypingBurstSuppressionHost: SuggestionTypingBurstSuppressionHost
-    let suggestionRequestExecutionHost: SuggestionRequestExecutionHost
     let suggestionIdleRetryState: SuggestionIdleRetryStateHost
     let recordSuggestionEvent: (String, FocusedTextContext, CompatibilityProfile, [String: String]) -> Void
     let recordAnnoyanceSignal: (AnnoyanceSignal, AnnoyanceContext?, String, String, [String: String]) -> Void
@@ -41,6 +38,28 @@ struct SuggestionSchedulingHostDependencies {
         [String: String],
         Bool
     ) -> Void
+
+    // Request preparation (merged from SuggestionRequestPreparationHost)
+    let acceptedTextStyleSketch: (AcceptedTextStyleMemoryKey) -> AcceptedTextStyleSketch?
+    let suggestionTuning: () -> SuggestionTuning
+    let requestSchedulingPolicy: SuggestionRequestSchedulingPolicy
+
+    // Delayed model execution (merged from SuggestionRequestExecutionHost)
+    let scheduler: SuggestionRequestScheduler
+    let handlePartial: @MainActor @Sendable (CompletionSuggestion, SuggestionModelResultInput) -> Void
+    let handleFinal: @MainActor @Sendable (CompletionSuggestion?, SuggestionModelResultInput) -> Void
+    let handleFailure: @MainActor @Sendable (SuggestionModelResultInput) -> Void
+
+    // Request cancellation (merged from SuggestionRequestCancellationHost)
+    let cancelScheduledPendingRequest: () -> Bool
+    let clearStreamingPresentations: () -> Void
+    let invalidateOrchestratorRequest: () -> Void
+}
+
+struct SuggestionRequestPreparation: Sendable {
+    let orchestration: SuggestionOrchestration
+    let requestSchedule: SuggestionRequestSchedule
+    let requestMetadata: [String: String]
 }
 
 /// Owns request scheduling, local fast-path selection, proof-mode gates, and model handoff.
@@ -51,10 +70,6 @@ final class SuggestionSchedulingHost {
 
     init(dependencies: SuggestionSchedulingHostDependencies) {
         self.dependencies = dependencies
-    }
-
-    private var suggestionRequestPreparationHost: SuggestionRequestPreparationHost {
-        dependencies.suggestionRequestPreparationHost
     }
 
     private var suggestionOrchestrator: SuggestionOrchestrator {
@@ -81,10 +96,6 @@ final class SuggestionSchedulingHost {
         dependencies.suggestionTypingBurstSuppressionHost
     }
 
-    private var suggestionRequestExecutionHost: SuggestionRequestExecutionHost {
-        dependencies.suggestionRequestExecutionHost
-    }
-
     private var suggestionIdleRetryState: SuggestionIdleRetryStateHost {
         dependencies.suggestionIdleRetryState
     }
@@ -93,8 +104,129 @@ final class SuggestionSchedulingHost {
         dependencies.cancelPrefixCooldownRetry()
     }
 
-    private func cancelPendingSuggestionTask(reason: String) {
-        dependencies.cancelPendingSuggestionTask(reason)
+    @discardableResult
+    func cancelPendingRequest(reason: String) -> Bool {
+        let cancelledPendingRequest = dependencies.cancelScheduledPendingRequest()
+        guard cancelledPendingRequest else {
+            return false
+        }
+
+        dependencies.clearStreamingPresentations()
+        DiagnosticsLog.shared.record(
+            "suggestion-request-cancelled",
+            metadata: ["reason": reason]
+        )
+        return true
+    }
+
+    @discardableResult
+    func invalidatePendingRequest() -> Bool {
+        let cancelledPendingRequest = cancelPendingRequest(reason: "invalidate")
+        dependencies.clearStreamingPresentations()
+        dependencies.invalidateOrchestratorRequest()
+        return cancelledPendingRequest
+    }
+
+    /// Assembles a request and its initial streaming-state/trace transition. Exposed
+    /// (not private) so its assembly decisions stay directly unit-testable.
+    func prepare(
+        context: FocusedTextContext,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldClassification: AXFieldClassification,
+        renderMode: SuggestionRenderMode,
+        delayMilliseconds: Int,
+        timingLane: SuggestionTimingLane,
+        requestMode: CompletionRequestMode,
+        typingBurstDecision: TypingBurstDecision,
+        visiblePageContext: VisiblePageContext?,
+        triggerReason: String
+    ) -> SuggestionRequestPreparation {
+        let acceptedTextStyleKey = suggestionOrchestrator.acceptedTextStyleKey(
+            appBundleIdentifier: appBundleIdentifier,
+            fieldKind: fieldClassification.kind,
+            textBeforeCursor: context.textBeforeCursor
+        )
+        let acceptedTextStyleSketch = dependencies.acceptedTextStyleSketch(acceptedTextStyleKey)
+        let orchestration = suggestionOrchestrator.beginRequest(SuggestionRequestInput(
+            context: context,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: fieldClassification,
+            acceptedTextStyleSketch: acceptedTextStyleSketch,
+            visiblePageContext: visiblePageContext,
+            maxVisibleWords: dependencies.suggestionTuning().maxVisibleWords,
+            requestMode: requestMode,
+            suggestionTuning: dependencies.suggestionTuning()
+        ))
+        let requestSchedule = dependencies.requestSchedulingPolicy.schedule(
+            policyDelayMilliseconds: delayMilliseconds,
+            timingLane: timingLane,
+            requestMode: orchestration.request.mode,
+            renderMode: renderMode
+        )
+        let requestMetadata = orchestration.requestMetadata
+            .merging(timingLane.traceMetadata) { current, _ in current }
+        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
+            ? [:]
+            : typingBurstDecision.traceMetadata
+
+        suggestionOrchestrator.startStreamingPresentation(
+            suggestionID: orchestration.suggestionID
+        )
+        RawAutocompleteTraceLog.shared.record(
+            type: .suggestionRequested,
+            suggestionID: orchestration.suggestionID,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: orchestration.fieldIdentityDescription,
+            requestMode: orchestration.request.mode.rawValue,
+            triggerReason: triggerReason,
+            textBeforeCursor: orchestration.request.textBeforeCursor,
+            textAfterCursor: orchestration.request.textAfterCursor,
+            metadata: [
+                "renderMode": renderMode.rawValue
+            ]
+            .merging(typingBurstMetadata) { current, _ in current }
+            .merging(requestSchedule.traceMetadata) { current, _ in current }
+            .merging(requestMetadata) { current, _ in current }
+        )
+
+        return SuggestionRequestPreparation(
+            orchestration: orchestration,
+            requestSchedule: requestSchedule,
+            requestMetadata: requestMetadata
+        )
+    }
+
+    /// Owns delayed model execution and forwards each lifecycle result to its policy/presentation
+    /// host. Exposed (not private) so its forwarding contract stays directly unit-testable.
+    func scheduleModelExecution(input: SuggestionModelResultInput) {
+        let suggestionOrchestrator = dependencies.suggestionOrchestrator
+        let handlePartial = dependencies.handlePartial
+        let handleFinal = dependencies.handleFinal
+        let handleFailure = dependencies.handleFailure
+        dependencies.scheduler.schedule(
+            suggestionID: input.suggestionID,
+            delayMilliseconds: input.requestSchedule.scheduledDelayMilliseconds
+        ) {
+            do {
+                let suggestion = try await suggestionOrchestrator.suggestion(
+                    for: input.request,
+                    onPartialSuggestion: { partialSuggestion in
+                        Task { @MainActor in
+                            handlePartial(partialSuggestion, input)
+                        }
+                    }
+                )
+                await MainActor.run {
+                    handleFinal(suggestion, input)
+                }
+            } catch {
+                await MainActor.run {
+                    handleFailure(input)
+                }
+            }
+        }
     }
 
     private func recordSuggestionEvent(
@@ -218,10 +350,10 @@ final class SuggestionSchedulingHost {
         triggerReason: String = "poll"
     ) {
         cancelPrefixCooldownRetry()
-        cancelPendingSuggestionTask(reason: "new-request")
+        cancelPendingRequest(reason: "new-request")
         dependencies.setLastRequestedTextBeforeCursor(context.textBeforeCursor)
 
-        let preparation = suggestionRequestPreparationHost.prepare(
+        let preparation = prepare(
             context: context,
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
@@ -697,7 +829,7 @@ final class SuggestionSchedulingHost {
             .merging(requestMetadata) { current, _ in current }
         )
         suggestionIdleRetryState.cancel()
-        suggestionRequestExecutionHost.schedule(
+        scheduleModelExecution(
             input: SuggestionModelResultInput(
                 suggestionID: suggestionID,
                 request: request,

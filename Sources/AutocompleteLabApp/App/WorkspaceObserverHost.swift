@@ -11,21 +11,16 @@ enum WorkspaceObserverEvent {
     case screenGeometryChanged
 }
 
-@MainActor
-protocol WorkspaceObserverEventHandling: AnyObject {
-    func handleWorkspaceObserverEvent(_ event: WorkspaceObserverEvent)
-}
-
 /// Owns notification tokens for workspace lifecycle and screen changes. The app
 /// coordinator receives typed events and keeps the focus/interruption policies.
 @MainActor
 final class WorkspaceObserverHost {
-    private weak var handler: (any WorkspaceObserverEventHandling)?
+    private weak var appDelegate: AppDelegate?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var screenGeometryObserver: NSObjectProtocol?
 
-    init(handler: any WorkspaceObserverEventHandling) {
-        self.handler = handler
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
     }
 
     func start() {
@@ -123,6 +118,6 @@ final class WorkspaceObserverHost {
     }
 
     private func send(_ event: WorkspaceObserverEvent) {
-        handler?.handleWorkspaceObserverEvent(event)
+        appDelegate?.handleWorkspaceObserverEvent(event)
     }
 }

@@ -10,14 +10,9 @@ struct SettingsWindowHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/AppDelegate.swift"),
             encoding: .utf8
         )
-        let wiring = try String(
-            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/SettingsWindowWiring.swift"),
-            encoding: .utf8
-        )
 
-        #expect(appDelegate.contains("SettingsWindowHost(handler: self)"))
-        #expect(wiring.contains("extension AppDelegate: SettingsWindowActionHandling"))
-        #expect(wiring.contains("handleSettingsWindowAction(_ action: SettingsWindowAction)"))
+        #expect(appDelegate.contains("SettingsWindowHost(appDelegate: self)"))
+        #expect(appDelegate.contains("func handleSettingsWindowAction(_ action: SettingsWindowAction)"))
         #expect(!appDelegate.contains("private lazy var settingsWindow = SettingsWindowController("))
     }
 }
