@@ -39,7 +39,7 @@ enum SettingsWindowAction {
 /// launch/UI wiring out of the application coordinator.
 @MainActor
 final class SettingsWindowHost {
-    private unowned let appDelegate: AppDelegate
+    private weak var appDelegate: AppDelegate?
 
     lazy var controller = SettingsWindowController(
         requestPermission: { [weak self] in
@@ -139,6 +139,6 @@ final class SettingsWindowHost {
     }
 
     private func send(_ action: SettingsWindowAction) {
-        appDelegate.handleSettingsWindowAction(action)
+        appDelegate?.handleSettingsWindowAction(action)
     }
 }
