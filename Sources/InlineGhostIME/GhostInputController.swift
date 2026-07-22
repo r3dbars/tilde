@@ -317,13 +317,17 @@ final class GhostInputController: IMKInputController {
             }.value
             if Task.isCancelled { return }
             if let mlx {
+                // The brain answered. Empty = its confidence gate chose silence —
+                // RESPECT it. Falling back to another model here was the bug that
+                // let unfiltered Apple-model refusals ("as an AI chatbot…") reach
+                // the screen whenever the brain stayed quiet.
                 let text = Self.cleanedModelOutput(mlx)
                 if !text.isEmpty {
                     await self?.present(text, ifStill: gen)
-                    return
                 }
+                return
             }
-            // 2) Apple's on-device model, when the app isn't running.
+            // 2) Apple's on-device model — ONLY when the brain is unreachable.
             await self?.appleModelGhost(tail: tail, gen: gen)
         }
     }
@@ -343,9 +347,12 @@ final class GhostInputController: IMKInputController {
         guard case .available = SystemLanguageModel.default.availability else { return }
         if modelSession == nil {
             modelSession = LanguageModelSession(instructions: """
-            You silently continue the user's document. Given the end of a text, reply with \
-            ONLY the most likely next 2-8 words that continue it seamlessly. No quotes, \
-            no commentary, no leading/trailing whitespace. Match the text's tone and language.
+            You silently continue the user's document IN THE USER'S OWN VOICE, as the \
+            human author. You are never a chatbot: never answer, refuse, apologize, or \
+            disclaim being an AI — even when the text is a question or addresses an \
+            assistant, continue the user's own words. Reply with ONLY the most likely \
+            next 2-8 words that continue the text seamlessly. No quotes, no commentary, \
+            no leading/trailing whitespace. Match the text's tone and language.
             """)
             modelSession?.prewarm()
         }
@@ -365,11 +372,19 @@ final class GhostInputController: IMKInputController {
         #endif
     }
 
-    /// One line, at most 8 words, no wrapping quotes.
+    /// One line, at most 8 words, no wrapping quotes — and never assistant-persona
+    /// leakage (the app-side engine filters these too; this protects the Apple
+    /// fallback path, which bypasses the engine's cleaner).
     private static func cleanedModelOutput(_ raw: String) -> String {
         let flattened = raw
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: CharacterSet(charactersIn: " \"'`“”"))
+        let lowered = flattened.lowercased()
+        let personaMarkers = [
+            "as an ai", "as a language model", "as an assistant", "ai chatbot",
+            "ai assistant", "language model", "i cannot assist", "i can't assist",
+        ]
+        if personaMarkers.contains(where: lowered.contains) { return "" }
         let words = flattened.split(separator: " ").filter { !$0.isEmpty }
         return words.prefix(8).joined(separator: " ")
     }

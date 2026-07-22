@@ -88,7 +88,10 @@ enum GhostBrainClient {
                         onPartial?(suggestion)
                     }
                 } else {
-                    return suggestion.isEmpty ? lastPartial : suggestion
+                    // The brain ANSWERED — empty means it chose silence. Return ""
+                    // (not nil) so callers respect the silence instead of treating
+                    // it as "brain unreachable" and falling back to another model.
+                    return suggestion.isEmpty ? (lastPartial ?? "") : suggestion
                 }
             }
         }
