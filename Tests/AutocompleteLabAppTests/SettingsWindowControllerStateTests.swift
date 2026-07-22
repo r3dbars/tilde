@@ -148,43 +148,43 @@ struct SettingsWindowControllerStateTests {
     @Test("Prompt apps can toggle and choose placement without exposing proof tooling")
     func promptAppsCanToggleAndChoosePlacementWithoutExposingProofTooling() {
         let store = CompatibilityProfileStore.mvp
-        let codex = SettingsCurrentAppState(
-            displayName: "Codex",
-            bundleIdentifier: "com.openai.codex",
-            supportStatus: store.supportStatus(for: "com.openai.codex"),
+        let claude = SettingsCurrentAppState(
+            displayName: "Claude",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            supportStatus: store.supportStatus(for: "com.anthropic.claudefordesktop"),
             isEnabled: true,
             disabledAppCount: 0
         )
 
-        #expect(codex.statusText == "Codex: suggestions on")
-        #expect(codex.menuToggleTitle == "Pause in Codex")
-        #expect(codex.canToggle)
-        #expect(codex.canChangePlacement)
-        #expect(codex.placementButtonTitle == "Show in a Floating Box")
+        #expect(claude.statusText == "Claude: suggestions on")
+        #expect(claude.menuToggleTitle == "Pause in Claude")
+        #expect(claude.canToggle)
+        #expect(claude.canChangePlacement)
+        #expect(claude.placementButtonTitle == "Show in a Floating Box")
 
-        let forcedCodex = SettingsCurrentAppState(
-            displayName: "Codex",
-            bundleIdentifier: "com.openai.codex",
-            supportStatus: store.supportStatus(for: "com.openai.codex"),
+        let forcedClaude = SettingsCurrentAppState(
+            displayName: "Claude",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            supportStatus: store.supportStatus(for: "com.anthropic.claudefordesktop"),
             isEnabled: true,
             disabledAppCount: 0,
             renderModeOverride: .floatingMirror
         )
 
-        #expect(forcedCodex.placementButtonTitle == "Show Inline Text")
-        #expect(forcedCodex.canChangePlacement)
+        #expect(forcedClaude.placementButtonTitle == "Show Inline Text")
+        #expect(forcedClaude.canChangePlacement)
 
-        let disabledCodex = SettingsCurrentAppState(
-            displayName: "Codex",
-            bundleIdentifier: "com.openai.codex",
-            supportStatus: store.supportStatus(for: "com.openai.codex"),
+        let disabledClaude = SettingsCurrentAppState(
+            displayName: "Claude",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            supportStatus: store.supportStatus(for: "com.anthropic.claudefordesktop"),
             isEnabled: false,
             disabledAppCount: 1
         )
 
-        #expect(disabledCodex.statusText == "Codex: suggestions paused")
-        #expect(disabledCodex.menuToggleTitle == "Resume in Codex")
-        #expect(disabledCodex.canToggle)
+        #expect(disabledClaude.statusText == "Claude: suggestions paused")
+        #expect(disabledClaude.menuToggleTitle == "Resume in Claude")
+        #expect(disabledClaude.canToggle)
     }
 
     @Test("Per-app placement copy flips between inline and floating")
