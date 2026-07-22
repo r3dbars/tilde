@@ -9,4 +9,14 @@ let bundleIdentifier = Bundle.main.bundleIdentifier ?? "bar.r3d.inputmethod.Inli
 let server = IMKServer(name: connectionName, bundleIdentifier: bundleIdentifier)
 _ = server
 
+// System candidate panel (the UI Japanese/Chinese keyboards use) — powers the
+// optional "panel" display mode where the user's text stays completely clean.
+enum GhostPanel {
+    static var candidates: IMKCandidates?
+}
+GhostPanel.candidates = IMKCandidates(
+    server: server,
+    panelType: kIMKSingleRowSteppingCandidatePanel
+)
+
 NSApplication.shared.run()
