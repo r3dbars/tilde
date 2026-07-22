@@ -130,7 +130,6 @@ these drift from this ADR:
 - `CompatibilityRoutingSettings.mvp.enforceKnownApps == false`
 - `CompatibilityRoutingSettings.mvp.suppressSecureFields == true`
 - Messages / Slack / Discord never carry `promptAppSafetyMode == .notPrompt`
-  (nor `HostCompatibilityPolicy.safetyMode == .notPrompt`)
 
 ## Revisiting this decision
 
