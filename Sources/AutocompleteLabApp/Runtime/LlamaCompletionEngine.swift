@@ -1,0 +1,92 @@
+import AutocompleteLabCore
+import Foundation
+
+/// CompletionEngine speaking the raw-continuation recipe to a local llama.cpp
+/// server (see RawContinuationPrompt). Output flows through the same
+/// CompletionOutputCleaner discipline as the MLX engine — every model path
+/// gets identical persona/echo/no-suggestion filtering.
+enum LlamaEngineError: Error {
+    case transport(String)
+}
+
+final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
+
+    private let baseURL: URL
+    private let cleaner = CompletionOutputCleaner(maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords)
+
+    init(baseURL: URL) {
+        self.baseURL = baseURL
+    }
+
+    func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        let startedAt = Date()
+        let recipe = RawContinuationPrompt(textBeforeCursor: request.textBeforeCursor)
+        let body: [String: Any] = [
+            "prompt": recipe.prompt,
+            "n_predict": min(16, request.mode.generatedTokenCeiling),
+            "temperature": 0,
+            "cache_prompt": true,
+            "stop": ["\n"],
+        ]
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+        urlRequest.timeoutInterval = 4
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw LlamaEngineError.transport("http error")
+        }
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let content = object["content"] as? String
+        else {
+            throw LlamaEngineError.transport("bad payload")
+        }
+
+        let normalized = recipe.normalizedContinuation(content)
+        let suggestion = cleaner.clean(normalized, after: request.textBeforeCursor, mode: request.mode)
+        DiagnosticsLog.shared.record("llama-completion-timing", metadata: [
+            "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1000)),
+            "cleanedChars": String(suggestion?.visibleText.count ?? 0),
+            "mode": request.mode.rawValue,
+        ])
+        return suggestion
+    }
+}
+
+/// Routes phrase continuations to the reliability engine (llama.cpp/Gemma) when
+/// it is healthy, everything else — and any llama failure — to the MLX engine.
+/// A llama SILENCE (nil suggestion) is respected, not retried on MLX: both
+/// engines share the same output discipline, and silence means low confidence.
+final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
+
+    private let phraseEngine: any CompletionEngine
+    private let fallbackEngine: any CompletionEngine
+    private let phraseEngineIsHealthy: @Sendable () -> Bool
+
+    init(
+        phraseEngine: any CompletionEngine,
+        fallbackEngine: any CompletionEngine,
+        phraseEngineIsHealthy: @escaping @Sendable () -> Bool
+    ) {
+        self.phraseEngine = phraseEngine
+        self.fallbackEngine = fallbackEngine
+        self.phraseEngineIsHealthy = phraseEngineIsHealthy
+    }
+
+    func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        if request.mode != .wordCompletion, phraseEngineIsHealthy() {
+            do {
+                // nil here is the engine's low-confidence silence — respected,
+                // never retried on the fallback (both engines share the same
+                // output discipline).
+                return try await phraseEngine.suggestion(for: request)
+            } catch {
+                // Engine/transport failure only: fall back to MLX.
+            }
+        }
+        return try await fallbackEngine.suggestion(for: request)
+    }
+}
