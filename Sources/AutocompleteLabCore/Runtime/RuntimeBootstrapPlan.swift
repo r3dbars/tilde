@@ -194,9 +194,12 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
-    // A/B in progress (see docs/ime-tuning-log.md): Gemma E4B it-OptiQ measured
-    // ~1.1s per suggestion vs Qwen's ~0.3s on this hardware — Qwen stays until
-    // a faster Gemma quant/path is found.
+    // Gemma-on-MLX verdict (see docs/ime-tuning-log.md, 2026-07-22): three
+    // different load failures across three Gemma 4 builds (OptiQ E4B needed a
+    // hand patch and ran ~1.1s; plain-4bit E2B PLE shape mismatch; OptiQ E2B
+    // missing per-layer quant keys). mlx-swift-lm's Gemma 4 support is not
+    // production-ready — Gemma quality is pursued via the llama.cpp path
+    // instead. Qwen3.5-4B stays the MLX default.
     public static let preferredMLX = qwen35FourBMLX
 
     public static let selectableMLXManifests: [String: LocalModelAssetManifest] = [
