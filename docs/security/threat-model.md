@@ -187,7 +187,7 @@ worth the complexity here.
 `NSWorkspace.shared.frontmostApplication.bundleIdentifier`; that string is the *only* key into
 the per-app trust model — `AppDelegate.effectiveProfile(for:)` → `profileStore.profile(for:
 app.bundleIdentifier)` (and ~10 other `profile(for: bundleIdentifier)` sites),
-`Configuration/HostCompatibilityPolicy.swift`, `Compatibility/CompatibilityRouter.swift`. A
+and `Configuration/CompatibilityProfile.swift` (denylist + profile store). A
 repo-wide search for `SecCode` / `SecStaticCode` / `teamIdentifier` / `SecRequirement` returns
 **nothing** — code-signing identity is never verified.
 
