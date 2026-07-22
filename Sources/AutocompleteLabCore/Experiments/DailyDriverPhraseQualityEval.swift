@@ -50,7 +50,7 @@ public struct DailyDriverPhraseQualityEvalCaseResult: Equatable, Sendable {
     }
 
     public var visibleWordCount: Int {
-        phraseWords(visibleText).count
+        evaluationNormalizedWords(visibleText).count
     }
 
     public var phraseLengthAcceptable: Bool? {
@@ -64,7 +64,7 @@ public struct DailyDriverPhraseQualityEvalCaseResult: Equatable, Sendable {
         guard evalCase.expectsSuggestion else {
             return nil
         }
-        let outputWords = Set(phraseWords(visibleText))
+        let outputWords = Set(evaluationNormalizedWords(visibleText))
         guard !outputWords.isEmpty else {
             return false
         }
@@ -81,7 +81,7 @@ public struct DailyDriverPhraseQualityEvalCaseResult: Equatable, Sendable {
     }
 
     public var repetitionFailure: Bool {
-        let outputWords = phraseWords(visibleText)
+        let outputWords = evaluationNormalizedWords(visibleText)
         guard !outputWords.isEmpty else {
             return evalCase.expectsSuggestion
         }
@@ -89,14 +89,14 @@ public struct DailyDriverPhraseQualityEvalCaseResult: Equatable, Sendable {
             return true
         }
 
-        let contextWords = phraseWords(evalCase.textBeforeCursor)
+        let contextWords = evaluationNormalizedWords(evalCase.textBeforeCursor)
         let maximumLead = min(3, outputWords.count, contextWords.count)
         guard maximumLead >= 2 else {
             return false
         }
 
         for leadCount in stride(from: maximumLead, through: 2, by: -1) {
-            if phraseContainsContiguous(Array(outputWords.prefix(leadCount)), in: contextWords) {
+            if evaluationContainsContiguous(Array(outputWords.prefix(leadCount)), in: contextWords) {
                 return true
             }
         }
@@ -475,26 +475,4 @@ public enum DailyDriverPhraseQualityEvaluator {
             rawCandidateLines: ["click send", "submit the prompt", "press return"]
         )
     ]
-}
-
-private func phraseWords(_ text: String?) -> [String] {
-    guard let text else {
-        return []
-    }
-    return text
-        .lowercased()
-        .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-        .map(String.init)
-}
-
-private func phraseContainsContiguous(_ needle: [String], in haystack: [String]) -> Bool {
-    guard !needle.isEmpty, haystack.count >= needle.count else {
-        return false
-    }
-    for startIndex in 0...(haystack.count - needle.count) {
-        if Array(haystack[startIndex..<(startIndex + needle.count)]) == needle {
-            return true
-        }
-    }
-    return false
 }
