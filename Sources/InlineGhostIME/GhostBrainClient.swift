@@ -17,8 +17,13 @@ enum GhostBrainClient {
     /// Total time we are willing to wait for the brain, per request.
     private static let timeout = timeval(tv_sec: 0, tv_usec: 700_000)
 
-    static func complete(context: String) -> String? {
-        guard let request = try? JSONSerialization.data(withJSONObject: ["v": 1, "context": context]) else {
+    static func complete(context: String, app: String?, field: String?) -> String? {
+        var object: [String: Any] = ["v": 1, "context": context]
+        // App + field identity let the brain's prompt KV cache recognize
+        // consecutive keystrokes in the same field (the big latency win).
+        if let app { object["app"] = app }
+        if let field { object["field"] = field }
+        guard let request = try? JSONSerialization.data(withJSONObject: object) else {
             return nil
         }
 

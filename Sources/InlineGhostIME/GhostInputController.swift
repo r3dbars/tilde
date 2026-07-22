@@ -283,17 +283,20 @@ final class GhostInputController: IMKInputController {
 
     private func requestModelGhost(_ client: IMKTextInput, context: String) {
         // Mid-word AND word-boundary contexts both go to the brain; the server picks
-        // the engine mode. Require a little context so answers aren't wild.
-        let tail = String(context.suffix(300))
+        // the engine mode. The prompt KV cache makes long context cheap after the
+        // first request, so send generously. Require a little so answers aren't wild.
+        let tail = String(context.suffix(1000))
         guard tail.count >= 12 else { return }
 
         let gen = generation
+        let hostApp = client.bundleIdentifier()
+        let fieldIdentity = client.uniqueClientIdentifierString()
         modelTask?.cancel()
         modelTask = Task { [weak self] in
             // 1) SteadyType's own MLX model, served by the menu-bar app over a local
             //    socket. Blocking client with its own timeouts, kept off this task.
             let mlx = await Task.detached(priority: .userInitiated) {
-                GhostBrainClient.complete(context: tail)
+                GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity)
             }.value
             if Task.isCancelled { return }
             if let mlx {
