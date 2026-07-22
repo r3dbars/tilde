@@ -19,36 +19,80 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
     }
 
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        try await suggestion(for: request) { _ in }
+    }
+
+    func suggestion(
+        for request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
-        let recipe = RawContinuationPrompt(textBeforeCursor: request.textBeforeCursor)
+        let recipe = RawContinuationPrompt(
+            textBeforeCursor: request.textBeforeCursor,
+            screenContext: request.visiblePageContext?.promptText
+        )
         let body: [String: Any] = [
             "prompt": recipe.prompt,
             "n_predict": min(16, request.mode.generatedTokenCeiling),
             "temperature": 0,
             "cache_prompt": true,
             "stop": ["\n"],
+            "stream": true,
         ]
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
-        urlRequest.timeoutInterval = 4
+        urlRequest.timeoutInterval = 10
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw LlamaEngineError.transport("http error")
         }
-        guard
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let content = object["content"] as? String
-        else {
-            throw LlamaEngineError.transport("bad payload")
+
+        var rawOutput = ""
+        var lastPartialVisibleText = ""
+        var firstChunkMilliseconds: Int?
+        var promptTokensProcessed: Int?
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data: ") else { continue }
+            guard let object = try? JSONSerialization.jsonObject(
+                with: Data(line.dropFirst(6).utf8)
+            ) as? [String: Any] else { continue }
+
+            if let piece = object["content"] as? String, !piece.isEmpty {
+                if firstChunkMilliseconds == nil {
+                    firstChunkMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1000)
+                }
+                rawOutput += piece
+                let partial = cleaner.clean(
+                    recipe.normalizedContinuation(rawOutput),
+                    after: request.textBeforeCursor,
+                    mode: request.mode
+                )
+                if let partial, !partial.isEmpty, partial.visibleText != lastPartialVisibleText {
+                    lastPartialVisibleText = partial.visibleText
+                    onPartialSuggestion(partial)
+                }
+            }
+            if (object["stop"] as? Bool) == true {
+                if let timings = object["timings"] as? [String: Any] {
+                    promptTokensProcessed = (timings["prompt_n"] as? NSNumber)?.intValue
+                }
+                break
+            }
         }
 
-        let normalized = recipe.normalizedContinuation(content)
-        let suggestion = cleaner.clean(normalized, after: request.textBeforeCursor, mode: request.mode)
+        let suggestion = cleaner.clean(
+            recipe.normalizedContinuation(rawOutput),
+            after: request.textBeforeCursor,
+            mode: request.mode
+        )
         DiagnosticsLog.shared.record("llama-completion-timing", metadata: [
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1000)),
+            "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
+            "promptTokensProcessed": promptTokensProcessed.map(String.init) ?? "unknown",
+            "screenContextAttached": String(request.visiblePageContext != nil),
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
             "mode": request.mode.rawValue,
         ])
@@ -77,16 +121,23 @@ final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
     }
 
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        try await suggestion(for: request) { _ in }
+    }
+
+    func suggestion(
+        for request: CompletionRequest,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         if request.mode != .wordCompletion, phraseEngineIsHealthy() {
             do {
                 // nil here is the engine's low-confidence silence — respected,
                 // never retried on the fallback (both engines share the same
                 // output discipline).
-                return try await phraseEngine.suggestion(for: request)
+                return try await phraseEngine.suggestion(for: request, onPartialSuggestion: onPartialSuggestion)
             } catch {
                 // Engine/transport failure only: fall back to MLX.
             }
         }
-        return try await fallbackEngine.suggestion(for: request)
+        return try await fallbackEngine.suggestion(for: request, onPartialSuggestion: onPartialSuggestion)
     }
 }
