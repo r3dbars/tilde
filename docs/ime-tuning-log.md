@@ -23,6 +23,27 @@ more dogfood data).
 | Socket timeout (IME side) | 700ms | `GhostBrainClient.timeout` |
 | Accept keys | Tab=word, Shift-Tab=all, Esc=dismiss | `GhostInputController.handle` |
 
+## 2026-07-22 — quality round (measured with script/quality_probe.py)
+
+- **New: `script/quality_probe.py`** — fixed 14-context corpus across
+  registers, scored for silence rate / persona leaks / dangling fragments /
+  latency. Run before and after ANY prompt or cleaner change.
+- **Baseline → after:** spoke 13/14 → 14/14; danglers 3 → 1; persona 0 → 0;
+  p50 ~170ms both.
+- **Dangler fix (two layers):** `repairDanglingTail` trims never-end-on tails
+  (articles/prepositions/conjunctions) from cut-off generations, AND from the
+  word-capped visible text — the 8-word display cap was slicing finished
+  sentences back into fragments ("…any thoughts on the proposal." → capped →
+  "…on the"). Applied in normalizedContinuation and post-cap in the engine.
+- **Generation budgets:** chat 14 / email+prose 20 tokens (was 12/16) — room
+  to finish the clause; latency cost ~+10ms p50.
+- **Scaffolds:** third curated example per register.
+- **Screen-echo guard:** suggestions of 4+ words appearing verbatim in the OCR
+  screen text are dropped (no more "predicting" by copying the visible draft).
+- **Dictionary quality:** never extends an already-complete common word
+  ("the" → "theory" noise); prefers completing TO a common word over obscure
+  dictionary finds; suffix must be ≥2 chars; obscure long completions capped.
+
 ## 2026-07-22 — THE GREAT DIVORCE (llama-only)
 
 - Deleted the entire legacy world in one gate-green PR: AX reading + overlay
