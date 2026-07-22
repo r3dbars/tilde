@@ -85,11 +85,33 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             }
         }
 
-        let suggestion = cleaner.clean(
+        var suggestion = cleaner.clean(
             recipe.normalizedContinuation(rawOutput),
             after: request.textBeforeCursor,
             mode: request.mode
         )
+        // The display word-cap can slice a finished sentence back into a
+        // dangling fragment ("…any thoughts on the proposal." capped at 8 words
+        // ends on "the") — repair the visible tail after capping.
+        if let capped = suggestion?.visibleText {
+            let repaired = RawContinuationPrompt.repairDanglingTail(capped)
+            if repaired != capped {
+                let clean = repaired.trimmingCharacters(in: .whitespaces)
+                suggestion = clean.isEmpty ? nil : CompletionSuggestion(
+                    text: repaired,
+                    maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords
+                )
+            }
+        }
+        // Screen-echo guard: never "predict" words by copying a run of text the
+        // user can already see on screen (their own draft elsewhere, the message
+        // being replied to). Grounding is welcome; verbatim copying is not.
+        if let visible = suggestion?.visibleText.trimmingCharacters(in: .whitespaces).lowercased(),
+           visible.split(separator: " ").count >= 4,
+           let screen = request.visiblePageContext?.text.lowercased(),
+           screen.contains(visible) {
+            suggestion = nil
+        }
         DiagnosticsLog.shared.record("llama-completion-timing", metadata: [
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1000)),
             "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
