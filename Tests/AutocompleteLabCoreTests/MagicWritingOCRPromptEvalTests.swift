@@ -71,8 +71,8 @@ struct MagicWritingOCRPromptEvalTests {
 
             #expect(prompt.user.contains("Active app: \(scenario.appName)"), "missing app context for \(scenario.id)")
             #expect(prompt.user.contains(scenario.anchorText), "missing OCR anchor for \(scenario.id)")
-            #expect(prompt.system.contains("local writing companion"), "missing companion guidance for \(scenario.id)")
-            #expect(prompt.system.contains("Never output visible window titles"), "missing OCR chrome guardrail for \(scenario.id)")
+            #expect(prompt.system.contains("relationship to the typing is unknown"), "missing relationship-inference guidance for \(scenario.id)")
+            #expect(prompt.system.contains("never output window titles"), "missing OCR chrome guardrail for \(scenario.id)")
             #expect(activationDecision.canSuggest, "activation blocked \(scenario.id)")
             guard case .request = triggerDecision else {
                 Issue.record("cadence skipped \(scenario.id)")
@@ -112,9 +112,9 @@ struct MagicWritingOCRPromptEvalTests {
         if prompt.user.contains("Active app: \(scenario.appName)") { score += 0.16 }
         if prompt.user.contains("OCR scope: visible_screen") { score += 0.12 }
         if prompt.user.contains(scenario.anchorText) { score += 0.16 }
-        if prompt.system.contains("what the user is replying to") { score += 0.14 }
+        if prompt.system.contains("REPLYING to") { score += 0.14 }
         if prompt.system.contains("Prefer the next word or short phrase") { score += 0.14 }
-        if prompt.system.contains("Never output visible window titles") { score += 0.05 }
+        if prompt.system.contains("never output window titles") { score += 0.05 }
         if prompt.system.contains("Return only the suffix") { score += 0.05 }
         if activationDecision.canSuggest { score += 0.12 }
         if scenario.expectedFastSuffix == nil || fastWordSelection.suggestion?.visibleText == scenario.expectedFastSuffix { score += 0.06 }

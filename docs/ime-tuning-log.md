@@ -84,6 +84,30 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — screen context round, part 2 (latency-first + relationship-aware)
+
+- **Event-driven capture (owner's design):** screenshots now happen at capture
+  MOMENTS — app activation (NSWorkspace observer; OCR completes while the human
+  is still settling into the window), new field session (field identity change
+  on the socket), or typing resuming after an 8s idle gap. **While a burst is
+  active the attached context is FROZEN** so the prompt prefix stays stable and
+  the KV cache keeps hitting; if a burst starts before its capture lands, the
+  context attaches once mid-burst then freezes. Verified: `page:true` with
+  stable context through a burst; memory steady (~5.6GB RSS, no leak).
+  **KEEP.** (Earlier app "crash" was self-inflicted: raw-binary launches
+  bypassed single-instance dedupe → two 5.6GB instances → system kill. Always
+  launch via `open`.)
+- **Relationship-aware OCR guidance (owner catch):** raw OCR text was framed
+  without telling the model WHAT it is. `promptGuidance` rewritten: it is a
+  noisy snapshot of the visible screen, never text to continue; its
+  relationship to the typing is unknown and must be inferred — a message being
+  REPLIED to (reply should address it), source material being commented on,
+  the user's own earlier writing (stay consistent), or unrelated UI. Grounding
+  uses (names, register, topic, style) spelled out; OCR-chrome and quoting
+  bans kept. OCR eval suite assertions updated to the new phrases. Verified
+  live: "Yes I agree, the screen aware approach " → "is the best way forward"
+  with our conversation on screen.
+
 ## 2026-07-22 — screen context round
 
 - **Screen-context (OCR) wired into IME requests.** The pre-keyboard
