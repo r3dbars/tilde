@@ -20,63 +20,6 @@ public enum CompletionRuntimeCandidate: String, Equatable, Sendable {
     }
 }
 
-public struct CompletionLatencySample: Equatable, Sendable {
-    public let candidate: CompletionRuntimeCandidate
-    public let milliseconds: Int
-    public let tokenCount: Int
-
-    public init(candidate: CompletionRuntimeCandidate, milliseconds: Int, tokenCount: Int) {
-        self.candidate = candidate
-        self.milliseconds = milliseconds
-        self.tokenCount = tokenCount
-    }
-}
-
-public struct CompletionRuntimeBenchmark: Equatable, Sendable {
-    public let candidate: CompletionRuntimeCandidate
-    public let samples: [CompletionLatencySample]
-
-    public init(candidate: CompletionRuntimeCandidate, samples: [CompletionLatencySample]) {
-        self.candidate = candidate
-        self.samples = samples
-    }
-
-    public var averageLatencyMilliseconds: Int? {
-        guard !samples.isEmpty else {
-            return nil
-        }
-
-        let total = samples.reduce(0) { $0 + $1.milliseconds }
-        return total / samples.count
-    }
-
-    public var p95LatencyMilliseconds: Int? {
-        percentile(0.95)
-    }
-
-    public func passesAutocompleteTarget(_ policy: CompletionModelPolicy = .mvp) -> Bool {
-        guard let averageLatencyMilliseconds, let p95LatencyMilliseconds else {
-            return false
-        }
-
-        return averageLatencyMilliseconds <= policy.targetLatencyMilliseconds
-            && p95LatencyMilliseconds <= policy.targetLatencyMilliseconds
-    }
-
-    private func percentile(_ fraction: Double) -> Int? {
-        guard !samples.isEmpty else {
-            return nil
-        }
-
-        let sorted = samples.map(\.milliseconds).sorted()
-        let index = min(
-            sorted.count - 1,
-            Int((Double(sorted.count - 1) * fraction).rounded())
-        )
-        return sorted[index]
-    }
-}
-
 public struct EmbeddedRuntimeDecision: Equatable, Sendable {
     public let preferredCandidate: CompletionRuntimeCandidate
     public let fallbackCandidate: CompletionRuntimeCandidate
