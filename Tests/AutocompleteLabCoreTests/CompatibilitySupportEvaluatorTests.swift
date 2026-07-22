@@ -46,21 +46,13 @@ struct CompatibilitySupportEvaluatorTests {
         #expect(evaluation.reasons.contains("Needs 15 shown suggestions for supported."))
     }
 
-    @Test("Codex dogfood traces can become experimental")
-    func codexDogfoodTracesCanBecomeExperimental() {
-        let events = cleanEvents(
-            appBundleIdentifier: "com.openai.codex",
-            shown: 4,
-            kept: 1,
-            latency: 400
-        )
-
-        let evaluation = evaluator.evaluate(bundleIdentifier: "com.openai.codex", events: events)
-
-        #expect(evaluation.state == .experimental)
-        #expect(evaluation.reasons.contains("Needs 10 shown suggestions for caveated."))
-        #expect(!evaluation.reasons.contains("Codex is diagnostics-only because it is sensitive."))
-        #expect(!evaluation.reasons.contains("Codex cannot present suggestions safely yet."))
+    @Test("Removed agent CLI bundle ids stay denylisted")
+    func removedAgentCLIBundleIdsStayDenylisted() {
+        for bundleIdentifier in ["com.openai.codex", "com.anthropic.claude-code"] {
+            let evaluation = evaluator.evaluate(bundleIdentifier: bundleIdentifier, events: [])
+            #expect(evaluation.state == .blocked)
+            #expect(evaluation.reasons.contains("App is denylisted."))
+        }
     }
 
     @Test("Blocked apps stay blocked and terminal hosts are not generic")
