@@ -28,43 +28,6 @@ public struct AutocompleteTraceMiss: Equatable, Sendable {
     }
 }
 
-public struct AutocompleteTraceDailySummary: Equatable, Sendable {
-    public let date: String
-    public let activeWritingMinutes: Int
-    public let shown: Int
-    public let accepted: Int
-    public let acceptedAndKept: Int
-    public let p50LatencyMilliseconds: Int?
-    public let p95LatencyMilliseconds: Int?
-    public let severeFailures: Int
-    public let pauses: Int
-    public let disables: Int
-
-    public init(
-        date: String,
-        activeWritingMinutes: Int,
-        shown: Int,
-        accepted: Int,
-        acceptedAndKept: Int,
-        p50LatencyMilliseconds: Int?,
-        p95LatencyMilliseconds: Int?,
-        severeFailures: Int,
-        pauses: Int,
-        disables: Int
-    ) {
-        self.date = date
-        self.activeWritingMinutes = activeWritingMinutes
-        self.shown = shown
-        self.accepted = accepted
-        self.acceptedAndKept = acceptedAndKept
-        self.p50LatencyMilliseconds = p50LatencyMilliseconds
-        self.p95LatencyMilliseconds = p95LatencyMilliseconds
-        self.severeFailures = severeFailures
-        self.pauses = pauses
-        self.disables = disables
-    }
-}
-
 public struct AutocompleteTraceFailureReason: Equatable, Sendable {
     public let title: String
     public let count: Int
@@ -76,59 +39,6 @@ public struct AutocompleteTraceFailureReason: Equatable, Sendable {
         self.count = count
         self.priority = priority
         self.category = category
-    }
-}
-
-public struct AutocompleteAcceptanceFunnel: Equatable, Sendable {
-    public let requested: Int
-    public let modelReturned: Int
-    public let shown: Int
-    public let accepted: Int
-    public let keptAt10Seconds: Int
-    public let keptAt30SecondsOrBlur: Int
-
-    public init(
-        requested: Int = 0,
-        modelReturned: Int = 0,
-        shown: Int = 0,
-        accepted: Int = 0,
-        keptAt10Seconds: Int = 0,
-        keptAt30SecondsOrBlur: Int = 0
-    ) {
-        self.requested = requested
-        self.modelReturned = modelReturned
-        self.shown = shown
-        self.accepted = accepted
-        self.keptAt10Seconds = keptAt10Seconds
-        self.keptAt30SecondsOrBlur = keptAt30SecondsOrBlur
-    }
-}
-
-public struct AutocompleteAnnoyanceFunnel: Equatable, Sendable {
-    public let shown: Int
-    public let ignored: Int
-    public let typedOver: Int
-    public let escapeDismissed: Int
-    public let acceptedThenDeleted: Int
-    public let paused: Int
-    public let disabled: Int
-
-    public init(
-        shown: Int = 0,
-        ignored: Int = 0,
-        typedOver: Int = 0,
-        escapeDismissed: Int = 0,
-        acceptedThenDeleted: Int = 0,
-        paused: Int = 0,
-        disabled: Int = 0
-    ) {
-        self.shown = shown
-        self.ignored = ignored
-        self.typedOver = typedOver
-        self.escapeDismissed = escapeDismissed
-        self.acceptedThenDeleted = acceptedThenDeleted
-        self.paused = paused
-        self.disabled = disabled
     }
 }
 
@@ -144,65 +54,6 @@ public struct AutocompleteRecommendedFix: Equatable, Sendable {
     }
 }
 
-public struct AutocompleteInsertionReliability: Equatable, Sendable {
-    public let appBundleIdentifier: String
-    public let insertionMode: String
-    public let verifiedCount: Int
-    public let failedCount: Int
-    public let successRate: Double
-
-    public init(
-        appBundleIdentifier: String,
-        insertionMode: String,
-        verifiedCount: Int,
-        failedCount: Int,
-        successRate: Double
-    ) {
-        self.appBundleIdentifier = appBundleIdentifier
-        self.insertionMode = insertionMode
-        self.verifiedCount = verifiedCount
-        self.failedCount = failedCount
-        self.successRate = successRate
-    }
-}
-
-public struct AutocompleteUndoRecoverability: Equatable, Sendable {
-    public let appBundleIdentifier: String
-    public let acceptedCount: Int
-    public let verifiedCount: Int
-    public let nativeSingleEditCount: Int
-    public let appRollbackCount: Int
-    public let degradedCount: Int
-    public let oneWordNativeCount: Int
-    public let fullNativeCount: Int
-    public let status: String
-    public let reason: String
-
-    public init(
-        appBundleIdentifier: String,
-        acceptedCount: Int,
-        verifiedCount: Int,
-        nativeSingleEditCount: Int,
-        appRollbackCount: Int,
-        degradedCount: Int,
-        oneWordNativeCount: Int,
-        fullNativeCount: Int,
-        status: String,
-        reason: String
-    ) {
-        self.appBundleIdentifier = appBundleIdentifier
-        self.acceptedCount = acceptedCount
-        self.verifiedCount = verifiedCount
-        self.nativeSingleEditCount = nativeSingleEditCount
-        self.appRollbackCount = appRollbackCount
-        self.degradedCount = degradedCount
-        self.oneWordNativeCount = oneWordNativeCount
-        self.fullNativeCount = fullNativeCount
-        self.status = status
-        self.reason = reason
-    }
-}
-
 public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let totalEvents: Int
     public let presentedCount: Int
@@ -210,68 +61,34 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let typedThroughCount: Int
     public let typeThroughSurvivalRate: Double
     public let typedOverCount: Int
-    public let ignoredCount: Int
     public let suppressedCount: Int
     public let actionableSuppressedCount: Int
-    public let insertionFailureCount: Int
-    public let insertionVerifiedCount: Int
     public let insertionVerificationSuccessRate: Double
     public let acceptedAndKeptCount: Int
     public let acceptedAndKeptRateAccepted: Double
     public let acceptedAndKeptRateShown: Double
-    public let medianEditDistanceAfterAccept: Double?
-    public let medianTimeUntilFirstEditAfterAcceptMilliseconds: Int?
     public let acceptanceRetentionClearedCount: Int
     public let acceptanceRetentionClearedByReason: [String: Int]
     public let tabAcceptShare: Double
-    public let fullAcceptShare: Double
     public let duplicateTextCount: Int
     public let doNotShipCounters: [String: Int]
-    public let appDisableCount: Int
-    public let caretGeometryFailureCount: Int
     public let caretGeometryFailureRate: Double
-    public let caretGeometryFailuresByApp: [String: Int]
-    public let caretGeometryFailureRateByApp: [String: Double]
-    public let caretGeometryFailuresByRenderMode: [String: Int]
-    public let caretGeometryFailureRateByRenderMode: [String: Double]
     public let annoyanceScore: Double
-    public let annoyanceSignalCounts: [String: Int]
     public let activeWritingMinutes: Int
     public let shownPerActiveMinute: Double
-    public let explicitDismissalCount: Int
     public let explicitDismissalsPerShown: Double
     public let typedOverRate: Double
-    public let staleOrWrongContextCount: Int
     public let staleOrWrongContextRate: Double
     public let acceptRate: Double
     public let usefulRate: Double
     public let p50LatencyMilliseconds: Int?
-    public let p90LatencyMilliseconds: Int?
     public let p95LatencyMilliseconds: Int?
-    public let p50VisibleLifetimeMilliseconds: Int?
     public let p95VisibleLifetimeMilliseconds: Int?
-    public let p50HideLatencyMilliseconds: Int?
     public let p95HideLatencyMilliseconds: Int?
-    public let modelResultP50LatencyMilliseconds: Int?
-    public let modelResultP90LatencyMilliseconds: Int?
-    public let modelResultP95LatencyMilliseconds: Int?
-    public let emptyModelResultCount: Int
-    public let emptyModelResultRate: Double
-    public let preRenderBlockedCount: Int
-    public let preRenderBlockedByReason: [String: Int]
-    public let modelFirstTokenLatencyBuckets: [String: Int]
-    public let modelFirstVisibleLatencyBuckets: [String: Int]
-    public let modelTotalGenerationLatencyBuckets: [String: Int]
-    public let dailySummaries: [AutocompleteTraceDailySummary]
     public let topFailureReasons: [AutocompleteTraceFailureReason]
-    public let acceptanceFunnel: AutocompleteAcceptanceFunnel
-    public let annoyanceFunnel: AutocompleteAnnoyanceFunnel
     public let recommendedFixes: [AutocompleteRecommendedFix]
-    public let insertionReliabilityByAppAndMode: [AutocompleteInsertionReliability]
-    public let undoRecoverabilityByApp: [AutocompleteUndoRecoverability]
     public let acceptRateByApp: [String: Double]
     public let acceptRateByMode: [String: Double]
-    public let acceptRateByExperimentArm: [String: Double]
     public let acceptedAndKeptRateByApp: [String: Double]
     public let acceptedAndKeptRateByFieldKind: [String: Double]
     public let acceptedAndKeptRateByRenderMode: [String: Double]
@@ -281,13 +98,6 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let acceptedAndKeptRateByExperimentArm: [String: Double]
     public let usefulRateByApp: [String: Double]
     public let usefulRateByMode: [String: Double]
-    public let usefulRateByExperimentArm: [String: Double]
-    public let presentedByExperimentArm: [String: Int]
-    public let acceptedAndKeptByExperimentArm: [String: Int]
-    public let suppressedByExperimentArm: [String: Int]
-    public let presentedByFieldKind: [String: Int]
-    public let acceptedAndKeptByFieldKind: [String: Int]
-    public let suppressedByFieldKind: [String: Int]
     public let suppressedByReason: [String: Int]
     public let sensitiveSuppressedByCategory: [String: Int]
     public let sensitivePresentedByCategory: [String: Int]
@@ -296,11 +106,6 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let suppressedByMode: [String: Int]
     public let actionableSuppressedByApp: [String: Int]
     public let actionableSuppressedByMode: [String: Int]
-    public let anchorQualityByApp: [String: [String: Int]]
-    public let insertionModeByApp: [String: [String: Int]]
-    public let insertionFailuresByAppAndMode: [String: [String: Int]]
-    public let updateSourceByApp: [String: [String: Int]]
-    public let axFailureReasonByApp: [String: [String: Int]]
     public let topMisses: [AutocompleteTraceMiss]
 
     public init(
@@ -310,68 +115,34 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         typedThroughCount: Int,
         typeThroughSurvivalRate: Double = 0,
         typedOverCount: Int,
-        ignoredCount: Int,
         suppressedCount: Int = 0,
         actionableSuppressedCount: Int = 0,
-        insertionFailureCount: Int,
-        insertionVerifiedCount: Int = 0,
         insertionVerificationSuccessRate: Double = 0,
         acceptedAndKeptCount: Int = 0,
         acceptedAndKeptRateAccepted: Double = 0,
         acceptedAndKeptRateShown: Double = 0,
-        medianEditDistanceAfterAccept: Double? = nil,
-        medianTimeUntilFirstEditAfterAcceptMilliseconds: Int? = nil,
         acceptanceRetentionClearedCount: Int = 0,
         acceptanceRetentionClearedByReason: [String: Int] = [:],
         tabAcceptShare: Double = 0,
-        fullAcceptShare: Double = 0,
         duplicateTextCount: Int = 0,
         doNotShipCounters: [String: Int] = [:],
-        appDisableCount: Int = 0,
-        caretGeometryFailureCount: Int = 0,
         caretGeometryFailureRate: Double = 0,
-        caretGeometryFailuresByApp: [String: Int] = [:],
-        caretGeometryFailureRateByApp: [String: Double] = [:],
-        caretGeometryFailuresByRenderMode: [String: Int] = [:],
-        caretGeometryFailureRateByRenderMode: [String: Double] = [:],
         annoyanceScore: Double = 0,
-        annoyanceSignalCounts: [String: Int] = [:],
         activeWritingMinutes: Int = 0,
         shownPerActiveMinute: Double = 0,
-        explicitDismissalCount: Int = 0,
         explicitDismissalsPerShown: Double = 0,
         typedOverRate: Double = 0,
-        staleOrWrongContextCount: Int = 0,
         staleOrWrongContextRate: Double = 0,
         acceptRate: Double,
         usefulRate: Double,
         p50LatencyMilliseconds: Int?,
-        p90LatencyMilliseconds: Int?,
         p95LatencyMilliseconds: Int?,
-        p50VisibleLifetimeMilliseconds: Int? = nil,
         p95VisibleLifetimeMilliseconds: Int? = nil,
-        p50HideLatencyMilliseconds: Int? = nil,
         p95HideLatencyMilliseconds: Int? = nil,
-        modelResultP50LatencyMilliseconds: Int? = nil,
-        modelResultP90LatencyMilliseconds: Int? = nil,
-        modelResultP95LatencyMilliseconds: Int? = nil,
-        emptyModelResultCount: Int = 0,
-        emptyModelResultRate: Double = 0,
-        preRenderBlockedCount: Int = 0,
-        preRenderBlockedByReason: [String: Int] = [:],
-        modelFirstTokenLatencyBuckets: [String: Int] = [:],
-        modelFirstVisibleLatencyBuckets: [String: Int] = [:],
-        modelTotalGenerationLatencyBuckets: [String: Int] = [:],
-        dailySummaries: [AutocompleteTraceDailySummary] = [],
         topFailureReasons: [AutocompleteTraceFailureReason] = [],
-        acceptanceFunnel: AutocompleteAcceptanceFunnel = AutocompleteAcceptanceFunnel(),
-        annoyanceFunnel: AutocompleteAnnoyanceFunnel = AutocompleteAnnoyanceFunnel(),
         recommendedFixes: [AutocompleteRecommendedFix] = [],
-        insertionReliabilityByAppAndMode: [AutocompleteInsertionReliability] = [],
-        undoRecoverabilityByApp: [AutocompleteUndoRecoverability] = [],
         acceptRateByApp: [String: Double] = [:],
         acceptRateByMode: [String: Double] = [:],
-        acceptRateByExperimentArm: [String: Double] = [:],
         acceptedAndKeptRateByApp: [String: Double] = [:],
         acceptedAndKeptRateByFieldKind: [String: Double] = [:],
         acceptedAndKeptRateByRenderMode: [String: Double] = [:],
@@ -381,13 +152,6 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         acceptedAndKeptRateByExperimentArm: [String: Double] = [:],
         usefulRateByApp: [String: Double] = [:],
         usefulRateByMode: [String: Double] = [:],
-        usefulRateByExperimentArm: [String: Double] = [:],
-        presentedByExperimentArm: [String: Int] = [:],
-        acceptedAndKeptByExperimentArm: [String: Int] = [:],
-        suppressedByExperimentArm: [String: Int] = [:],
-        presentedByFieldKind: [String: Int] = [:],
-        acceptedAndKeptByFieldKind: [String: Int] = [:],
-        suppressedByFieldKind: [String: Int] = [:],
         suppressedByReason: [String: Int] = [:],
         sensitiveSuppressedByCategory: [String: Int] = [:],
         sensitivePresentedByCategory: [String: Int] = [:],
@@ -396,11 +160,6 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         suppressedByMode: [String: Int] = [:],
         actionableSuppressedByApp: [String: Int] = [:],
         actionableSuppressedByMode: [String: Int] = [:],
-        anchorQualityByApp: [String: [String: Int]] = [:],
-        insertionModeByApp: [String: [String: Int]] = [:],
-        insertionFailuresByAppAndMode: [String: [String: Int]] = [:],
-        updateSourceByApp: [String: [String: Int]] = [:],
-        axFailureReasonByApp: [String: [String: Int]] = [:],
         topMisses: [AutocompleteTraceMiss]
     ) {
         self.totalEvents = totalEvents
@@ -409,68 +168,34 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.typedThroughCount = typedThroughCount
         self.typeThroughSurvivalRate = typeThroughSurvivalRate
         self.typedOverCount = typedOverCount
-        self.ignoredCount = ignoredCount
         self.suppressedCount = suppressedCount
         self.actionableSuppressedCount = actionableSuppressedCount
-        self.insertionFailureCount = insertionFailureCount
-        self.insertionVerifiedCount = insertionVerifiedCount
         self.insertionVerificationSuccessRate = insertionVerificationSuccessRate
         self.acceptedAndKeptCount = acceptedAndKeptCount
         self.acceptedAndKeptRateAccepted = acceptedAndKeptRateAccepted
         self.acceptedAndKeptRateShown = acceptedAndKeptRateShown
-        self.medianEditDistanceAfterAccept = medianEditDistanceAfterAccept
-        self.medianTimeUntilFirstEditAfterAcceptMilliseconds = medianTimeUntilFirstEditAfterAcceptMilliseconds
         self.acceptanceRetentionClearedCount = acceptanceRetentionClearedCount
         self.acceptanceRetentionClearedByReason = acceptanceRetentionClearedByReason
         self.tabAcceptShare = tabAcceptShare
-        self.fullAcceptShare = fullAcceptShare
         self.duplicateTextCount = duplicateTextCount
         self.doNotShipCounters = doNotShipCounters
-        self.appDisableCount = appDisableCount
-        self.caretGeometryFailureCount = caretGeometryFailureCount
         self.caretGeometryFailureRate = caretGeometryFailureRate
-        self.caretGeometryFailuresByApp = caretGeometryFailuresByApp
-        self.caretGeometryFailureRateByApp = caretGeometryFailureRateByApp
-        self.caretGeometryFailuresByRenderMode = caretGeometryFailuresByRenderMode
-        self.caretGeometryFailureRateByRenderMode = caretGeometryFailureRateByRenderMode
         self.annoyanceScore = annoyanceScore
-        self.annoyanceSignalCounts = annoyanceSignalCounts
         self.activeWritingMinutes = activeWritingMinutes
         self.shownPerActiveMinute = shownPerActiveMinute
-        self.explicitDismissalCount = explicitDismissalCount
         self.explicitDismissalsPerShown = explicitDismissalsPerShown
         self.typedOverRate = typedOverRate
-        self.staleOrWrongContextCount = staleOrWrongContextCount
         self.staleOrWrongContextRate = staleOrWrongContextRate
         self.acceptRate = acceptRate
         self.usefulRate = usefulRate
         self.p50LatencyMilliseconds = p50LatencyMilliseconds
-        self.p90LatencyMilliseconds = p90LatencyMilliseconds
         self.p95LatencyMilliseconds = p95LatencyMilliseconds
-        self.p50VisibleLifetimeMilliseconds = p50VisibleLifetimeMilliseconds
         self.p95VisibleLifetimeMilliseconds = p95VisibleLifetimeMilliseconds
-        self.p50HideLatencyMilliseconds = p50HideLatencyMilliseconds
         self.p95HideLatencyMilliseconds = p95HideLatencyMilliseconds
-        self.modelResultP50LatencyMilliseconds = modelResultP50LatencyMilliseconds
-        self.modelResultP90LatencyMilliseconds = modelResultP90LatencyMilliseconds
-        self.modelResultP95LatencyMilliseconds = modelResultP95LatencyMilliseconds
-        self.emptyModelResultCount = emptyModelResultCount
-        self.emptyModelResultRate = emptyModelResultRate
-        self.preRenderBlockedCount = preRenderBlockedCount
-        self.preRenderBlockedByReason = preRenderBlockedByReason
-        self.modelFirstTokenLatencyBuckets = modelFirstTokenLatencyBuckets
-        self.modelFirstVisibleLatencyBuckets = modelFirstVisibleLatencyBuckets
-        self.modelTotalGenerationLatencyBuckets = modelTotalGenerationLatencyBuckets
-        self.dailySummaries = dailySummaries
         self.topFailureReasons = topFailureReasons
-        self.acceptanceFunnel = acceptanceFunnel
-        self.annoyanceFunnel = annoyanceFunnel
         self.recommendedFixes = recommendedFixes
-        self.insertionReliabilityByAppAndMode = insertionReliabilityByAppAndMode
-        self.undoRecoverabilityByApp = undoRecoverabilityByApp
         self.acceptRateByApp = acceptRateByApp
         self.acceptRateByMode = acceptRateByMode
-        self.acceptRateByExperimentArm = acceptRateByExperimentArm
         self.acceptedAndKeptRateByApp = acceptedAndKeptRateByApp
         self.acceptedAndKeptRateByFieldKind = acceptedAndKeptRateByFieldKind
         self.acceptedAndKeptRateByRenderMode = acceptedAndKeptRateByRenderMode
@@ -480,13 +205,6 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.acceptedAndKeptRateByExperimentArm = acceptedAndKeptRateByExperimentArm
         self.usefulRateByApp = usefulRateByApp
         self.usefulRateByMode = usefulRateByMode
-        self.usefulRateByExperimentArm = usefulRateByExperimentArm
-        self.presentedByExperimentArm = presentedByExperimentArm
-        self.acceptedAndKeptByExperimentArm = acceptedAndKeptByExperimentArm
-        self.suppressedByExperimentArm = suppressedByExperimentArm
-        self.presentedByFieldKind = presentedByFieldKind
-        self.acceptedAndKeptByFieldKind = acceptedAndKeptByFieldKind
-        self.suppressedByFieldKind = suppressedByFieldKind
         self.suppressedByReason = suppressedByReason
         self.sensitiveSuppressedByCategory = sensitiveSuppressedByCategory
         self.sensitivePresentedByCategory = sensitivePresentedByCategory
@@ -495,11 +213,6 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.suppressedByMode = suppressedByMode
         self.actionableSuppressedByApp = actionableSuppressedByApp
         self.actionableSuppressedByMode = actionableSuppressedByMode
-        self.anchorQualityByApp = anchorQualityByApp
-        self.insertionModeByApp = insertionModeByApp
-        self.insertionFailuresByAppAndMode = insertionFailuresByAppAndMode
-        self.updateSourceByApp = updateSourceByApp
-        self.axFailureReasonByApp = axFailureReasonByApp
         self.topMisses = topMisses
     }
 }
@@ -526,17 +239,14 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .intersection(presentedIDs)
         let usefulIDs = acceptedIDs.union(typedThroughIDs)
         let typedOver = events.filter { $0.type == .suggestionTypedOver }
-        let hiddenIgnored = events.filter { $0.type == .suggestionHidden && $0.outcome == "ignored" }
         let suppressed = events.filter { $0.type == .suggestionSuppressed }
         let actionableSuppressed = suppressed.filter { isActionableSuppression($0) }
         let sensitiveSuppressed = suppressed.filter { sensitiveCategory($0) != nil }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let insertionVerified = events.filter { $0.type == .insertionVerified }
-        let acceptedInsertionUndone = events.filter { $0.type == .acceptedInsertionUndone }
         let caretGeometryFailures = events.filter { $0.type == .caretGeometryFailed }
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let acceptanceRetentionCleared = events.filter { $0.type == .acceptanceRetentionCleared }
-        let modelResults = events.filter { $0.type == .modelResult }
         let hidden = events.filter { $0.type == .suggestionHidden }
         let explicitDismissals = hidden.filter { $0.reason == "escape" }
         let activeMinutes = activeWritingMinutes(in: events)
@@ -548,14 +258,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .sorted()
         let staleOrWrongContextEvents = events.filter(isStaleOrWrongContextEvent)
         let firstShownLatencies = firstPresentedByID.values.compactMap(\.latencyMilliseconds).sorted()
-        let modelResultLatencies = modelResults
-            .compactMap { modelTotalGenerationLatency($0) }
-            .sorted()
-        let firstTokenLatencies = modelResults
-            .compactMap { intMetadata($0, key: "firstTokenLatencyMilliseconds") }
-            .sorted()
-        let emptyModelResults = modelResults.filter(isEmptyModelResult)
-        let preRenderBlocked = suppressed.filter { !presentedIDs.contains($0.suggestionID) }
         let acceptedEventIDs = Set(accepted.map(\.acceptanceIdentifier))
         let acceptedAndKeptEventIDs = Set(acceptedTextEdited
             .filter(\.isAcceptedAndKeptSignal)
@@ -564,12 +266,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .filter(\.isAcceptedAndKeptSignal)
             .map(\.suggestionID))
             .intersection(presentedIDs)
-        let editDistances = acceptedTextEdited
-            .compactMap { doubleMetadata($0, key: "normalizedEditDistance") }
-            .sorted()
-        let firstEditDelays = acceptedTextEdited
-            .compactMap { intMetadata($0, key: "firstEditDelayMs") }
-            .sorted()
         let verifiedAndFailedCount = insertionVerified.count + insertionFailures.count
         let annoyanceSignals = annoyanceSignalCounts(from: events, presentedByID: firstPresentedByID)
 
@@ -582,11 +278,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 ? 0
                 : Double(typedThroughIDs.count) / Double(firstPresentedByID.count),
             typedOverCount: typedOver.count,
-            ignoredCount: hiddenIgnored.count,
             suppressedCount: suppressed.count,
             actionableSuppressedCount: actionableSuppressed.count,
-            insertionFailureCount: insertionFailures.count,
-            insertionVerifiedCount: insertionVerified.count,
             insertionVerificationSuccessRate: verifiedAndFailedCount == 0
                 ? 0
                 : Double(insertionVerified.count) / Double(verifiedAndFailedCount),
@@ -597,39 +290,20 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             acceptedAndKeptRateShown: presentedIDs.isEmpty
                 ? 0
                 : Double(acceptedAndKeptSuggestionIDs.count) / Double(presentedIDs.count),
-            medianEditDistanceAfterAccept: median(editDistances),
-            medianTimeUntilFirstEditAfterAcceptMilliseconds: percentile(0.50, in: firstEditDelays),
             acceptanceRetentionClearedCount: acceptanceRetentionCleared.count,
             acceptanceRetentionClearedByReason: countsByReason(acceptanceRetentionCleared),
             tabAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isTabAccept).count) / Double(accepted.count),
-            fullAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isFullAccept).count) / Double(accepted.count),
             duplicateTextCount: insertionFailures.filter(\.isDuplicateInsertionSignal).count,
             doNotShipCounters: doNotShipCounters(from: events),
-            appDisableCount: events.filter { $0.type == .appDisabled }.count,
-            caretGeometryFailureCount: caretGeometryFailures.count,
             caretGeometryFailureRate: rate(
                 numerator: caretGeometryFailures.count,
                 denominator: firstPresentedByID.count + caretGeometryFailures.count
             ),
-            caretGeometryFailuresByApp: counts(caretGeometryFailures, key: \.appBundleIdentifier),
-            caretGeometryFailureRateByApp: failureRates(
-                presented: Array(firstPresentedByID.values),
-                failures: caretGeometryFailures,
-                key: \.appBundleIdentifier
-            ),
-            caretGeometryFailuresByRenderMode: counts(caretGeometryFailures, key: renderMode),
-            caretGeometryFailureRateByRenderMode: failureRates(
-                presented: Array(firstPresentedByID.values),
-                failures: caretGeometryFailures,
-                key: renderMode
-            ),
             annoyanceScore: annoyanceScore(signalCounts: annoyanceSignals, presentedCount: firstPresentedByID.count),
-            annoyanceSignalCounts: annoyanceSignals,
             activeWritingMinutes: activeMinutes,
             shownPerActiveMinute: activeMinutes == 0
                 ? 0
                 : Double(firstPresentedByID.count) / Double(activeMinutes),
-            explicitDismissalCount: explicitDismissals.count,
             explicitDismissalsPerShown: rate(
                 numerator: explicitDismissals.count,
                 denominator: firstPresentedByID.count
@@ -638,7 +312,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 numerator: typedOver.count,
                 denominator: firstPresentedByID.count
             ),
-            staleOrWrongContextCount: staleOrWrongContextEvents.count,
             staleOrWrongContextRate: rate(
                 numerator: staleOrWrongContextEvents.count,
                 denominator: firstPresentedByID.count
@@ -646,49 +319,13 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             acceptRate: presentedIDs.isEmpty ? 0 : Double(acceptedIDs.count) / Double(presentedIDs.count),
             usefulRate: presentedIDs.isEmpty ? 0 : Double(usefulIDs.count) / Double(presentedIDs.count),
             p50LatencyMilliseconds: percentile(0.50, in: firstShownLatencies),
-            p90LatencyMilliseconds: percentile(0.90, in: firstShownLatencies),
             p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies),
-            p50VisibleLifetimeMilliseconds: percentile(0.50, in: visibleLifetimes),
             p95VisibleLifetimeMilliseconds: percentile(0.95, in: visibleLifetimes),
-            p50HideLatencyMilliseconds: percentile(0.50, in: hideLatencies),
             p95HideLatencyMilliseconds: percentile(0.95, in: hideLatencies),
-            modelResultP50LatencyMilliseconds: percentile(0.50, in: modelResultLatencies),
-            modelResultP90LatencyMilliseconds: percentile(0.90, in: modelResultLatencies),
-            modelResultP95LatencyMilliseconds: percentile(0.95, in: modelResultLatencies),
-            emptyModelResultCount: emptyModelResults.count,
-            emptyModelResultRate: modelResults.isEmpty
-                ? 0
-                : Double(emptyModelResults.count) / Double(modelResults.count),
-            preRenderBlockedCount: preRenderBlocked.count,
-            preRenderBlockedByReason: countsByReason(preRenderBlocked),
-            modelFirstTokenLatencyBuckets: latencyBuckets(firstTokenLatencies),
-            modelFirstVisibleLatencyBuckets: latencyBuckets(firstShownLatencies),
-            modelTotalGenerationLatencyBuckets: latencyBuckets(modelResultLatencies),
-            dailySummaries: dailySummaries(from: events),
             topFailureReasons: topFailureReasons(from: events),
-            acceptanceFunnel: acceptanceFunnel(
-                events: events,
-                firstPresentedByID: firstPresentedByID,
-                acceptedIDs: acceptedIDs
-            ),
-            annoyanceFunnel: annoyanceFunnel(
-                events: events,
-                presentedCount: firstPresentedByID.count,
-                hiddenIgnoredCount: hiddenIgnored.count,
-                typedOverCount: typedOver.count
-            ),
             recommendedFixes: recommendedFixes(
                 events: events,
                 p95LatencyMilliseconds: percentile(0.95, in: firstShownLatencies)
-            ),
-            insertionReliabilityByAppAndMode: insertionReliabilityByAppAndMode(
-                insertionVerified: insertionVerified,
-                insertionFailures: insertionFailures
-            ),
-            undoRecoverabilityByApp: undoRecoverabilityByApp(
-                accepted: accepted,
-                insertionVerified: insertionVerified,
-                acceptedInsertionUndone: acceptedInsertionUndone
             ),
             acceptRateByApp: rates(
                 presentedByID: firstPresentedByID,
@@ -699,11 +336,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 presentedByID: firstPresentedByID,
                 outcomeIDs: acceptedIDs,
                 key: \.requestMode
-            ),
-            acceptRateByExperimentArm: rates(
-                presentedByID: firstPresentedByID,
-                outcomeIDs: acceptedIDs,
-                key: experimentArm
             ),
             acceptedAndKeptRateByApp: rates(
                 presentedByID: firstPresentedByID,
@@ -750,23 +382,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 outcomeIDs: usefulIDs,
                 key: \.requestMode
             ),
-            usefulRateByExperimentArm: rates(
-                presentedByID: firstPresentedByID,
-                outcomeIDs: usefulIDs,
-                key: experimentArm
-            ),
-            presentedByExperimentArm: counts(Array(firstPresentedByID.values), key: experimentArm),
-            acceptedAndKeptByExperimentArm: counts(
-                acceptedTextEdited.filter(\.isAcceptedAndKeptSignal),
-                key: experimentArm
-            ),
-            suppressedByExperimentArm: counts(suppressed, key: experimentArm),
-            presentedByFieldKind: counts(Array(firstPresentedByID.values), key: fieldKind),
-            acceptedAndKeptByFieldKind: counts(
-                acceptedTextEdited.filter(\.isAcceptedAndKeptSignal),
-                key: fieldKind
-            ),
-            suppressedByFieldKind: counts(suppressed, key: fieldKind),
             suppressedByReason: countsByReason(suppressed),
             sensitiveSuppressedByCategory: counts(sensitiveSuppressed, key: sensitiveSuppressionCategory),
             sensitivePresentedByCategory: counts(
@@ -778,24 +393,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             suppressedByMode: counts(suppressed, key: \.requestMode),
             actionableSuppressedByApp: counts(actionableSuppressed, key: \.appBundleIdentifier),
             actionableSuppressedByMode: counts(actionableSuppressed, key: \.requestMode),
-            anchorQualityByApp: countsByAppAndMetadata(events, keys: ["anchorQuality", "caretQuality", "geometryQuality"]),
-            insertionModeByApp: countsByAppAndMetadata(
-                events,
-                keys: ["actualInsertionMode", "profileInsertionMode", "insertionMode"]
-            ),
-            insertionFailuresByAppAndMode: countsByAppAndMetadata(
-                insertionFailures,
-                keys: ["actualInsertionMode", "profileInsertionMode", "insertionMode"],
-                fallback: \.requestMode
-            ),
-            updateSourceByApp: countsByAppAndMetadata(
-                events,
-                keys: ["updateSource", "refreshSource", "geometryUpdateSource"]
-            ),
-            axFailureReasonByApp: countsByAppAndMetadata(
-                events,
-                keys: ["axFailureReason", "geometryReason", "caretInvalidReason"]
-            ),
             topMisses: topMisses(from: events)
         )
     }
@@ -887,74 +484,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             || event.outcome == "acceptNextWord"
     }
 
-    private func isFullAccept(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["acceptMode"] == "full"
-            || event.metadata["acceptMode"] == "acceptAllVisible"
-            || event.outcome == "acceptAllVisible"
-    }
-
-    private func doubleMetadata(_ event: AutocompleteTraceEvent, key: String) -> Double? {
-        event.doubleMetadata(key)
-    }
-
     private func intMetadata(_ event: AutocompleteTraceEvent, key: String) -> Int? {
         event.intMetadata(key)
-    }
-
-    private func modelTotalGenerationLatency(_ event: AutocompleteTraceEvent) -> Int? {
-        event.latencyMilliseconds
-            ?? intMetadata(event, key: "totalGenerationLatencyMilliseconds")
-            ?? intMetadata(event, key: "modelTotalLatencyMilliseconds")
-    }
-
-    private func isEmptyModelResult(_ event: AutocompleteTraceEvent) -> Bool {
-        if let wordCount = intMetadata(event, key: "cleanedWordCount") {
-            return wordCount == 0
-        }
-
-        if let charCount = intMetadata(event, key: "cleanedVisibleTextChars") {
-            return charCount == 0
-        }
-
-        let cleanedVisibleText = event.cleanedVisibleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawOutput = event.rawOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanedVisibleText.isEmpty || !rawOutput.isEmpty else {
-            return true
-        }
-
-        return cleanedVisibleText.isEmpty
-    }
-
-    private func latencyBuckets(_ latencies: [Int]) -> [String: Int] {
-        var buckets: [String: Int] = [
-            "0-50ms": 0,
-            "51-100ms": 0,
-            "101-250ms": 0,
-            "251-500ms": 0,
-            "501-1000ms": 0,
-            ">1000ms": 0
-        ]
-
-        for latency in latencies {
-            let key: String
-            switch latency {
-            case ...50:
-                key = "0-50ms"
-            case ...100:
-                key = "51-100ms"
-            case ...250:
-                key = "101-250ms"
-            case ...500:
-                key = "251-500ms"
-            case ...1_000:
-                key = "501-1000ms"
-            default:
-                key = ">1000ms"
-            }
-            buckets[key, default: 0] += 1
-        }
-
-        return buckets.filter { $0.value > 0 }
     }
 
     private func counts(
@@ -968,60 +499,12 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         .mapValues(\.count)
     }
 
-    private func countsByAppAndMetadata(
-        _ events: [AutocompleteTraceEvent],
-        keys: [String],
-        fallback: ((AutocompleteTraceEvent) -> String)? = nil
-    ) -> [String: [String: Int]] {
-        var result: [String: [String: Int]] = [:]
-
-        for event in events {
-            let bucket = rawMetadataValue(event, keys: keys) ?? fallback?(event)
-            guard let bucket, !bucket.isEmpty else {
-                continue
-            }
-
-            let app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
-            result[app, default: [:]][bucket, default: 0] += 1
-        }
-
-        return result
-    }
-
-    private func rawMetadataValue(_ event: AutocompleteTraceEvent, keys: [String]) -> String? {
-        for key in keys {
-            if let value = event.metadata[key], !value.isEmpty {
-                return value
-            }
-        }
-
-        return nil
-    }
-
     private func isActionableSuppression(_ event: AutocompleteTraceEvent) -> Bool {
         event.reason != "no-fast-word-candidate"
     }
 
     private func rate(numerator: Int, denominator: Int) -> Double {
         denominator == 0 ? 0 : Double(numerator) / Double(denominator)
-    }
-
-    private func failureRates(
-        presented: [AutocompleteTraceEvent],
-        failures: [AutocompleteTraceEvent],
-        key: (AutocompleteTraceEvent) -> String
-    ) -> [String: Double] {
-        let presentedCounts = counts(presented, key: key)
-        let failureCounts = counts(failures, key: key)
-        var rates: [String: Double] = [:]
-
-        for bucket in Set(presentedCounts.keys).union(failureCounts.keys) {
-            let failures = failureCounts[bucket] ?? 0
-            let shown = presentedCounts[bucket] ?? 0
-            rates[bucket] = rate(numerator: failures, denominator: shown + failures)
-        }
-
-        return rates
     }
 
     private func rates(
@@ -1043,118 +526,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             rates[normalizedBucket] = Double(outcomeCounts[bucket] ?? 0) / Double(presentedCount)
         }
         return rates
-    }
-
-    private func insertionReliabilityByAppAndMode(
-        insertionVerified: [AutocompleteTraceEvent],
-        insertionFailures: [AutocompleteTraceEvent]
-    ) -> [AutocompleteInsertionReliability] {
-        var buckets: [String: (app: String, mode: String, verified: Int, failed: Int)] = [:]
-
-        for event in insertionVerified {
-            let app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
-            let mode = insertionMode(event)
-            let key = "\(app)|\(mode)"
-            var bucket = buckets[key] ?? (app: app, mode: mode, verified: 0, failed: 0)
-            bucket.verified += 1
-            buckets[key] = bucket
-        }
-
-        for event in insertionFailures {
-            let app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
-            let mode = insertionMode(event)
-            let key = "\(app)|\(mode)"
-            var bucket = buckets[key] ?? (app: app, mode: mode, verified: 0, failed: 0)
-            bucket.failed += 1
-            buckets[key] = bucket
-        }
-
-        return buckets.values
-            .map { bucket in
-                let attempts = bucket.verified + bucket.failed
-                return AutocompleteInsertionReliability(
-                    appBundleIdentifier: bucket.app,
-                    insertionMode: bucket.mode,
-                    verifiedCount: bucket.verified,
-                    failedCount: bucket.failed,
-                    successRate: attempts == 0 ? 0 : Double(bucket.verified) / Double(attempts)
-                )
-            }
-            .sorted {
-                if $0.appBundleIdentifier == $1.appBundleIdentifier {
-                    return $0.insertionMode < $1.insertionMode
-                }
-
-                return $0.appBundleIdentifier < $1.appBundleIdentifier
-            }
-    }
-
-    private func undoRecoverabilityByApp(
-        accepted: [AutocompleteTraceEvent],
-        insertionVerified: [AutocompleteTraceEvent],
-        acceptedInsertionUndone: [AutocompleteTraceEvent]
-    ) -> [AutocompleteUndoRecoverability] {
-        let acceptedByApp = Dictionary(grouping: accepted) { event in
-            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
-        }
-        let verifiedByApp = Dictionary(grouping: insertionVerified) { event in
-            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
-        }
-        let undoneByApp = Dictionary(grouping: acceptedInsertionUndone) { event in
-            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
-        }
-
-        return Set(acceptedByApp.keys)
-            .union(verifiedByApp.keys)
-            .union(undoneByApp.keys)
-            .sorted()
-            .map { app in
-                let appAccepted = acceptedByApp[app] ?? []
-                let appVerified = verifiedByApp[app] ?? []
-                let appUndone = undoneByApp[app] ?? []
-                let native = appUndone.filter { undoMechanism($0) == .nativeSingleEdit }
-                let rollback = appUndone.filter { undoMechanism($0) == .appRollback }
-                let degraded = appUndone.filter { undoMechanism($0) == .degraded }
-                let oneWordNative = native.filter(isTabAccept)
-                let fullNative = native.filter(isFullAccept)
-                let status: String
-                let reason: String
-
-                if !native.isEmpty {
-                    status = "nativeSingleEdit"
-                    reason = "Native undo proof exists in the same trace slice."
-                } else if !rollback.isEmpty {
-                    status = "appRollback"
-                    reason = "App rollback proof exists, but native undo is not proven."
-                } else if !degraded.isEmpty {
-                    status = "degraded"
-                    reason = "Surface is marked degraded for undo."
-                } else {
-                    status = "missing"
-                    reason = "No same-slice undo proof recorded."
-                }
-
-                return AutocompleteUndoRecoverability(
-                    appBundleIdentifier: app,
-                    acceptedCount: appAccepted.count,
-                    verifiedCount: appVerified.count,
-                    nativeSingleEditCount: native.count,
-                    appRollbackCount: rollback.count,
-                    degradedCount: degraded.count,
-                    oneWordNativeCount: oneWordNative.count,
-                    fullNativeCount: fullNative.count,
-                    status: status,
-                    reason: reason
-                )
-            }
-    }
-
-    private func undoMechanism(_ event: AutocompleteTraceEvent) -> InsertionUndoRecoverabilityLevel? {
-        guard let value = event.metadata["undoMechanism"] ?? event.metadata["rollbackMechanism"] else {
-            return nil
-        }
-
-        return InsertionUndoRecoverabilityLevel(rawValue: value)
     }
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
@@ -1387,33 +758,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .map { $0 }
     }
 
-    private func dailySummaries(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceDailySummary] {
-        Dictionary(grouping: events, by: dayKey)
-            .map { date, dayEvents in
-                let presentedByID = firstEventsBySuggestionID(
-                    from: dayEvents.filter { $0.type == .suggestionPresented }
-                )
-                let accepted = dayEvents.filter { $0.type == .suggestionAccepted }
-                let acceptedAndKept = dayEvents
-                    .filter { $0.type == .acceptedTextEdited && $0.isAcceptedAndKeptSignal }
-                let latencies = presentedByID.values.compactMap(\.latencyMilliseconds).sorted()
-
-                return AutocompleteTraceDailySummary(
-                    date: date,
-                    activeWritingMinutes: activeWritingMinutes(in: dayEvents),
-                    shown: presentedByID.count,
-                    accepted: accepted.count,
-                    acceptedAndKept: Set(acceptedAndKept.map(\.acceptanceIdentifier)).count,
-                    p50LatencyMilliseconds: percentile(0.50, in: latencies),
-                    p95LatencyMilliseconds: percentile(0.95, in: latencies),
-                    severeFailures: severeFailureCount(in: dayEvents),
-                    pauses: dayEvents.filter { $0.type == .appPaused || $0.type == .fieldPaused }.count,
-                    disables: dayEvents.filter { $0.type == .appDisabled }.count
-                )
-            }
-            .sorted { $0.date > $1.date }
-    }
-
     private func topFailureReasons(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceFailureReason] {
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let duplicateText = insertionFailures.filter(\.isDuplicateInsertionSignal).count
@@ -1478,61 +822,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
                 return lhs.count > rhs.count
             }
-    }
-
-    private func acceptanceFunnel(
-        events: [AutocompleteTraceEvent],
-        firstPresentedByID: [String: AutocompleteTraceEvent],
-        acceptedIDs: Set<String>
-    ) -> AutocompleteAcceptanceFunnel {
-        let requested = firstEventsBySuggestionID(
-            from: events.filter { $0.type == .suggestionRequested }
-        ).count
-        let modelReturned = firstEventsBySuggestionID(
-            from: events.filter { $0.type == .modelResult }
-        ).count
-        let keptAt10 = Set(events
-            .filter {
-                $0.type == .acceptedTextEdited
-                    && $0.isAcceptedAndKeptSignal
-                    && $0.metadata["checkpoint"] == "10s"
-            }
-            .map(\.acceptanceIdentifier))
-            .count
-        let keptAt30OrBlur = Set(events
-            .filter {
-                $0.type == .acceptedTextEdited
-                    && $0.isAcceptedAndKeptSignal
-                    && ["30s", "1m", "5m", "fieldBlur", "fieldSend"].contains($0.metadata["checkpoint"] ?? "")
-            }
-            .map(\.acceptanceIdentifier))
-            .count
-
-        return AutocompleteAcceptanceFunnel(
-            requested: requested,
-            modelReturned: modelReturned,
-            shown: firstPresentedByID.count,
-            accepted: acceptedIDs.intersection(Set(firstPresentedByID.keys)).count,
-            keptAt10Seconds: keptAt10,
-            keptAt30SecondsOrBlur: keptAt30OrBlur
-        )
-    }
-
-    private func annoyanceFunnel(
-        events: [AutocompleteTraceEvent],
-        presentedCount: Int,
-        hiddenIgnoredCount: Int,
-        typedOverCount: Int
-    ) -> AutocompleteAnnoyanceFunnel {
-        AutocompleteAnnoyanceFunnel(
-            shown: presentedCount,
-            ignored: hiddenIgnoredCount,
-            typedOver: typedOverCount,
-            escapeDismissed: events.filter { $0.type == .suggestionHidden && $0.reason == "escape" }.count,
-            acceptedThenDeleted: acceptedThenDeletedCount(in: events),
-            paused: events.filter { $0.type == .appPaused || $0.type == .fieldPaused }.count,
-            disabled: events.filter { $0.type == .appDisabled }.count
-        )
     }
 
     private func recommendedFixes(
@@ -1919,10 +1208,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             || normalized.hasPrefix("certainly,")
     }
 
-    private func dayKey(_ event: AutocompleteTraceEvent) -> String {
-        String(event.timestamp.prefix(10))
-    }
-
     private func activeWritingMinutes(in events: [AutocompleteTraceEvent]) -> Int {
         let dates = events
             .compactMap { iso8601Date(from: $0.timestamp) }
@@ -1933,24 +1218,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
         let seconds = max(0, last.timeIntervalSince(first))
         return max(1, Int((seconds / 60).rounded(.up)))
-    }
-
-    private func severeFailureCount(in events: [AutocompleteTraceEvent]) -> Int {
-        events.filter { event in
-            if event.metadata["severe"] == "true" {
-                return true
-            }
-
-            if event.type == .insertionFailed || event.type == .appDisabled {
-                return true
-            }
-
-            if event.type == .caretGeometryFailed {
-                return event.metadata["severe"] == "true"
-            }
-
-            return event.isFocusStealSignal || event.isTabConflictSignal
-        }.count
     }
 
     private func doNotShipCounters(from events: [AutocompleteTraceEvent]) -> [String: Int] {
@@ -2064,10 +1331,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         }
 
         return false
-    }
-
-    private func acceptedThenDeletedCount(in events: [AutocompleteTraceEvent]) -> Int {
-        events.filter(\.isAcceptedThenDeletedWithinTwoSecondsSignal).count
     }
 
     // ISO8601DateFormatter.date(from:) is thread-safe; shared to avoid per-call allocation.
@@ -2228,19 +1491,6 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         }
 
         return max(0, Int(endDate.timeIntervalSince(startDate) * 1_000))
-    }
-
-    private func median(_ values: [Double]) -> Double? {
-        guard !values.isEmpty else {
-            return nil
-        }
-
-        let middle = values.count / 2
-        if values.count.isMultiple(of: 2) {
-            return (values[middle - 1] + values[middle]) / 2
-        }
-
-        return values[middle]
     }
 
     private func percentile(_ percentile: Double, in values: [Int]) -> Int? {

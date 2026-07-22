@@ -3,11 +3,10 @@ import Testing
 
 @Suite("App compatibility profile")
 struct AppCompatibilityProfileTests {
-    @Test("Fallback profile is default-on")
+    @Test("Fallback profile uses caret-only, unclipped placement")
     func fallbackProfileIsDefaultOn() {
-        #expect(AppCompatibilityProfile.fallback.defaultRung == .accept)
-        #expect(AppCompatibilityProfile.fallback.textPath == .nativeAccessibility)
-        #expect(AppCompatibilityProfile.fallback.acceptMode == .directAccessibility)
+        #expect(AppCompatibilityProfile.fallback.lineRectPolicy == .caretOnly)
+        #expect(AppCompatibilityProfile.fallback.boundaryClipPolicy == .clipToFocusedTextElementWhenCaretInside)
     }
 
     @Test("Selects known app profiles by bundle identifier")
@@ -33,8 +32,13 @@ struct AppCompatibilityProfileTests {
         #expect(registry.profile(for: "com.googlecode.iterm2").id == "terminal")
     }
 
-    @Test("High-value unproven collaboration apps stay blocked at the routing layer")
-    func highValueUnprovenCollaborationAppsStayBlocked() {
+    @Test("High-value unproven collaboration apps ignore the focused text element for placement")
+    func highValueUnprovenCollaborationAppsIgnoreFocusedTextElement() {
+        // These apps are actually blocked at the live gate (CompatibilityProfileStore,
+        // exact bundle-id match, graduationDecision == .blocked) — this placement
+        // registry only owns geometry tuning, so what it can meaningfully assert is
+        // that these unreliable-AX targets don't try to clip placement to the
+        // focused text element.
         let registry = AppCompatibilityRegistry.default
         let blockedProfiles = [
             registry.profile(for: "notion.id"),
@@ -43,9 +47,11 @@ struct AppCompatibilityProfileTests {
         ]
 
         for profile in blockedProfiles {
-            #expect(profile.defaultRung == .blocked)
-            #expect(profile.textPath == .blocked)
-            #expect(profile.acceptMode == .none)
+            #expect(profile.boundaryClipPolicy == .ignoreFocusedTextElement)
+        }
+
+        for bundleIdentifier in ["notion.id", "com.tinyspeck.slackmacgap", "com.hnc.Discord"] {
+            #expect(CompatibilityProfileStore.mvp.profile(for: bundleIdentifier)?.graduationDecision == .blocked)
         }
     }
 
@@ -54,16 +60,7 @@ struct AppCompatibilityProfileTests {
         let registry = AppCompatibilityRegistry.default
 
         #expect(registry.profile(for: "example.unknown.Writer").id == "fallback")
-        #expect(registry.profile(for: "example.unknown.Writer").defaultRung == .accept)
-        #expect(registry.profile(for: "example.unknown.Writer").textPath == .nativeAccessibility)
+        #expect(registry.profile(for: "example.unknown.Writer").lineRectPolicy == .caretOnly)
         #expect(registry.profile(for: nil).id == "fallback")
-    }
-
-    @Test("Default profiles do not use clipboard fallback acceptance")
-    func defaultProfilesDoNotUseClipboardFallback() {
-        let clipboardProfiles = AppCompatibilityRegistry.defaultProfiles
-            .filter { $0.acceptMode == .clipboardFallback }
-
-        #expect(clipboardProfiles.isEmpty)
     }
 }
