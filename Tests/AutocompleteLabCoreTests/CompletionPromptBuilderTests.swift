@@ -190,9 +190,9 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Visible page context source: screen_ocr, scope: visible_screen"))
-        #expect(prompt.system.contains("Use it to infer the active app"))
-        #expect(prompt.system.contains("Prefer a useful best guess"))
-        #expect(prompt.system.contains("Never output visible window titles"))
+        #expect(prompt.system.contains("Use it for grounding: the active app"))
+        #expect(prompt.system.contains("prefer a useful best guess"))
+        #expect(prompt.system.contains("never output window titles"))
         #expect(prompt.user.contains("Visible page context:\nOCR scope: visible_screen\nLaunch Plan"))
         #expect(prompt.user.contains("OCR scope: visible_screen"))
         #expect(prompt.user.contains("- Keep OCR local"))

@@ -43,12 +43,11 @@ public struct VisiblePageContext: Equatable, Sendable {
 
     public var promptGuidance: String {
         """
-        Visible page context source: \(source.rawValue), scope: \(captureScope.rawValue). This may include OCR mistakes, nearby UI, or other visible app text.
-        Use it to infer the active app, local topic, what the user is replying to, names, repeated terms, headings, list style, and the next words the user is likely trying to type.
-        Act like a local writing companion that can see the screen but still only types the user's next words.
-        Prefer a useful best guess when the visible context strongly implies the next word or short phrase.
-        Ignore buttons, menus, sidebars, and anything unrelated to the active text field.
-        Never output visible window titles, document titles, tab labels, menu labels, sidebar labels, font controls, app navigation, or other OCR chrome.
+        Visible page context source: \(source.rawValue), scope: \(captureScope.rawValue). This is a noisy OCR snapshot of what is VISIBLE on the user's screen right now — it is not text the user wrote, and never text to continue.
+        Its relationship to the typing is unknown — infer it from content: it may be a message, email, or comment the user is REPLYING to; an article or document they are reading and reacting to; their own earlier writing scrolled above the cursor; or unrelated windows and UI.
+        If it reads like a received message or question, treat the typing as a reply to it and let the reply address it. If it reads like source material, treat the typing as notes or commentary about it. If it matches the typed text's topic and voice, treat it as the user's own earlier writing and stay consistent with it.
+        Use it for grounding: the active app and its register, the topic at hand, names, project terms, repeated vocabulary, headings, and list style — and prefer a useful best guess when it strongly implies the user's next words.
+        Only ever continue the "Before cursor" text. Never quote, copy, or continue the visible context itself; never output window titles, tab labels, buttons, menus, timestamps, or other OCR chrome; expect OCR misreadings and silently correct them.
         """
     }
 
