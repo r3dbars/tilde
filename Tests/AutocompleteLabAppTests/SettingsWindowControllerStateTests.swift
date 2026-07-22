@@ -622,7 +622,6 @@ struct SettingsWindowControllerStateTests {
                 screenshotTracingEnabled: false,
                 screenshotTracingExpiresAt: nil,
                 visiblePageContextEnabled: false,
-                personalCaptureEnabled: true,
                 screenCaptureAccessGranted: false,
                 diagnosticsPath: "/tmp/diagnostics.log",
                 tracePath: "/tmp/traces.jsonl"

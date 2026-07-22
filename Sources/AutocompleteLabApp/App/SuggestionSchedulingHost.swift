@@ -502,7 +502,6 @@ final class SuggestionSchedulingHost {
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 docLocalContextTexts: orchestration.docLocalContextTexts,
-                personalWritingMemory: orchestration.personalWritingMemory,
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,

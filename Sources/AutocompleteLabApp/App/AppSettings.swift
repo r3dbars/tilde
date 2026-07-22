@@ -17,7 +17,6 @@ final class AppSettings {
     private enum Key {
         static let suggestionsEnabled = "settings.suggestionsEnabled"
         static let runtimeMode = "settings.runtimeMode"
-        static let personalCaptureEnabled = "settings.personalCaptureEnabled"
     }
 
     private let defaults: UserDefaults
@@ -40,24 +39,14 @@ final class AppSettings {
         set { defaults.set(newValue.rawValue, forKey: Key.runtimeMode) }
     }
 
-    var personalCaptureEnabled: Bool {
-        get { defaults.bool(forKey: Key.personalCaptureEnabled) }
-        set { defaults.set(newValue, forKey: Key.personalCaptureEnabled) }
-    }
-
     func toggleSuggestionsEnabled() {
         suggestionsEnabled.toggle()
-    }
-
-    func togglePersonalCapture() {
-        personalCaptureEnabled.toggle()
     }
 
     private func registerDefaults() {
         defaults.register(defaults: [
             Key.suggestionsEnabled: true,
-            Key.runtimeMode: RuntimeMode.appOwnedLocalModel.rawValue,
-            Key.personalCaptureEnabled: false
+            Key.runtimeMode: RuntimeMode.appOwnedLocalModel.rawValue
         ])
     }
 }

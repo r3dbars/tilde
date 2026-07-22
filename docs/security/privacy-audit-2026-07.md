@@ -73,4 +73,4 @@ swift test --jobs 1 --filter LiveSuggestionWiringTests
 
 These suites passed 6, 7, and 7 tests respectively on the corrected PR heads.
 
-Privacy export behavior is additionally covered by `RawTraceReportExportTests`, `PrivacyExportProofCommandTests`, and the fast proof gate. Manual or live-user-content proof was neither required nor performed for this source-level audit.
+Privacy export behavior is additionally covered by `RawTraceReportExportTests` and the fast proof gate. Manual or live-user-content proof was neither required nor performed for this source-level audit.

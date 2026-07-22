@@ -37,12 +37,6 @@ extension AppDelegate: SettingsWindowActionHandling {
             toggleGlobalScreenshotTracing()
         case .toggleVisiblePageContext:
             toggleVisiblePageContext()
-        case .togglePersonalCapture:
-            togglePersonalCapture()
-        case .revealPersonalCaptureFolder:
-            revealPersonalCaptureFolder()
-        case .deletePersonalCapture:
-            deletePersonalCapture()
         case .deleteLocalLogs:
             deleteLocalPrivacyLogs()
         case .clearLearningData:

@@ -30,10 +30,8 @@ struct SettingsStateHostDependencies {
     let screenshotTracingEnabled: () -> Bool
     let screenshotTracingExpiresAt: () -> Date?
     let visiblePageContextEnabled: () -> Bool
-    let personalCaptureEnabled: () -> Bool
     let diagnosticsPath: () -> String
     let tracePath: () -> String
-    let personalCapturePath: () -> String
     let suggestionTuning: () -> SuggestionTuning
     let modelName: () -> String
     let completionLengthSummary: () -> String
@@ -106,11 +104,9 @@ final class SettingsStateHost {
             screenshotTracingEnabled: dependencies.screenshotTracingEnabled(),
             screenshotTracingExpiresAt: dependencies.screenshotTracingExpiresAt(),
             visiblePageContextEnabled: dependencies.visiblePageContextEnabled(),
-            personalCaptureEnabled: dependencies.personalCaptureEnabled(),
             screenCaptureAccessGranted: CGPreflightScreenCaptureAccess(),
             diagnosticsPath: dependencies.diagnosticsPath(),
-            tracePath: dependencies.tracePath(),
-            personalCapturePath: dependencies.personalCapturePath()
+            tracePath: dependencies.tracePath()
         )
     }
 

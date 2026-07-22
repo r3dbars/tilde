@@ -59,11 +59,6 @@ extension AppDelegate: InsertionVerificationHandling {
                 "currentAfterChars": String(context.textAfterCursor.count)
             ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
-        recordPersonalCaptureSuggestionEpisodeInsertionFailed(
-            baseline: baseline,
-            outcome: resultDescription,
-            reason: "insert-verification-failed"
-        )
         recordAnnoyanceSignal(
             .wrongInsertion,
             context: annoyanceContext(
@@ -119,24 +114,6 @@ extension AppDelegate: InsertionVerificationHandling {
                 "fieldKindReason": baseline.fieldKindReason,
                 "behaviorProfile": baseline.behaviorProfileID.rawValue
             ]
-        )
-        recordPersonalCaptureSuggestionEpisodeAction(
-            suggestionID: baseline.suggestionID ?? "",
-            appBundleIdentifier: baseline.profile.bundleIdentifier,
-            outcome: .accepted,
-            reason: "insertion-verified",
-            acceptedText: acceptedText,
-            metadata: [
-                "acceptanceID": baseline.acceptanceID,
-                "acceptMode": baseline.acceptMode,
-                "fieldKind": baseline.fieldKind.rawValue,
-                "fieldKindReason": baseline.fieldKindReason,
-                "behaviorProfile": baseline.behaviorProfileID.rawValue
-            ]
-        )
-        recordPersonalCaptureAcceptedSuggestion(
-            acceptedText: acceptedText,
-            baseline: baseline
         )
         let tracker = AcceptanceSurvivalTracker(
             acceptanceID: baseline.acceptanceID,
