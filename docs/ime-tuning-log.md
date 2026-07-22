@@ -84,6 +84,28 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — GEMMA RECIPE SOLVED: E4B + scaffolded raw completion
+
+- **The winning combination:** llama.cpp 10080 + `google/gemma-4-E4B-it-qat-q4_0-gguf`
+  + RAW completion mode (no chat template → no thinking) + a 2-example
+  "documents being continued" scaffold + strip the trailing space + stop on
+  newline, temperature 0, ~14 tokens.
+- **Measured: 106–248ms per suggestion** (owner's bar: 200–300ms). Quality on
+  the exact probes Qwen failed: casual register natural and in-voice ("way
+  better than " → "I thought it would."), persona repro continues the USER
+  ("I'm curious to see if it can handle complex instructions."), email prose
+  excellent ("get approval from the board before we can move forward").
+- **Mid-word remains weak** (" thing", "te a clear set") — by design the
+  dictionary layer owns mid-word; the llama.cpp bridge should NOT route
+  wordCompletion mode to Gemma.
+- **NEXT (the build): llama-server bridge** — app manages the llama-server
+  process (launchd-style child, port or unix socket), a `CompletionEngine`
+  conformance speaks /completion with this recipe, phraseContinuation routes
+  to Gemma/llama.cpp while wordCompletion stays MLX/dictionary; per-model
+  engine choice behind the same ghost socket. Server restart for iteration:
+  `llama-server -hf google/gemma-4-E4B-it-qat-q4_0-gguf --port 8873 -c 2048`.
+- Prior investigation details below (MLX dead end; E2B/config modes).
+
 ## 2026-07-22 — Gemma quest: MLX dead end, llama.cpp promising
 
 - **Gemma-4-on-MLX: DEAD END (three strikes).** (1) E4B it-OptiQ: loads only
