@@ -84,6 +84,15 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — display-mode verdict: INLINE WINS
+
+- A/B toggle shipped (PR #316): inline marked-text ghost vs the system
+  candidate panel (IMKCandidates). Owner verdict after feeling both:
+  **inline is better** ("the normal version of this is better... it has a
+  great feel"). Inline stays the default; the panel toggle remains in the
+  input menu as a preference and as the clean-text option for underline-averse
+  users. Read-ahead-in-the-sentence beats pristine-text-plus-eye-hop.
+
 ## 2026-07-22 — GEMMA FULL POWER: cache + streaming + screen context
 
 - **llama slot cache engaged:** `--swa-full` (Gemma's sliding-window layers keep
