@@ -331,9 +331,73 @@ final class GhostInputController: IMKInputController {
         requestModelGhost(client, context: context)
     }
 
-    /// Present ghost text as marked text. Styling is app-controlled (proven in
-    /// phase 1) — grey is sent anyway for the rare client that honors it.
+    // MARK: - Display modes
+
+    /// "inline" (default): marked text in the sentence, composing underline.
+    /// "panel": the system candidate window — the user's text stays pristine.
+    /// Toggled from the input menu (menu-bar keyboard icon); persisted in the
+    /// IME's own defaults domain.
+    private static let displayModeKey = "GhostDisplayMode"
+
+    private var panelMode: Bool {
+        UserDefaults.standard.string(forKey: Self.displayModeKey) == "panel"
+    }
+
+    /// Whether an inline marked-text ghost is currently rendered (needed so a
+    /// mid-session mode switch still clears the right surface).
+    private var inlineGhostVisible = false
+
+    override func menu() -> NSMenu! {
+        let menu = NSMenu()
+        let inline = NSMenuItem(
+            title: "Inline suggestions (underlined)",
+            action: #selector(selectInlineMode(_:)),
+            keyEquivalent: ""
+        )
+        inline.target = self
+        inline.state = panelMode ? .off : .on
+        menu.addItem(inline)
+        let panel = NSMenuItem(
+            title: "Panel suggestions (clean text)",
+            action: #selector(selectPanelMode(_:)),
+            keyEquivalent: ""
+        )
+        panel.target = self
+        panel.state = panelMode ? .on : .off
+        menu.addItem(panel)
+        return menu
+    }
+
+    @objc private func selectInlineMode(_ sender: Any?) {
+        UserDefaults.standard.set("inline", forKey: Self.displayModeKey)
+        GhostPanel.candidates?.hide()
+    }
+
+    @objc private func selectPanelMode(_ sender: Any?) {
+        UserDefaults.standard.set("panel", forKey: Self.displayModeKey)
+    }
+
+    override func candidates(_ sender: Any!) -> [Any]! {
+        ghost.isEmpty ? [] : [ghost]
+    }
+
+    /// Present the ghost in the active display mode. Inline styling is
+    /// app-controlled (proven in phase 1) — grey is sent anyway for the rare
+    /// client that honors it.
     private func show(_ suffix: String, _ client: IMKTextInput) {
+        if panelMode {
+            if inlineGhostVisible {
+                client.setMarkedText(
+                    "",
+                    selectionRange: NSRange(location: 0, length: 0),
+                    replacementRange: Self.unset
+                )
+                inlineGhostVisible = false
+            }
+            GhostPanel.candidates?.update()
+            GhostPanel.candidates?.show(kIMKLocateCandidatesBelowHint)
+            return
+        }
         client.setMarkedText(
             NSAttributedString(string: suffix, attributes: [
                 .foregroundColor: NSColor.tertiaryLabelColor,
@@ -341,6 +405,7 @@ final class GhostInputController: IMKInputController {
             selectionRange: NSRange(location: 0, length: 0),
             replacementRange: Self.unset
         )
+        inlineGhostVisible = true
     }
 
     // MARK: - Model layer: SteadyType MLX brain first, Apple on-device model fallback
@@ -445,11 +510,15 @@ final class GhostInputController: IMKInputController {
         generation += 1
         modelTask?.cancel()
         guard !ghost.isEmpty else { return }
-        client.setMarkedText(
-            "",
-            selectionRange: NSRange(location: 0, length: 0),
-            replacementRange: Self.unset
-        )
+        GhostPanel.candidates?.hide()
+        if inlineGhostVisible {
+            client.setMarkedText(
+                "",
+                selectionRange: NSRange(location: 0, length: 0),
+                replacementRange: Self.unset
+            )
+            inlineGhostVisible = false
+        }
         ghost = ""
     }
 
@@ -483,6 +552,7 @@ final class GhostInputController: IMKInputController {
         }
         let remainder = String(ghost.dropFirst(chunk.count))
         ghost = ""
+        inlineGhostVisible = false
         var insertion = chunk
         if remainder.isEmpty, !insertion.hasSuffix(" ") {
             // Last word of the chain: auto-space so typing moves to the next word.
@@ -493,12 +563,6 @@ final class GhostInputController: IMKInputController {
         typedFallback.append(insertion)
         guard !remainder.isEmpty else { updateGhost(client); return }
         ghost = remainder
-        client.setMarkedText(
-            NSAttributedString(string: remainder, attributes: [
-                .foregroundColor: NSColor.tertiaryLabelColor,
-            ]),
-            selectionRange: NSRange(location: 0, length: 0),
-            replacementRange: Self.unset
-        )
+        show(remainder, client)
     }
 }
