@@ -25,13 +25,37 @@ public struct RawContinuationPrompt: Equatable, Sendable {
 
     """
 
-    public init(textBeforeCursor: String, maxContextCharacters: Int = 1200) {
+    /// `screenContext` is the OCR snapshot of the writer's screen (frozen per
+    /// typing burst upstream, so it stays inside the server's cacheable prompt
+    /// prefix). It is framed as reference notes, never as text to continue.
+    public init(
+        textBeforeCursor: String,
+        screenContext: String? = nil,
+        maxContextCharacters: Int = 1200,
+        maxScreenContextCharacters: Int = 700
+    ) {
         let tail = String(textBeforeCursor.suffix(max(80, maxContextCharacters)))
         let trimmed = String(
             tail.reversed().drop(while: { $0.isWhitespace }).reversed()
         )
         contextEndedInWhitespace = trimmed.count != tail.count
-        prompt = Self.scaffold + "Text: " + trimmed + "\nContinuation:"
+
+        var pieces = Self.scaffold
+        if let screenContext {
+            let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !bounded.isEmpty {
+                pieces += """
+                Reference notes visible on the writer's screen (may be a message being replied to, \
+                a document being discussed, or unrelated windows — use names and topics from it \
+                when they fit; never copy or continue it):
+                \(bounded)
+
+
+                """
+            }
+        }
+        prompt = pieces + "Text: " + trimmed + "\nContinuation:"
     }
 
     /// Normalizes a raw model continuation against the original context: strips
