@@ -189,10 +189,14 @@ final class GhostInputController: IMKInputController {
         let separators = CharacterSet.alphanumerics.inverted
         let words = context.components(separatedBy: separators).filter { !$0.isEmpty }
 
-        // 2. Mid-word: the document's own vocabulary wins; otherwise fall back to the
-        //    system dictionary, which ranks completions by likelihood ("wh" → "what").
+        // 2. Mid-word: the system dictionary LEADS (likelihood-ranked English —
+        //    owner preference: real words over echoing the document's own
+        //    vocabulary); doc words only fill in when the dictionary is silent,
+        //    which keeps rare personal/project terms completing.
         if let last = tail.unicodeScalars.last, !separators.contains(last) {
             guard let partial = words.last, partial.count >= 2 else { return "" }
+            let fromDictionary = dictionaryCompletion(for: partial)
+            if !fromDictionary.isEmpty { return fromDictionary }
             let lowerPartial = partial.lowercased()
             var counts: [String: Int] = [:]
             for word in words.dropLast() where word.count > partial.count {
@@ -202,7 +206,7 @@ final class GhostInputController: IMKInputController {
             if let best = counts.max(by: { ($0.value, $1.key) < ($1.value, $0.key) })?.key {
                 return String(best.dropFirst(partial.count))
             }
-            return dictionaryCompletion(for: partial)
+            return ""
         }
 
         return nextWordPrediction(lowerTail: lowerTail, words: words)
