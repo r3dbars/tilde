@@ -138,16 +138,6 @@ final class GhostInputController: IMKInputController {
 
     // MARK: - Prediction (deliberately tiny — the channel is what's under test)
 
-    private static let commonNextWord: [String: String] = [
-        "i": "think", "you": "can", "we": "should", "it": "is", "this": "is",
-        "that": "would", "the": "same", "to": "the", "of": "the", "in": "the",
-        "and": "then", "for": "the", "is": "a", "are": "you", "will": "be",
-        "would": "be", "can": "be", "let": "me", "thank": "you", "thanks": "for",
-        "please": "let", "looking": "forward", "feel": "free", "make": "sure",
-        "as": "soon", "be": "able", "want": "to", "need": "to", "going": "to",
-        "have": "a", "just": "wanted", "should": "be", "could": "be", "there": "is",
-    ]
-
     private static let phraseOpeners: [(prefix: String, suffix: String)] = [
         ("thank you", " so much"),
         ("looking forward", " to hearing from you"),
@@ -232,10 +222,13 @@ final class GhostInputController: IMKInputController {
                 bigrams[words[i + 1].lowercased(), default: 0] += 1
             }
         }
+        // Doc-bigram evidence only — no generic common-word fallback. Dogfood
+        // verdict: statistically-plausible generic chains read as junk; silence
+        // beats filler, and confident model phrases replace silence anyway.
         if let best = bigrams.max(by: { ($0.value, $1.key) < ($1.value, $0.key) }), best.value >= 2 {
             return best.key
         }
-        return Self.commonNextWord[previous] ?? ""
+        return ""
     }
 
     // MARK: - Ghost lifecycle
@@ -257,13 +250,18 @@ final class GhostInputController: IMKInputController {
         generation += 1
         let context = contextBeforeCaret(client)
 
-        // Fast layer: instant word/bigram chain from the tiny predictor.
+        // Fast layer: instant completions with real evidence (doc vocabulary,
+        // dictionary, doc bigrams) — no generic filler.
         let suffix = predict(context: context)
         ghost = suffix
         if !suffix.isEmpty { show(suffix, client) }
 
-        // Smart layer: Apple's on-device model refines the ghost when it's ready
-        // (only at word boundaries; mid-word stays the fast layer's job).
+        // Smart layer. Mid-word, the dictionary/doc completion is precise — when
+        // it produced one, the model does NOT get to overwrite it (small-model
+        // word suffixes are erratic). The model fills mid-word gaps and offers
+        // phrase continuations at word boundaries.
+        let midWord = !(context.hasSuffix(" ") || context.hasSuffix("\n"))
+        if midWord, !suffix.isEmpty { return }
         requestModelGhost(client, context: context)
     }
 
