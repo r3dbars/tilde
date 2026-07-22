@@ -1,4 +1,8 @@
-# InlineGhostIME — the input-method spike (2026-07-22: BREAKTHROUGH)
+# InlineGhostIME — SteadyType's input method
+
+Graduated from `spike/` on 2026-07-22 after the owner declared this the product
+direction. Built as the `InlineGhostIME` SwiftPM executable target; assembled,
+signed, notarized, installed, and registered by `script/build_ime.sh`.
 
 A minimal macOS input method that renders inline autocomplete suggestions
 **inside the focused app's own text** via IMKit marked text — no overlay window,
@@ -44,7 +48,7 @@ AX + overlay stack is now legacy pending this path maturing.
 ## Build & install
 
 ```bash
-./build_and_install.sh
+./script/build_ime.sh
 ```
 
 One-time notarization setup (needs an app-specific password from

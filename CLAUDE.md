@@ -13,6 +13,10 @@ SwiftPM (`swift-tools 6.2`). The app cannot build on Linux; the pure
 
 - Build and run: `./script/build_and_run.sh` (`--verify` builds/validates
   without launching).
+- Input method: `./script/build_ime.sh` builds, signs, notarizes, installs,
+  and registers InlineGhostIME (`--no-notarize --no-install` for compile
+  checks; notarization is mandatory for the keyboard to appear in System
+  Settings).
 - All tests: `swift test --jobs 1`
 - Core (pure) tests: `swift test --jobs 1 --filter AutocompleteLabCoreTests`
 - One test: `swift test --jobs 1 --filter AutocompleteLabCoreTests.<Suite>/<test>`
@@ -23,7 +27,7 @@ SwiftPM (`swift-tools 6.2`). The app cannot build on Linux; the pure
 
 ## Architecture
 
-Two layers; the split is load-bearing:
+Three parts; the split is load-bearing:
 
 - `Sources/AutocompleteLabCore/` — pure deterministic policy types. Every
   decision about when to request, show, accept, or suppress a suggestion.
@@ -32,7 +36,16 @@ Two layers; the split is load-bearing:
   drives the request lifecycle over predictor layers (doc-local n-gram, common
   phrase, word ranking, MLX model via the `CompletionEngine` protocol);
   `UI/SuggestionPanelController` renders ghost text; `Mac/KeyboardEventTap` +
-  `Mac/InsertionEngine` handle Tab/Shift-Tab/Esc and insertion.
+  `Mac/InsertionEngine` handle Tab/Shift-Tab/Esc and insertion. Also hosts
+  `App/GhostBrainServerHost`: a local unix socket serving MLX completions to
+  the input method.
+- `Sources/InlineGhostIME/` — the input method (the product direction since
+  2026-07-22): renders suggestions inside the focused app's own text via IMKit
+  marked text. Instant local predictors upgraded async by the app's MLX brain
+  over the socket (Apple FoundationModels as fallback). Its `README.md` records
+  the non-obvious deployment facts (bundle-id rule, mandatory notarization,
+  TIS registration). The AX + overlay stack above is legacy pending this path
+  maturing.
 
 ## Rules
 
