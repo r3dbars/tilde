@@ -91,3 +91,18 @@ public struct SuggestionAnnoyanceBackoffPolicy: Equatable, Sendable {
         prefixFamilyCooldownPolicy.reset()
     }
 }
+
+/// The single decision a request-time quiet check can resolve to. Prefix-family
+/// cooldown and annoyance quiet-mode are two independently scored decaying-score
+/// gates (different evidence, different state), but callers only ever need to
+/// know: proceed, or stay quiet for this one reason. Collapsing them into one
+/// decision type keeps the call site from growing a second suppression branch.
+public enum RequestQuietDecision: Equatable, Sendable {
+    case allowed
+    case prefixCooldown(PrefixFamilyCooldown)
+    case annoyanceQuiet(QuietMode)
+
+    public var isAllowed: Bool {
+        self == .allowed
+    }
+}

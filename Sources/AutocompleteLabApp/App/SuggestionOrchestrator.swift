@@ -366,6 +366,28 @@ final class SuggestionOrchestrator {
         suggestionAnnoyanceBackoffPolicy.prefixCooldownDecision(for: input, now: now)
     }
 
+    /// The single request-time quiet gate: checks prefix-family cooldown first
+    /// (cheap, synchronous, local state), then falls through to the annoyance
+    /// suppressor's quiet mode (actor-isolated, shared across fields/apps).
+    /// Both scoring systems keep their own thresholds and half-lives untouched;
+    /// this only unifies the call site and its decision type.
+    func requestQuietDecision(
+        prefixCooldownInput: PrefixFamilyCooldownInput,
+        annoyanceContext: AnnoyanceContext,
+        annoyanceSuppressor: AnnoyanceSuppressorActor,
+        now: Date = Date()
+    ) async -> RequestQuietDecision {
+        if case let .coolingDown(cooldown) = prefixCooldownDecision(for: prefixCooldownInput, now: now) {
+            return .prefixCooldown(cooldown)
+        }
+
+        let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext, now: now)
+        guard quietMode.isActive else {
+            return .allowed
+        }
+        return .annoyanceQuiet(quietMode)
+    }
+
     func recordPrefixFamilyCooldown(
         _ reason: PrefixFamilyCooldownReason,
         input: PrefixFamilyCooldownInput,

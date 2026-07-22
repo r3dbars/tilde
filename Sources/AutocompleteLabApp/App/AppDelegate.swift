@@ -123,9 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
     private let focusedTextAXHealthHost = FocusedTextAXHealthHost()
     private let focusedTextContextDiagnosticsHost = FocusedTextContextDiagnosticsHost()
-    private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
-    private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
-        FocusedTextPollingThrottleSuggestionVisibilityPolicy()
+    private let focusedTextSlowReadSuggestionVisibilityPolicy = FocusedTextSlowReadSuggestionVisibilityPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private lazy var suggestionChromeHost = SuggestionChromeHost()
@@ -2029,11 +2027,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
-        switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
+        let annoyanceContext = annoyanceContext(
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            fieldKind: suggestionFieldClassification.kind
+        )
+        switch await suggestionOrchestrator.requestQuietDecision(
+            prefixCooldownInput: prefixCooldownInput,
+            annoyanceContext: annoyanceContext,
+            annoyanceSuppressor: annoyanceSuppressor
+        ) {
         case .allowed:
             prefixCooldownRetryHost.cancel()
-            break
-        case let .coolingDown(cooldown):
+        case let .prefixCooldown(cooldown):
             setSuggestionDecision(SuggestionStatusText.notShown(reason: "prefix-family-cooldown"))
             suggestionChromeHost.showFieldStatusIndicator(.waiting.withReason("recent miss cooldown"), context: context)
             schedulePrefixCooldownRetry(
@@ -2064,16 +2071,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             hideSuggestion()
             return
-        }
-
-        let annoyanceContext = annoyanceContext(
-            appBundleIdentifier: profile.bundleIdentifier,
-            fieldIdentity: fieldIdentity,
-            requestMode: requestMode,
-            fieldKind: suggestionFieldClassification.kind
-        )
-        let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
-        guard !quietMode.isActive else {
+        case let .annoyanceQuiet(quietMode):
             setSuggestionDecision(SuggestionStatusText.notShown(reason: quietMode.traceReason))
             suggestionChromeHost.showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)
             let metadata = suggestionFieldClassification.traceMetadata
@@ -2308,8 +2306,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if focusedTextAXHealthSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
-            during: cooldown,
+        if focusedTextSlowReadSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
+            degradedBundleIdentifier: cooldown.bundleIdentifier,
             currentSuggestionBundleIdentifier: currentSuggestionState.appBundleIdentifier,
             currentSuggestionHostBundleIdentifier: nil,
             currentSuggestionFieldIdentity: currentSuggestionState.fieldIdentity,
@@ -2353,12 +2351,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionSchedulingHost.invalidatePendingRequest()
         if suggestionSession.hasVisibleSuggestion {
             let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
-            if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
+            if focusedTextSlowReadSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
+                degradedBundleIdentifier: frontmostBundleIdentifier,
                 currentSuggestionBundleIdentifier: currentSuggestionState.appBundleIdentifier,
                 currentSuggestionHostBundleIdentifier: nil,
                 currentSuggestionFieldIdentity: currentSuggestionState.fieldIdentity,
                 currentFieldIdentity: currentFieldIdentity,
-                frontmostBundleIdentifier: frontmostBundleIdentifier,
                 isInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown,
                 currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
                 maximumPreservedAgeMilliseconds: maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds
