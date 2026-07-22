@@ -84,6 +84,43 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — Gemma quest: MLX dead end, llama.cpp promising
+
+- **Gemma-4-on-MLX: DEAD END (three strikes).** (1) E4B it-OptiQ: loads only
+  via our hand patch, ~1.1s. (2) plain-4bit E2B: PLE shape mismatch
+  ("per_layer_model_projection… Actual [8960,192], expected [8960,384]").
+  (3) OptiQ E2B: missing quant keys ("layers.15.self_attn.k_proj.weight not
+  found"). mlx-swift-lm Gemma 4 support is not production-ready; python
+  mlx-lm on this machine too old to cross-check (py3.9 / mlx_lm 0.29 has no
+  gemma4). Qwen3.5-4B restored as MLX default. Do not retry MLX-Gemma until
+  mlx-swift-lm ships native Gemma 4 support.
+- **llama.cpp + Gemma 4 E2B (google/gemma-4-E2B-it-qat-q4_0-gguf): the engine
+  story is excellent, the prompt story needs work.**
+  - brew llama.cpp 8500 predates Gemma 4 ("unknown model architecture:
+    gemma4") — upgraded to 10080, loads and runs flawlessly.
+  - **Latency: warm full suggestions ~100-160ms; mid-word ~35-70ms** with
+    llama-server's built-in prompt cache (`cache_prompt`) — comfortably under
+    the owner's 200-300ms bar. Engine reliability + speed thesis CONFIRMED.
+  - **Quality per mode:** CHAT mode: E2B-QAT is thinking-first; with default
+    template all tokens went to reasoning_content; with `--reasoning-budget 0`
+    the narration leaked into content ("The user wants me to continue…").
+    RAW completion: email prose genuinely good ("are aiming for a launch by
+    the end of Q3"), but casual register gave empties/artifacts ("100%…" after
+    trailing-space prompts — strip the trailing space before prompting), and
+    mid-word suffixes unreliable ("somet" → "ing" [someting]). ASSISTANT-
+    PREFILL: llama-server did not continue the final assistant message
+    (restarted the turn) — needs the continue-final-message capability or
+    template surgery.
+  - **Restart for iteration:** `llama-server -hf
+    google/gemma-4-E2B-it-qat-q4_0-gguf --port 8873 -c 2048
+    --reasoning-budget 0`.
+- **Next (scoped):** (a) raw-mode scaffold: few-shot header + trailing-space
+  fix + stop-sequences, re-probe casual register; (b) try E4B QAT GGUF
+  (Cotypist's quality tier) same way; (c) if quality lands, build the
+  llama-server bridge behind `CompletionEngine` (app manages the process;
+  same socket protocol; per-model engine choice — Qwen/MLX and
+  Gemma/llama.cpp can coexist).
+
 ## 2026-07-22 — screen context round, part 4 (the leak was the FALLBACK)
 
 - **Persona refusals persisted after part 3's fix — root cause found:** the
