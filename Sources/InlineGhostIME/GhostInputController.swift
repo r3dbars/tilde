@@ -281,23 +281,49 @@ final class GhostInputController: IMKInputController {
         return nextWordPrediction(lowerTail: lowerTail, words: words)
     }
 
-    /// macOS's spell checker returns completions for a partial word ranked by
-    /// likelihood — an instant, real English vocabulary with zero shipped data.
+    /// Everyday words the dictionary should prefer completing TO — and never
+    /// try to extend when the user has already typed one completely ("the" →
+    /// "theory" is noise, not help).
+    private static let commonWords: Set<String> = Set("""
+    about after again always another anything around because become before being \
+    better between change coming could different does doing done during actually \
+    everything example experience feeling first friend getting going great group \
+    happen having hello help home hope house idea important interest interesting \
+    into just keep know language large last later learn least leave life little \
+    long look love make making many maybe mean meaning meeting might minute moment \
+    money month more morning most much music must need never new next night nothing \
+    now number office only other our over own part people perfect person place plan \
+    please point possible probably problem project put question quick really reason \
+    remember right same school second see seem send should since small some someone \
+    something sometimes soon sorry sound start still story sure system take talk \
+    team tell thank thanks their them then there these thing think this those thought \
+    three through time today together tomorrow tonight understand until update use \
+    very want week welcome well what when where which while will with without word \
+    work working world would write writing wrong year
+    """.split(whereSeparator: \.isWhitespace).map(String.init))
+
+    /// macOS's spell checker returns completions ranked by likelihood; we layer
+    /// two quality rules on top: don't extend an already-complete common word,
+    /// and prefer completing TO a common word over an obscure dictionary find.
     private func dictionaryCompletion(for partial: String) -> String {
-        // 2 letters (was 3): owner wants eager word completion — the dictionary
-        // is the word-completer of the stack (the phrase model fumbles suffixes).
         guard partial.count >= 2 else { return "" }
+        let lowerPartial = partial.lowercased()
+        if Self.commonWords.contains(lowerPartial) { return "" }
         let range = NSRange(location: 0, length: (partial as NSString).length)
-        let candidates = NSSpellChecker.shared.completions(
+        let candidates = (NSSpellChecker.shared.completions(
             forPartialWordRange: range,
             in: partial,
             language: "en",
             inSpellDocumentWithTag: 0
-        ) ?? []
-        let lowerPartial = partial.lowercased()
-        for candidate in candidates
-        where candidate.count > partial.count && candidate.lowercased().hasPrefix(lowerPartial) {
-            return String(candidate.dropFirst(partial.count))
+        ) ?? []).filter { candidate in
+            candidate.count >= partial.count + 2
+                && candidate.lowercased().hasPrefix(lowerPartial)
+        }
+        if let common = candidates.first(where: { Self.commonWords.contains($0.lowercased()) }) {
+            return String(common.dropFirst(partial.count))
+        }
+        if let first = candidates.first, first.count <= partial.count + 9 {
+            return String(first.dropFirst(partial.count))
         }
         return ""
     }

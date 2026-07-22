@@ -72,3 +72,32 @@ struct ContinuationRegisterTests {
         #expect(ContinuationRegister.chat.generatedTokenBudget < ContinuationRegister.prose.generatedTokenBudget)
     }
 }
+
+@Suite("Continuation cutoff repair")
+struct ContinuationCutoffRepairTests {
+    @Test("Trailing function-word fragments are trimmed")
+    func trailingFragmentsAreTrimmed() {
+        let recipe = RawContinuationPrompt(textBeforeCursor: "I wanted to ")
+
+        #expect(recipe.normalizedContinuation(" see if you had any thoughts on the") == "see if you had any thoughts")
+        #expect(recipe.normalizedContinuation(" still make the meeting if") == "still make the meeting")
+    }
+
+    @Test("Finished thoughts are left alone")
+    func finishedThoughtsAreLeftAlone() {
+        let recipe = RawContinuationPrompt(textBeforeCursor: "I wanted to ")
+
+        #expect(recipe.normalizedContinuation(" discuss the Q3 strategy in more detail.") == "discuss the Q3 strategy in more detail.")
+        #expect(recipe.normalizedContinuation(" much more realistic for Q3.") == "much more realistic for Q3.")
+    }
+}
+
+@Suite("Cap-induced dangler repair")
+struct CapInducedDanglerRepairTests {
+    @Test("Word-capped finished sentences get their tails repaired")
+    func cappedSentencesGetRepaired() {
+        #expect(RawContinuationPrompt.repairDanglingTail(" see if you had any thoughts on the") == " see if you had any thoughts")
+        #expect(RawContinuationPrompt.repairDanglingTail("still make the meeting, should be there in") == "still make the meeting, should be there")
+        #expect(RawContinuationPrompt.repairDanglingTail(" walk through the new proposal in detail.") == " walk through the new proposal in detail.")
+    }
+}

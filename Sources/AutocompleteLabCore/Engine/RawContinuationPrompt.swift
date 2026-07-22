@@ -33,9 +33,10 @@ public enum ContinuationRegister: String, Sendable {
         return .prose
     }
 
-    /// Suggested generation budget: chat wants shorter bursts.
+    /// Suggested generation budget: chat wants shorter bursts; prose/email get
+    /// room to finish the clause (cut-off fragments were the top quality wart).
     public var generatedTokenBudget: Int {
-        self == .chat ? 12 : 16
+        self == .chat ? 14 : 20
     }
 }
 
@@ -55,6 +56,9 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             Text: lol ok that's fair,
             Continuation: let's just ship it and see.
 
+            Text: running like 10 min late but
+            Continuation: save me a seat, almost there.
+
 
             """
         case .email:
@@ -67,6 +71,9 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             Text: Thanks for sending this over — I'll review it
             Continuation: tonight and get you notes by tomorrow.
 
+            Text: Following up on last week's discussion, I think the
+            Continuation: revised timeline is workable if we start now.
+
 
             """
         case .prose:
@@ -78,6 +85,9 @@ public struct RawContinuationPrompt: Equatable, Sendable {
 
             Text: honestly the new setup is working better
             Continuation: than I expected, we should keep it.
+
+            Text: The results suggest two things. First, the approach
+            Continuation: scales well beyond the original design load.
 
 
             """
@@ -119,9 +129,22 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         prompt = pieces + "Text: " + trimmed + "\nContinuation:"
     }
 
+    /// Words a suggestion should never END on — a trailing article/preposition/
+    /// conjunction is the signature of a token-limit cutoff mid-clause
+    /// ("…thoughts on the"). Trimming them back yields a complete-feeling
+    /// phrase ("…thoughts").
+    private static let neverEndOn: Set<String> = [
+        "a", "an", "the", "of", "on", "in", "to", "at", "by", "as", "if",
+        "and", "or", "but", "with", "for", "from", "that", "than", "so",
+        "my", "your", "our", "their", "his", "her", "its", "is", "are",
+        "was", "be", "been", "will", "would", "can", "could", "should",
+        "very", "more", "most", "quite", "really",
+    ]
+
     /// Normalizes a raw model continuation against the original context: strips
-    /// the model's separating space when the user already typed one, and cuts at
-    /// the first newline (raw mode can run on).
+    /// the model's separating space when the user already typed one, cuts at
+    /// the first newline (raw mode can run on), and trims token-limit cutoffs
+    /// so the ghost never dangles mid-clause.
     public func normalizedContinuation(_ rawOutput: String) -> String {
         var text = rawOutput
         if let newline = text.firstIndex(where: \.isNewline) {
@@ -130,6 +153,25 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         if contextEndedInWhitespace {
             text = String(text.drop(while: { $0 == " " }))
         }
-        return text
+        return Self.repairDanglingTail(text)
+    }
+
+    /// Cutoff repair, applied both to the raw generation AND after any display
+    /// word-cap (the cap can re-create a dangler from a finished sentence):
+    /// when text ends mid-word-stream (no terminal punctuation), trailing
+    /// never-end-on words are trimmed back to a complete-feeling phrase.
+    public static func repairDanglingTail(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard let last = trimmed.last, last.isLetter || last.isNumber else {
+            return text
+        }
+        var words = trimmed.split(separator: " ").map(String.init)
+        while let tail = words.last,
+              neverEndOn.contains(tail.lowercased().trimmingCharacters(in: .punctuationCharacters)) {
+            words.removeLast()
+        }
+        guard !words.isEmpty else { return text }
+        let leadingSpace = text.hasPrefix(" ") ? " " : ""
+        return leadingSpace + words.joined(separator: " ")
     }
 }
