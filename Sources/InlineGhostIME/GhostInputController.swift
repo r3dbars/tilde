@@ -46,9 +46,12 @@ final class GhostInputController: IMKInputController {
             return false
         }
 
-        // Never eat shortcuts (Cmd/Control/Fn) — drop the ghost and pass through.
+        // Never eat shortcuts (Cmd/Control/Fn) or Option combos — drop the ghost
+        // and pass through. Option must reach the app untouched so dead-key
+        // accents (Option-E, e → é) and special characters (©, ñ, ø) compose
+        // normally.
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if mods.contains(.command) || mods.contains(.control) || mods.contains(.function) {
+        if mods.contains(.command) || mods.contains(.control) || mods.contains(.function) || mods.contains(.option) {
             clearGhost(client)
             return false
         }
@@ -106,6 +109,17 @@ final class GhostInputController: IMKInputController {
             typedFallback.append("\n")
         }
         return false
+    }
+
+    /// Called when the client ends composition (mouse click, caret move, focus
+    /// shift, programmatic edits). The default can COMMIT marked text — which
+    /// would turn an unaccepted ghost into real inserted text. Never allow that:
+    /// the ghost is only ever inserted by an explicit Tab/Shift-Tab.
+    override func commitComposition(_ sender: Any!) {
+        if let client = sender as? IMKTextInput {
+            clearGhost(client)
+        }
+        ghost = ""
     }
 
     /// Called when focus leaves; make sure no ghost is stranded.
