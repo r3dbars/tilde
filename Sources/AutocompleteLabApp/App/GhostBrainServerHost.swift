@@ -20,12 +20,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
     ).expandingTildeInPath
 
     private let engineProvider: @MainActor () -> any CompletionEngine
+    private let screenContextResolver: @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext?
     private let queue = DispatchQueue(label: "bar.r3d.steadytype.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
 
-    init(engineProvider: @escaping @MainActor () -> any CompletionEngine) {
+    init(
+        engineProvider: @escaping @MainActor () -> any CompletionEngine,
+        screenContextResolver: @escaping @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext? = { _, _, _ in nil }
+    ) {
         self.engineProvider = engineProvider
+        self.screenContextResolver = screenContextResolver
     }
 
     func start() {
@@ -101,10 +106,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // boundaries want phrase continuation. App + field identity let the
             // prompt KV cache recognize consecutive keystrokes in the same field.
             let midWord = payload.context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
+            let pageContext = self.screenContextResolver(payload.app, payload.field, payload.context)
             let request = CompletionRequest(
                 textBeforeCursor: payload.context,
                 appBundleIdentifier: payload.app,
                 fieldIdentityDescription: payload.field,
+                visiblePageContext: pageContext,
                 mode: midWord ? .wordCompletion : .phraseContinuation
             )
             // Partial callbacks can fire from generation threads; serialize socket
@@ -120,7 +127,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 guard !text.isEmpty else { return }
                 send(["suggestion": text, "partial": true])
             }
-            send(["suggestion": final?.visibleText ?? ""])
+            // "page" reports whether screen context was attached — observability
+            // for the capture pipeline (content itself never leaves the process).
+            send(["suggestion": final?.visibleText ?? "", "page": pageContext != nil])
         }
     }
 
