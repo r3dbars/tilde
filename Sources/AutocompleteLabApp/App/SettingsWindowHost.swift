@@ -19,9 +19,6 @@ enum SettingsWindowAction {
     case toggleRawContentTracing
     case toggleScreenshotTracing
     case toggleVisiblePageContext
-    case togglePersonalCapture
-    case revealPersonalCaptureFolder
-    case deletePersonalCapture
     case deleteLocalLogs
     case clearLearningData
     case exportPrivacyBundle
@@ -100,15 +97,6 @@ final class SettingsWindowHost {
         },
         toggleVisiblePageContext: { [weak self] in
             self?.send(.toggleVisiblePageContext)
-        },
-        togglePersonalCapture: { [weak self] in
-            self?.send(.togglePersonalCapture)
-        },
-        revealPersonalCaptureFolder: { [weak self] in
-            self?.send(.revealPersonalCaptureFolder)
-        },
-        deletePersonalCapture: { [weak self] in
-            self?.send(.deletePersonalCapture)
         },
         deleteLocalLogs: { [weak self] in
             self?.send(.deleteLocalLogs)

@@ -34,9 +34,6 @@ Two layers; the split is load-bearing:
   `UI/SuggestionPanelController` renders ghost text; `Mac/KeyboardEventTap` +
   `Mac/InsertionEngine` handle Tab/Shift-Tab/Esc and insertion.
 
-Supporting executables: `AutocompleteTraceReplay` and `SteadyTypeReplayEval`
-(offline replay/eval of redacted traces), `SteadyTypeTextEventHelper`.
-
 ## Rules
 
 - Privacy first: never log or transmit raw typed text, prompts, model output,

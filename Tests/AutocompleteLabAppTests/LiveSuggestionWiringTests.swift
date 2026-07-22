@@ -32,9 +32,6 @@ struct LiveSuggestionWiringTests {
         try require(suggestionWiring, contains: "suggestionOrchestrator.fastWordSelection(")
         try require(suggestionWiring, contains: "triggerReason: \"fast-word-completion\"")
         try require(suggestionWiring, contains: "suggestionOrchestrator.fastPhraseSelection(")
-        try require(suggestionWiring, contains: "personalizationCoordinator.selection(")
-        try require(suggestionWiring, contains: "personalContext: personalization.context")
-        try require(suggestionWiring, contains: "personalWritingMemory: personalization.memory")
         try require(suggestionWiring, contains: "suggestionOrchestrator.fastPhraseFallbackLearningDecision(")
         try require(suggestionWiring, contains: "triggerReason: \"canned-bridge\"")
         try require(suggestionWiring, contains: "try await suggestionOrchestrator.suggestion(")
@@ -61,7 +58,6 @@ struct LiveSuggestionWiringTests {
         try require(suggestionPresentationWiring, contains: "currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText")
         try require(suggestionPresentationWiring, contains: "\"Shown: typing through suggestion\"")
         try require(suggestionPresentationWiring, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
-        try require(suggestionPresentationWiring, contains: "reason: \"survived_typethrough\"")
         try require(suggestionPresentationWiring, contains: "passthroughTypingMatchObserver:")
         try require(suggestionPresentationWiring, contains: "observeOptimisticTypeThrough(transition)")
         try require(suggestionPresentationWiring, contains: "currentSuggestionState.invalidatedByUserKeyDown = false")
@@ -79,16 +75,6 @@ struct LiveSuggestionWiringTests {
         try require(
             appDelegate + commitHost,
             contains: "screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized"
-        )
-    }
-
-    @Test("Personal capture uses authoritative app support status before AX reads")
-    func personalCaptureUsesAuthoritativeSupportStatus() throws {
-        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
-
-        try require(
-            appDelegate,
-            contains: "supportStatus: profileStore.supportStatus(for: app.bundleIdentifier)"
         )
     }
 

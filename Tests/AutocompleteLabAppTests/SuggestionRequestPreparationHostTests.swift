@@ -91,8 +91,6 @@ struct SuggestionRequestPreparationHostTests {
             dependencies: SuggestionRequestPreparationHostDependencies(
                 suggestionOrchestrator: orchestrator,
                 acceptedTextStyleSketch: { _ in nil },
-                personalizationCoordinator: PersonalizationCoordinator(),
-                isPersonalCaptureEnabled: { false },
                 suggestionTuning: { SuggestionTuning(maxVisibleWords: 3) },
                 requestSchedulingPolicy: SuggestionRequestSchedulingPolicy()
             )

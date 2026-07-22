@@ -64,10 +64,8 @@ struct SettingsStateHostTests {
                 rawTracingEnabled: { false },
                 screenshotTracingEnabled: { true },
                 visiblePageContextEnabled: { false },
-                personalCaptureEnabled: { true },
                 diagnosticsPath: { "/tmp/diagnostics" },
                 tracePath: { "/tmp/trace" },
-                personalCapturePath: { "/tmp/journal" }
             )
         )
 
@@ -76,10 +74,8 @@ struct SettingsStateHostTests {
         #expect(!state.rawContentTracingEnabled)
         #expect(state.screenshotTracingEnabled)
         #expect(!state.visiblePageContextEnabled)
-        #expect(state.personalCaptureEnabled)
         #expect(state.diagnosticsPath == "/tmp/diagnostics")
         #expect(state.tracePath == "/tmp/trace")
-        #expect(state.personalCapturePath == "/tmp/journal")
     }
 
     @Test("AppDelegate keeps settings state assembly behind the host")
@@ -107,10 +103,8 @@ private func makeDependencies(
     rawTracingEnabled: @escaping () -> Bool = { true },
     screenshotTracingEnabled: @escaping () -> Bool = { false },
     visiblePageContextEnabled: @escaping () -> Bool = { true },
-    personalCaptureEnabled: @escaping () -> Bool = { false },
     diagnosticsPath: @escaping () -> String = { "/tmp/diagnostics" },
     tracePath: @escaping () -> String = { "/tmp/trace" },
-    personalCapturePath: @escaping () -> String = { "/tmp/journal" }
 ) -> SettingsStateHostDependencies {
     SettingsStateHostDependencies(
         appForSettingsState: app,
@@ -142,10 +136,8 @@ private func makeDependencies(
         screenshotTracingEnabled: screenshotTracingEnabled,
         screenshotTracingExpiresAt: { nil },
         visiblePageContextEnabled: visiblePageContextEnabled,
-        personalCaptureEnabled: personalCaptureEnabled,
         diagnosticsPath: diagnosticsPath,
         tracePath: tracePath,
-        personalCapturePath: personalCapturePath,
         suggestionTuning: tuning,
         modelName: { "Qwen3.5 4B" },
         completionLengthSummary: { "up to 8 words" }
