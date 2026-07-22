@@ -91,11 +91,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     // Rebuilds its engine per request so model repairs/installs are picked up live.
+    // Phrase continuations route to the llama.cpp/Gemma engine when its server is
+    // healthy (reliability pick, 2026-07-22); word completion and any llama
+    // failure stay on MLX/Qwen.
+    private let llamaServerHost = LlamaServerProcessHost()
     private lazy var ghostScreenContextBridge = GhostScreenContextBridge(provider: visiblePageContextProvider)
     private lazy var ghostBrainServerHost = GhostBrainServerHost(
         engineProvider: { [weak self] in
             guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
-            return RuntimeBackedCompletionEngine(runtime: self.modelRuntimeBundle.runtime)
+            let mlx = RuntimeBackedCompletionEngine(runtime: self.modelRuntimeBundle.runtime)
+            let llama = self.llamaServerHost
+            return ModeRoutedCompletionEngine(
+                phraseEngine: LlamaCompletionEngine(baseURL: llama.baseURL),
+                fallbackEngine: mlx,
+                phraseEngineIsHealthy: { llama.isHealthy }
+            )
         },
         screenContextResolver: { [bridge = ghostScreenContextBridge] app, field, text in
             bridge.context(
@@ -1057,9 +1067,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         appLifecycleHost.start()
         ghostBrainServerHost.start()
+        llamaServerHost.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        llamaServerHost.stop()
         ghostBrainServerHost.stop()
         appLifecycleHost.stop()
     }

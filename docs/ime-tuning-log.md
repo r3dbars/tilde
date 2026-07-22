@@ -84,6 +84,28 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — LLAMA BRIDGE SHIPPED: Gemma E4B is the phrase engine
+
+- **The keyboard now runs Gemma 4 E4B for phrase continuations.** Architecture:
+  `LlamaServerProcessHost` (app-managed llama-server child on 127.0.0.1:17872,
+  health-polled, bounded auto-restart, terminates with the app; stays
+  unhealthy → MLX fallback when the brew binary or model is missing) +
+  `LlamaCompletionEngine` (core `RawContinuationPrompt` recipe + the SAME
+  `CompletionOutputCleaner` discipline as MLX) + `ModeRoutedCompletionEngine`
+  (phraseContinuation → Gemma when healthy; wordCompletion and llama ERRORS →
+  MLX/Qwen; llama SILENCE respected, never retried on MLX).
+- **Verified end-to-end through the ghost socket:** casual register 128–191ms
+  with owner-grade prose ("I thought it would."); mid-word still MLX
+  ("somet" → "hing"); `llama-completion-timing` diagnostics confirm routing.
+- **Dependencies (onboarding debt):** brew `llama.cpp` binary at
+  /opt/homebrew/bin/llama-server and the HF-cached
+  google/gemma-4-E4B-it-qat-q4_0-gguf (~4.5GB). Bundling/downloading both
+  in-app is future onboarding work; without them the app quietly stays on MLX.
+- **OPEN:** streaming partials over the llama path (server supports SSE);
+  screen-context block in the raw recipe (untested); llama-server prompt-cache
+  behavior under the scaffold (cache_prompt=true — scaffold is a stable
+  prefix, context grows at the end — should hit naturally; verify slot reuse).
+
 ## 2026-07-22 — GEMMA RECIPE SOLVED: E4B + scaffolded raw completion
 
 - **The winning combination:** llama.cpp 10080 + `google/gemma-4-E4B-it-qat-q4_0-gguf`
