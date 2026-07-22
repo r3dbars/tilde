@@ -194,6 +194,9 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
+    // A/B in progress (see docs/ime-tuning-log.md): Gemma E4B it-OptiQ measured
+    // ~1.1s per suggestion vs Qwen's ~0.3s on this hardware — Qwen stays until
+    // a faster Gemma quant/path is found.
     public static let preferredMLX = qwen35FourBMLX
 
     public static let selectableMLXManifests: [String: LocalModelAssetManifest] = [
