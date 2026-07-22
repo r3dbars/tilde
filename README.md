@@ -17,8 +17,8 @@ no telemetry, no separate model server.
 Beta, and honestly labeled as such. It works best in TextEdit, Apple Notes,
 Obsidian, and browser text areas; other apps go through a generic Accessibility
 path and can be paused individually when placement or insertion misbehaves.
-Prompt/terminal surfaces stay conservative (one word, fail-closed), and secure
-or sensitive fields are hard-blocked.
+Prompt surfaces stay conservative (one word, fail-closed); terminal emulators,
+secure fields, and sensitive fields are hard-blocked.
 
 ## Requirements
 

@@ -97,7 +97,7 @@ struct AutocompleteTraceAnalyzerTests {
             event(
                 .insertionFailed,
                 suggestionID: "mutation",
-                appBundleIdentifier: "com.openai.codex",
+                appBundleIdentifier: "com.anthropic.claudefordesktop",
                 reason: "prompt-mutation-outside-accepted-span",
                 metadata: ["promptMutationWithoutUserIntent": "true"]
             ),
