@@ -29,9 +29,9 @@ final class GhostInputController: IMKInputController {
     /// Monotonic keystroke generation; async model results for a stale generation
     /// are dropped instead of clobbering a newer ghost.
     private var generation = 0
+    private var modelTask: Task<Void, Never>?
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
-    private var modelTask: Task<Void, Never>?
     #endif
 
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
@@ -98,9 +98,7 @@ final class GhostInputController: IMKInputController {
         typedFallback = ""
         ghost = ""
         generation += 1
-        #if canImport(FoundationModels)
         modelTask?.cancel()
-        #endif
         super.deactivateServer(sender)
     }
 
@@ -228,17 +226,46 @@ final class GhostInputController: IMKInputController {
         )
     }
 
-    // MARK: - On-device model layer (Apple Intelligence via FoundationModels)
+    // MARK: - Model layer: SteadyType MLX brain first, Apple on-device model fallback
 
     private func requestModelGhost(_ client: IMKTextInput, context: String) {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, *) else { return }
         // Word boundaries only; require a little context so continuations aren't wild.
         guard context.hasSuffix(" ") || context.hasSuffix("\n") else { return }
         let tail = String(context.suffix(300))
         guard tail.count >= 12 else { return }
-        guard case .available = SystemLanguageModel.default.availability else { return }
 
+        let gen = generation
+        modelTask?.cancel()
+        modelTask = Task { [weak self] in
+            // 1) SteadyType's own MLX model, served by the menu-bar app over a local
+            //    socket. Blocking client with its own timeouts, kept off this task.
+            let mlx = await Task.detached(priority: .userInitiated) {
+                GhostBrainClient.complete(context: tail)
+            }.value
+            if Task.isCancelled { return }
+            if let mlx {
+                let text = Self.cleanedModelOutput(mlx)
+                if !text.isEmpty {
+                    await self?.present(text, ifStill: gen)
+                    return
+                }
+            }
+            // 2) Apple's on-device model, when the app isn't running.
+            await self?.appleModelGhost(tail: tail, gen: gen)
+        }
+    }
+
+    @MainActor
+    private func present(_ text: String, ifStill gen: Int) {
+        guard generation == gen, let liveClient = client() else { return }
+        ghost = text
+        show(text, liveClient)
+    }
+
+    private func appleModelGhost(tail: String, gen: Int) async {
+        #if canImport(FoundationModels)
+        guard #available(macOS 26.0, *) else { return }
+        guard case .available = SystemLanguageModel.default.availability else { return }
         if modelSession == nil {
             modelSession = LanguageModelSession(instructions: """
             You silently continue the user's document. Given the end of a text, reply with \
@@ -248,27 +275,18 @@ final class GhostInputController: IMKInputController {
             modelSession?.prewarm()
         }
         guard let session = modelSession, !session.isResponding else { return }
-
-        let gen = generation
-        modelTask = Task { [weak self] in
-            let text: String
-            do {
-                let response = try await session.respond(
-                    to: tail,
-                    options: GenerationOptions(maximumResponseTokens: 16)
-                )
-                text = Self.cleanedModelOutput(response.content)
-            } catch {
-                return // guardrail refusal / cancellation / transient — fast layer stands
-            }
-            guard !text.isEmpty else { return }
-            await MainActor.run {
-                guard let self, self.generation == gen else { return }
-                guard let liveClient = self.client() else { return }
-                self.ghost = text
-                self.show(text, liveClient)
-            }
+        let text: String
+        do {
+            let response = try await session.respond(
+                to: tail,
+                options: GenerationOptions(maximumResponseTokens: 16)
+            )
+            text = Self.cleanedModelOutput(response.content)
+        } catch {
+            return // guardrail refusal / cancellation / transient — fast layer stands
         }
+        guard !text.isEmpty else { return }
+        await present(text, ifStill: gen)
         #endif
     }
 
@@ -283,9 +301,7 @@ final class GhostInputController: IMKInputController {
 
     private func clearGhost(_ client: IMKTextInput) {
         generation += 1
-        #if canImport(FoundationModels)
         modelTask?.cancel()
-        #endif
         guard !ghost.isEmpty else { return }
         client.setMarkedText(
             "",
