@@ -634,54 +634,6 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             notes: "Yellow browser target for local textarea and contenteditable fixtures only. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached local fixture surfaces. Production browser apps, public pages, chat, hosted docs, Monaco, CodeMirror, and ProseMirror stay blocked until current exact proof exists."
         ),
         CompatibilityProfile(
-            bundleIdentifier: "com.openai.codex",
-            displayName: "Codex",
-            appFamily: .customCanvas,
-            supportLevel: .yellow,
-            supportReason: "Codex prompt support is on for this installed app: Tab and whole-suggestion accept are available, and prompt safety gates stay on.",
-            renderMode: .inlineAdjacent,
-            insertionMode: .axValueReplacement,
-            fallbackRenderMode: .floatingMirror,
-            fieldIdentityMode: .stableBounds,
-            anchorLadder: [.caret],
-            knownFailureModes: ["prompt editor may need synthetic caret", "detached whole-box suggestions are disallowed", "key-event insertion can land at the start of the prompt"],
-            allowsFieldAnchor: false,
-            allowsWindowAnchor: false,
-            supportsOneWordAcceptance: true,
-            supportsFullAcceptance: true,
-            requiresNoSubmitAcceptanceProof: false,
-            suppressesAfterInsertionFailure: true,
-            allowsDetachedSuggestions: false,
-            promptAppSafetyMode: .wordOnly,
-            notes: "Enabled for this local Codex build with one-word no-submit proof, full-accept no-submit proof, and prompt-safe accepted-text filtering. Detached suggestions, generic key-event insertion, and clipboard fallback stay off."
-        ),
-        CompatibilityProfile(
-            bundleIdentifier: "com.anthropic.claude-code",
-            displayName: "Claude Code",
-            appFamily: .customCanvas,
-            supportLevel: .yellow,
-            graduationDecision: .wordOnly,
-            supportReason: "Claude Code is enabled for dogfood through the direct app profile and terminal-host adapter.",
-            renderMode: .floatingMirror,
-            insertionMode: .clipboardFallbackOptIn,
-            fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .keyEvents,
-            fieldIdentityMode: .stableBounds,
-            anchorLadder: [.caret],
-            knownFailureModes: ["foreground prompt surface is often a terminal host", "terminal-hosted CLI input can submit shell commands"],
-            allowsFieldAnchor: true,
-            allowsWindowAnchor: false,
-            requiresValidatedCaret: false,
-            supportsOneWordAcceptance: true,
-            supportsFullAcceptance: false,
-            requiresNoSubmitAcceptanceProof: true,
-            suppressesAfterInsertionFailure: true,
-            allowsDetachedSuggestions: false,
-            allowsSyntheticCaretPlacement: true,
-            promptAppSafetyMode: .wordOnly,
-            notes: "Default-on Claude Code dogfood target. Direct app profile uses floating placement and one-word acceptance only. Terminal-hosted sessions use the Claude Code terminal adapter without requiring proof mode, and should be fixed app-by-app when screenshots show bad placement or insertion."
-        ),
-        CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             appFamily: .electron,
@@ -908,8 +860,16 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         "com.dashlane.dashlanephonefinal",
         "com.lastpass.LastPass",
         "com.apple.systempreferences",
-        "com.apple.systemsettings"
-    ]).union(ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts)
+        "com.apple.systemsettings",
+        // Terminal emulators: shell input can submit commands, so suggestions stay off.
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp",
+        "com.mitchellh.ghostty",
+        "net.kovidgoyal.kitty",
+        "org.alacritty",
+        "com.github.wez.wezterm"
+    ])
 }
 
 public enum CompatibilitySupportStatus: Equatable, Sendable {

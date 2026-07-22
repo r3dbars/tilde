@@ -35,16 +35,4 @@ struct InsertionVerificationTimingPolicyTests {
         ) == nil)
     }
 
-    @Test("Claude Code waits for delayed no-submit paste")
-    func claudeCodeWaitsForDelayedNoSubmitPaste() {
-        let policy = InsertionVerificationTimingPolicy()
-        let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile
-
-        #expect(policy.delayMilliseconds(for: profile, retryCount: 0) == 640)
-        #expect(policy.readOnlyRecheckDelayMilliseconds(
-            for: profile,
-            result: .unchanged,
-            retryCount: 0
-        ) == nil)
-    }
 }

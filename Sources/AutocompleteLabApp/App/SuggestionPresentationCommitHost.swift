@@ -29,11 +29,6 @@ struct SuggestionPresentationCommitHostDependencies {
     let setSuggestionDecision: (String) -> Void
     let activateKeyboardCapture: () -> Bool
     let handleKeyboardCaptureUnavailable: () -> Void
-    let cacheProofOnlyAcceptRecentSuggestion: (
-        SuggestionPresentationCommitInput,
-        SuggestionAcceptanceSnapshot,
-        Date
-    ) -> Void
     let recordGeometry: (SuggestionPresentationCommitInput) -> Void
     let screenshotCapture: TraceScreenshotCaptureCoordinator
     let compatibilityLearningStore: CompatibilityLearningStore
@@ -99,7 +94,6 @@ final class SuggestionPresentationCommitHost {
         dependencies.currentSuggestionState.presentedAt = presentedAt
         dependencies.currentSuggestionState.displayScoreFinal = input.displayScoreFinal
         dependencies.currentSuggestionState.invalidatedByUserKeyDown = false
-        dependencies.cacheProofOnlyAcceptRecentSuggestion(input, acceptanceSnapshot, presentedAt)
 
         guard dependencies.activateKeyboardCapture() else {
             dependencies.handleKeyboardCaptureUnavailable()

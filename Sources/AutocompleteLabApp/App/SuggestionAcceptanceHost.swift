@@ -2,16 +2,6 @@ import AutocompleteLabCore
 import Foundation
 
 @MainActor
-struct SuggestionDeferredAcceptanceInput {
-    let acceptedText: String
-    let acceptanceID: String
-    let acceptedAt: Date
-    let action: KeyboardAction
-    let acceptanceProof: SuggestionAcceptanceProof
-    let verificationBaseline: InsertionVerificationBaseline?
-}
-
-@MainActor
 struct SuggestionNextWordAcceptanceInput {
     let acceptedText: String
     let acceptanceID: String
@@ -33,22 +23,19 @@ struct SuggestionAcceptanceHostDependencies {
     let undoAcceptedInsertion: () -> Bool
     let acceptedInsertionUndoIsActive: () -> Bool
     let clearPendingAcceptedInsertionUndo: (String) -> Void
-    let preserveClaudeCodeTerminalHostProofSuggestionAfterPassthrough: (String) -> Bool
     let suppressKey: (AutocompleteKey) -> Void
     let clearKeySuppression: (AutocompleteKey) -> Void
     let setPreservesResidualSuggestionAfterNextWordAccept: (Bool) -> Void
     let shouldSuppressKey: (AutocompleteKey, Bool) -> Bool
-    let focusedFieldMatchesCurrentSuggestion: (Bool, Bool, Bool) -> Bool
-    let recordClaudeCodeTerminalHostProofKeyboardProgress: (String, AutocompleteKey, KeyboardAction, [String: String]) -> Void
+    let focusedFieldMatchesCurrentSuggestion: (Bool) -> Bool
     let setSuggestionDecision: (String) -> Void
     let hideSuggestion: (String, [String: String]) -> Void
     let recordKeyboardAction: (AutocompleteKey, KeyboardAction, Bool, String) -> Void
-    let currentSuggestionAcceptanceDecision: (Bool, Bool) -> SuggestionAcceptanceDecision
+    let currentSuggestionAcceptanceDecision: (Bool) -> SuggestionAcceptanceDecision
     let recordAcceptanceGuardBlock: (SuggestionAcceptanceBlockReason) -> Void
     let insertionVerificationBaseline: (String, Date, KeyboardAction, String) -> InsertionVerificationBaseline?
     let acceptedTextForCurrentAcceptance: (String, KeyboardAction) -> String
     let suggestionAcceptanceProof: (KeyboardAction, String) -> SuggestionAcceptanceProof?
-    let scheduleDeferredAcceptance: (SuggestionDeferredAcceptanceInput) -> Bool
     let insertAcceptedText: (String, KeyboardAction) -> Bool
     let suppressCurrentFieldAfterInsertionFailure: (String) -> Void
     let completeNextWordAcceptance: (SuggestionNextWordAcceptanceInput) -> Void
@@ -114,12 +101,6 @@ final class SuggestionAcceptanceHost {
         dependencies.clearPendingAcceptedInsertionUndo(reason)
     }
 
-    private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(
-        source: String
-    ) -> Bool {
-        dependencies.preserveClaudeCodeTerminalHostProofSuggestionAfterPassthrough(source)
-    }
-
     private func suppressKey(_ key: AutocompleteKey) {
         dependencies.suppressKey(key)
     }
@@ -129,24 +110,9 @@ final class SuggestionAcceptanceHost {
     }
 
     private func focusedFieldMatchesCurrentSuggestion(
-        allowTerminalHostProofSnapshotFastPath: Bool = false,
-        allowCodexProofSnapshotFastPath: Bool = false,
         allowObsidianSnapshotFastPath: Bool = false
     ) -> Bool {
-        dependencies.focusedFieldMatchesCurrentSuggestion(
-            allowTerminalHostProofSnapshotFastPath,
-            allowCodexProofSnapshotFastPath,
-            allowObsidianSnapshotFastPath
-        )
-    }
-
-    private func recordClaudeCodeTerminalHostProofKeyboardProgress(
-        stage: String,
-        key: AutocompleteKey,
-        action: KeyboardAction,
-        metadata: [String: String] = [:]
-    ) {
-        dependencies.recordClaudeCodeTerminalHostProofKeyboardProgress(stage, key, action, metadata)
+        dependencies.focusedFieldMatchesCurrentSuggestion(allowObsidianSnapshotFastPath)
     }
 
     private func setSuggestionDecision(_ decision: String) {
@@ -170,13 +136,9 @@ final class SuggestionAcceptanceHost {
     }
 
     private func currentSuggestionAcceptanceDecision(
-        allowCodexProofSnapshotFastPath: Bool = false,
         allowObsidianSnapshotFastPath: Bool = false
     ) -> SuggestionAcceptanceDecision {
-        dependencies.currentSuggestionAcceptanceDecision(
-            allowCodexProofSnapshotFastPath,
-            allowObsidianSnapshotFastPath
-        )
+        dependencies.currentSuggestionAcceptanceDecision(allowObsidianSnapshotFastPath)
     }
 
     private func recordAcceptanceGuardBlock(reason: SuggestionAcceptanceBlockReason) {
@@ -204,26 +166,6 @@ final class SuggestionAcceptanceHost {
         acceptedText: String
     ) -> SuggestionAcceptanceProof? {
         dependencies.suggestionAcceptanceProof(action, acceptedText)
-    }
-
-    private func scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
-        acceptedText: String,
-        acceptanceID: String,
-        acceptedAt: Date,
-        action: KeyboardAction,
-        acceptanceProof: SuggestionAcceptanceProof,
-        verificationBaseline: InsertionVerificationBaseline?
-    ) -> Bool {
-        dependencies.scheduleDeferredAcceptance(
-            SuggestionDeferredAcceptanceInput(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptanceProof: acceptanceProof,
-                verificationBaseline: verificationBaseline
-            )
-        )
     }
 
     private func insertAcceptedText(_ acceptedText: String, action: KeyboardAction) -> Bool {
@@ -326,13 +268,9 @@ final class SuggestionAcceptanceHost {
         didObservePassthroughKeyDown: Bool = false
     ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
-            if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
-                dependencies.setPreservesResidualSuggestionAfterNextWordAccept(false)
-            } else {
-                currentSuggestionState.invalidatedByUserKeyDown = true
-                dependencies.setPreservesResidualSuggestionAfterNextWordAccept(false)
-                clearPendingAcceptedInsertionUndo(reason: "typing")
-            }
+            currentSuggestionState.invalidatedByUserKeyDown = true
+            dependencies.setPreservesResidualSuggestionAfterNextWordAccept(false)
+            clearPendingAcceptedInsertionUndo(reason: "typing")
         }
 
         let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
@@ -372,14 +310,7 @@ final class SuggestionAcceptanceHost {
             return .replayOriginalKey(.noVisibleSuggestion)
         }
 
-        recordClaudeCodeTerminalHostProofKeyboardProgress(
-            stage: "focus-check-start",
-            key: key,
-            action: action
-        )
         guard focusedFieldMatchesCurrentSuggestion(
-            allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action.insertsSuggestionText,
             allowObsidianSnapshotFastPath: action.insertsSuggestionText
         ) else {
             setSuggestionDecision("Blocked: focus changed")
@@ -392,18 +323,8 @@ final class SuggestionAcceptanceHost {
             )
             return keyboardCaptureSafetyPolicy.handlingResultForFocusMismatch(key: key)
         }
-        recordClaudeCodeTerminalHostProofKeyboardProgress(
-            stage: "focus-check-passed",
-            key: key,
-            action: action
-        )
 
         if currentSuggestionState.invalidatedByUserKeyDown {
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "blocked-stale-after-keydown",
-                key: key,
-                action: action
-            )
             setSuggestionDecision("Blocked: stale suggestion passed through")
             hideSuggestion(reason: "stale-after-keydown")
             recordKeyboardAction(
@@ -416,11 +337,6 @@ final class SuggestionAcceptanceHost {
         }
 
         if shouldSuppressKey(key, isAutorepeat: isAutorepeat) {
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "suppressed-autorepeat",
-                key: key,
-                action: action
-            )
             recordKeyboardAction(key: key, action: .passThrough, handled: true, reason: "suppressed-autorepeat")
             return .handled
         }
@@ -433,17 +349,11 @@ final class SuggestionAcceptanceHost {
             return .replayOriginalKey(.undoUnavailable)
 
         case .acceptNextWord:
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-entered",
-                key: key,
-                action: action
-            )
             guard currentProfile?.supportsOneWordAcceptance == true else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-one-word")
                 return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true,
                 allowObsidianSnapshotFastPath: true
             ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
@@ -461,65 +371,20 @@ final class SuggestionAcceptanceHost {
                 action: action,
                 acceptMode: action.diagnosticName
             )
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-baseline-ready",
-                key: key,
-                action: action,
-                metadata: [
-                    "hasBaseline": String(verificationBaseline != nil)
-                ]
-            )
             guard let rawAcceptedText = suggestionSession.nextWordAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
             let acceptedText = acceptedTextForCurrentAcceptance(rawAcceptedText, action: action)
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-text-ready",
-                key: key,
-                action: action,
-                metadata: [
-                    "acceptedChars": String(acceptedText.count),
-                    "rawAcceptedChars": String(rawAcceptedText.count)
-                ]
-            )
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
-            }
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-proof-ready",
-                key: key,
-                action: action,
-                metadata: acceptanceProof.traceMetadata
-            )
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-insert-start",
-                key: key,
-                action: action
-            )
-            if scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptedAt: acceptedAt,
-                action: action,
-                acceptanceProof: acceptanceProof,
-                verificationBaseline: verificationBaseline
-            ) {
-                suppressKey(key)
-                recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted-deferred-insert-scheduled")
-                return .handled
             }
             guard insertAcceptedText(acceptedText, action: action) else {
                 suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
-            recordClaudeCodeTerminalHostProofKeyboardProgress(
-                stage: "accept-next-word-insert-succeeded",
-                key: key,
-                action: action
-            )
 
             completeNextWordAcceptance(
                 acceptedText: acceptedText,
@@ -539,7 +404,6 @@ final class SuggestionAcceptanceHost {
                 return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true,
                 allowObsidianSnapshotFastPath: true
             ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)

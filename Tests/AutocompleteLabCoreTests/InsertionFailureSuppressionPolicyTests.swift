@@ -8,7 +8,7 @@ struct InsertionFailureSuppressionPolicyTests {
     @Test("Suppresses fields for profiles that fail closed after insertion failures")
     func suppressesFailClosedProfiles() {
         #expect(policy.shouldSuppressField(
-            profile: ClaudeCodeTerminalHostProofPolicy.proofProfile,
+            profile: CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop")!,
             failureReason: "insert-failed"
         ))
     }
@@ -35,7 +35,7 @@ struct InsertionFailureSuppressionPolicyTests {
     @Test("Requires a concrete failure reason")
     func requiresFailureReason() {
         #expect(!policy.shouldSuppressField(
-            profile: ClaudeCodeTerminalHostProofPolicy.proofProfile,
+            profile: CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop")!,
             failureReason: ""
         ))
     }

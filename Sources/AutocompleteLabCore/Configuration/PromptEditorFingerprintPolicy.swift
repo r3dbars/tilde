@@ -13,8 +13,6 @@ public struct PromptEditorFingerprintDecision: Equatable, Sendable {
 
 public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
     public static let dogfoodBundleIdentifiers: Set<String> = [
-        "com.openai.codex",
-        "com.anthropic.claude-code",
         "com.anthropic.claudefordesktop"
     ]
 
@@ -29,8 +27,7 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         proofModeEnabled: Bool = false,
         textBeforeCursor: String = "",
         textAfterCursor: String = "",
-        selectedTextLength: Int = 0,
-        codexProofMarker: String = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        selectedTextLength: Int = 0
     ) -> PromptEditorFingerprintDecision {
         guard Self.dogfoodBundleIdentifiers.contains(bundleIdentifier) else {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "non-dogfood-profile")
@@ -40,26 +37,8 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "non-prompt-role")
         }
 
-        if bundleIdentifier == "com.openai.codex",
-           proofModeEnabled,
-           role == "AXTextArea",
-           selectedTextLength == 0,
-           textAfterCursor.isEmpty,
-           !codexProofMarker.isEmpty,
-           textBeforeCursor.contains(codexProofMarker) {
-            return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-proof-marker")
-        }
-
-        guard bundleIdentifier == "com.openai.codex" || proofModeEnabled else {
+        guard proofModeEnabled else {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "prompt-proof-mode-required")
-        }
-
-        if bundleIdentifier == "com.openai.codex",
-           role == "AXTextArea",
-           selectedTextLength == 0,
-           textAfterCursor.isEmpty,
-           elementRect != nil {
-            return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-text-area")
         }
 
         let searchable = fingerprintText.lowercased()
@@ -142,10 +121,8 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
     }
 
     private static let strongPromptTerms: Set<String> = [
-        "ask codex",
         "ask claude",
         "claude message composer",
-        "codex message composer",
         "compose a message",
         "describe a task or ask a question",
         "message composer",
@@ -157,7 +134,6 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         "ask",
         "chat",
         "claude",
-        "codex",
         "input",
         "message",
         "prompt",

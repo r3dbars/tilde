@@ -584,32 +584,6 @@ final class SuggestionOrchestrator {
         screenshotTracingEnabled: Bool,
         shouldCaptureScreenshot: Bool
     ) -> Bool {
-        if profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier {
-            guard context.role == "AXTextArea",
-                  context.caretIsSynthetic,
-                  context.capabilities.canReadValue,
-                  context.capabilities.canReadSelectedTextRange,
-                  context.selectedTextLength == 0,
-                  context.textAfterCursor.isEmpty,
-                  context.windowIdentifier != nil,
-                  let elementRect = context.elementRect,
-                  elementRect.width > 0,
-                  elementRect.height > 0 else {
-                return false
-            }
-
-            return PromptEditorFingerprintPolicy().decision(
-                bundleIdentifier: profile.bundleIdentifier,
-                role: context.role,
-                fingerprintText: context.fingerprint.searchableText,
-                elementRect: context.elementRect,
-                windowRect: context.windowRect,
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                selectedTextLength: context.selectedTextLength
-            ).canSuggest
-        }
-
         guard profile.bundleIdentifier == "com.google.Chrome",
               context.role == "AXTextArea",
               context.caretIsSynthetic,
@@ -862,20 +836,6 @@ final class SuggestionOrchestrator {
         )
         let adjustedPolicy = displayScorePolicy
             .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
-        let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            && (
-                profile.requiresNoSubmitAcceptanceProof
-                    || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
-            )
-            && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
-            && request.textAfterCursor.isEmpty
-        let claudeCodeTerminalHostProofLatencyBypass =
-            request.appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
-                && request.textAfterCursor.isEmpty
-        let proofLatencyBypass = promptProofLatencyBypass || claudeCodeTerminalHostProofLatencyBypass
         let modelDisplayLatencyBudgetMilliseconds = Self.maximumFinalModelDisplayLatencyMilliseconds(
             for: request,
             suggestion: suggestion,
@@ -898,17 +858,11 @@ final class SuggestionOrchestrator {
             latencyBudgetMilliseconds: modelDisplayLatencyBudgetMilliseconds,
             latencyForBudgetMilliseconds: modelLatencyForBudget,
             enforceLatencyCeiling: triggerReason != "model-stream",
-            allowLatencyBypass: proofLatencyBypass,
+            allowLatencyBypass: false,
             behaviorProfileID: request.behaviorProfile.id
         )
         var confidenceMetadata = unifiedDecision.metadata
         confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
-        if promptProofLatencyBypass {
-            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
-        }
-        if claudeCodeTerminalHostProofLatencyBypass {
-            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
-        }
 
         return SuggestionDisplayScoreDecision(
             decision: unifiedDecision.decision,

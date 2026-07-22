@@ -203,12 +203,12 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Next 3-8 words, or <NO_SUGGESTION>:"))
     }
 
-    @Test("Codex prompt avoids generic product filler")
-    func codexPromptAvoidsGenericProductFiller() {
+    @Test("Prompt app prompt avoids generic product filler")
+    func promptAppPromptAvoidsGenericProductFiller() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
-            textBeforeCursor: "I need this to be more accurate in the codex app so I can",
-            appBundleIdentifier: "com.openai.codex"
+            textBeforeCursor: "I need this autocomplete to be more accurate so I can",
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
         #expect(prompt.system.contains("dogfooding this autocomplete tool"))
@@ -369,7 +369,7 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "- [ ] Make autocomplete",
-            appBundleIdentifier: "com.openai.codex"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
         #expect(prompt.system.contains("Behavior profile: ai_chat"))
@@ -378,12 +378,12 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("do not repeat the marker or checkbox"))
     }
 
-    @Test("Codex prompt does not force dogfood topics into normal writing")
-    func codexPromptDoesNotForceDogfoodTopicsIntoNormalWriting() {
+    @Test("Prompt app prompt does not force dogfood topics into normal writing")
+    func promptAppPromptDoesNotForceDogfoodTopicsIntoNormalWriting() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "hello does this work right?",
-            appBundleIdentifier: "com.openai.codex"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
         #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
@@ -393,12 +393,12 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
-    @Test("Codex prompt ignores loose dogfood substrings")
-    func codexPromptIgnoresLooseDogfoodSubstrings() {
+    @Test("Prompt app prompt ignores loose dogfood substrings")
+    func promptAppPromptIgnoresLooseDogfoodSubstrings() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "This table model should pass the normal writing test",
-            appBundleIdentifier: "com.openai.codex"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
         #expect(prompt.system.contains("Continue the user's actual sentence naturally"))
@@ -406,8 +406,8 @@ struct CompletionPromptBuilderTests {
         #expect(!prompt.system.contains("Prefer concrete continuations about testing"))
     }
 
-    @Test("Codex prompt keeps normal suggestion words out of dogfood mode")
-    func codexPromptKeepsNormalSuggestionWordsOutOfDogfoodMode() {
+    @Test("Prompt app prompt keeps normal suggestion words out of dogfood mode")
+    func promptAppPromptKeepsNormalSuggestionWordsOutOfDogfoodMode() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let cases = [
             "I have a suggestion for dinner and",
@@ -418,7 +418,7 @@ struct CompletionPromptBuilderTests {
         for textBeforeCursor in cases {
             let prompt = builder.prompt(for: CompletionRequest(
                 textBeforeCursor: textBeforeCursor,
-                appBundleIdentifier: "com.openai.codex"
+                appBundleIdentifier: "com.anthropic.claudefordesktop"
             ))
 
             #expect(
@@ -430,15 +430,15 @@ struct CompletionPromptBuilderTests {
         }
     }
 
-    @Test("Claude Code prompt uses dogfood guidance")
-    func claudeCodePromptUsesDogfoodGuidance() {
+    @Test("Claude desktop prompt uses dogfood guidance")
+    func claudeDesktopPromptUsesDogfoodGuidance() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "I need this autocomplete debug trace to",
-            appBundleIdentifier: "com.anthropic.claude-code"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
-        #expect(prompt.system.contains("The active app is Claude Code"))
+        #expect(prompt.system.contains("The active app is Claude"))
         #expect(prompt.system.contains("dogfooding this autocomplete tool"))
         #expect(prompt.system.contains("testing, using, building, debugging"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
@@ -463,7 +463,7 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "Claude Code no-submit prompt insertion should",
-            appBundleIdentifier: "com.anthropic.claude-code"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
         #expect(prompt.system.contains("dogfooding this autocomplete tool"))
@@ -681,7 +681,7 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "Can you make this easier to",
-            appBundleIdentifier: "com.openai.codex"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
@@ -700,7 +700,7 @@ struct CompletionPromptBuilderTests {
         ))
         let formPrompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "Justin",
-            appBundleIdentifier: "com.openai.codex",
+            appBundleIdentifier: "com.anthropic.claudefordesktop",
             fieldKind: .form
         ))
 

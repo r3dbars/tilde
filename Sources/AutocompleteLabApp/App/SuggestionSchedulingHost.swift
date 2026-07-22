@@ -494,16 +494,11 @@ final class SuggestionSchedulingHost {
         var didPresentFastPhraseFallback = false
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
-            let allowsClaudeCodeProofPromptPrediction =
-                appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
-            let allowsPredictivePhraseFallback =
-                allowsClaudeCodeProofPromptPrediction
-                || shouldUsePredictivePhraseFallback(
-                    profile: profile,
-                    behaviorProfileID: request.behaviorProfileID,
-                    visiblePageContext: visiblePageContext
-                )
+            let allowsPredictivePhraseFallback = shouldUsePredictivePhraseFallback(
+                profile: profile,
+                behaviorProfileID: request.behaviorProfileID,
+                visiblePageContext: visiblePageContext
+            )
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 docLocalContextTexts: orchestration.docLocalContextTexts,
@@ -511,7 +506,7 @@ final class SuggestionSchedulingHost {
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
-                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
+                allowPromptAppPrediction: false
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }

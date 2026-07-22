@@ -6,8 +6,8 @@ struct PromptAppNoSubmitMetricsTests {
     @Test("Empty prompt proof metrics pass release gate")
     func emptyPromptProofMetricsPassReleaseGate() {
         let metrics = PromptAppNoSubmitMetricsAnalyzer().metrics(from: [
-            event(app: "com.openai.codex", type: .suggestionPresented),
-            event(app: "com.openai.codex", type: .suggestionAccepted)
+            event(app: "com.anthropic.claudefordesktop", type: .suggestionPresented),
+            event(app: "com.anthropic.claudefordesktop", type: .suggestionAccepted)
         ])
 
         #expect(metrics == PromptAppNoSubmitMetrics())
@@ -17,11 +17,11 @@ struct PromptAppNoSubmitMetricsTests {
     @Test("Counts prompt-app hard gate failures")
     func countsPromptAppHardGateFailures() {
         let metrics = PromptAppNoSubmitMetricsAnalyzer().metrics(from: [
-            event(app: "com.openai.codex", metadata: ["checkpoint": "fieldSend"]),
-            event(app: "com.anthropic.claude-code", reason: "tab-conflict"),
+            event(app: "com.anthropic.claudefordesktop", metadata: ["checkpoint": "fieldSend"]),
+            event(app: "com.openai.ChatGPT", reason: "tab-conflict"),
             event(app: "com.anthropic.claudefordesktop", reason: "prompt-mutation-outside-accepted-span"),
             event(app: "com.openai.chat", reason: "wrong-app-or-field-before-accept"),
-            event(app: "com.openai.codex", type: .suggestionAccepted, metadata: ["acceptMode": "acceptAllVisible"]),
+            event(app: "com.anthropic.claudefordesktop", type: .suggestionAccepted, metadata: ["acceptMode": "acceptAllVisible"]),
             event(app: "ru.keepcoder.Telegram", reason: "accepted-text-prompt-command-prefix")
         ])
 

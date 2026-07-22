@@ -496,10 +496,6 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
 private extension Optional where Wrapped == String {
     var dogfoodAppName: String? {
         switch self {
-        case .some("com.openai.codex"):
-            return "Codex"
-        case .some("com.anthropic.claude-code"):
-            return "Claude Code"
         case .some("com.anthropic.claudefordesktop"):
             return "Claude"
         default:
@@ -520,7 +516,7 @@ private extension String {
     var isAutocompleteDogfoodContext: Bool {
         let lowercasedText = lowercased()
         let dogfoodPhrases = [
-            "autocomplete", "codex app", "claude code", "ghost text",
+            "autocomplete", "ghost text",
             "inline suggestion", "keyboard event tap", "phrase continuation",
             "no submit", "no-submit", "prompt app", "prompt editor",
             "prompt input", "prompt insertion", "selected text range",

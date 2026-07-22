@@ -83,39 +83,6 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.google.Chrome")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.google.Chrome")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.google.Chrome")?.allowsSyntheticCaretPlacement == false)
-        #expect(store.profile(for: "com.openai.codex")?.displayName == "Codex")
-        #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
-        #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
-        #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.openai.codex")?.graduationDecision == .supported)
-        #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
-        #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
-        #expect(store.profile(for: "com.openai.codex")?.fallbackInsertionMode == nil)
-        #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.openai.codex")?.anchorLadder == [.caret])
-        #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == true)
-        #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == true)
-        #expect(store.profile(for: "com.openai.codex")?.requiresNoSubmitAcceptanceProof == false)
-        #expect(store.profile(for: "com.openai.codex")?.canPresentSuggestions == true)
-        #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
-        #expect(store.profile(for: "com.openai.codex")?.isSensitive == false)
-        #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.graduationDecision == .wordOnly)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .floatingMirror)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .clipboardFallbackOptIn)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .keyEvents)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.anchorLadder == [.caret])
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == true)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.graduationDecision == .wordOnly)
@@ -166,20 +133,6 @@ struct CompatibilityProfileTests {
         #expect(!store.allows(bundleIdentifier: "com.apple.Passwords"))
     }
 
-    @Test("Terminal hosts stay blocked outside explicit Claude proof")
-    func terminalHostsStayBlockedOutsideExplicitClaudeProof() {
-        let store = CompatibilityProfileStore.mvp
-
-        for hostBundleIdentifier in ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts {
-            #expect(store.supportStatus(for: hostBundleIdentifier) == .denylisted)
-            #expect(!store.allows(bundleIdentifier: hostBundleIdentifier))
-        }
-
-        let proofProfile = ClaudeCodeTerminalHostProofPolicy.proofProfile
-        #expect(proofProfile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier)
-        #expect(proofProfile.insertionMode == .clipboardFallbackOptIn)
-        #expect(proofProfile.requiresNoSubmitAcceptanceProof)
-    }
 
     @Test("Highest-risk developer and system apps stay denylisted by default")
     func highestRiskDeveloperAndSystemAppsStayDenylisted() {
@@ -316,8 +269,6 @@ struct CompatibilityProfileTests {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
         let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let obsidian = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
-        let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
 
@@ -325,8 +276,6 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: chrome) == [.axThenKeyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: obsidian) == [.keyEvents])
-        #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement])
-        #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
 
@@ -338,57 +287,25 @@ struct CompatibilityProfileTests {
     @Test("Unproven real app profiles fail closed on risky affordances")
     func unprovenRealAppProfilesFailClosedOnRiskyAffordances() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
-        let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
         let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
 
         #expect(notes.allowsDetachedSuggestions == false)
         #expect(notes.fallbackInsertionMode == .keyEvents)
-        #expect(codex.supportsOneWordAcceptance == true)
-        #expect(codex.supportsFullAcceptance == true)
-        #expect(codex.requiresNoSubmitAcceptanceProof == false)
-        #expect(codex.canPresentSuggestions == true)
-        #expect(claudeCode.supportsOneWordAcceptance == true)
-        #expect(claudeCode.supportsFullAcceptance == false)
-        #expect(claudeCode.requiresNoSubmitAcceptanceProof == true)
-        #expect(claudeCode.canPresentSuggestions == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
         #expect(claude.requiresNoSubmitAcceptanceProof == true)
         #expect(claude.canPresentSuggestions == true)
 
-        #expect(codex.supportReason.contains("on for this installed app"))
-        #expect(codex.notes.contains("one-word no-submit proof"))
-        #expect(codex.notes.contains("full-accept no-submit proof"))
-        #expect(codex.supportsFullAcceptance == true)
-        #expect(codex.requiresNoSubmitAcceptanceProof == false)
-        #expect(codex.allowsDetachedSuggestions == false)
-        #expect(codex.allowsSyntheticCaretPlacement == false)
-        #expect(codex.isSensitive == false)
-        #expect(codex.promptAppSafetyMode == .wordOnly)
-        #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement == true)
         #expect(claude.notes.contains("Same-slice one-word no-submit proof exists"))
         #expect(claude.notes.contains("Default-on Claude desktop"))
         #expect(claude.promptAppSafetyMode == .wordOnly)
         #expect(claude.allowsStrictVisualProofSyntheticCaretPlacement == true)
 
-        #expect(claudeCode.supportReason.contains("terminal-host adapter"))
-        #expect(claudeCode.notes.contains("terminal adapter"))
-        #expect(claudeCode.allowsStrictVisualProofSyntheticCaretPlacement == false)
     }
 
     @Test("Required prompt and chat apps are disabled except dogfood targets")
     func requiredPromptAndChatAppsAreDisabledExceptDogfoodTargets() throws {
         let store = CompatibilityProfileStore.mvp
-        let codex = try #require(store.profile(for: "com.openai.codex"))
-        #expect(codex.supportLevel == .yellow)
-        #expect(codex.renderMode == .inlineAdjacent)
-        #expect(codex.insertionMode == .axValueReplacement)
-        #expect(codex.supportsOneWordAcceptance == true)
-        #expect(codex.supportsFullAcceptance == true)
-        #expect(codex.requiresNoSubmitAcceptanceProof == false)
-        #expect(codex.promptAppSafetyMode == .wordOnly)
-        #expect(codex.canPresentSuggestions == true)
 
         let disabledPromptApps = [
             "com.openai.chat",
@@ -417,10 +334,6 @@ struct CompatibilityProfileTests {
         #expect(!messages.supportsFullAcceptance)
         #expect(messages.requiresNoSubmitAcceptanceProof)
 
-        let claudeCode = try #require(store.profile(for: "com.anthropic.claude-code"))
-        #expect(claudeCode.graduationDecision == .wordOnly)
-        #expect(claudeCode.promptAppSafetyMode == .wordOnly)
-        #expect(claudeCode.canPresentSuggestions)
     }
 
     @Test("High-value writing surfaces have explicit graduation decisions")
@@ -430,7 +343,6 @@ struct CompatibilityProfileTests {
         let supportedBundles = [
             "com.google.Chrome",
             "md.obsidian",
-            "com.openai.codex"
         ]
         for bundleIdentifier in supportedBundles {
             #expect(try #require(store.profile(for: bundleIdentifier)).graduationDecision == .supported)
@@ -438,7 +350,6 @@ struct CompatibilityProfileTests {
 
         let wordOnlyBundles = [
             "com.apple.MobileSMS",
-            "com.anthropic.claude-code",
             "com.anthropic.claudefordesktop"
         ]
         for bundleIdentifier in wordOnlyBundles {
@@ -470,75 +381,6 @@ struct CompatibilityProfileTests {
         #expect(store.supportStatus(for: "com.todesktop.230313mzl4w4u92").supportLevel == .diagnosticsOnly)
     }
 
-    @Test("Safety summaries expose the practical current-app stance")
-    func safetySummariesExposePracticalCurrentAppStance() throws {
-        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
-        let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
-        let mailStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.mail")
-        let atlasStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.openai.atlas")
-        let genericStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.example.UnknownEditor")
-
-        #expect(
-            textEdit.userFacingSafetySummary
-                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe."
-        )
-        #expect(
-            notes.userFacingSafetySummary
-                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Insertion fails closed if the primary method is not verified."
-        )
-        #expect(
-            codex.userFacingSafetySummary
-                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Prompt safety mode is word-only. Insertion fails closed if the primary method is not verified."
-        )
-        #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
-        #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
-        #expect(
-            genericStatus.userFacingSafetySummary
-                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Insertion fails closed if the primary method is not verified."
-        )
-    }
-
-    @Test("Proof-only profile copy can enable full accept without changing placement")
-    func proofOnlyProfileCopyCanEnableFullAcceptWithoutChangingPlacement() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
-        let proofProfile = codex.replacingAcceptanceProofMode(
-            supportsFullAcceptance: true,
-            requiresNoSubmitAcceptanceProof: false,
-            notes: "Proof-only full accept."
-        )
-
-        #expect(proofProfile.bundleIdentifier == codex.bundleIdentifier)
-        #expect(proofProfile.displayName == codex.displayName)
-        #expect(proofProfile.renderMode == codex.renderMode)
-        #expect(proofProfile.insertionMode == codex.insertionMode)
-        #expect(proofProfile.fieldIdentityMode == codex.fieldIdentityMode)
-        #expect(proofProfile.supportsOneWordAcceptance == codex.supportsOneWordAcceptance)
-        #expect(proofProfile.supportsFullAcceptance)
-        #expect(!proofProfile.requiresNoSubmitAcceptanceProof)
-        #expect(proofProfile.promptAppSafetyMode == codex.promptAppSafetyMode)
-        #expect(proofProfile.notes == "Proof-only full accept.")
-    }
-
-    @Test("Proof-only Codex full accept keeps strict visual synthetic caret proof")
-    func proofOnlyCodexFullAcceptKeepsStrictVisualSyntheticCaretProof() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
-        let proofProfile = codex.replacingAcceptanceProofMode(
-            supportsFullAcceptance: true,
-            requiresNoSubmitAcceptanceProof: false,
-            notes: "\(codex.notes) Proof-only Codex full-accept no-submit scenario is active."
-        )
-        let unprovenFullAccept = codex.replacingAcceptanceProofMode(
-            supportsFullAcceptance: true,
-            requiresNoSubmitAcceptanceProof: false,
-            notes: "Proof-only full accept."
-        )
-
-        #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement)
-        #expect(proofProfile.allowsStrictVisualProofSyntheticCaretPlacement)
-        #expect(!unprovenFullAccept.allowsStrictVisualProofSyntheticCaretPlacement)
-    }
-
     @Test("Insertion mode plans can skip failed primary modes")
     func insertionModePlansCanSkipFailedPrimaryModes() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
@@ -560,83 +402,6 @@ struct CompatibilityProfileTests {
         #expect(notes.allowsDetachedSuggestions == false)
         #expect(InsertionModePlan.modes(for: notes) == [.axThenKeyEvents, .keyEvents])
         #expect(InsertionModePlan.modes(for: notes, skipping: [.axThenKeyEvents]) == [.keyEvents])
-    }
-
-    @Test("Render mode plans respect Codex dogfood and disabled prompt targets")
-    func renderModePlansRespectCodexDogfoodAndDisabledPromptTargets() throws {
-        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
-        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
-        let claudeCode = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claude-code"))
-        let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
-        let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
-
-        #expect(RenderModePlan.effectiveMode(
-            for: textEdit,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == .inlineAdjacent)
-        #expect(RenderModePlan.effectiveMode(
-            for: textEdit,
-            supportsInlineSuggestions: false,
-            hasMirrorAnchor: true
-        ) == .floatingMirror)
-        #expect(RenderModePlan.effectiveMode(
-            for: chrome,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == .inlineAdjacent)
-        #expect(RenderModePlan.effectiveMode(
-            for: chrome,
-            supportsInlineSuggestions: false,
-            hasMirrorAnchor: true
-        ) == .floatingMirror)
-        let obsidian = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
-        #expect(RenderModePlan.effectiveMode(
-            for: obsidian,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == .inlineAdjacent)
-        #expect(RenderModePlan.effectiveMode(
-            for: obsidian,
-            supportsInlineSuggestions: false,
-            hasMirrorAnchor: true
-        ) == nil)
-        #expect(RenderModePlan.effectiveMode(
-            for: codex,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == .inlineAdjacent)
-        #expect(RenderModePlan.effectiveMode(
-            for: codex,
-            supportsInlineSuggestions: false,
-            hasMirrorAnchor: true
-        ) == .floatingMirror)
-        #expect(RenderModePlan.effectiveMode(
-            for: claudeCode,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == .floatingMirror)
-        #expect(RenderModePlan.effectiveMode(
-            for: claudeCode,
-            supportsInlineSuggestions: false,
-            hasMirrorAnchor: true
-        ) == .floatingMirror)
-        #expect(RenderModePlan.effectiveMode(
-            for: claude,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == .inlineAdjacent)
-        #expect(RenderModePlan.effectiveMode(
-            for: claude,
-            supportsInlineSuggestions: false,
-            hasMirrorAnchor: true
-        ) == .floatingMirror)
-        #expect(RenderModePlan.effectiveMode(
-            for: mail,
-            supportsInlineSuggestions: true,
-            hasMirrorAnchor: true
-        ) == nil)
     }
 
     @Test("Yellow mirror fallback does not permit low confidence placement without proof")

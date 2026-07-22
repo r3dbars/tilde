@@ -163,8 +163,6 @@ public enum AutocompleteTracePrivacyFilter {
         "caret-outside-focused-bounds",
         "caretGeometryFailed",
         "clamped-to-safe-range",
-        "codex-proof-marker",
-        "codex-textarea-fast-path",
         "comboBoxRole",
         "confidence",
         "copy-only",

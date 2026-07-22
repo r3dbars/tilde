@@ -51,7 +51,7 @@ except a short list.
   broken, not as cautious. Users expect "near the caret, in the app I'm typing
   in."
 - The per-app ladder still exists. Broad support is the *floor* for unprofiled
-  apps; profiled apps (TextEdit, Notes, Obsidian, Codex, Claude, …) keep their
+  apps; profiled apps (TextEdit, Notes, Obsidian, Claude, …) keep their
   tuned behavior on top.
 - Breadth is safe *only because* the guardrails below hold regardless of how
   broad the fallback is. The fallback rung does not get a vote on the

@@ -12,18 +12,8 @@ struct SuggestionPresentationRefreshHostDependencies {
     let frontmostApplication: () -> RunningApplicationInfo?
     let focusedTextContext: (RunningApplicationInfo, CompatibilityProfile) -> FocusedTextContext?
     let frontmostAppMatchesSuggestion: (RunningApplicationInfo, String, CompatibilityProfile) -> Bool
-    let terminalHostProofBlockReason: (RunningApplicationInfo, FocusedTextContext, CompatibilityProfile) -> String?
     let promptTextAreaMatch: (String, FocusedTextContext) -> SuggestionPresentationPromptMatch
-    let continuityHost: CodexPromptTargetContinuityHost
-    let currentFieldIdentity: () -> FocusedFieldIdentity?
     let lastTextSnapshot: () -> FocusedTextSnapshot?
-    let cancelAndRearmCodexPromptTargetWork: (
-        RunningApplicationInfo,
-        FocusedTextContext,
-        CompatibilityProfile,
-        String,
-        String
-    ) -> Void
     let presentationAdjustedContext: (
         FocusedTextContext,
         RunningApplicationInfo,
@@ -72,58 +62,12 @@ final class SuggestionPresentationRefreshHost {
             return (nil, "stale-focused-context")
         }
 
-        guard dependencies.terminalHostProofBlockReason(frontmostApp, rawContext, profile) == nil else {
-            return (nil, "stale-terminal-host-proof")
-        }
-
         let promptMatch = dependencies.promptTextAreaMatch(
             frontmostApp.bundleIdentifier,
             rawContext
         )
-        if !promptMatch.canSuggest {
-            let snapshot = dependencies.lastTextSnapshot()
-            let requestMatchesCurrentSnapshot = snapshot?.fieldIdentity == fieldIdentity
-                && snapshot?.textBeforeCursor == request.textBeforeCursor
-                && snapshot?.textAfterCursor == request.textAfterCursor
-            let resolution = requestMatchesCurrentSnapshot
-                ? dependencies.continuityHost.presentationRefreshResolution(
-                    app: frontmostApp,
-                    promptBlockReason: promptMatch.reason,
-                    currentFieldIdentity: dependencies.currentFieldIdentity(),
-                    currentSnapshot: snapshot,
-                    observedContext: rawContext,
-                    trustedContext: requestContext
-                )
-                : .reject
-            guard resolution != .reject else {
-                return (nil, "stale-prompt-target")
-            }
-            if resolution == .cancelAndRetry {
-                dependencies.cancelAndRearmCodexPromptTargetWork(
-                    frontmostApp,
-                    rawContext,
-                    profile,
-                    promptMatch.reason,
-                    "presentation-refresh"
-                )
-                return (nil, "quarantined-codex-prompt-target")
-            }
-
-            dependencies.recordDiagnostic(
-                resolution == .reuseTrustedTextAreaContext
-                    ? "codex-prompt-target-bounds-reused"
-                    : "codex-prompt-target-refresh-retry-needed",
-                [
-                    "app": frontmostApp.bundleIdentifier,
-                    "reason": promptMatch.reason,
-                    "role": rawContext.role ?? "unknown",
-                    "beforeChars": String(rawContext.textBeforeCursor.count),
-                    "afterChars": String(rawContext.textAfterCursor.count)
-                ]
-            )
-            return resolution == .reuseTrustedTextAreaContext
-                ? (requestContext, nil)
-                : (nil, "transient-codex-prompt-target")
+        guard promptMatch.canSuggest else {
+            return (nil, "stale-prompt-target")
         }
 
         guard let context = dependencies.presentationAdjustedContext(

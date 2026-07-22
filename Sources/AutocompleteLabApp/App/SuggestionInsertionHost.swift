@@ -10,12 +10,8 @@ struct SuggestionInsertionHostDependencies {
     let setSuggestionDecision: (String) -> Void
     let hideSuggestion: (String) -> Void
     let suppressPassthroughObservation: (Date) -> Void
-    let shouldUseClaudeCodeTerminalHostProofDirectInsertion: (CompatibilityProfile, KeyboardAction?) -> Bool
-    let shouldUseCodexProofDirectInsertion: (CompatibilityProfile) -> Bool
     let shouldUseClaudeDesktopProofDirectInsertion: (CompatibilityProfile) -> Bool
     let shouldUseObsidianDirectValueInsertion: (CompatibilityProfile, KeyboardAction?) -> Bool
-    let insertCodexProofText: (String) -> Bool
-    let insertClaudeCodeTerminalHostProofText: (String) -> Bool
     let insertClaudeDesktopProofText: (String) -> Bool
     let insertObsidianDirectValueText: (String, CompatibilityProfile) -> Bool
     let repairObsidianFullAcceptCaret: (CompatibilityProfile, KeyboardAction?) -> Void
@@ -115,10 +111,7 @@ final class SuggestionInsertionHost {
         let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
             acceptedText: acceptedText,
             profile: profile,
-            allowsPromptActionWords: dependencies.shouldUseClaudeCodeTerminalHostProofDirectInsertion(
-                profile,
-                action
-            )
+            allowsPromptActionWords: false
         )
         if let blockReason = acceptedTextDecision.blockReason {
             setSuggestionDecision("Blocked: unsafe accepted text")
@@ -151,53 +144,9 @@ final class SuggestionInsertionHost {
         }
 
         suppressPassthroughObservation(
-            for: dependencies.shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile, action)
-                || dependencies.shouldUseCodexProofDirectInsertion(profile)
-                || dependencies.shouldUseClaudeDesktopProofDirectInsertion(profile)
+            for: dependencies.shouldUseClaudeDesktopProofDirectInsertion(profile)
                 || dependencies.shouldUseObsidianDirectValueInsertion(profile, action) ? 0.75 : 0.25
         )
-
-        if dependencies.shouldUseCodexProofDirectInsertion(profile) {
-            let succeeded = dependencies.insertCodexProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.axValueReplacement.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                pausePolling()
-            }
-            return succeeded
-        }
-
-        if dependencies.shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile, action) {
-            let succeeded = dependencies.insertClaudeCodeTerminalHostProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                pausePolling()
-            }
-            return succeeded
-        }
 
         if dependencies.shouldUseClaudeDesktopProofDirectInsertion(profile) {
             let succeeded = dependencies.insertClaudeDesktopProofText(acceptedText)

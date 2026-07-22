@@ -3,7 +3,6 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="SteadyType"
-HELPER_NAME="SteadyTypeTextEventHelper"
 BUNDLE_ID="bar.r3d.steadytype"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
@@ -18,7 +17,6 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
-HELPER_BINARY="$APP_MACOS/$HELPER_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
@@ -471,7 +469,6 @@ run_swift_build_product() {
 
 run_swift_build() {
   run_swift_build_product "$APP_NAME"
-  run_swift_build_product "$HELPER_NAME"
 }
 
 swift_build_bin_path() {
@@ -486,7 +483,6 @@ run_swift_package_resolve
 ./script/patch_mlx_swift_lm.sh
 run_swift_build
 BUILD_BINARY="$(swift_build_bin_path)/$APP_NAME"
-BUILD_HELPER_BINARY="$(swift_build_bin_path)/$HELPER_NAME"
 
 build_mlx_metallib_if_needed() {
   if [[ -f "$MLX_METALLIB" ]]; then
@@ -568,11 +564,9 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS"
 mkdir -p "$APP_RESOURCES/mlx-swift_Cmlx.bundle"
 cp "$BUILD_BINARY" "$APP_BINARY"
-cp "$BUILD_HELPER_BINARY" "$HELPER_BINARY"
 cp "$MLX_METALLIB" "$APP_RESOURCES/mlx-swift_Cmlx.bundle/default.metallib"
 cp "$GENERATED_APP_ICON" "$APP_ICON"
 chmod +x "$APP_BINARY"
-chmod +x "$HELPER_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -611,10 +605,8 @@ PLIST
 
 SIGNING_IDENTITY="$(find_signing_identity)"
 if [[ -n "$SIGNING_IDENTITY" ]]; then
-  codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$HELPER_BINARY" >/dev/null
   sign_app_bundle "$SIGNING_IDENTITY"
 else
-  codesign --force --options runtime --sign - "$HELPER_BINARY" >/dev/null
   codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign - "$APP_BUNDLE" >/dev/null
   echo "warning: no stable code signing identity found; Accessibility may ask again after rebuilds" >&2
 fi

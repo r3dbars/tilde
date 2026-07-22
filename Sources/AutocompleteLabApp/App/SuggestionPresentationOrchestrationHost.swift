@@ -2,43 +2,7 @@ import AutocompleteLabCore
 import Foundation
 
 @MainActor
-struct SuggestionPresentationRefreshRetryInput {
-    let suggestion: CompletionSuggestion
-    let suggestionID: String
-    let request: CompletionRequest
-    let context: FocusedTextContext
-    let profile: CompatibilityProfile
-    let fieldIdentity: FocusedFieldIdentity
-    let renderMode: SuggestionRenderMode
-    let latencyMilliseconds: Int
-    let triggerReason: String
-    let requestTicket: SuggestionRequestTicket?
-    let candidateSelectionMetadata: [String: String]
-    let scheduledDelayMilliseconds: Int
-    let retry: CodexPromptPresentationRefreshRetry
-}
-
-@MainActor
-struct SuggestionPresentationAXCooldownInput {
-    let suggestion: CompletionSuggestion
-    let suggestionID: String
-    let request: CompletionRequest
-    let context: FocusedTextContext
-    let profile: CompatibilityProfile
-    let fieldIdentity: FocusedFieldIdentity
-    let renderMode: SuggestionRenderMode
-    let latencyMilliseconds: Int
-    let triggerReason: String
-    let requestTicket: SuggestionRequestTicket?
-    let candidateSelectionMetadata: [String: String]
-    let scheduledDelayMilliseconds: Int
-    let presentationRefreshAttempt: Int
-    let delayMilliseconds: Int
-}
-
-@MainActor
 struct SuggestionPresentationOrchestrationHostDependencies {
-    let codexPromptTargetContinuityHost: CodexPromptTargetContinuityHost
     let suggestionOrchestrator: SuggestionOrchestrator
     let suggestionSession: SuggestionSessionHost
     let currentSuggestionState: CurrentSuggestionStateHost
@@ -53,9 +17,6 @@ struct SuggestionPresentationOrchestrationHostDependencies {
     let suggestionPresentationPlacementHost: SuggestionPresentationPlacementHost
     let suggestionPresentationDeliveryHost: SuggestionPresentationDeliveryHost
     let suggestionPresentationCommitHost: SuggestionPresentationCommitHost
-    let codexPromptAXCooldownPresentationDelayMilliseconds: (CompatibilityProfile, FocusedFieldIdentity) -> Int
-    let scheduleCodexPromptPresentationRefreshRetry: (SuggestionPresentationRefreshRetryInput) -> Void
-    let scheduleCodexPromptPresentationAfterAXCooldown: (SuggestionPresentationAXCooldownInput) -> Void
     let refreshedPresentationContext: (CompletionRequest, FocusedTextContext, CompatibilityProfile, FocusedFieldIdentity) -> (context: FocusedTextContext?, reason: String?)
     let traceGeometryMetadata: (FocusedTextContext, SuggestionRenderMode) -> [String: String]
     let traceRequestMetadata: (CompletionRequest, FocusedTextContext) -> [String: String]
@@ -80,10 +41,6 @@ final class SuggestionPresentationOrchestrationHost {
 
     init(dependencies: SuggestionPresentationOrchestrationHostDependencies) {
         self.dependencies = dependencies
-    }
-
-    private var codexPromptTargetContinuityHost: CodexPromptTargetContinuityHost {
-        dependencies.codexPromptTargetContinuityHost
     }
 
     private var suggestionOrchestrator: SuggestionOrchestrator {
@@ -220,13 +177,6 @@ final class SuggestionPresentationOrchestrationHost {
         dependencies.currentSuggestionAgeMilliseconds()
     }
 
-    private func codexPromptAXCooldownPresentationDelayMilliseconds(
-        profile: CompatibilityProfile,
-        fieldIdentity: FocusedFieldIdentity
-    ) -> Int {
-        dependencies.codexPromptAXCooldownPresentationDelayMilliseconds(profile, fieldIdentity)
-    }
-
     private func refreshedPresentationContext(
         for request: CompletionRequest,
         requestContext: FocusedTextContext,
@@ -234,76 +184,6 @@ final class SuggestionPresentationOrchestrationHost {
         fieldIdentity: FocusedFieldIdentity
     ) -> (context: FocusedTextContext?, reason: String?) {
         dependencies.refreshedPresentationContext(request, requestContext, profile, fieldIdentity)
-    }
-
-    private func scheduleCodexPromptPresentationRefreshRetry(
-        _ suggestion: CompletionSuggestion,
-        suggestionID: String,
-        request: CompletionRequest,
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        fieldIdentity: FocusedFieldIdentity,
-        renderMode: SuggestionRenderMode,
-        latencyMilliseconds: Int,
-        triggerReason: String,
-        requestTicket: SuggestionRequestTicket?,
-        candidateSelectionMetadata: [String: String],
-        scheduledDelayMilliseconds: Int,
-        retry: CodexPromptPresentationRefreshRetry
-    ) {
-        dependencies.scheduleCodexPromptPresentationRefreshRetry(
-            SuggestionPresentationRefreshRetryInput(
-                suggestion: suggestion,
-                suggestionID: suggestionID,
-                request: request,
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds,
-                triggerReason: triggerReason,
-                requestTicket: requestTicket,
-                candidateSelectionMetadata: candidateSelectionMetadata,
-                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                retry: retry
-            )
-        )
-    }
-
-    private func scheduleCodexPromptPresentationAfterAXCooldown(
-        _ suggestion: CompletionSuggestion,
-        suggestionID: String,
-        request: CompletionRequest,
-        context: FocusedTextContext,
-        profile: CompatibilityProfile,
-        fieldIdentity: FocusedFieldIdentity,
-        renderMode: SuggestionRenderMode,
-        latencyMilliseconds: Int,
-        triggerReason: String,
-        requestTicket: SuggestionRequestTicket?,
-        candidateSelectionMetadata: [String: String],
-        scheduledDelayMilliseconds: Int,
-        presentationRefreshAttempt: Int,
-        delayMilliseconds: Int
-    ) {
-        dependencies.scheduleCodexPromptPresentationAfterAXCooldown(
-            SuggestionPresentationAXCooldownInput(
-                suggestion: suggestion,
-                suggestionID: suggestionID,
-                request: request,
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds,
-                triggerReason: triggerReason,
-                requestTicket: requestTicket,
-                candidateSelectionMetadata: candidateSelectionMetadata,
-                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                presentationRefreshAttempt: presentationRefreshAttempt,
-                delayMilliseconds: delayMilliseconds
-            )
-        )
     }
 
         func presentSuggestion(
@@ -319,51 +199,19 @@ final class SuggestionPresentationOrchestrationHost {
         requestTicket: SuggestionRequestTicket? = nil,
         candidateSelectionMetadata: [String: String] = [:],
         refreshBeforePresenting: Bool = true,
-        scheduledDelayMilliseconds: Int = 0,
-        presentationRefreshAttempt: Int = 0
+        scheduledDelayMilliseconds: Int = 0
     ) {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
             && currentSuggestionState.id == suggestionID
-        let cooldownDelayMilliseconds = refreshBeforePresenting
-            ? codexPromptAXCooldownPresentationDelayMilliseconds(
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-            : 0
-        let refreshedContext: (context: FocusedTextContext?, reason: String?)
-        switch codexPromptTargetContinuityHost.presentationPreparationPolicy.preparation(
-            refreshBeforePresenting: refreshBeforePresenting,
-            cooldownDelayMilliseconds: cooldownDelayMilliseconds
-        ) {
-        case let .deferForAXCooldown(delayMilliseconds):
-            scheduleCodexPromptPresentationAfterAXCooldown(
-                suggestion,
-                suggestionID: suggestionID,
-                request: request,
-                context: originalContext,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds,
-                triggerReason: triggerReason,
-                requestTicket: requestTicket,
-                candidateSelectionMetadata: candidateSelectionMetadata,
-                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                presentationRefreshAttempt: presentationRefreshAttempt,
-                delayMilliseconds: delayMilliseconds
-            )
-            return
-        case .refreshFocusedContext:
-            refreshedContext = refreshedPresentationContext(
+        let refreshedContext: (context: FocusedTextContext?, reason: String?) = refreshBeforePresenting
+            ? refreshedPresentationContext(
                 for: request,
                 requestContext: context,
                 profile: profile,
                 fieldIdentity: fieldIdentity
             )
-        case .useOriginalContext:
-            refreshedContext = (context: context, reason: nil)
-        }
+            : (context: context, reason: nil)
         let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
         let freshnessFieldIdentity = verifiedRefreshContext == nil
             ? currentFieldIdentity
@@ -414,31 +262,7 @@ final class SuggestionPresentationOrchestrationHost {
         }
 
         guard let context = refreshedContext.context else {
-            let refreshReason = refreshedContext.reason ?? "stale-focused-context"
-            if refreshReason == "transient-codex-prompt-target",
-               let retry = codexPromptTargetContinuityHost.presentationRefreshRetryPolicy.next(
-                after: presentationRefreshAttempt
-               ) {
-                scheduleCodexPromptPresentationRefreshRetry(
-                    suggestion,
-                    suggestionID: suggestionID,
-                    request: request,
-                    context: originalContext,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: latencyMilliseconds,
-                    triggerReason: triggerReason,
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: candidateSelectionMetadata,
-                    scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                    retry: retry
-                )
-                return
-            }
-            let reason = refreshReason == "transient-codex-prompt-target"
-                ? "stale-prompt-target"
-                : refreshReason
+            let reason = refreshedContext.reason ?? "stale-focused-context"
             let metadata = traceGeometryMetadata(context: originalContext, renderMode: renderMode)
                 .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
