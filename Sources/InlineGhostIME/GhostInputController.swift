@@ -294,9 +294,14 @@ final class GhostInputController: IMKInputController {
         modelTask?.cancel()
         modelTask = Task { [weak self] in
             // 1) SteadyType's own MLX model, served by the menu-bar app over a local
-            //    socket. Blocking client with its own timeouts, kept off this task.
+            //    socket. Streaming: partials show the first words near time-to-
+            //    first-token; the stale-guard in present() drops late arrivals.
             let mlx = await Task.detached(priority: .userInitiated) {
-                GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity)
+                GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity) { partial in
+                    let text = Self.cleanedModelOutput(partial)
+                    guard !text.isEmpty else { return }
+                    Task { @MainActor in self?.present(text, ifStill: gen) }
+                }
             }.value
             if Task.isCancelled { return }
             if let mlx {

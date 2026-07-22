@@ -108,8 +108,26 @@ more dogfood data).
 - **Model-only routing** (drop the instant layer entirely) — DECISION RULE
   agreed with owner: flip only if boundary latency ≤ ~150ms. Measured floor is
   ~315ms → **rule not met; two layers stay** for now.
-- **Next latency lever (untried): streaming first tokens.** The MLX runtime
-  already supports `onPartialSuggestion` mid-generation callbacks; the socket
-  server currently waits for the FINAL suggestion. Streaming the first words as
-  they arrive could put ghost-on-screen near time-to-first-token instead of
-  time-to-last-token. **OPEN — most promising path to ≤150ms perceived.**
+- **Streaming first tokens through the socket** — server forwards
+  `onPartialSuggestion` partials as `{"suggestion":…,"partial":true}` lines;
+  IME presents each partial (stale-guarded), final replaces. Measured: 3
+  partials per response, **first partial ~270–290ms vs final ~315–345ms** —
+  only ~45ms saved, because generation doesn't START until ~250ms in (see
+  next entry). **KEEP** — harmless now, multiplies once prefill is fixed
+  (first chunk would land ~30–80ms).
+- **ROOT CAUSE of the ~250ms floor (diagnosed from `mlx-completion-timing` in
+  `~/Library/Logs/SteadyType/diagnostics.log`):** warm boundary request at
+  ~1,040 prompt tokens = prepare 19ms + session 20ms + **firstChunk ~250ms**
+  (prefill) + short tail. KV cache verdict: **miss, reason
+  `untrimmable-prompt-cache`** — the prompt template appends closing markers
+  AFTER the user context, so cache reuse requires trimming those suffix tokens,
+  and this model's cache type cannot trim. Every keystroke re-prefills the
+  full prompt. Also learned: identical-context repeats miss by design
+  (`empty-token-append`), so never benchmark the cache with identical prompts.
+  Diagnostics decode trick: values are privacy-redacted to `String(N chars)` —
+  decode enum values by length (miss=4, untrimmable-prompt-cache=24).
+- **NEXT LEVER (well-scoped): prefix-only prompt cache.** Store/reuse the KV
+  cache for system+context only (everything BEFORE the template's closing
+  markers), so consecutive keystrokes append cleanly with no trimming. Expected
+  to cut firstChunk from ~250ms to tens of ms; combined with streaming, first
+  ghost words at ~50–100ms — under the 150ms model-only threshold. **OPEN.**
