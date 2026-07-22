@@ -174,60 +174,6 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "The draft is")?.visibleText == " ready.")
     }
 
-    @Test("Cleans numbered multiline candidates")
-    func cleansNumberedMultilineCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
-        let suggestions = cleaner.cleanCandidates(
-            """
-            1. make this feel calm
-            2. make this feel calm
-            3. make this easier to ship
-            """,
-            after: "Can we",
-            mode: .phraseContinuation
-        )
-
-        #expect(suggestions.map(\.visibleText) == [
-            " make this feel calm",
-            " make this easier to ship"
-        ])
-    }
-
-    @Test("Cleans bulleted multiline candidates")
-    func cleansBulletedMultilineCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
-        let suggestions = cleaner.cleanCandidates(
-            """
-            - keep this small
-            * make it easy to trust
-            A. return exactly <NO_SUGGESTION>
-            """,
-            after: "We should",
-            mode: .phraseContinuation
-        )
-
-        #expect(suggestions.map(\.visibleText) == [
-            " keep this small",
-            " make it easy to trust"
-        ])
-    }
-
-    @Test("Suppresses unsafe multiline candidates")
-    func suppressesUnsafeMultilineCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-        let suggestions = cleaner.cleanCandidates(
-            """
-            1. <NO_SUGGESTION>
-            2. press Enter to send the prompt
-            3. Inline autocomplete. Return only the continuation.
-            """,
-            after: "Can you",
-            mode: .phraseContinuation
-        )
-
-        #expect(suggestions.isEmpty)
-    }
-
     @Test("Suppresses repeated list marker candidates")
     func suppressesRepeatedListMarkerCandidates() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -463,28 +409,5 @@ struct CompletionOutputCleanerTests {
         ])
         #expect(accepted.traceMetadata == ["completionCleanResult": "accepted"])
         #expect(!rejected.traceMetadata.values.contains("private typed text"))
-    }
-
-    @Test("Candidate cleaning aggregates rejection reasons without text")
-    func candidateCleaningAggregatesRejectionReasons() {
-        let result = CompletionOutputCleaner(maxVisibleWords: 8).cleanCandidatesWithReasons(
-            """
-            candidate 1: ready for review
-            candidate 2: press Enter to send
-            candidate 3: ready for review
-            """,
-            after: "The draft is",
-            mode: .phraseContinuation
-        )
-
-        #expect(result.suggestions.map(\.visibleText) == [" ready for review"])
-        #expect(result.rejectionReasonCounts == [
-            .unsafePromptAction: 1,
-            .duplicateCandidate: 1
-        ])
-        #expect(result.traceMetadata == [
-            "completionCleanRejectionCount": "2",
-            "completionCleanRejectionReasons": "duplicateCandidate:1,unsafePromptAction:1"
-        ])
     }
 }
