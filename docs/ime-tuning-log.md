@@ -161,3 +161,21 @@ more dogfood data).
 - **Model-only routing threshold (≤150ms) is now MET on cache hits.** Decision:
   dogfood the feel first; flip to model-only once hit rate is proven in real
   typing (paragraph guard relaxation likely needed first).
+- **Quality triage (owner: "longer suggestions are really really bad" +
+  "instant words feel turned off").** Diagnosed via socket probes + diagnostics:
+  (1) In casual/chat-style text the engine SUPPRESSES its phrase output
+  (`low-top-score`, 0.75–0.85 vs threshold; `no-candidates`) — so what the owner
+  saw as "bad long suggestions" was the FAST layer's generic word chains
+  (common-next-word table strung 4 deep) standing unreplaced. (2) Mid-word,
+  erratic small-model suffixes ("want to underst" → "anding") were overwriting
+  precise dictionary completions. Email-style prose on cache hits was GOOD
+  ("coordinate with" → "the backend team"), so this is context-dependent
+  confidence, not cache corruption.
+  **Fix (silence beats junk):** generic common-next-word table DELETED (fast
+  layer now needs real evidence: doc vocab, dictionary, doc bigrams ≥2, phrase
+  openers); mid-word the model no longer overwrites a non-empty fast completion
+  (it only fills gaps); boundary phrases remain model-only-when-confident.
+  Expected feel: quieter, but every ghost is either precise or confident.
+  **OPEN:** ranker threshold for casual registers (0.75–0.85 candidates might
+  deserve display in chat contexts); send fieldKind/behavior hints through the
+  socket so profiles apply.
