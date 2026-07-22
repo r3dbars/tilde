@@ -32,11 +32,11 @@ struct SuggestionInsertionHostTests {
     func directRouteWinsBeforeDefaultInsertion() throws {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
         let spy = SuggestionInsertionHostSpy()
-        spy.codexRoute = true
+        spy.claudeDesktopRoute = true
         let host = makeHost(profile: profile, spy: spy)
 
         #expect(host.insertAcceptedText("safe"))
-        #expect(spy.insertions == ["codex"])
+        #expect(spy.insertions == ["claude-desktop"])
         #expect(spy.pauseDurations == [220])
         #expect(spy.defaultExpectedFieldIdentity == nil)
     }
@@ -85,15 +85,8 @@ struct SuggestionInsertionHostTests {
                 setSuggestionDecision: { spy.decisions.append($0) },
                 hideSuggestion: { spy.hiddenReasons.append($0) },
                 suppressPassthroughObservation: { _ in spy.suppressionCount += 1 },
-                shouldUseClaudeCodeTerminalHostProofDirectInsertion: { _, _ in spy.terminalRoute },
-                shouldUseCodexProofDirectInsertion: { _ in spy.codexRoute },
                 shouldUseClaudeDesktopProofDirectInsertion: { _ in spy.claudeDesktopRoute },
                 shouldUseObsidianDirectValueInsertion: { _, _ in spy.obsidianDirectRoute },
-                insertCodexProofText: { _ in spy.insertions.append("codex"); return spy.routeSucceeded },
-                insertClaudeCodeTerminalHostProofText: { _ in
-                    spy.insertions.append("terminal")
-                    return spy.routeSucceeded
-                },
                 insertClaudeDesktopProofText: { _ in
                     spy.insertions.append("claude-desktop")
                     return spy.routeSucceeded
@@ -128,8 +121,6 @@ private final class SuggestionInsertionHostSpy {
     var defaultExpectedFieldIdentity: FocusedFieldIdentity?
     var suppressionCount = 0
     var repairCount = 0
-    var codexRoute = false
-    var terminalRoute = false
     var claudeDesktopRoute = false
     var obsidianDirectRoute = false
     var routeSucceeded = true

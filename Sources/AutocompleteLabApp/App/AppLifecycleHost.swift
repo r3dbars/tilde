@@ -3,7 +3,6 @@ import AppKit
 @MainActor
 protocol AppLifecycleHandling: AnyObject {
     func prepareForLaunch()
-    func startProofOnlyAcceptCommandObserver()
     func startStatusMenu()
     func recordLaunchDiagnostics()
     func requestAccessibilityPermissionIfNeeded()
@@ -69,7 +68,6 @@ final class AppLifecycleHost {
         keepProcessResident()
         infrastructure.setAccessoryApplicationPolicy()
         handler?.prepareForLaunch()
-        handler?.startProofOnlyAcceptCommandObserver()
         handler?.startStatusMenu()
         handler?.recordLaunchDiagnostics()
         handler?.requestAccessibilityPermissionIfNeeded()

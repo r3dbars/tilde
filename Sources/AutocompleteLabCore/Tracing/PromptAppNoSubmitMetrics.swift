@@ -127,8 +127,6 @@ public struct PromptAppNoSubmitMetricsAnalyzer: Equatable, Sendable {
     }
 
     public static let defaultPromptAppBundleIdentifiers: Set<String> = [
-        "com.openai.codex",
-        "com.anthropic.claude-code",
         "com.anthropic.claudefordesktop",
         "com.openai.chat",
         "com.openai.ChatGPT",

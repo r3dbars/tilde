@@ -125,20 +125,20 @@ struct AnchorPlanTests {
 
     @Test("Profiles can disallow detached field anchors")
     func profilesCanDisallowDetachedFieldAnchors() throws {
-        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let claude = try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
         let field = CGRect(x: 4, y: 12, width: 260, height: 44)
         let window = CGRect(x: 0, y: 0, width: 600, height: 420)
 
         let decision = RenderModePlan.anchorDecision(
             for: .floatingMirror,
-            profile: codex,
+            profile: claude,
             caretRect: nil,
             elementRect: field,
             windowRect: nil
         )
         let windowDecision = RenderModePlan.anchorDecision(
             for: .floatingMirror,
-            profile: codex,
+            profile: claude,
             caretRect: nil,
             elementRect: nil,
             windowRect: window

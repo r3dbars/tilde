@@ -26,11 +26,6 @@ enum FocusedTextReadOptionsPolicy {
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> FocusedTextReadOptions {
-        if app.bundleIdentifier == "com.openai.codex",
-           profile.bundleIdentifier == "com.openai.codex" {
-            return .syntheticTextAreaFastPath
-        }
-
         if profile.appFamily == .electron {
             return FocusedTextReadOptions(manualAccessibilityWakeAppFamily: .electron)
         }

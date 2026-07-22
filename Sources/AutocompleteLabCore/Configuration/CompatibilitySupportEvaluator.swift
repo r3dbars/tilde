@@ -284,7 +284,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             return "nativeText"
         case "com.google.Chrome":
             return "browserTextarea"
-        case "md.obsidian", "com.openai.codex":
+        case "md.obsidian":
             return "electronEditor"
         case "com.apple.mail":
             return "richTextCompose"

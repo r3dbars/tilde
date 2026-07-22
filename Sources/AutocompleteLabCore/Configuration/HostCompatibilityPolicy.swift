@@ -237,35 +237,6 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             notes: "Only local textarea and local contenteditable fixtures are beta-safe. Public pages, production browser apps, browser ChatGPT, Slack, Discord, Google Docs, Notion, official CodeMirror, and default Monaco remain blocked until exact proof exists."
         ),
         HostCompatibilityPolicy(
-            bundleIdentifier: "com.openai.codex",
-            displayName: "Codex",
-            hostVersion: .exact(shortVersion: "26.519.22136", build: "3003", source: "/Applications/Codex.app"),
-            safetyMode: .wordOnly,
-            runtimeState: .userToggleAllowed,
-            proofState: .partial,
-            killSwitch: .perHostDisable,
-            proofArtifacts: [
-                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png"),
-                HostProofArtifact(kind: "manual-smoke", reference: "Codex/default"),
-                HostProofArtifact(kind: "manual-smoke", reference: "Codex/full-accept")
-            ],
-            notes: "Enabled for this local Codex build with one-word and full-accept no-submit proof. Detached suggestions and generic key-event insertion stay off."
-        ),
-        HostCompatibilityPolicy(
-            bundleIdentifier: "com.anthropic.claude-code",
-            displayName: "Claude Code",
-            hostVersion: .exact(shortVersion: "2.1.128", build: "2.1.128", source: "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app"),
-            safetyMode: .wordOnly,
-            runtimeState: .userToggleAllowed,
-            proofState: .partial,
-            killSwitch: .perHostDisable,
-            proofArtifacts: [
-                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/claude-code-terminal.png"),
-                HostProofArtifact(kind: "manual-smoke", reference: "Claude Code/default")
-            ],
-            notes: "Default-on dogfood lane; terminal-host support is Claude-detected and one-word only."
-        ),
-        HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             hostVersion: .exact(shortVersion: "1.6608.0", build: "1.6608.0", source: "/Applications/Claude.app"),

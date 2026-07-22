@@ -95,7 +95,7 @@ struct AutocompleteBehaviorProfileTests {
         )).id == .search)
 
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: "com.openai.codex",
+            appBundleIdentifier: "com.anthropic.claudefordesktop",
             fieldKind: .form
         )).id == .forms)
     }
@@ -122,7 +122,7 @@ struct AutocompleteBehaviorProfileTests {
         let lineStructure = CurrentLineStructure.from(textBeforeCursor: "- [ ] Follow u")
 
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: "com.openai.codex",
+            appBundleIdentifier: "com.anthropic.claudefordesktop",
             fieldKind: .multilineCompose,
             currentLineStructure: lineStructure
         )).id == .aiChat)
@@ -154,7 +154,7 @@ struct AutocompleteBehaviorProfileTests {
             appBundleIdentifier: "ru.keepcoder.Telegram"
         )).id == .casualChat)
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: "com.openai.codex"
+            appBundleIdentifier: "com.anthropic.claudefordesktop"
         )).id == .aiChat)
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
             appBundleIdentifier: "com.apple.dt.Xcode"
