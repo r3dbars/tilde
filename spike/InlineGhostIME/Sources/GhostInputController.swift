@@ -30,6 +30,9 @@ final class GhostInputController: IMKInputController {
     /// are dropped instead of clobbering a newer ghost.
     private var generation = 0
     private var modelTask: Task<Void, Never>?
+    /// True right after an accept added a trailing space the user didn't type.
+    /// Typing punctuation next swallows that space (like iOS smart punctuation).
+    private var pendingAutoSpace = false
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
@@ -64,6 +67,7 @@ final class GhostInputController: IMKInputController {
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.
+            pendingAutoSpace = false
             clearGhost(client)
             if !typedFallback.isEmpty { typedFallback.removeLast() }
             return false
@@ -79,7 +83,16 @@ final class GhostInputController: IMKInputController {
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 0x20, scalar.value != 0x7F {
             clearGhost(client)
-            client.insertText(chars, replacementRange: Self.unset)
+            let swallowAutoSpace = pendingAutoSpace && ".,!?;:".contains(chars)
+            pendingAutoSpace = false
+            let selection = client.selectedRange()
+            if swallowAutoSpace, selection.location != NSNotFound, selection.location > 0 {
+                // "word ." → "word." — replace the auto-space with the punctuation.
+                client.insertText(chars, replacementRange: NSRange(location: selection.location - 1, length: 1))
+                if typedFallback.hasSuffix(" ") { typedFallback.removeLast() }
+            } else {
+                client.insertText(chars, replacementRange: Self.unset)
+            }
             typedFallback.append(chars)
             if typedFallback.count > 2000 { typedFallback.removeFirst(500) }
             scheduleGhostAfterPause(client)
@@ -87,6 +100,7 @@ final class GhostInputController: IMKInputController {
         }
 
         // Return, arrows, anything else: drop the ghost and let the app handle it.
+        pendingAutoSpace = false
         clearGhost(client)
         if let chars = event.characters, chars.contains("\r") || chars.contains("\n") {
             typedFallback.append("\n")
@@ -352,10 +366,15 @@ final class GhostInputController: IMKInputController {
         ghost = ""
     }
 
-    /// Accept everything, then predict a fresh chain.
+    /// Accept everything, then predict a fresh chain. A trailing space is added so
+    /// typing continues with the NEXT word instead of extending the accepted one.
     private func acceptWholeGhost(_ client: IMKTextInput) {
-        let accepted = ghost
+        var accepted = ghost
         clearGhost(client)
+        if !accepted.hasSuffix(" ") {
+            accepted += " "
+            pendingAutoSpace = true
+        }
         client.insertText(accepted, replacementRange: Self.unset)
         typedFallback.append(accepted)
         updateGhost(client)
@@ -377,8 +396,14 @@ final class GhostInputController: IMKInputController {
         }
         let remainder = String(ghost.dropFirst(chunk.count))
         ghost = ""
-        client.insertText(chunk, replacementRange: Self.unset)
-        typedFallback.append(chunk)
+        var insertion = chunk
+        if remainder.isEmpty, !insertion.hasSuffix(" ") {
+            // Last word of the chain: auto-space so typing moves to the next word.
+            insertion += " "
+            pendingAutoSpace = true
+        }
+        client.insertText(insertion, replacementRange: Self.unset)
+        typedFallback.append(insertion)
         guard !remainder.isEmpty else { updateGhost(client); return }
         ghost = remainder
         client.setMarkedText(
