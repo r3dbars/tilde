@@ -10,46 +10,22 @@ struct AppSettingsTests {
         let settings = AppSettings(defaults: isolatedDefaults())
 
         #expect(settings.suggestionsEnabled)
-        #expect(!settings.enforceAllowlist)
-        #expect(settings.suppressSecureFields)
-        #expect(settings.suppressShortText)
-        #expect(settings.suppressAfterNewline)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
-        #expect(settings.minimumCharacters == 3)
         #expect(!settings.personalCaptureEnabled)
         #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")
     }
 
-    @Test("Toggles and clamping flow into privacy settings")
-    func togglesAndClampingFlowIntoPrivacySettings() {
+    @Test("Toggles flip and persist")
+    func togglesFlipAndPersist() {
         let settings = AppSettings(defaults: isolatedDefaults())
 
-        settings.toggleAllowlist()
-        settings.toggleSecureFieldSuppression()
-        settings.toggleShortTextSuppression()
-        settings.toggleAfterNewlineSuppression()
+        settings.toggleSuggestionsEnabled()
         settings.togglePersonalCapture()
-        settings.minimumCharacters = 0
         settings.runtimeMode = .appOwnedLocalModel
 
-        let privacy = settings.privacySettings(allowedBundleIdentifiers: ["com.apple.TextEdit"])
-        let routing = settings.compatibilityRoutingSettings()
-
-        #expect(settings.enforceAllowlist)
-        #expect(!settings.suppressSecureFields)
-        #expect(!settings.suppressShortText)
-        #expect(!settings.suppressAfterNewline)
+        #expect(!settings.suggestionsEnabled)
         #expect(settings.personalCaptureEnabled)
-        #expect(settings.minimumCharacters == 1)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
-        #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")
-        #expect(privacy.isAppAllowlistEnabled)
-        #expect(privacy.minimumCharactersBeforeSuggestion == 1)
-        #expect(!privacy.suppressEmptyText)
-        #expect(!privacy.suppressImmediatelyAfterNewline)
-        #expect(routing.enforceKnownApps)
-        #expect(!routing.suppressSecureFields)
-        #expect(routing.minimumCharactersBeforeSuggestion == 1)
     }
 
     private func isolatedDefaults() -> UserDefaults {

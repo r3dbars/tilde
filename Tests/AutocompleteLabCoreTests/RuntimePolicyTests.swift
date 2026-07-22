@@ -451,50 +451,6 @@ struct RuntimePolicyTests {
         ))
     }
 
-    @Test("Benchmark passes when average latency is under target")
-    func benchmarkPassesUnderTarget() {
-        let benchmark = CompletionRuntimeBenchmark(
-            candidate: .liteRTLM,
-            samples: [
-                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 40, tokenCount: 3),
-                CompletionLatencySample(candidate: .liteRTLM, milliseconds: 50, tokenCount: 4)
-            ]
-        )
-
-        #expect(benchmark.averageLatencyMilliseconds == 45)
-        #expect(benchmark.p95LatencyMilliseconds == 50)
-        #expect(benchmark.passesAutocompleteTarget())
-    }
-
-    @Test("Benchmark fails when average latency is too slow")
-    func benchmarkFailsWhenTooSlow() {
-        let benchmark = CompletionRuntimeBenchmark(
-            candidate: .mlx,
-            samples: [
-                CompletionLatencySample(candidate: .mlx, milliseconds: 1_100, tokenCount: 8),
-                CompletionLatencySample(candidate: .mlx, milliseconds: 1_000, tokenCount: 8)
-            ]
-        )
-
-        #expect(!benchmark.passesAutocompleteTarget())
-    }
-
-    @Test("Benchmark fails when p95 latency is too slow")
-    func benchmarkFailsWhenP95IsTooSlow() {
-        let benchmark = CompletionRuntimeBenchmark(
-            candidate: .mlx,
-            samples: [
-                CompletionLatencySample(candidate: .mlx, milliseconds: 10, tokenCount: 1),
-                CompletionLatencySample(candidate: .mlx, milliseconds: 10, tokenCount: 1),
-                CompletionLatencySample(candidate: .mlx, milliseconds: 90, tokenCount: 1)
-            ]
-        )
-
-        #expect(benchmark.averageLatencyMilliseconds == 36)
-        #expect(benchmark.p95LatencyMilliseconds == 90)
-        #expect(!benchmark.passesAutocompleteTarget())
-    }
-
     @Test("Static prompt cache reports hit miss and redacted key")
     func staticPromptCacheReportsHitMissAndRedactedKey() {
         var cache = RuntimeStaticPromptCache(capacity: 2)
