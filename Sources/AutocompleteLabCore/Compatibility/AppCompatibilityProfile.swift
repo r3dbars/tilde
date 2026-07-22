@@ -1,42 +1,6 @@
 import CoreGraphics
 import Foundation
 
-public enum CompatibilityRung: Int, CaseIterable, Comparable, Sendable {
-    case blocked = 0
-    case detect = 1
-    case suggest = 2
-    case accept = 3
-    case stableBeta = 4
-    case supportedCandidate = 5
-
-    public static func < (lhs: CompatibilityRung, rhs: CompatibilityRung) -> Bool {
-        lhs.rawValue < rhs.rawValue
-    }
-
-    public var allowsSuggestions: Bool {
-        self >= .suggest
-    }
-
-    public var allowsAcceptance: Bool {
-        self >= .accept
-    }
-}
-
-public enum TextIntegrationPath: String, Equatable, Sendable {
-    case nativeAccessibility
-    case webExtension
-    case editorPlugin
-    case overlayOnly
-    case blocked
-}
-
-public enum SuggestionAcceptMode: String, Equatable, Sendable {
-    case none
-    case directAccessibility
-    case clipboardFallback
-    case domExtension
-}
-
 public enum LineRectPolicy: String, Equatable, Sendable {
     case trustAfterValidation
     case caretOnly
@@ -48,13 +12,22 @@ public enum BoundaryClipPolicy: String, Equatable, Sendable {
     case ignoreFocusedTextElement
 }
 
+/// Placement-tuning-only catalog: which line-rect/boundary trust policy and
+/// which geometry tolerances to use for `InlineGhostPlacementResolver`. This
+/// is *not* a suggestion/insertion gate — that authority is
+/// `CompatibilityProfileStore` (exact bundle-id match, keyed off the live
+/// runtime `CompatibilityProfile`). This type used to also carry a
+/// `defaultRung`/`textPath`/`acceptMode` that looked like a second gate but
+/// were never read by anything outside this type and its own tests; they were
+/// removed so there is exactly one decision authority for "can this app get
+/// suggestions" and exactly one (this one) for "where should the ghost text
+/// go," with prefix-matching kept here because placement tuning is often
+/// shared across a family of related bundle identifiers (browsers, chat
+/// apps) that the live gate tracks individually.
 public struct AppCompatibilityProfile: Equatable, Sendable {
     public let id: String
     public let displayName: String
     public let bundleIdentifierPrefixes: [String]
-    public let defaultRung: CompatibilityRung
-    public let textPath: TextIntegrationPath
-    public let acceptMode: SuggestionAcceptMode
     public let lineRectPolicy: LineRectPolicy
     public let boundaryClipPolicy: BoundaryClipPolicy
     public let maximumLineHeightMultiplier: CGFloat
@@ -68,9 +41,6 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
         id: String,
         displayName: String,
         bundleIdentifierPrefixes: [String],
-        defaultRung: CompatibilityRung = .detect,
-        textPath: TextIntegrationPath = .nativeAccessibility,
-        acceptMode: SuggestionAcceptMode = .none,
         lineRectPolicy: LineRectPolicy = .caretOnly,
         boundaryClipPolicy: BoundaryClipPolicy = .clipToFocusedTextElementWhenCaretInside,
         maximumLineHeightMultiplier: CGFloat = 1.8,
@@ -83,9 +53,6 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
         self.id = id
         self.displayName = displayName
         self.bundleIdentifierPrefixes = bundleIdentifierPrefixes
-        self.defaultRung = defaultRung
-        self.textPath = textPath
-        self.acceptMode = acceptMode
         self.lineRectPolicy = lineRectPolicy
         self.boundaryClipPolicy = boundaryClipPolicy
         self.maximumLineHeightMultiplier = maximumLineHeightMultiplier
@@ -110,9 +77,6 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
         id: "fallback",
         displayName: "Generic App",
         bundleIdentifierPrefixes: [],
-        defaultRung: .accept,
-        textPath: .nativeAccessibility,
-        acceptMode: .directAccessibility,
         lineRectPolicy: .caretOnly,
         boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
     )
@@ -141,9 +105,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "textedit",
             displayName: "TextEdit",
             bundleIdentifierPrefixes: ["com.apple.TextEdit"],
-            defaultRung: .stableBeta,
-            textPath: .nativeAccessibility,
-            acceptMode: .directAccessibility,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -151,9 +112,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "notes",
             displayName: "Apple Notes",
             bundleIdentifierPrefixes: ["com.apple.Notes"],
-            defaultRung: .accept,
-            textPath: .nativeAccessibility,
-            acceptMode: .directAccessibility,
             lineRectPolicy: .trustAfterValidation,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             verticalToleranceMultiplier: 1.2
@@ -162,9 +120,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "mail",
             displayName: "Apple Mail",
             bundleIdentifierPrefixes: ["com.apple.mail"],
-            defaultRung: .detect,
-            textPath: .nativeAccessibility,
-            acceptMode: .none,
             lineRectPolicy: .trustAfterValidation,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -172,9 +127,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "obsidian",
             displayName: "Obsidian",
             bundleIdentifierPrefixes: ["md.obsidian"],
-            defaultRung: .detect,
-            textPath: .editorPlugin,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -184,9 +136,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "notion-blocked",
             displayName: "Notion",
             bundleIdentifierPrefixes: ["notion.id"],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .ignoreFocusedTextElement
         ),
@@ -198,9 +147,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.openai.chat",
                 "com.openai.codex"
             ],
-            defaultRung: .detect,
-            textPath: .nativeAccessibility,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -208,9 +154,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "claude-desktop",
             displayName: "Claude Desktop",
             bundleIdentifierPrefixes: ["com.anthropic.claudefordesktop"],
-            defaultRung: .detect,
-            textPath: .editorPlugin,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -226,9 +169,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "company.thebrowser.Browser",
                 "org.mozilla.firefox"
             ],
-            defaultRung: .detect,
-            textPath: .webExtension,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -242,9 +182,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.apple.systempreferences",
                 "com.apple.ActivityMonitor"
             ],
-            defaultRung: .detect,
-            textPath: .nativeAccessibility,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -252,9 +189,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "apple-messaging",
             displayName: "Apple Messaging",
             bundleIdentifierPrefixes: ["com.apple.MobileSMS"],
-            defaultRung: .detect,
-            textPath: .nativeAccessibility,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
         ),
@@ -264,9 +198,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             bundleIdentifierPrefixes: [
                 "ru.keepcoder.Telegram"
             ],
-            defaultRung: .detect,
-            textPath: .editorPlugin,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -276,9 +207,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "slack-blocked",
             displayName: "Slack",
             bundleIdentifierPrefixes: ["com.tinyspeck.slackmacgap"],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .ignoreFocusedTextElement
         ),
@@ -290,9 +218,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.hnc.DiscordPTB",
                 "com.hnc.DiscordCanary"
             ],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .ignoreFocusedTextElement
         ),
@@ -303,9 +228,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.microsoft.VSCode",
                 "com.todesktop"
             ],
-            defaultRung: .detect,
-            textPath: .editorPlugin,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
@@ -318,9 +240,6 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
                 "com.apple.Terminal",
                 "com.googlecode.iterm2"
             ],
-            defaultRung: .blocked,
-            textPath: .blocked,
-            acceptMode: .none,
             lineRectPolicy: .caretOnly,
             boundaryClipPolicy: .ignoreFocusedTextElement
         )
