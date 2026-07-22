@@ -26,6 +26,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private var container: ModelContainer?
     private var staticPromptCache = RuntimeStaticPromptCache()
     private var promptKVCacheOwner: MLXPromptKVCacheOwner
+    /// Token count of the chat template's closing markers after the user content.
+    /// Static per model+template; measured once by probe (guarded by stateQueue).
+    private var cachedTemplateSuffixTokenCount: Int?
     private var generation = 0
     private var warmTaskID = 0
     private var warmTask: (id: Int, task: Task<Void, Error>, gate: MLXRuntimeWarmGate)?
@@ -791,6 +794,43 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
     }
 
+    /// Number of trailing template tokens after the user content (turn-close +
+    /// assistant-open markers). Probe: tokenize the same chat with the user text
+    /// extended; the shared token prefix ends where the user content ends, so the
+    /// remainder of the real prompt is the template suffix. The estimate can only
+    /// overshoot (by a merged boundary token), which merely re-prefills an extra
+    /// token per request — it can never under-count and reintroduce trimming.
+    private func templateSuffixTokenCount(
+        container: ModelContainer,
+        systemPrompt: String,
+        userPrompt: String,
+        fullPromptTokens: [Int]
+    ) async -> Int {
+        if let cached = stateQueue.sync(execute: { cachedTemplateSuffixTokenCount }) {
+            return cached
+        }
+        guard let probeInput = try? await container.prepare(input: UserInput(
+            chat: [
+                .system(systemPrompt),
+                .user(userPrompt + " qx")
+            ],
+            additionalContext: ["enable_thinking": false]
+        )) else {
+            return 0
+        }
+        let probeTokens = probeInput.text.tokens.asArray(Int.self)
+        var shared = 0
+        while shared < fullPromptTokens.count,
+              shared < probeTokens.count,
+              fullPromptTokens[shared] == probeTokens[shared] {
+            shared += 1
+        }
+        let suffix = fullPromptTokens.count - shared
+        let usable = suffix > 0 && suffix < fullPromptTokens.count ? suffix : 0
+        stateQueue.sync { cachedTemplateSuffixTokenCount = usable }
+        return usable
+    }
+
     private func generateRawCompletionWithPromptKVCache(
         container: ModelContainer,
         prompt: FormattedCompletionPrompt,
@@ -815,10 +855,35 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         ))
         let preparedAt = Date()
         let promptTokens = preparedInput.text.tokens.asArray(Int.self)
+
+        // The chat template closes the user turn and opens the assistant turn AFTER
+        // the typed context (the prompt itself is context-terminal since prompt
+        // style v12). Cache the PREFIX only — everything before those closing
+        // markers — so consecutive keystrokes strictly extend the stored tokens and
+        // reuse never needs trimming (hybrid caches like Qwen3.5's recurrent layers
+        // are appendable but not trimmable). The short static suffix is re-prefilled
+        // every request.
+        let templateSuffixCount = await templateSuffixTokenCount(
+            container: container,
+            systemPrompt: promptCacheLookup.systemPrompt,
+            userPrompt: prompt.user,
+            fullPromptTokens: promptTokens
+        )
+        // Keep the last couple of context tokens OUT of the stored prefix: the
+        // trailing space/partial word re-tokenizes once the next word arrives
+        // ("outputs " + "feel" → the space merges into "Ġfeel"), and a stored
+        // cache ending on such a volatile token forces an untrimmable miss.
+        // Ending the stored state 2 tokens early costs 2 tokens of re-prefill.
+        let boundaryMargin = 2
+        let cacheableCount = promptTokens.count - templateSuffixCount - boundaryMargin
+        let splitIsUsable = templateSuffixCount > 0 && cacheableCount > 0
+        let prefixTokens = splitIsUsable ? Array(promptTokens.prefix(cacheableCount)) : promptTokens
+        let suffixTokens = splitIsUsable ? Array(promptTokens.dropFirst(cacheableCount)) : []
+
         let lookup = stateQueue.sync {
             promptKVCacheOwner.lookup(
                 request: request,
-                promptTokens: promptTokens,
+                promptTokens: prefixTokens,
                 systemPrompt: promptCacheLookup.systemPrompt,
                 modelRevision: promptKVCacheModelRevision,
                 promptStyleIdentifier: CompletionPromptBuilder.promptStyleIdentifier
@@ -830,6 +895,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         promptCacheTraceMetadata["preparePromptMilliseconds"] = String(Self.milliseconds(from: sessionStartedAt, to: preparedAt))
         promptCacheTraceMetadata["promptTokenCount"] = String(promptTokens.count)
         promptCacheTraceMetadata["appendTokenCount"] = String(lookup.appendTokens.count)
+        promptCacheTraceMetadata["templateSuffixTokenCount"] = String(suffixTokens.count)
 
         let modelBox = await container.perform { context in
             MLXRuntimeSendableBox(context.model)
@@ -838,27 +904,64 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let modelConfiguration = await container.configuration
         let tokenizer = await container.tokenizer
         let workingCache = lookup.reusableCache ?? model.newCache(parameters: generateParameters)
-        let generationInput = lookup.decision.isHit
-            ? LMInput(tokens: MLXArray(lookup.appendTokens))
-            : preparedInput
+
+        let iterator: TokenIterator
+        if suffixTokens.isEmpty {
+            // Fallback (no usable split): previous single-stage behavior.
+            let generationInput = lookup.decision.isHit
+                ? LMInput(tokens: MLXArray(lookup.appendTokens))
+                : preparedInput
+            iterator = try TokenIterator(
+                input: generationInput,
+                model: model,
+                cache: workingCache,
+                parameters: generateParameters
+            )
+            let storeMetadata = stateQueue.sync {
+                promptKVCacheOwner.storePreparedPromptCache(
+                    workingCache,
+                    key: lookup.currentKey,
+                    request: request,
+                    promptTokens: lookup.promptTokens
+                )
+            }
+            promptCacheTraceMetadata.merge(storeMetadata) { current, _ in current }
+        } else {
+            // Stage 1: bring the cache to end-of-prefix state (append the typed
+            // delta on a hit; prefill the whole prefix on a miss), then store a
+            // copy — the state the NEXT keystroke extends without trimming.
+            // (TokenIterator prefills its input during init; the sampled token is
+            // discarded and never enters the cache.)
+            let prefixInput = lookup.decision.isHit
+                ? LMInput(tokens: MLXArray(lookup.appendTokens))
+                : LMInput(tokens: MLXArray(prefixTokens))
+            _ = try TokenIterator(
+                input: prefixInput,
+                model: model,
+                cache: workingCache,
+                parameters: generateParameters
+            )
+            let storeMetadata = stateQueue.sync {
+                promptKVCacheOwner.storePreparedPromptCache(
+                    workingCache,
+                    key: lookup.currentKey,
+                    request: request,
+                    promptTokens: lookup.promptTokens
+                )
+            }
+            promptCacheTraceMetadata.merge(storeMetadata) { current, _ in current }
+
+            // Stage 2: append the template's closing markers and generate.
+            iterator = try TokenIterator(
+                input: LMInput(tokens: MLXArray(suffixTokens)),
+                model: model,
+                cache: workingCache,
+                parameters: generateParameters
+            )
+        }
 
         let sessionBuiltAt = Date()
         promptCacheTraceMetadata["cacheSetupMilliseconds"] = String(Self.milliseconds(from: preparedAt, to: sessionBuiltAt))
-        let iterator = try TokenIterator(
-            input: generationInput,
-            model: model,
-            cache: workingCache,
-            parameters: generateParameters
-        )
-        let storeMetadata = stateQueue.sync {
-            promptKVCacheOwner.storePreparedPromptCache(
-                workingCache,
-                key: lookup.currentKey,
-                request: request,
-                promptTokens: lookup.promptTokens
-            )
-        }
-        promptCacheTraceMetadata.merge(storeMetadata) { current, _ in current }
 
         var rawOutput = ""
         var firstChunkMilliseconds: Int?

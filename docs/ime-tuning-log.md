@@ -126,8 +126,29 @@ more dogfood data).
   (`empty-token-append`), so never benchmark the cache with identical prompts.
   Diagnostics decode trick: values are privacy-redacted to `String(N chars)` —
   decode enum values by length (miss=4, untrimmable-prompt-cache=24).
-- **NEXT LEVER (well-scoped): prefix-only prompt cache.** Store/reuse the KV
-  cache for system+context only (everything BEFORE the template's closing
-  markers), so consecutive keystrokes append cleanly with no trimming. Expected
-  to cut firstChunk from ~250ms to tens of ms; combined with streaming, first
-  ghost words at ~50–100ms — under the 150ms model-only threshold. **OPEN.**
+- **Prefix cache SHIPPED (three coordinated changes):**
+  1. **Prompt style v12 (core):** all instructions (including the answer label)
+     moved into the SYSTEM prompt; the user prompt is context-terminal — ends
+     with "Before cursor:\n<context>". Consecutive keystrokes now strictly
+     extend the previous prompt's tokens.
+  2. **Two-stage prefill (runtime):** stage 1 brings the cache to end-of-prefix
+     state and stores a copy; stage 2 appends the template's closing markers
+     (~9 tokens, probe-measured once per model) and generates.
+  3. **2-token boundary margin:** the stored prefix ends 2 tokens before the
+     context end, because the trailing space/partial word re-tokenizes when the
+     next word arrives ("outputs " + "feel" → space merges into "Ġfeel") and a
+     stored cache ending on a volatile token forces an untrimmable miss.
+  **Measured on hit: firstChunk 13ms (was ~250ms); first ghost word ~70ms,
+  final ~134ms — UNDER the 150ms model-only threshold.**
+- **Hit-rate reality (from diagnostics, mixed real+bench traffic):** hits fire
+  during continuous same-paragraph typing (the hot path). Dominant miss is
+  `paragraph-changed` (RuntimeSessionCachePolicy resets the cache when the
+  current paragraph is no longer an extension — i.e., every Enter/newline),
+  then `field-changed` (honest cold start). **OPEN levers:** (a) relax the
+  paragraph guard — token-prefix checking in the lookup already guarantees
+  correctness, so the guard mostly costs hits; (b) the cache holds ONE entry —
+  per-field entries would survive brief app/field switches; (c) re-verify the
+  residual `untrimmable-prompt-cache` misses disappear post-margin.
+- **Model-only routing threshold (≤150ms) is now MET on cache hits.** Decision:
+  dogfood the feel first; flip to model-only once hit rate is proven in real
+  typing (paragraph guard relaxation likely needed first).
