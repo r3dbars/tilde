@@ -17,7 +17,15 @@ enum GhostBrainClient {
     /// Total time we are willing to wait for the brain, per request.
     private static let timeout = timeval(tv_sec: 0, tv_usec: 700_000)
 
-    static func complete(context: String, app: String?, field: String?) -> String? {
+    /// Streams a completion: `onPartial` fires for each partial suggestion as the
+    /// model generates (first words near time-to-first-token); the return value is
+    /// the final suggestion (or the last partial if the stream times out).
+    static func complete(
+        context: String,
+        app: String?,
+        field: String?,
+        onPartial: ((String) -> Void)? = nil
+    ) -> String? {
         var object: [String: Any] = ["v": 1, "context": context]
         // App + field identity let the brain's prompt KV cache recognize
         // consecutive keystrokes in the same field (the big latency win).
@@ -58,23 +66,32 @@ enum GhostBrainClient {
         let sent = payload.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
         guard sent == payload.count else { return nil }
 
-        // Read until newline / EOF / timeout (responses are small).
-        var response = Data()
+        // Read newline-delimited JSON lines: partials as they generate, then the
+        // final (no "partial" flag). On timeout/EOF, the last partial stands.
+        var pending = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
-        while response.count < 65536 {
+        var lastPartial: String?
+        while pending.count < 262_144 {
             let n = read(fd, &buffer, buffer.count)
             guard n > 0 else { break }
-            response.append(contentsOf: buffer[0..<n])
-            if buffer[0..<n].contains(0x0A) { break }
+            pending.append(contentsOf: buffer[0..<n])
+            while let newline = pending.firstIndex(of: 0x0A) {
+                let line = pending.prefix(upTo: newline)
+                pending = Data(pending.suffix(from: pending.index(after: newline)))
+                guard
+                    let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                    let suggestion = object["suggestion"] as? String
+                else { continue }
+                if (object["partial"] as? Bool) == true {
+                    if !suggestion.isEmpty {
+                        lastPartial = suggestion
+                        onPartial?(suggestion)
+                    }
+                } else {
+                    return suggestion.isEmpty ? lastPartial : suggestion
+                }
+            }
         }
-        if let newline = response.firstIndex(of: 0x0A) {
-            response = response.prefix(upTo: newline)
-        }
-        guard
-            let object = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
-            let suggestion = object["suggestion"] as? String,
-            !suggestion.isEmpty
-        else { return nil }
-        return suggestion
+        return lastPartial
     }
 }
