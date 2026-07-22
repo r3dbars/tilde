@@ -20,7 +20,6 @@ extension AppDelegate: SuggestionPipelineHost {
             isTrustedForAccessibility: accessibilityClient.isTrusted,
             hasSupportedProfile: hasSupportedProfile,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasPersonalCapture: appSettings.personalCaptureEnabled,
             lastFocusedTextChangeAt: lastFocusedTextChangeAt
         )
     }

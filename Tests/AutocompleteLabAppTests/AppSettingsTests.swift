@@ -11,7 +11,6 @@ struct AppSettingsTests {
 
         #expect(settings.suggestionsEnabled)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
-        #expect(!settings.personalCaptureEnabled)
         #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")
     }
 
@@ -20,11 +19,9 @@ struct AppSettingsTests {
         let settings = AppSettings(defaults: isolatedDefaults())
 
         settings.toggleSuggestionsEnabled()
-        settings.togglePersonalCapture()
         settings.runtimeMode = .appOwnedLocalModel
 
         #expect(!settings.suggestionsEnabled)
-        #expect(settings.personalCaptureEnabled)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
     }
 

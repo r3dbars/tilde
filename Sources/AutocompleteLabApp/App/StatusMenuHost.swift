@@ -10,9 +10,7 @@ enum StatusMenuAction {
     case silenceCurrentField
     case showSettings
     case openFeedbackForm
-    case showDiagnostics
     case revealModelFolder
-    case revealPersonalCaptureFolder
     case nudgeSuggestionUp
     case nudgeSuggestionDown
     case nudgeSuggestionLeft
@@ -115,9 +113,7 @@ final class StatusMenuHost: NSObject {
         if developerMenuEnabled {
             let debugMenuItem = NSMenuItem(title: "Developer", action: nil, keyEquivalent: "")
             let debugMenu = NSMenu()
-            debugMenu.addItem(actionItem(title: "Diagnostics", action: #selector(handleShowDiagnostics), keyEquivalent: "d"))
             debugMenu.addItem(actionItem(title: "Model Folder", action: #selector(handleRevealModelFolder), keyEquivalent: "m"))
-            debugMenu.addItem(actionItem(title: "Writing Journal Folder", action: #selector(handleRevealPersonalCaptureFolder)))
             debugMenu.addItem(NSMenuItem.separator())
             debugMenu.addItem(actionItem(title: "Nudge Suggestion Up", action: #selector(handleNudgeSuggestionUp)))
             debugMenu.addItem(actionItem(title: "Nudge Suggestion Down", action: #selector(handleNudgeSuggestionDown)))
@@ -209,9 +205,7 @@ final class StatusMenuHost: NSObject {
     @objc private func handleSilenceCurrentField() { send(.silenceCurrentField) }
     @objc private func handleShowSettings() { send(.showSettings) }
     @objc private func handleOpenFeedbackForm() { send(.openFeedbackForm) }
-    @objc private func handleShowDiagnostics() { send(.showDiagnostics) }
     @objc private func handleRevealModelFolder() { send(.revealModelFolder) }
-    @objc private func handleRevealPersonalCaptureFolder() { send(.revealPersonalCaptureFolder) }
     @objc private func handleNudgeSuggestionUp() { send(.nudgeSuggestionUp) }
     @objc private func handleNudgeSuggestionDown() { send(.nudgeSuggestionDown) }
     @objc private func handleNudgeSuggestionLeft() { send(.nudgeSuggestionLeft) }

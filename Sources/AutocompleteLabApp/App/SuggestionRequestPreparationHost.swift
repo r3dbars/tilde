@@ -5,8 +5,6 @@ import Foundation
 struct SuggestionRequestPreparationHostDependencies {
     let suggestionOrchestrator: SuggestionOrchestrator
     let acceptedTextStyleSketch: (AcceptedTextStyleMemoryKey) -> AcceptedTextStyleSketch?
-    let personalizationCoordinator: PersonalizationCoordinator
-    let isPersonalCaptureEnabled: () -> Bool
     let suggestionTuning: () -> SuggestionTuning
     let requestSchedulingPolicy: SuggestionRequestSchedulingPolicy
 }
@@ -47,21 +45,12 @@ final class SuggestionRequestPreparationHost {
             textBeforeCursor: context.textBeforeCursor
         )
         let acceptedTextStyleSketch = dependencies.acceptedTextStyleSketch(acceptedTextStyleKey)
-        let personalization = dependencies.personalizationCoordinator.selection(
-            isEnabled: dependencies.isPersonalCaptureEnabled(),
-            context: context,
-            appBundleIdentifier: appBundleIdentifier,
-            fieldClassification: fieldClassification,
-            requestMode: requestMode
-        )
         let orchestration = dependencies.suggestionOrchestrator.beginRequest(SuggestionRequestInput(
             context: context,
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
-            personalContext: personalization.context,
-            personalWritingMemory: personalization.memory,
             visiblePageContext: visiblePageContext,
             maxVisibleWords: dependencies.suggestionTuning().maxVisibleWords,
             requestMode: requestMode,

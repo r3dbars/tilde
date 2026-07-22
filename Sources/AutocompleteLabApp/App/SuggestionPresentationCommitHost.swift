@@ -33,11 +33,6 @@ struct SuggestionPresentationCommitHostDependencies {
     let screenshotCapture: TraceScreenshotCaptureCoordinator
     let compatibilityLearningStore: CompatibilityLearningStore
     let presentationDelivery: SuggestionPresentationDelivery
-    let recordPersonalCaptureEpisodePresented: (
-        SuggestionPresentationCommitInput,
-        TraceScreenshotCaptureResult,
-        SuggestionPresentationTracePayload
-    ) -> Void
     let recordSuggestionEvent: (
         SuggestionPresentationCommitInput,
         SuggestionPresentationTracePayload
@@ -143,11 +138,6 @@ final class SuggestionPresentationCommitHost {
             screenshotPath: screenshotCapture.path,
             screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized,
             metadata: presentationTracePayload.rawTraceMetadata
-        )
-        dependencies.recordPersonalCaptureEpisodePresented(
-            input,
-            screenshotCapture,
-            presentationTracePayload
         )
         dependencies.recordSuggestionEvent(input, presentationTracePayload)
         dependencies.updateKeyboardEventTapSnapshot()

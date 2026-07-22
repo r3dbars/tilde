@@ -21,12 +21,8 @@ extension AppDelegate: StatusMenuActionHandling {
             showSettings()
         case .openFeedbackForm:
             openFeedbackForm()
-        case .showDiagnostics:
-            showDiagnostics()
         case .revealModelFolder:
             revealModelFolder()
-        case .revealPersonalCaptureFolder:
-            revealPersonalCaptureFolder()
         case .nudgeSuggestionUp:
             nudgeCurrentAppSuggestionUp()
         case .nudgeSuggestionDown:
