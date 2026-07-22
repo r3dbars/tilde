@@ -84,6 +84,28 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — edge-case hardening round
+
+- **Ghost committed by mouse click (code-audit catch):** `commitComposition` was
+  not overridden, and the default can COMMIT marked text when the client ends
+  composition (click, caret move, focus shift) — inserting an unaccepted ghost
+  as real text. Now overridden to clear instead: **the ghost only ever becomes
+  text via explicit Tab/Shift-Tab.** **KEEP** — trust-critical invariant.
+- **Option-key passthrough:** Option combos now pass through untouched so
+  dead-key accents (Option-E, e → é) and special characters (©, ñ, ø) compose
+  normally; previously the printable branch could commit the raw dead-key char.
+  **KEEP.** Manual verification of é-composition still needed (dead-key state
+  machine interaction with IMEs is subtle).
+- **Free rides confirmed by design:** secure/password fields bypass third-party
+  input methods entirely (macOS routes around us); Tab keeps its day job
+  whenever no ghost is showing; the IME process is respawned on demand by
+  imklaunchagent after a crash (typing continues after ~a keystroke).
+- **Known open edge cases (manual test checklist):** undo granularity after
+  accepts (Cmd+Z), autocorrect coexistence, key-repeat (held keys), non-US
+  keyboard layouts under the IME, emoji picker input, dictation interplay,
+  IME kill mid-sentence (crash-recovery drill), marked-text behavior in
+  Google Docs (custom composition handling).
+
 ## 2026-07-22 — latency & model round
 
 - **Gemma E4B it-OptiQ as default model** — measured through the full socket
