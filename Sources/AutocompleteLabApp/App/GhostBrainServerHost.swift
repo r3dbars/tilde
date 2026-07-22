@@ -92,13 +92,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
         Task.detached(priority: .userInitiated) { [weak self] in
             defer { close(connection) }
-            guard let self, let context = Self.readContext(connection) else { return }
+            guard let self, let payload = Self.readPayload(connection) else { return }
             let engine = await self.engineProvider()
             // Mid-word contexts want the engine's word-completion mode; word
-            // boundaries want phrase continuation.
-            let midWord = context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
+            // boundaries want phrase continuation. App + field identity let the
+            // prompt KV cache recognize consecutive keystrokes in the same field.
+            let midWord = payload.context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
             let request = CompletionRequest(
-                textBeforeCursor: context,
+                textBeforeCursor: payload.context,
+                appBundleIdentifier: payload.app,
+                fieldIdentityDescription: payload.field,
                 mode: midWord ? .wordCompletion : .phraseContinuation
             )
             let suggestion = (try? await engine.suggestion(for: request))??.visibleText ?? ""
@@ -108,7 +111,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
     // MARK: - Wire format
 
-    private static func readContext(_ fd: Int32) -> String? {
+    private struct RequestPayload {
+        let context: String
+        let app: String?
+        let field: String?
+    }
+
+    private static func readPayload(_ fd: Int32) -> RequestPayload? {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
         while data.count < 65536 {
@@ -125,7 +134,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let context = object["context"] as? String,
             !context.isEmpty
         else { return nil }
-        return context
+        return RequestPayload(
+            context: context,
+            app: object["app"] as? String,
+            field: object["field"] as? String
+        )
     }
 
     private static func write(_ object: [String: String], to fd: Int32) {
