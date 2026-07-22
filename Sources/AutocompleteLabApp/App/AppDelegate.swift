@@ -1065,11 +1065,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { appPreferencePersistenceHost.acceptedTextStyleMemory = newValue }
     }
 
+    private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         appLifecycleHost.start()
         ghostBrainServerHost.start()
         llamaServerHost.start()
         registerAsLoginItemIfNeeded()
+        ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login
