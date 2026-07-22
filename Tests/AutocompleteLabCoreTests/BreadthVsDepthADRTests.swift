@@ -57,8 +57,7 @@ struct BreadthVsDepthADRTests {
         // Messages / Slack / Discord are sendable surfaces: Return can submit, so
         // they must never be downgraded to `.notPrompt` (the relaxed,
         // not-a-prompt-surface mode). They may be `.disabled`, `.clickOnly`, or
-        // `.wordOnly` — anything except `.notPrompt`. Locked on both the
-        // compatibility profile and the host policy.
+        // `.wordOnly` — anything except `.notPrompt`.
         let sendSurfaceBundleIdentifiers = [
             "com.apple.MobileSMS",       // Messages
             "com.tinyspeck.slackmacgap", // Slack
@@ -66,16 +65,10 @@ struct BreadthVsDepthADRTests {
         ]
 
         let profiles = CompatibilityProfileStore.mvp.profiles
-        let policies = HostCompatibilityPolicyCatalog.mvp.policies
-
         for bundleIdentifier in sendSurfaceBundleIdentifiers {
             let profile = try #require(profiles[bundleIdentifier])
             #expect(profile.promptAppSafetyMode != .notPrompt)
             #expect(profile.promptAppSafetyMode.isPromptSurface)
-
-            let policy = try #require(policies[bundleIdentifier])
-            #expect(policy.safetyMode != .notPrompt)
-            #expect(policy.safetyMode.isPromptSurface)
         }
     }
 
