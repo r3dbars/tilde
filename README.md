@@ -54,9 +54,7 @@ deterministic Swift — every decision about when to request, show, accept, or
 suppress a suggestion lives there as a small tested policy type.
 `Sources/AutocompleteLabApp` is the native shell — Accessibility reading,
 keyboard event tap, text insertion, the overlay panel, and the MLX runtime.
-`AutocompleteTraceReplay` and `SteadyTypeReplayEval` replay redacted traces
-through core logic for offline quality work. See `AGENTS.md` for the working
-rules.
+See `AGENTS.md` for the working rules.
 
 ## Privacy
 

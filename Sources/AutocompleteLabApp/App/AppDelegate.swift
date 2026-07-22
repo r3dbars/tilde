@@ -7822,6 +7822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RawAutocompleteTraceLog.shared.deleteAll()
         compatibilityLearningStore.deleteAll()
         DiagnosticsLog.shared.deleteAll()
+        deleteLegacyPersonalCaptureFolderIfPresent(surface: refreshSettings ? "settings" : "diagnostics")
         DiagnosticsLog.shared.record(
             "local-privacy-logs-deleted",
             metadata: ["surface": refreshSettings ? "settings" : "diagnostics"]
@@ -7829,6 +7830,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if refreshSettings {
             refreshRuntimeChrome()
         }
+    }
+
+    /// The personal-capture feature was removed; its opt-in journal held verbatim
+    /// user writing, so any folder left behind by earlier builds is deleted rather
+    /// than stranded with no in-app deletion path.
+    private func deleteLegacyPersonalCaptureFolderIfPresent(surface: String) {
+        let folderURL = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SteadyType/Personal Capture")
+        guard FileManager.default.fileExists(atPath: folderURL.path) else {
+            return
+        }
+
+        try? FileManager.default.removeItem(at: folderURL)
+        DiagnosticsLog.shared.record(
+            "legacy-personal-capture-deleted",
+            metadata: ["surface": surface]
+        )
     }
 
     func clearLearningData() {
