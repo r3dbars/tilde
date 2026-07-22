@@ -138,6 +138,10 @@ struct CompatibilityProfileTests {
     func highestRiskDeveloperAndSystemAppsStayDenylisted() {
         let store = CompatibilityProfileStore.mvp
         let highRiskBundleIdentifiers = [
+            "com.openai.codex",
+            "com.anthropic.claude-code",
+            "com.apple.Terminal",
+            "com.mitchellh.ghostty",
             "com.apple.dt.Xcode",
             "com.microsoft.VSCodeInsiders",
             "com.visualstudio.code.oss",
