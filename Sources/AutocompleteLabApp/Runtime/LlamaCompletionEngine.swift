@@ -27,13 +27,15 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
+        let register = ContinuationRegister.from(bundleIdentifier: request.appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: request.textBeforeCursor,
-            screenContext: request.visiblePageContext?.promptText
+            screenContext: request.visiblePageContext?.promptText,
+            register: register
         )
         let body: [String: Any] = [
             "prompt": recipe.prompt,
-            "n_predict": min(16, request.mode.generatedTokenCeiling),
+            "n_predict": min(register.generatedTokenBudget, request.mode.generatedTokenCeiling),
             "temperature": 0,
             "cache_prompt": true,
             "stop": ["\n"],

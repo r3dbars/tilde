@@ -166,7 +166,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             "-m", modelPath,
             "--host", "127.0.0.1",
             "--port", String(Self.port),
-            "-c", "2048",
+            "-c", "4096",
             // Gemma uses sliding-window attention; without --swa-full the slot
             // cache can't roll back past the window and consecutive keystrokes
             // re-read the whole prompt. --cache-reuse enables chunked prefix
