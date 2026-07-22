@@ -255,14 +255,14 @@ final class GhostInputController: IMKInputController {
 
     /// Debounce: the ghost appears only after typing rests for a beat. Fresh
     /// keystrokes bump `generation`, so pending reveals cancel themselves.
-    /// Mid-word rests reveal faster (100ms) than word boundaries (180ms): word
-    /// completion is only useful BEFORE the word is finished, so it has to win
-    /// the race against the typist's own fingers.
+    /// Speed experiment (owner, 2026-07-22): mid-word 10ms / boundary 50ms —
+    /// near-instant ghosts for fast typists. Prior calmer settings were
+    /// 100/180ms; if this feels chaotic, these two numbers are the whole dial.
     private func scheduleGhostAfterPause(_ client: IMKTextInput) {
         generation += 1
         let gen = generation
         let midWord = typedFallback.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
-        let delay: UInt64 = midWord ? 100_000_000 : 180_000_000
+        let delay: UInt64 = midWord ? 10_000_000 : 50_000_000
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: delay)
             guard let self, self.generation == gen else { return }
