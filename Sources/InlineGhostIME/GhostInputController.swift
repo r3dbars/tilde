@@ -33,11 +33,75 @@ final class GhostInputController: IMKInputController {
     /// True right after an accept added a trailing space the user didn't type.
     /// Typing punctuation next swallows that space (like iOS smart punctuation).
     private var pendingAutoSpace = false
+    /// What produced the ghost currently on screen (for per-source accept stats).
+    private enum GhostSource: String { case fast, model }
+    private var ghostSource: GhostSource = .fast
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
 
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
+
+    // MARK: - Stats (privacy-clean: COUNTS ONLY, never text)
+
+    /// Daily counters, buffered in memory and flushed to the IME's own defaults.
+    /// Read back by the input menu ("Today: SteadyType wrote N% of your words").
+    private enum Stats {
+        static var wordsAccepted = 0
+        static var charactersAccepted = 0
+        static var wordsTyped = 0
+        static var ghostsShown = 0
+        static var ghostsAccepted = 0
+        static var fastAccepts = 0
+        static var modelAccepts = 0
+        static var lastFlush = Date.distantPast
+
+        static var dayKey: String {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            return "stats." + formatter.string(from: Date())
+        }
+
+        static func flushIfDue(force: Bool = false) {
+            guard force || Date().timeIntervalSince(lastFlush) > 20 else { return }
+            lastFlush = Date()
+            let defaults = UserDefaults.standard
+            var day = defaults.dictionary(forKey: dayKey) as? [String: Int] ?? [:]
+            day["wordsAccepted", default: 0] += wordsAccepted
+            day["charactersAccepted", default: 0] += charactersAccepted
+            day["wordsTyped", default: 0] += wordsTyped
+            day["ghostsShown", default: 0] += ghostsShown
+            day["ghostsAccepted", default: 0] += ghostsAccepted
+            day["fastAccepts", default: 0] += fastAccepts
+            day["modelAccepts", default: 0] += modelAccepts
+            defaults.set(day, forKey: dayKey)
+            wordsAccepted = 0; charactersAccepted = 0; wordsTyped = 0
+            ghostsShown = 0; ghostsAccepted = 0; fastAccepts = 0; modelAccepts = 0
+        }
+
+        static func todaySummary() -> String {
+            flushIfDue(force: true)
+            let day = UserDefaults.standard.dictionary(forKey: dayKey) as? [String: Int] ?? [:]
+            let accepted = day["wordsAccepted"] ?? 0
+            let typed = day["wordsTyped"] ?? 0
+            let total = accepted + typed
+            guard total > 0 else { return "Today: no typing yet" }
+            let percent = Int((Double(accepted) / Double(total) * 100).rounded())
+            return "Today: wrote \(accepted) words for you (\(percent)%)"
+        }
+    }
+
+    private func recordAccept(_ text: String) {
+        let words = text.split(whereSeparator: { $0.isWhitespace }).count
+        Stats.wordsAccepted += words
+        Stats.charactersAccepted += text.count
+        Stats.ghostsAccepted += 1
+        switch ghostSource {
+        case .fast: Stats.fastAccepts += 1
+        case .model: Stats.modelAccepts += 1
+        }
+        Stats.flushIfDue()
+    }
 
     // MARK: - Event handling
 
@@ -98,6 +162,10 @@ final class GhostInputController: IMKInputController {
             }
             typedFallback.append(chars)
             if typedFallback.count > 2000 { typedFallback.removeFirst(500) }
+            if chars == " ", typedFallback.dropLast().last?.isLetter == true {
+                Stats.wordsTyped += 1
+                Stats.flushIfDue()
+            }
             scheduleGhostAfterPause(client)
             return true
         }
@@ -124,6 +192,7 @@ final class GhostInputController: IMKInputController {
 
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
+        Stats.flushIfDue(force: true)
         if let client = sender as? IMKTextInput { clearGhost(client) }
         typedFallback = ""
         ghost = ""
@@ -139,7 +208,7 @@ final class GhostInputController: IMKInputController {
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
         let selection = client.selectedRange()
         if selection.location != NSNotFound, selection.location > 0 {
-            let start = max(0, selection.location - 1000)
+            let start = max(0, selection.location - 3000)
             let range = NSRange(location: start, length: selection.location - start)
             if let text = client.attributedSubstring(from: range)?.string, !text.isEmpty {
                 clientGivesContext = true
@@ -320,7 +389,10 @@ final class GhostInputController: IMKInputController {
         // dictionary, doc bigrams) — no generic filler.
         let suffix = predict(context: context)
         ghost = suffix
-        if !suffix.isEmpty { show(suffix, client) }
+        if !suffix.isEmpty {
+            ghostSource = .fast
+            show(suffix, client)
+        }
 
         // Smart layer. Mid-word, the dictionary/doc completion is precise — when
         // it produced one, the model does NOT get to overwrite it (small-model
@@ -349,6 +421,10 @@ final class GhostInputController: IMKInputController {
 
     override func menu() -> NSMenu! {
         let menu = NSMenu()
+        let stats = NSMenuItem(title: Stats.todaySummary(), action: nil, keyEquivalent: "")
+        stats.isEnabled = false
+        menu.addItem(stats)
+        menu.addItem(.separator())
         let inline = NSMenuItem(
             title: "Inline suggestions (underlined)",
             action: #selector(selectInlineMode(_:)),
@@ -385,6 +461,7 @@ final class GhostInputController: IMKInputController {
     /// app-controlled (proven in phase 1) — grey is sent anyway for the rare
     /// client that honors it.
     private func show(_ suffix: String, _ client: IMKTextInput) {
+        Stats.ghostsShown += 1
         if panelMode {
             if inlineGhostVisible {
                 client.setMarkedText(
@@ -414,7 +491,7 @@ final class GhostInputController: IMKInputController {
         // Mid-word AND word-boundary contexts both go to the brain; the server picks
         // the engine mode. The prompt KV cache makes long context cheap after the
         // first request, so send generously. Require a little so answers aren't wild.
-        let tail = String(context.suffix(1000))
+        let tail = String(context.suffix(3000))
         guard tail.count >= 12 else { return }
 
         let gen = generation
@@ -453,6 +530,7 @@ final class GhostInputController: IMKInputController {
     private func present(_ text: String, ifStill gen: Int) {
         guard generation == gen, let liveClient = client() else { return }
         ghost = text
+        ghostSource = .model
         show(text, liveClient)
     }
 
@@ -526,6 +604,7 @@ final class GhostInputController: IMKInputController {
     /// typing continues with the NEXT word instead of extending the accepted one.
     private func acceptWholeGhost(_ client: IMKTextInput) {
         var accepted = ghost
+        recordAccept(accepted)
         clearGhost(client)
         if !accepted.hasSuffix(" ") {
             accepted += " "
@@ -551,6 +630,7 @@ final class GhostInputController: IMKInputController {
             }
         }
         let remainder = String(ghost.dropFirst(chunk.count))
+        recordAccept(chunk)
         ghost = ""
         inlineGhostVisible = false
         var insertion = chunk

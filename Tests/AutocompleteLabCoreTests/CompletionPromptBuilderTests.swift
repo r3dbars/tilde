@@ -740,3 +740,27 @@ struct RawContinuationPromptTests {
         #expect(noSpace.normalizedContinuation(" need approval") == " need approval")
     }
 }
+
+@Suite("Continuation register")
+struct ContinuationRegisterTests {
+    @Test("Bundle identity maps to the right register")
+    func bundleIdentityMapsToRegister() {
+        #expect(ContinuationRegister.from(bundleIdentifier: "com.tinyspeck.slackmacgap") == .chat)
+        #expect(ContinuationRegister.from(bundleIdentifier: "com.anthropic.claudefordesktop") == .chat)
+        #expect(ContinuationRegister.from(bundleIdentifier: "com.apple.mail") == .email)
+        #expect(ContinuationRegister.from(bundleIdentifier: "com.mimestream.Mimestream") == .email)
+        #expect(ContinuationRegister.from(bundleIdentifier: "com.apple.TextEdit") == .prose)
+        #expect(ContinuationRegister.from(bundleIdentifier: nil) == .prose)
+    }
+
+    @Test("Register selects its scaffold voice and token budget")
+    func registerSelectsScaffoldAndBudget() {
+        let chat = RawContinuationPrompt(textBeforeCursor: "yeah ok ", register: .chat)
+        #expect(chat.prompt.contains("real chat messages"))
+        let email = RawContinuationPrompt(textBeforeCursor: "Hi Sarah, ", register: .email)
+        #expect(email.prompt.contains("real emails"))
+        let prose = RawContinuationPrompt(textBeforeCursor: "The report ")
+        #expect(prose.prompt.contains("real documents"))
+        #expect(ContinuationRegister.chat.generatedTokenBudget < ContinuationRegister.prose.generatedTokenBudget)
+    }
+}

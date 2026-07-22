@@ -1068,6 +1068,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Two instances fight over the ghost socket and double the model's
+        // memory — the older instance wins, this one bows out.
+        let me = NSRunningApplication.current
+        let twins = NSRunningApplication.runningApplications(
+            withBundleIdentifier: Bundle.main.bundleIdentifier ?? ""
+        ).filter { $0.processIdentifier != me.processIdentifier }
+        if !twins.isEmpty {
+            DiagnosticsLog.shared.record("duplicate-instance-exit", metadata: [:])
+            NSApp.terminate(nil)
+            return
+        }
         appLifecycleHost.start()
         ghostBrainServerHost.start()
         llamaServerHost.start()
