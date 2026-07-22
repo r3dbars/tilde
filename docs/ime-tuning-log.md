@@ -23,6 +23,21 @@ more dogfood data).
 | Socket timeout (IME side) | 700ms | `GhostBrainClient.timeout` |
 | Accept keys | Tab=word, Shift-Tab=all, Esc=dismiss | `GhostInputController.handle` |
 
+## 2026-07-22 — the predictive trio (measure, context, register)
+
+- **Accept/typed counters (privacy-clean, counts only):** the IME tracks words
+  accepted vs typed, ghosts shown vs taken, split by source (dictionary vs
+  model), flushed to daily buckets in its own defaults; the input menu shows
+  "Today: wrote N words for you (P%)". This is the tuning yardstick from now on.
+- **Context tripled:** IME reads/sends 3000 chars (was 1000); llama -c 4096.
+- **Register-aware scaffolds (core, tested):** ContinuationRegister
+  chat/email/prose from host bundle id; per-register voices + token budgets
+  (chat 12, else 16). Verified live: email/prose voices landing.
+- **Single-instance guard:** duplicate app instances (the day's #1 operational
+  papercut — socket clobbering, doubled model memory) exit at launch.
+- **FUTURE-OPTIONAL (owner-parked):** (4) lightweight personal adaptation;
+  (5) bigger Gemma tiers (12B OptiQ) via the same llama bridge.
+
 ## 2026-07-22 — foundation day
 
 ### Rendering channel
