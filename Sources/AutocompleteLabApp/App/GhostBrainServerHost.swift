@@ -4,8 +4,11 @@ import Foundation
 /// Serves completions to the InlineGhostIME input method over a local unix socket.
 ///
 /// The IME stays a thin, crash-proof pipe; this host answers its requests from the
-/// app's already-warm MLX engine. Wire protocol is one newline-delimited JSON
-/// object per connection: {"v":1,"context":"..."} → {"suggestion":"..."}.
+/// app's already-warm MLX engine. Wire protocol: one newline-delimited JSON request
+/// {"v":1,"context":"...","app":?,"field":?} → a STREAM of newline-delimited JSON
+/// responses: zero or more {"suggestion":"...","partial":true} as the model
+/// generates, then a final {"suggestion":"..."} and close. Partials put the first
+/// words on screen near time-to-first-token instead of time-to-last-token.
 ///
 /// Privacy: requests carry raw typed context. It is used only in-memory to build a
 /// `CompletionRequest` and is never logged or persisted. The socket lives in the
@@ -104,8 +107,20 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 fieldIdentityDescription: payload.field,
                 mode: midWord ? .wordCompletion : .phraseContinuation
             )
-            let suggestion = (try? await engine.suggestion(for: request))??.visibleText ?? ""
-            Self.write(["suggestion": suggestion], to: connection)
+            // Partial callbacks can fire from generation threads; serialize socket
+            // writes so JSON lines never interleave mid-message.
+            let writeLock = NSLock()
+            let send: @Sendable ([String: Any]) -> Void = { object in
+                writeLock.lock()
+                defer { writeLock.unlock() }
+                Self.write(object, to: connection)
+            }
+            let final = try? await engine.suggestion(for: request) { partial in
+                let text = partial.visibleText
+                guard !text.isEmpty else { return }
+                send(["suggestion": text, "partial": true])
+            }
+            send(["suggestion": final?.visibleText ?? ""])
         }
     }
 
@@ -141,7 +156,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         )
     }
 
-    private static func write(_ object: [String: String], to fd: Int32) {
+    private static func write(_ object: [String: Any], to fd: Int32) {
         guard var payload = try? JSONSerialization.data(withJSONObject: object) else { return }
         payload.append(0x0A)
         _ = payload.withUnsafeBytes { raw in
