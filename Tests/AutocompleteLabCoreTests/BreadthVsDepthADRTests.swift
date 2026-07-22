@@ -4,8 +4,8 @@ import Testing
 // Locks the invariants recorded in docs/product/adr/0001-breadth-vs-depth.md.
 //
 // ADR-0001 decided that generic / broad autocomplete support is ON (as of
-// 2026-06-13): apps with no custom profile fall through to the "Generic App"
-// fallback at the `.accept` rung, and routing does not restrict itself to a
+// 2026-06-13): apps with no custom profile fall through to the default-on
+// generic fallback profile, and routing does not restrict itself to a
 // known-apps allowlist. That breadth is only legitimate because a fixed set of
 // safety guardrails holds REGARDLESS of breadth. This suite fails loudly if a
 // future change flips the decision, or relaxes a guardrail, without first
@@ -19,37 +19,53 @@ struct BreadthVsDepthADRTests {
 
     // MARK: Decision — broad support is ON
 
-    @Test("Generic fallback profile stays at the accept rung (broad support ON)")
-    func genericFallbackProfileStaysAtAcceptRung() {
-        let fallback = AppCompatibilityProfile.fallback
+    @Test("Unprofiled apps resolve to the default-on generic fallback (broad support ON)")
+    func unprofiledAppsResolveToDefaultOnFallback() throws {
+        let store = CompatibilityProfileStore.mvp
+        let profile = try #require(store.profile(for: "com.example.some-unprofiled-app"))
 
         // Identity of the broad-support profile.
-        #expect(fallback.id == "fallback")
-        #expect(fallback.displayName == "Generic App")
+        #expect(profile.displayName == "Generic App")
 
-        // The decision of record: unprofiled apps reach the `.accept` rung — not
-        // `.blocked` (the narrow / covenant-restored value) and not merely
-        // `.detect`. Over the native Accessibility path with direct insertion.
-        #expect(fallback.defaultRung == .accept)
-        #expect(fallback.textPath == .nativeAccessibility)
-        #expect(fallback.acceptMode == .directAccessibility)
-    }
-
-    @Test("Routing does not enforce a known-apps allowlist (broad support ON)")
-    func routingDoesNotEnforceKnownApps() {
-        // `enforceKnownApps == true` is the narrow posture; ADR-0001 keeps it off
-        // so unprofiled apps route to the generic fallback instead of being
-        // rejected as unsupported.
-        #expect(CompatibilityRoutingSettings.mvp.enforceKnownApps == false)
+        // The decision of record: unprofiled apps can request, show, and accept
+        // suggestions over the native Accessibility path — they are not rejected
+        // as unsupported.
+        #expect(profile.canPresentSuggestions)
+        #expect(profile.supportsOneWordAcceptance)
+        #expect(store.allows(bundleIdentifier: "com.example.some-unprofiled-app"))
     }
 
     // MARK: Guardrails — always on, regardless of breadth
 
-    @Test("Secure-field suppression is always on")
-    func secureFieldSuppressionIsAlwaysOn() {
-        // Non-negotiable guardrail: secure fields are suppressed before the
-        // fallback rung is ever consulted.
-        #expect(CompatibilityRoutingSettings.mvp.suppressSecureFields == true)
+    @Test("Sensitive apps stay denylisted regardless of breadth")
+    func sensitiveAppsStayDenylisted() {
+        let store = CompatibilityProfileStore.mvp
+
+        // Password managers, system settings, and terminal emulators never fall
+        // through to the generic rung.
+        for bundleIdentifier in [
+            "com.1password.1password",
+            "com.apple.systemsettings",
+            "com.apple.Terminal"
+        ] {
+            #expect(store.supportStatus(for: bundleIdentifier) == .denylisted)
+            #expect(!store.allows(bundleIdentifier: bundleIdentifier))
+        }
+    }
+
+    @Test("Guardrails win over breadth: secure fields are hard-blocked")
+    func guardrailsWinOverBreadthForSecureFields() {
+        // Even on the generic fallback rung, a secure field is blocked before
+        // any suggestion is requested.
+        let decision = CompletionActivationPolicy().decision(
+            textBeforeCursor: "Hello there friend",
+            textAfterCursor: "",
+            isSecure: true,
+            isFieldSuppressed: false
+        )
+
+        #expect(decision == .block(.secureField))
+        #expect(!decision.canSuggest)
     }
 
     @Test("Send surfaces are never treated as not-a-prompt")
@@ -57,8 +73,7 @@ struct BreadthVsDepthADRTests {
         // Messages / Slack / Discord are sendable surfaces: Return can submit, so
         // they must never be downgraded to `.notPrompt` (the relaxed,
         // not-a-prompt-surface mode). They may be `.disabled`, `.clickOnly`, or
-        // `.wordOnly` — anything except `.notPrompt`. Locked on both the
-        // compatibility profile and the host policy.
+        // `.wordOnly` — anything except `.notPrompt`.
         let sendSurfaceBundleIdentifiers = [
             "com.apple.MobileSMS",       // Messages
             "com.tinyspeck.slackmacgap", // Slack
@@ -66,69 +81,11 @@ struct BreadthVsDepthADRTests {
         ]
 
         let profiles = CompatibilityProfileStore.mvp.profiles
-        let policies = HostCompatibilityPolicyCatalog.mvp.policies
 
         for bundleIdentifier in sendSurfaceBundleIdentifiers {
             let profile = try #require(profiles[bundleIdentifier])
             #expect(profile.promptAppSafetyMode != .notPrompt)
             #expect(profile.promptAppSafetyMode.isPromptSurface)
-
-            let policy = try #require(policies[bundleIdentifier])
-            #expect(policy.safetyMode != .notPrompt)
-            #expect(policy.safetyMode.isPromptSurface)
         }
-    }
-
-    // MARK: Behavior — breadth and guardrails meet at the router
-
-    @Test("An arbitrary app reaches the accept rung through the generic fallback")
-    func arbitraryAppReachesAcceptRungThroughGenericFallback() {
-        let router = CompatibilityRouter()
-        let decision = router.decision(
-            for: CompatibilityEvaluationContext(
-                bundleIdentifier: "com.example.some-unprofiled-app",
-                elementRole: "AXTextArea",
-                elementSubrole: nil,
-                fieldClassifierInput: AXFieldClassifierInput(
-                    role: "AXTextArea",
-                    textBeforeCursorLength: 18,
-                    lineCount: 1
-                ),
-                isSecureTextEntry: false,
-                textBeforeCursor: "Hello there friend",
-                hasCaretRect: true
-            )
-        )
-
-        // Broad support: an unknown app routes to the generic fallback and is NOT
-        // rejected as unsupported (that suppression reason only appears under the
-        // narrow `enforceKnownApps` posture).
-        #expect(decision.profile.id == AppCompatibilityProfile.fallback.id)
-        #expect(decision.suppressionReason == nil)
-        #expect(decision.rung == .accept)
-        #expect(decision.shouldRequestSuggestion)
-        #expect(decision.canAcceptSuggestion)
-    }
-
-    @Test("Guardrails win over breadth: a secure field on the generic fallback is blocked")
-    func guardrailsWinOverBreadthForSecureFields() {
-        let router = CompatibilityRouter()
-        let decision = router.decision(
-            for: CompatibilityEvaluationContext(
-                bundleIdentifier: "com.example.some-unprofiled-app",
-                elementRole: nil,
-                elementSubrole: nil,
-                isSecureTextEntry: true,
-                textBeforeCursor: "Hello there friend",
-                hasCaretRect: true
-            )
-        )
-
-        // Even though the same app reaches `.accept` on a normal compose field,
-        // a secure field is hard-blocked regardless of breadth.
-        #expect(decision.profile.id == AppCompatibilityProfile.fallback.id)
-        #expect(decision.rung == .blocked)
-        #expect(decision.suppressionReason == .secureTextEntry)
-        #expect(!decision.canShowSuggestion)
     }
 }

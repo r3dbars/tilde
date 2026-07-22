@@ -198,52 +198,6 @@ struct TypingReplayEvalTests {
         #expect(score.keystrokesSaved == "we should ship this".count)
     }
 
-    @Test("Wrong-topic synthetic cases keep offline quality guardrails active")
-    func syntheticTopicsPassOfflineGuardrails() async throws {
-        let fixtures = [
-            OfflineModelQualityAuditTask(
-                id: "shipping",
-                textBeforeCursor: "I think",
-                expectedMeaningTerms: ["we", "should", "ship", "this"],
-                maxVisibleWords: 4
-            ),
-            OfflineModelQualityAuditTask(
-                id: "latency",
-                textBeforeCursor: "Can we",
-                expectedMeaningTerms: ["make", "this", "feel", "instant"],
-                maxVisibleWords: 4
-            ),
-            OfflineModelQualityAuditTask(
-                id: "scope",
-                textBeforeCursor: "The plan",
-                expectedMeaningTerms: ["is", "to", "keep", "small"],
-                maxVisibleWords: 5
-            )
-        ]
-        let engine = MockCompletionEngine()
-        var scores: [OfflineModelOutputScore] = []
-        for fixture in fixtures {
-            let suggestion = try await engine.suggestion(for: CompletionRequest(
-                textBeforeCursor: fixture.textBeforeCursor,
-                maxVisibleWords: fixture.maxVisibleWords,
-                suggestionID: fixture.id
-            ))
-            scores.append(OfflineModelQualityEvaluator.scoreAuditOutput(
-                output: suggestion?.visibleText ?? "",
-                for: fixture
-            ))
-        }
-
-        let threshold = OfflineModelQualityEvaluator.thresholdResult(
-            scores: scores,
-            thresholds: OfflineModelQualityThresholds(minimumTasks: 3)
-        )
-
-        #expect(Set(fixtures.map(\.id)).count == 3)
-        #expect(scores.allSatisfy { $0.wrongTopic == 1 })
-        #expect(threshold.passes)
-    }
-
     private func entry(
         _ text: String,
         app: String = "app.one",

@@ -1,6 +1,42 @@
 import CoreGraphics
 import Foundation
 
+public enum CompatibilityRung: Int, CaseIterable, Comparable, Sendable {
+    case blocked = 0
+    case detect = 1
+    case suggest = 2
+    case accept = 3
+    case stableBeta = 4
+    case supportedCandidate = 5
+
+    public static func < (lhs: CompatibilityRung, rhs: CompatibilityRung) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    public var allowsSuggestions: Bool {
+        self >= .suggest
+    }
+
+    public var allowsAcceptance: Bool {
+        self >= .accept
+    }
+}
+
+public enum TextIntegrationPath: String, Equatable, Sendable {
+    case nativeAccessibility
+    case webExtension
+    case editorPlugin
+    case overlayOnly
+    case blocked
+}
+
+public enum SuggestionAcceptMode: String, Equatable, Sendable {
+    case none
+    case directAccessibility
+    case clipboardFallback
+    case domExtension
+}
+
 public enum LineRectPolicy: String, Equatable, Sendable {
     case trustAfterValidation
     case caretOnly
