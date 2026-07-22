@@ -13,8 +13,8 @@ more dogfood data).
 
 | Dial | Value | Where |
 |---|---|---|
-| Pause before ghost appears | 180ms | `GhostInputController.scheduleGhostAfterPause` |
-| Min letters before dictionary completes | 3 | `GhostInputController.dictionaryCompletion` |
+| Pause before ghost appears | 10ms mid-word / 50ms boundary (speed experiment; calm was 100/180) | `GhostInputController.scheduleGhostAfterPause` |
+| Min letters before dictionary completes | 2 (dictionary LEADS mid-word; doc vocab is fallback) | `GhostInputController.dictionaryCompletion` |
 | Min context before model is asked | 12 chars | `GhostInputController.requestModelGhost` |
 | Context sent to model | last 1000 chars | `GhostInputController.requestModelGhost` |
 | Fast-layer chain length | 4 words | `GhostInputController.predict` |
