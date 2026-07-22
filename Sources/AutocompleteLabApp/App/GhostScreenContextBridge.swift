@@ -130,27 +130,14 @@ final class GhostScreenContextBridge: @unchecked Sendable {
               let window = frontmostWindow(pid: app.processIdentifier) else { return nil }
         return FocusedTextContext(
             elementIdentifier: 0,
-            role: nil,
-            subrole: nil,
-            fingerprint: FocusedElementFingerprint(),
             textBeforeCursor: textBeforeCursor,
-            textAfterCursor: "",
             selectedTextLength: 0,
             caretRect: nil,
             elementRect: nil,
             windowRect: window.rect,
             windowIdentifier: window.number,
             textLineRect: nil,
-            textStyle: nil,
-            isSecure: false,
-            caretIsSynthetic: true,
-            capabilities: FocusedTextCapabilities(
-                canReadValue: false,
-                canReadSelectedTextRange: false,
-                canReadBoundsForRange: false,
-                canReadAttributedText: false,
-                canSetSelectedText: false
-            )
+            isSecure: false
         )
     }
 
