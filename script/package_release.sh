@@ -421,11 +421,9 @@ case "$MODE" in
       fi
     fi
 
-    if ./script/check_model_asset.py --quiet; then
       echo "Preferred MLX model: ready"
     else
       echo "Preferred MLX model: blocked - required app-owned model is missing, invalid, corrupt, or not checksum-verified"
-      echo "Run ./script/check_model_asset.py for the exact fix."
       check_failed=1
     fi
     exit "$check_failed"
@@ -437,7 +435,6 @@ case "$MODE" in
       exit 1
     fi
 
-    ./script/check_model_asset.py
 
     release_scratch_path="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build-release}"
     release_build_jobs="${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-4}"

@@ -23,6 +23,24 @@ more dogfood data).
 | Socket timeout (IME side) | 700ms | `GhostBrainClient.timeout` |
 | Accept keys | Tab=word, Shift-Tab=all, Esc=dismiss | `GhostInputController.handle` |
 
+## 2026-07-22 — THE GREAT DIVORCE (llama-only)
+
+- Deleted the entire legacy world in one gate-green PR: AX reading + overlay
+  presentation + insertion pipeline + orchestration hosts + per-app repair
+  policies + the whole MLX stack (runtime, KV-cache owner, model-install,
+  patches/, four package dependencies). AppDelegate: 8,831 → 85 lines. ~450
+  files removed. `ModeRoutedCompletionEngine` fallback is now
+  `UnavailableCompletionEngine` — llama-or-silence, with the IME's Apple
+  fallback only when the app is down.
+- Build is dependency-free (SwiftPM resolves nothing external); proof gate
+  slimmed (MLX self-tests removed).
+- **OPEN (security, from the divorce audit):** the old pipeline hard-blocked
+  secure fields and denylisted password managers; the IME path has no
+  equivalent guard yet. macOS secure-input bypasses IMEs for true password
+  fields (free protection), but browser password inputs and password-manager
+  apps deserve an explicit IME-side denylist. Owner decision + small build
+  needed; supersedes ADR-0001.
+
 ## 2026-07-22 — the predictive trio (measure, context, register)
 
 - **Accept/typed counters (privacy-clean, counts only):** the IME tracks words
