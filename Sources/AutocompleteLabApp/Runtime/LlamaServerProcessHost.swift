@@ -61,6 +61,12 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             "--host", "127.0.0.1",
             "--port", String(Self.port),
             "-c", "2048",
+            // Gemma uses sliding-window attention; without --swa-full the slot
+            // cache can't roll back past the window and consecutive keystrokes
+            // re-read the whole prompt. --cache-reuse enables chunked prefix
+            // reuse so only the newly typed tokens are processed.
+            "--swa-full",
+            "--cache-reuse", "256",
         ]
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice

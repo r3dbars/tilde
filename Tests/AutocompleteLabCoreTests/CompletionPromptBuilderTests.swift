@@ -711,6 +711,25 @@ struct RawContinuationPromptTests {
         #expect(prompt.prompt.contains("word600"))
     }
 
+    @Test("Screen context sits between scaffold and text as reference notes")
+    func screenContextSitsBetweenScaffoldAndText() {
+        let prompt = RawContinuationPrompt(
+            textBeforeCursor: "since we ",
+            screenContext: "Q3 Launch Plan\nOwner: Sarah Chen"
+        )
+
+        #expect(prompt.prompt.contains("Reference notes visible on the writer's screen"))
+        #expect(prompt.prompt.contains("Q3 Launch Plan"))
+        // Screen block must come BEFORE the Text line so it stays in the
+        // server's cacheable prompt prefix.
+        let notesIndex = prompt.prompt.range(of: "Reference notes")!.lowerBound
+        let textIndex = prompt.prompt.range(of: "Text: since we")!.lowerBound
+        #expect(notesIndex < textIndex)
+
+        let bare = RawContinuationPrompt(textBeforeCursor: "since we ")
+        #expect(!bare.prompt.contains("Reference notes"))
+    }
+
     @Test("Normalization strips the duplicate separating space and stops at newlines")
     func normalizationHandlesSpacesAndNewlines() {
         let afterSpace = RawContinuationPrompt(textBeforeCursor: "since we ")
