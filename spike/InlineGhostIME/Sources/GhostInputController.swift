@@ -71,7 +71,9 @@ final class GhostInputController: IMKInputController {
             break
         }
 
-        // Printable single characters (incl. space): commit them, then re-offer a ghost.
+        // Printable single characters (incl. space): commit them, then re-offer a ghost
+        // after a short pause. While fingers are moving there is NO marked text — the
+        // caret renders normally and the ghost only appears when typing rests.
         if let chars = event.characters,
            chars.count == 1,
            let scalar = chars.unicodeScalars.first,
@@ -80,7 +82,7 @@ final class GhostInputController: IMKInputController {
             client.insertText(chars, replacementRange: Self.unset)
             typedFallback.append(chars)
             if typedFallback.count > 2000 { typedFallback.removeFirst(500) }
-            updateGhost(client)
+            scheduleGhostAfterPause(client)
             return true
         }
 
@@ -169,7 +171,8 @@ final class GhostInputController: IMKInputController {
         let separators = CharacterSet.alphanumerics.inverted
         let words = context.components(separatedBy: separators).filter { !$0.isEmpty }
 
-        // 2. Mid-word: complete the partial word from the document's own vocabulary.
+        // 2. Mid-word: the document's own vocabulary wins; otherwise fall back to the
+        //    system dictionary, which ranks completions by likelihood ("wh" → "what").
         if let last = tail.unicodeScalars.last, !separators.contains(last) {
             guard let partial = words.last, partial.count >= 2 else { return "" }
             let lowerPartial = partial.lowercased()
@@ -181,9 +184,32 @@ final class GhostInputController: IMKInputController {
             if let best = counts.max(by: { ($0.value, $1.key) < ($1.value, $0.key) })?.key {
                 return String(best.dropFirst(partial.count))
             }
-            return ""
+            return dictionaryCompletion(for: partial)
         }
 
+        return nextWordPrediction(lowerTail: lowerTail, words: words)
+    }
+
+    /// macOS's spell checker returns completions for a partial word ranked by
+    /// likelihood — an instant, real English vocabulary with zero shipped data.
+    private func dictionaryCompletion(for partial: String) -> String {
+        guard partial.count >= 3 else { return "" }
+        let range = NSRange(location: 0, length: (partial as NSString).length)
+        let candidates = NSSpellChecker.shared.completions(
+            forPartialWordRange: range,
+            in: partial,
+            language: "en",
+            inSpellDocumentWithTag: 0
+        ) ?? []
+        let lowerPartial = partial.lowercased()
+        for candidate in candidates
+        where candidate.count > partial.count && candidate.lowercased().hasPrefix(lowerPartial) {
+            return String(candidate.dropFirst(partial.count))
+        }
+        return ""
+    }
+
+    private func nextWordPrediction(lowerTail: String, words: [String]) -> String {
         // 3. After a space: next word from the document's bigrams, else common English.
         guard lowerTail.hasSuffix(" "), let previous = words.last?.lowercased() else { return "" }
         var bigrams: [String: Int] = [:]
@@ -199,6 +225,19 @@ final class GhostInputController: IMKInputController {
     }
 
     // MARK: - Ghost lifecycle
+
+    /// Debounce: the ghost appears only after typing rests for a beat. Fresh
+    /// keystrokes bump `generation`, so pending reveals cancel themselves.
+    private func scheduleGhostAfterPause(_ client: IMKTextInput) {
+        generation += 1
+        let gen = generation
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard let self, self.generation == gen else { return }
+            guard let liveClient = self.client() else { return }
+            self.updateGhost(liveClient)
+        }
+    }
 
     private func updateGhost(_ client: IMKTextInput) {
         generation += 1
@@ -229,8 +268,8 @@ final class GhostInputController: IMKInputController {
     // MARK: - Model layer: SteadyType MLX brain first, Apple on-device model fallback
 
     private func requestModelGhost(_ client: IMKTextInput, context: String) {
-        // Word boundaries only; require a little context so continuations aren't wild.
-        guard context.hasSuffix(" ") || context.hasSuffix("\n") else { return }
+        // Mid-word AND word-boundary contexts both go to the brain; the server picks
+        // the engine mode. Require a little context so answers aren't wild.
         let tail = String(context.suffix(300))
         guard tail.count >= 12 else { return }
 
@@ -265,6 +304,8 @@ final class GhostInputController: IMKInputController {
     private func appleModelGhost(tail: String, gen: Int) async {
         #if canImport(FoundationModels)
         guard #available(macOS 26.0, *) else { return }
+        // Continuation prompt only makes sense at word boundaries.
+        guard tail.hasSuffix(" ") || tail.hasSuffix("\n") else { return }
         guard case .available = SystemLanguageModel.default.availability else { return }
         if modelSession == nil {
             modelSession = LanguageModelSession(instructions: """

@@ -94,7 +94,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
             defer { close(connection) }
             guard let self, let context = Self.readContext(connection) else { return }
             let engine = await self.engineProvider()
-            let request = CompletionRequest(textBeforeCursor: context)
+            // Mid-word contexts want the engine's word-completion mode; word
+            // boundaries want phrase continuation.
+            let midWord = context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
+            let request = CompletionRequest(
+                textBeforeCursor: context,
+                mode: midWord ? .wordCompletion : .phraseContinuation
+            )
             let suggestion = (try? await engine.suggestion(for: request))??.visibleText ?? ""
             Self.write(["suggestion": suggestion], to: connection)
         }
