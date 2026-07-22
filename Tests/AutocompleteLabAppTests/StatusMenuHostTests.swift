@@ -14,14 +14,9 @@ struct StatusMenuHostTests {
             contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/StatusMenuHost.swift"),
             encoding: .utf8
         )
-        let wiring = try String(
-            contentsOf: root.appendingPathComponent("Sources/AutocompleteLabApp/App/StatusMenuWiring.swift"),
-            encoding: .utf8
-        )
 
-        #expect(appDelegate.contains("StatusMenuHost(\n        handler: self"))
-        #expect(wiring.contains("extension AppDelegate: StatusMenuActionHandling"))
-        #expect(wiring.contains("handleStatusMenuAction(_ action: StatusMenuAction)"))
+        #expect(appDelegate.contains("StatusMenuHost(\n        appDelegate: self"))
+        #expect(appDelegate.contains("func handleStatusMenuAction(_ action: StatusMenuAction)"))
         #expect(!appDelegate.contains("private func configureStatusItem()"))
         #expect(!appDelegate.contains("#selector("))
         #expect(host.contains("developerMenuEnabled"))

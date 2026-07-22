@@ -15,6 +15,25 @@ struct SuggestionModelResultHostDependencies {
     let annoyanceContext: (String, FocusedFieldIdentity?, CompletionRequestMode?, AXFieldKind) -> AnnoyanceContext?
     let recordAnnoyanceSignal: (AnnoyanceSignal, AnnoyanceContext?, String, String) -> Void
     let presentSuggestion: (CompletionSuggestion, SuggestionModelResultPresentation) -> Void
+
+    // Streaming partial presentation (merged from SuggestionStreamingPartialHost)
+    let presentStreamingPartial: (CompletionSuggestion, SuggestionStreamingPartialPresentation) -> Void
+
+    // Continuation failure cleanup (merged from SuggestionContinuationFailureHost)
+    let updateKeyboardEventTapSnapshot: () -> Void
+}
+
+@MainActor
+struct SuggestionStreamingPartialPresentation: Equatable, Sendable {
+    let suggestionID: String
+    let request: CompletionRequest
+    let context: FocusedTextContext
+    let profile: CompatibilityProfile
+    let fieldIdentity: FocusedFieldIdentity
+    let renderMode: SuggestionRenderMode
+    let latencyMilliseconds: Int
+    let requestTicket: SuggestionRequestTicket
+    let candidateSelectionMetadata: [String: String]
 }
 
 @MainActor
@@ -258,5 +277,100 @@ final class SuggestionModelResultHost {
             currentFieldIdentity: dependencies.currentFieldIdentity(),
             hasVisibleSuggestion: dependencies.hasVisibleSuggestion()
         )
+    }
+
+    /// Owns the first-visible streaming-partial gate and keeps native presentation in the app
+    /// delegate through one injected callback.
+    func handlePartial(
+        partialSuggestion: CompletionSuggestion,
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        renderMode: SuggestionRenderMode,
+        requestTicket: SuggestionRequestTicket,
+        requestStartedAt: Date
+    ) {
+        let latencyMilliseconds = max(0, Int(Date().timeIntervalSince(requestStartedAt) * 1000))
+        guard dependencies.suggestionOrchestrator.allows(
+            requestTicket,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: dependencies.currentFieldIdentity()
+        ) else {
+            return
+        }
+
+        guard !partialSuggestion.isEmpty,
+              !dependencies.suggestionOrchestrator.shouldSuppressRepetition(
+                  partialSuggestion.visibleText,
+                  mode: request.mode,
+                  scope: appBundleIdentifier
+              ) else {
+            return
+        }
+
+        guard dependencies.suggestionOrchestrator.shouldPresentStreamingPartial(
+            partialSuggestion,
+            suggestionID: suggestionID,
+            mode: request.mode,
+            nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000),
+            latencyMilliseconds: latencyMilliseconds
+        ) else {
+            return
+        }
+
+        dependencies.presentStreamingPartial(
+            partialSuggestion,
+            SuggestionStreamingPartialPresentation(
+                suggestionID: suggestionID,
+                request: request,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds,
+                requestTicket: requestTicket,
+                candidateSelectionMetadata: dependencies.suggestionOrchestrator
+                    .streamingPresentationMetadata(suggestionID: suggestionID)
+            )
+        )
+    }
+
+    /// Keeps model-continuation failure cleanup together without moving native presentation or
+    /// latency-result decisions.
+    func handleContinuationFailure(
+        suggestionID: String,
+        requestTicket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) {
+        dependencies.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
+        if dependencies.suggestionOrchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: suggestionID,
+            currentSuggestionID: dependencies.currentSuggestionID(),
+            ticket: requestTicket,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: dependencies.currentFieldIdentity(),
+            hasVisibleSuggestion: dependencies.hasVisibleSuggestion()
+        ) {
+            dependencies.setSuggestionDecision("Shown: kept instant phrase after model error")
+            dependencies.repositionVisibleSuggestion(context, profile)
+            dependencies.updateKeyboardEventTapSnapshot()
+            return
+        }
+
+        guard dependencies.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
+            ticket: requestTicket,
+            failedRequestFieldIdentity: fieldIdentity,
+            currentFieldIdentity: dependencies.currentFieldIdentity()
+        ) else {
+            return
+        }
+
+        dependencies.setSuggestionDecision(SuggestionStatusText.notShown(reason: "engine-error"))
+        dependencies.hideSuggestion("engine-error")
     }
 }

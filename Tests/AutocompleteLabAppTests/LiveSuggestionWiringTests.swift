@@ -6,14 +6,8 @@ struct LiveSuggestionWiringTests {
     @Test("App delegate wires product predictors and display policies through the orchestrator")
     func appDelegateWiresProductPredictorsAndDisplayPolicies() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
-        let preparationHost = try source(
-            "Sources/AutocompleteLabApp/App/SuggestionRequestPreparationHost.swift"
-        )
-        let streamingPartialHost = try source(
-            "Sources/AutocompleteLabApp/App/SuggestionStreamingPartialHost.swift"
-        )
-        let requestExecutionHost = try source(
-            "Sources/AutocompleteLabApp/App/SuggestionRequestExecutionHost.swift"
+        let modelResultHost = try source(
+            "Sources/AutocompleteLabApp/App/SuggestionModelResultHost.swift"
         )
         let schedulingHost = try source(
             "Sources/AutocompleteLabApp/App/SuggestionSchedulingHost.swift"
@@ -22,7 +16,7 @@ struct LiveSuggestionWiringTests {
             "Sources/AutocompleteLabApp/App/SuggestionPresentationOrchestrationHost.swift"
         )
         let suggestionWiring =
-            appDelegate + preparationHost + streamingPartialHost + requestExecutionHost + schedulingHost + presentationOrchestrationHost
+            appDelegate + modelResultHost + schedulingHost + presentationOrchestrationHost
 
         try require(suggestionWiring, contains: "private lazy var suggestionOrchestrator = SuggestionOrchestrator(")
         try require(suggestionWiring, contains: "wordCompletionRanker: wordCompletionRanker")
