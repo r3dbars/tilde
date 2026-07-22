@@ -11,18 +11,12 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
     public static let proofScenarioEnvironmentKey =
         "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
-    public static let codexPromptFullAcceptNoSubmitScenario =
-        "codex-full-accept-no-submit"
 
     public let disablesFastWordCompletion: Bool
     public let disablesWordCompletion: Bool
     public let disablesPhraseContinuation: Bool
     public let disablesFastPhraseFallback: Bool
     public let proofScenario: String?
-
-    public var allowsCodexPromptFullAcceptNoSubmitProof: Bool {
-        proofScenario == Self.codexPromptFullAcceptNoSubmitScenario
-    }
 
     public init(
         disablesFastWordCompletion: Bool = false,

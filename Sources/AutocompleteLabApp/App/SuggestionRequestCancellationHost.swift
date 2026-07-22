@@ -2,9 +2,6 @@ import Foundation
 
 @MainActor
 struct SuggestionRequestCancellationHostDependencies {
-    let clearCooldownPreservation: () -> Void
-    let hasScheduledPresentationRetry: () -> Bool
-    let cancelPresentationRetry: () -> Void
     let cancelPendingRequest: () -> Bool
     let clearStreamingPresentations: () -> Void
     let invalidateRequest: () -> Void
@@ -12,7 +9,7 @@ struct SuggestionRequestCancellationHostDependencies {
 
 /// Owns the ordering-sensitive cancellation boundary for one suggestion request.
 /// Request execution and presentation remain in AppDelegate until their own seams are
-/// extracted; this host keeps transient retry, scheduler, and streaming cleanup together.
+/// extracted; this host keeps scheduler and streaming cleanup together.
 @MainActor
 final class SuggestionRequestCancellationHost {
     private let dependencies: SuggestionRequestCancellationHostDependencies
@@ -23,20 +20,9 @@ final class SuggestionRequestCancellationHost {
 
     @discardableResult
     func cancelPendingRequest(reason: String) -> Bool {
-        dependencies.clearCooldownPreservation()
-
-        let cancelledPresentationRefreshRetry = dependencies.hasScheduledPresentationRetry()
-        dependencies.cancelPresentationRetry()
-        if cancelledPresentationRefreshRetry {
-            DiagnosticsLog.shared.record(
-                "codex-prompt-target-refresh-retry-cancelled",
-                metadata: ["reason": reason]
-            )
-        }
-
         let cancelledPendingRequest = dependencies.cancelPendingRequest()
         guard cancelledPendingRequest else {
-            return cancelledPresentationRefreshRetry
+            return false
         }
 
         dependencies.clearStreamingPresentations()

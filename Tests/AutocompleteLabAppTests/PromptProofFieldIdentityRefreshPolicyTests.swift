@@ -8,7 +8,7 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Allows word-only prompt proof identity churn inside proof mode")
     func allowsWordOnlyPromptProofIdentityChurnInsideProofMode() throws {
-        let profile = try codexProfile().replacingAcceptanceProofMode(
+        let profile = try promptAppProfile().replacingAcceptanceProofMode(
             supportsFullAcceptance: false,
             requiresNoSubmitAcceptanceProof: true
         )
@@ -24,7 +24,7 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Allows Codex full-accept proof profile identity churn inside proof mode")
     func allowsCodexFullAcceptProofProfileIdentityChurnInsideProofMode() throws {
-        let profile = try codexProfile().replacingAcceptanceProofMode(
+        let profile = try promptAppProfile().replacingAcceptanceProofMode(
             supportsFullAcceptance: true,
             requiresNoSubmitAcceptanceProof: false
         )
@@ -40,7 +40,7 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Blocks full-accept proof profile identity churn outside the proof scenario")
     func blocksFullAcceptProofProfileIdentityChurnOutsideProofScenario() throws {
-        let profile = try codexProfile().replacingAcceptanceProofMode(
+        let profile = try promptAppProfile().replacingAcceptanceProofMode(
             supportsFullAcceptance: true,
             requiresNoSubmitAcceptanceProof: false
         )
@@ -56,7 +56,7 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Blocks prompt proof identity churn across processes")
     func blocksPromptProofIdentityChurnAcrossProcesses() throws {
-        let profile = try codexProfile()
+        let profile = try promptAppProfile()
 
         #expect(!policy.canTrustRefresh(
             requestFieldIdentity: identity(processIdentifier: 42, elementIdentifier: 7),
@@ -69,7 +69,7 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Blocks prompt proof identity churn outside proof mode")
     func blocksPromptProofIdentityChurnOutsideProofMode() throws {
-        let profile = try codexProfile()
+        let profile = try promptAppProfile()
 
         #expect(!policy.canTrustRefresh(
             requestFieldIdentity: identity(elementIdentifier: 7),
@@ -80,8 +80,8 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
         ))
     }
 
-    private func codexProfile() throws -> CompatibilityProfile {
-        try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
+    private func promptAppProfile() throws -> CompatibilityProfile {
+        try #require(CompatibilityProfileStore.mvp.profile(for: "com.anthropic.claudefordesktop"))
     }
 
     private func identity(
@@ -89,7 +89,7 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
         elementIdentifier: Int
     ) -> FocusedFieldIdentity {
         FocusedFieldIdentity(
-            bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             processIdentifier: processIdentifier,
             elementIdentifier: elementIdentifier
         )

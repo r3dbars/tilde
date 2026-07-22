@@ -107,40 +107,6 @@ struct LiveSuggestionWiringTests {
         try require(suggestionTriggerWiring, contains: "? \"idle-retry\"")
     }
 
-    @Test("App delegate preserves and rechecks transient Codex prompt targets")
-    func appDelegatePreservesAndRechecksTransientCodexPromptTargets() throws {
-        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
-        let refreshHost = try source(
-            "Sources/AutocompleteLabApp/App/SuggestionPresentationRefreshHost.swift"
-        )
-        let orchestrationHost = try source(
-            "Sources/AutocompleteLabApp/App/SuggestionPresentationOrchestrationHost.swift"
-        )
-        let suggestionPresentationWiring = appDelegate + refreshHost + orchestrationHost
-
-        try require(suggestionPresentationWiring, contains: "codexPromptTargetInvalidationResolution(")
-        try require(suggestionPresentationWiring, contains: "promptTargetInvalidationResolution == .cancelAndRetry")
-        try require(suggestionPresentationWiring, contains: "cancelAndRearmCodexPromptTargetWork(")
-        try require(suggestionPresentationWiring, contains: "codex-prompt-target-refresh-quarantined")
-        try require(suggestionPresentationWiring, contains: "\"presentation-refresh\"")
-        try require(suggestionPresentationWiring, contains: "return (nil, \"quarantined-codex-prompt-target\")")
-        try require(appDelegate, contains: "axHealthInvalidationResolution(")
-        try require(appDelegate, contains: "rearmedTransientRequest")
-        try require(appDelegate, contains: "\"codex-prompt-target-refresh-deferred\"")
-        try require(appDelegate, contains: "scheduleCodexPromptPresentationRefreshRetry(")
-        try require(appDelegate, contains: "codexPromptPresentationRetryHost.schedule(afterMilliseconds:")
-        try require(appDelegate, contains: "codexPromptPresentationRetryHost.cancel()")
-        try require(appDelegate, contains: "canPreserveDuringAXCooldown(")
-        try require(appDelegate, contains: "preservePendingRequest: shouldPreservePendingRequest")
-        try require(appDelegate, contains: "codexPromptAXCooldownPresentationDelayMilliseconds(")
-        try require(appDelegate, contains: "scheduleCodexPromptPresentationAfterAXCooldown(")
-        try require(appDelegate, contains: "codex-prompt-presentation-deferred-for-ax-cooldown")
-        try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
-        try require(appDelegate, contains: "suggestionChromeHost.hideFieldStatusIndicator()")
-        try require(suggestionPresentationWiring, contains: "switch codexPromptTargetContinuityHost.presentationPreparationPolicy.preparation(")
-        try require(suggestionPresentationWiring, contains: "case let .deferForAXCooldown(delayMilliseconds):")
-        try require(suggestionPresentationWiring, contains: "case .refreshFocusedContext:")
-    }
 }
 
 private func source(_ relativePath: String) throws -> String {

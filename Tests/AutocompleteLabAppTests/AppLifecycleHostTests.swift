@@ -38,7 +38,6 @@ struct AppLifecycleHostTests {
             "begin-activity",
             "accessory",
             "prepare",
-            "proof-observer",
             "status-menu",
             "launch-diagnostics",
             "accessibility",
@@ -82,7 +81,6 @@ private final class LifecycleRecorder: AppLifecycleHandling {
     var activityCount = 0
 
     func prepareForLaunch() { events.append("prepare") }
-    func startProofOnlyAcceptCommandObserver() { events.append("proof-observer") }
     func startStatusMenu() { events.append("status-menu") }
     func recordLaunchDiagnostics() { events.append("launch-diagnostics") }
     func requestAccessibilityPermissionIfNeeded() { events.append("accessibility") }

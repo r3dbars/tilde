@@ -282,8 +282,6 @@ public struct AutocompleteBehaviorProfileResolver: Equatable, Sendable {
     }
 
     private static let aiChatBundleIdentifiers: Set<String> = [
-        "com.openai.codex",
-        "com.anthropic.claude-code",
         "com.anthropic.claudefordesktop"
     ]
 

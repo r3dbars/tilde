@@ -42,15 +42,6 @@ struct HostCompatibilityPolicyTests {
             #expect(policy.killSwitch == .proofModeRequired || policy.killSwitch == .hardDisabled)
         }
 
-        let codex = try #require(catalog.policy(for: "com.openai.codex"))
-        #expect(codex.hostVersion == .exact(
-            shortVersion: "26.519.22136",
-            build: "3003",
-            source: "/Applications/Codex.app"
-        ))
-        #expect(codex.runtimeState == .userToggleAllowed)
-        #expect(codex.killSwitch == .perHostDisable)
-
         for bundleIdentifier in [
             "com.openai.chat",
             "com.openai.ChatGPT",
@@ -76,15 +67,9 @@ struct HostCompatibilityPolicyTests {
         for policy in wordOnlyPolicies {
             let profile = try #require(profiles[policy.bundleIdentifier])
             #expect(profile.supportsOneWordAcceptance)
-            if policy.bundleIdentifier == "com.openai.codex" {
-                #expect(profile.supportsFullAcceptance)
-                #expect(!profile.requiresNoSubmitAcceptanceProof)
-                #expect(policy.killSwitch == .perHostDisable)
-            } else {
-                #expect(!profile.supportsFullAcceptance)
-                #expect(profile.requiresNoSubmitAcceptanceProof)
-                #expect([.proofModeRequired, .perHostDisable].contains(policy.killSwitch))
-            }
+            #expect(!profile.supportsFullAcceptance)
+            #expect(profile.requiresNoSubmitAcceptanceProof)
+            #expect([.proofModeRequired, .perHostDisable].contains(policy.killSwitch))
             #expect(!policy.proofArtifacts.isEmpty)
         }
     }
@@ -116,8 +101,6 @@ struct HostCompatibilityPolicyTests {
             "com.apple.Notes",
             "md.obsidian",
             "com.google.Chrome",
-            "com.openai.codex",
-            "com.anthropic.claude-code",
             "com.anthropic.claudefordesktop"
         ])
 
@@ -128,9 +111,7 @@ struct HostCompatibilityPolicyTests {
         #expect(userToggleBundles == betaSafeBundles)
         #expect(try #require(catalog.policy(for: "com.apple.MobileSMS")).runtimeState == .proofModeOnly)
         #expect(try #require(catalog.policy(for: "com.apple.MobileSMS")).killSwitch == .proofModeRequired)
-        #expect(try #require(catalog.policy(for: "com.openai.codex")).runtimeState == .userToggleAllowed)
         #expect(try #require(catalog.policy(for: "com.anthropic.claudefordesktop")).runtimeState == .userToggleAllowed)
-        #expect(try #require(catalog.policy(for: "com.anthropic.claude-code")).runtimeState == .userToggleAllowed)
     }
 
     @Test("Runtime state keeps disabled and proof-only hosts closed by default")

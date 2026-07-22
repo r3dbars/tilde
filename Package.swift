@@ -23,10 +23,6 @@ let package = Package(
         .executable(
             name: "SteadyTypeReplayEval",
             targets: ["SteadyTypeReplayEval"]
-        ),
-        .executable(
-            name: "SteadyTypeTextEventHelper",
-            targets: ["SteadyTypeTextEventHelper"]
         )
     ],
     dependencies: [
@@ -59,9 +55,6 @@ let package = Package(
         .executableTarget(
             name: "SteadyTypeReplayEval",
             dependencies: ["AutocompleteLabCore"]
-        ),
-        .executableTarget(
-            name: "SteadyTypeTextEventHelper"
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
