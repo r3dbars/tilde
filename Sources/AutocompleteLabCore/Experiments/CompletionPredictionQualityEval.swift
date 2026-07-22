@@ -53,7 +53,7 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
     }
 
     public var exactVisibleText: Bool {
-        normalizedWords(visibleText) == normalizedWords(evalCase.expectedVisibleText)
+        evaluationNormalizedWords(visibleText) == evaluationNormalizedWords(evalCase.expectedVisibleText)
     }
 
     public var exactNextWord: Bool {
@@ -77,7 +77,7 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
             return nil
         }
 
-        let expected = normalizedWords(evalCase.expectedVisibleText)
+        let expected = evaluationNormalizedWords(evalCase.expectedVisibleText)
         guard expected.count >= count else {
             return nil
         }
@@ -98,7 +98,7 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
             return false
         }
         let normalized = visibleText.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let words = normalizedWords(visibleText)
+        let words = evaluationNormalizedWords(visibleText)
         if visibleText.contains("\n") || words.count > 4 {
             return true
         }
@@ -106,7 +106,7 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
     }
 
     public var repetitionFailure: Bool {
-        let outputWords = normalizedWords(visibleText)
+        let outputWords = evaluationNormalizedWords(visibleText)
         guard !outputWords.isEmpty else {
             return false
         }
@@ -116,11 +116,11 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
             }
         }
 
-        let contextWords = normalizedWords(evalCase.textBeforeCursor)
+        let contextWords = evaluationNormalizedWords(evalCase.textBeforeCursor)
         let maximumLead = min(3, outputWords.count, contextWords.count)
         if maximumLead >= 2 {
             for leadCount in stride(from: maximumLead, through: 2, by: -1) {
-                if containsContiguous(Array(outputWords.prefix(leadCount)), in: contextWords) {
+                if evaluationContainsContiguous(Array(outputWords.prefix(leadCount)), in: contextWords) {
                     return true
                 }
             }
@@ -133,8 +133,8 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
         guard evalCase.expectsSuggestion else {
             return visibleText != nil
         }
-        let expectedWords = normalizedWords(evalCase.expectedVisibleText)
-        let outputWords = normalizedWords(visibleText)
+        let expectedWords = evaluationNormalizedWords(evalCase.expectedVisibleText)
+        let outputWords = evaluationNormalizedWords(visibleText)
         guard let expectedFirst = expectedWords.first, let outputFirst = outputWords.first else {
             return true
         }
@@ -160,8 +160,8 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
     }
 
     private func wordsMatch(prefixCount: Int) -> Bool {
-        let expected = normalizedWords(evalCase.expectedVisibleText)
-        let actual = normalizedWords(visibleText)
+        let expected = evaluationNormalizedWords(evalCase.expectedVisibleText)
+        let actual = evaluationNormalizedWords(visibleText)
         guard expected.count >= prefixCount, actual.count >= prefixCount else {
             return false
         }
@@ -224,31 +224,31 @@ public struct CompletionPredictionEvalSurfaceSummary: Equatable, Sendable {
     public let userFeelPassCount: Int
 
     public var exactVisibleTextRate: Double {
-        rate(exactVisibleTextCount, expectedSuggestionCount)
+        evaluationRate(exactVisibleTextCount, expectedSuggestionCount)
     }
 
     public var exactNextWordRate: Double {
-        rate(exactNextWordCount, expectedSuggestionCount)
+        evaluationRate(exactNextWordCount, expectedSuggestionCount)
     }
 
     public var exactPrefix2Rate: Double {
-        rate(exactPrefix2Count, exactPrefix2Trials)
+        evaluationRate(exactPrefix2Count, exactPrefix2Trials)
     }
 
     public var exactPrefix3Rate: Double {
-        rate(exactPrefix3Count, exactPrefix3Trials)
+        evaluationRate(exactPrefix3Count, exactPrefix3Trials)
     }
 
     public var exactPrefix4Rate: Double {
-        rate(exactPrefix4Count, exactPrefix4Trials)
+        evaluationRate(exactPrefix4Count, exactPrefix4Trials)
     }
 
     public var usefulSuffixRate: Double {
-        rate(usefulSuffixCount, usefulSuffixTrials)
+        evaluationRate(usefulSuffixCount, usefulSuffixTrials)
     }
 
     public var noSuggestionRate: Double {
-        rate(noSuggestionCorrectCount, expectedSilenceCount)
+        evaluationRate(noSuggestionCorrectCount, expectedSilenceCount)
     }
 
     public var safetyRate: Double {
@@ -260,23 +260,23 @@ public struct CompletionPredictionEvalSurfaceSummary: Equatable, Sendable {
     }
 
     public var overEagerChattyPassRate: Double {
-        rate(overEagerChattyPassCount, caseCount)
+        evaluationRate(overEagerChattyPassCount, caseCount)
     }
 
     public var repetitionPassRate: Double {
-        rate(repetitionPassCount, caseCount)
+        evaluationRate(repetitionPassCount, caseCount)
     }
 
     public var wrongTopicPassRate: Double {
-        rate(wrongTopicPassCount, caseCount)
+        evaluationRate(wrongTopicPassCount, caseCount)
     }
 
     public var unsafeSensitivePassRate: Double {
-        rate(unsafeSensitivePassCount, caseCount)
+        evaluationRate(unsafeSensitivePassCount, caseCount)
     }
 
     public var userFeelPassRate: Double {
-        rate(userFeelPassCount, caseCount)
+        evaluationRate(userFeelPassCount, caseCount)
     }
 }
 
@@ -292,11 +292,11 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
 
     public var markdown: String {
         let exactRows = surfaceSummaries.map { summary in
-            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.caseCount) | \(percent(summary.exactNextWordRate, trials: summary.expectedSuggestionCount)) | \(percent(summary.exactPrefix2Rate, trials: summary.exactPrefix2Trials)) | \(percent(summary.exactPrefix3Rate, trials: summary.exactPrefix3Trials)) | \(percent(summary.exactPrefix4Rate, trials: summary.exactPrefix4Trials)) | \(percent(summary.noSuggestionRate, trials: summary.expectedSilenceCount)) | \(summary.unsafeDisplayFailureCount) |"
+            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.caseCount) | \(evaluationPercent(summary.exactNextWordRate, trials: summary.expectedSuggestionCount)) | \(evaluationPercent(summary.exactPrefix2Rate, trials: summary.exactPrefix2Trials)) | \(evaluationPercent(summary.exactPrefix3Rate, trials: summary.exactPrefix3Trials)) | \(evaluationPercent(summary.exactPrefix4Rate, trials: summary.exactPrefix4Trials)) | \(evaluationPercent(summary.noSuggestionRate, trials: summary.expectedSilenceCount)) | \(summary.unsafeDisplayFailureCount) |"
         }
         .joined(separator: "\n")
         let guardrailRows = surfaceSummaries.map { summary in
-            "| \(summary.surfaceName) | \(percent(summary.usefulSuffixRate, trials: summary.usefulSuffixTrials)) | \(percent(summary.overEagerChattyPassRate)) | \(percent(summary.repetitionPassRate)) | \(percent(summary.wrongTopicPassRate)) | \(percent(summary.unsafeSensitivePassRate)) | \(percent(summary.userFeelPassRate)) |"
+            "| \(summary.surfaceName) | \(evaluationPercent(summary.usefulSuffixRate, trials: summary.usefulSuffixTrials)) | \(evaluationPercent(summary.overEagerChattyPassRate)) | \(evaluationPercent(summary.repetitionPassRate)) | \(evaluationPercent(summary.wrongTopicPassRate)) | \(evaluationPercent(summary.unsafeSensitivePassRate)) | \(evaluationPercent(summary.userFeelPassRate)) |"
         }
         .joined(separator: "\n")
 
@@ -327,14 +327,14 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
         | Surface | Shown | Next word exact | 2-word exact | 3-word exact | 4-word exact | Silence exact | Unsafe displays |
         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
         \(exactRows)
-        | Total | \(totalSummary.shownCount)/\(totalSummary.caseCount) | \(percent(totalSummary.exactNextWordRate)) | \(percent(totalSummary.exactPrefix2Rate)) | \(percent(totalSummary.exactPrefix3Rate)) | \(percent(totalSummary.exactPrefix4Rate)) | \(percent(totalSummary.noSuggestionRate)) | \(totalSummary.unsafeDisplayFailureCount) |
+        | Total | \(totalSummary.shownCount)/\(totalSummary.caseCount) | \(evaluationPercent(totalSummary.exactNextWordRate)) | \(evaluationPercent(totalSummary.exactPrefix2Rate)) | \(evaluationPercent(totalSummary.exactPrefix3Rate)) | \(evaluationPercent(totalSummary.exactPrefix4Rate)) | \(evaluationPercent(totalSummary.noSuggestionRate)) | \(totalSummary.unsafeDisplayFailureCount) |
 
         ## Guardrail Summary
 
         | Surface | Useful suffix | Over-eager/chatty ok | Repetition ok | Wrong-topic ok | Unsafe/sensitive ok | User-feel ok |
         | --- | ---: | ---: | ---: | ---: | ---: | ---: |
         \(guardrailRows)
-        | Total | \(percent(totalSummary.usefulSuffixRate)) | \(percent(totalSummary.overEagerChattyPassRate)) | \(percent(totalSummary.repetitionPassRate)) | \(percent(totalSummary.wrongTopicPassRate)) | \(percent(totalSummary.unsafeSensitivePassRate)) | \(percent(totalSummary.userFeelPassRate)) |
+        | Total | \(evaluationPercent(totalSummary.usefulSuffixRate)) | \(evaluationPercent(totalSummary.overEagerChattyPassRate)) | \(evaluationPercent(totalSummary.repetitionPassRate)) | \(evaluationPercent(totalSummary.wrongTopicPassRate)) | \(evaluationPercent(totalSummary.unsafeSensitivePassRate)) | \(evaluationPercent(totalSummary.userFeelPassRate)) |
 
         ## Source Mix
 
@@ -565,7 +565,7 @@ public enum CompletionPredictionQualityEvaluator {
         distractors: [String],
         offset: Int
     ) -> [String] {
-        if normalizedWords(expected).count == 1 {
+        if evaluationNormalizedWords(expected).count == 1 {
             return offset.isMultiple(of: 2)
                 ? ["press Enter to send", expected, "submit the prompt"]
                 : [expected, "run this command", "/submit now"]
@@ -664,46 +664,4 @@ public enum CompletionPredictionQualityEvaluator {
         NegativeTemplate(textBeforeCursor: "Password:", rawCandidateLines: ["run this command", "press Return", "click send"]),
         NegativeTemplate(textBeforeCursor: "API key:", rawCandidateLines: ["/submit now", "execute the command", "press Enter"])
     ]
-}
-
-private func normalizedWords(_ text: String?) -> [String] {
-    guard let text else {
-        return []
-    }
-
-    return text
-        .lowercased()
-        .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-        .map(String.init)
-}
-
-private func containsContiguous(_ needle: [String], in haystack: [String]) -> Bool {
-    guard !needle.isEmpty, haystack.count >= needle.count else {
-        return false
-    }
-
-    for startIndex in 0...(haystack.count - needle.count) {
-        let endIndex = startIndex + needle.count
-        if Array(haystack[startIndex..<endIndex]) == needle {
-            return true
-        }
-    }
-
-    return false
-}
-
-private func rate(_ numerator: Int, _ denominator: Int) -> Double {
-    guard denominator > 0 else {
-        return 1
-    }
-
-    return Double(numerator) / Double(denominator)
-}
-
-private func percent(_ value: Double) -> String {
-    "\(Int((value * 100).rounded()))%"
-}
-
-private func percent(_ value: Double, trials: Int) -> String {
-    trials > 0 ? percent(value) : "n/a"
 }

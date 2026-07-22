@@ -92,27 +92,27 @@ public struct WordCompletionEvalSurfaceSummary: Equatable, Sendable {
     public let partialAcceptSuccessCount: Int
 
     public var candidateQualityRate: Double {
-        rate(correctCandidateCount, expectedCandidateCount)
+        evaluationRate(correctCandidateCount, expectedCandidateCount)
     }
 
     public var missRate: Double {
-        rate(missCount, shownCount)
+        evaluationRate(missCount, shownCount)
     }
 
     public var typedOverRate: Double {
-        rate(typedOverCount, shownCount)
+        evaluationRate(typedOverCount, shownCount)
     }
 
     public var repeatedMissSuppressionRate: Double {
-        rate(repeatedMissSuppressedCount, repeatedMissSuppressionTrials)
+        evaluationRate(repeatedMissSuppressedCount, repeatedMissSuppressionTrials)
     }
 
     public var prefixCooldownRate: Double {
-        rate(prefixCooldownBlockedCount, prefixCooldownTrials)
+        evaluationRate(prefixCooldownBlockedCount, prefixCooldownTrials)
     }
 
     public var partialAcceptSuccessRate: Double {
-        rate(partialAcceptSuccessCount, partialAcceptTrials)
+        evaluationRate(partialAcceptSuccessCount, partialAcceptTrials)
     }
 }
 
@@ -124,7 +124,7 @@ public struct WordCompletionEvalReport: Equatable, Sendable {
 
     public var markdown: String {
         let rows = surfaceSummaries.map { summary in
-            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.caseCount) | \(percent(summary.candidateQualityRate)) | \(percent(summary.missRate)) | \(percent(summary.typedOverRate)) | \(summary.repeatedMissSuppressedCount)/\(summary.repeatedMissSuppressionTrials) | \(summary.prefixCooldownBlockedCount)/\(summary.prefixCooldownTrials) | \(summary.partialAcceptSuccessCount)/\(summary.partialAcceptTrials) |"
+            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.caseCount) | \(evaluationPercent(summary.candidateQualityRate)) | \(evaluationPercent(summary.missRate)) | \(evaluationPercent(summary.typedOverRate)) | \(summary.repeatedMissSuppressedCount)/\(summary.repeatedMissSuppressionTrials) | \(summary.prefixCooldownBlockedCount)/\(summary.prefixCooldownTrials) | \(summary.partialAcceptSuccessCount)/\(summary.partialAcceptTrials) |"
         }
         .joined(separator: "\n")
 
@@ -149,7 +149,7 @@ public struct WordCompletionEvalReport: Equatable, Sendable {
         | Surface | Shown | Candidate quality | Miss rate | Typed-over rate | Repeated miss suppressed | Prefix cooldown blocked | Partial accept |
         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
         \(rows)
-        | Total | \(totalSummary.shownCount)/\(totalSummary.caseCount) | \(percent(totalSummary.candidateQualityRate)) | \(percent(totalSummary.missRate)) | \(percent(totalSummary.typedOverRate)) | \(totalSummary.repeatedMissSuppressedCount)/\(totalSummary.repeatedMissSuppressionTrials) | \(totalSummary.prefixCooldownBlockedCount)/\(totalSummary.prefixCooldownTrials) | \(totalSummary.partialAcceptSuccessCount)/\(totalSummary.partialAcceptTrials) |
+        | Total | \(totalSummary.shownCount)/\(totalSummary.caseCount) | \(evaluationPercent(totalSummary.candidateQualityRate)) | \(evaluationPercent(totalSummary.missRate)) | \(evaluationPercent(totalSummary.typedOverRate)) | \(totalSummary.repeatedMissSuppressedCount)/\(totalSummary.repeatedMissSuppressionTrials) | \(totalSummary.prefixCooldownBlockedCount)/\(totalSummary.prefixCooldownTrials) | \(totalSummary.partialAcceptSuccessCount)/\(totalSummary.partialAcceptTrials) |
 
         ## Case Evidence
 
@@ -501,16 +501,4 @@ public enum WordCompletionQualityEvaluator {
 
         return (value * 10).rounded() / 10
     }
-}
-
-private func rate(_ numerator: Int, _ denominator: Int) -> Double {
-    guard denominator > 0 else {
-        return 1
-    }
-
-    return Double(numerator) / Double(denominator)
-}
-
-private func percent(_ value: Double) -> String {
-    "\(Int((value * 100).rounded()))%"
 }
