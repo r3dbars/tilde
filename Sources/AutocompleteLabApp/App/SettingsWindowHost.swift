@@ -34,17 +34,12 @@ enum SettingsWindowAction {
     case resetSuggestionTuning
 }
 
-@MainActor
-protocol SettingsWindowActionHandling: AnyObject {
-    func handleSettingsWindowAction(_ action: SettingsWindowAction)
-}
-
 /// Owns SettingsWindowController construction and translates UI callbacks into one
 /// app action surface. AppDelegate keeps the product decisions; this host keeps the
 /// launch/UI wiring out of the application coordinator.
 @MainActor
 final class SettingsWindowHost {
-    private weak var handler: (any SettingsWindowActionHandling)?
+    private weak var appDelegate: AppDelegate?
 
     lazy var controller = SettingsWindowController(
         requestPermission: { [weak self] in
@@ -139,11 +134,11 @@ final class SettingsWindowHost {
         }
     )
 
-    init(handler: any SettingsWindowActionHandling) {
-        self.handler = handler
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
     }
 
     private func send(_ action: SettingsWindowAction) {
-        handler?.handleSettingsWindowAction(action)
+        appDelegate?.handleSettingsWindowAction(action)
     }
 }

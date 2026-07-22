@@ -153,7 +153,215 @@ struct SuggestionModelResultHostTests {
 
         #expect(source.contains("private lazy var suggestionModelResultHost"))
         #expect(source.contains("suggestionModelResultHost.handle("))
+        #expect(source.contains("suggestionModelResultHost.handlePartial("))
+        #expect(source.contains("suggestionModelResultHost.handleContinuationFailure("))
         #expect(!source.contains("let appModelResultMetadata = self.suggestionOrchestrator.appModelResultCandidateSelectionMetadata("))
+    }
+
+    // MARK: - handlePartial (merged from SuggestionStreamingPartialHost)
+
+    @Test("Presents a useful current partial and reports its streaming metadata")
+    func presentsUsefulPartial() throws {
+        let orchestrator = SuggestionOrchestrator(engine: ModelResultTestCompletionEngine())
+        let request = CompletionRequest(
+            textBeforeCursor: "draft",
+            textAfterCursor: "",
+            appBundleIdentifier: "com.apple.TextEdit",
+            maxVisibleWords: 5,
+            mode: .phraseContinuation,
+            suggestionID: "stream"
+        )
+        let fieldIdentity = Self.makeFieldIdentity()
+        let ticket = orchestrator.beginRequest(request).ticket
+        orchestrator.startStreamingPresentation(suggestionID: "stream")
+
+        var presented: (CompletionSuggestion, SuggestionStreamingPartialPresentation)?
+        let host = hostWith(
+            input: try makeHostAndInput().1,
+            events: SuggestionModelResultTestEvents(),
+            orchestrator: orchestrator,
+            currentFieldIdentity: { fieldIdentity },
+            presentStreamingPartial: { suggestion, presentation in
+                presented = (suggestion, presentation)
+            }
+        )
+
+        host.handlePartial(
+            partialSuggestion: CompletionSuggestion(text: " make steady progress", maxVisibleWords: 5),
+            suggestionID: "stream",
+            request: request,
+            context: Self.makeContext(),
+            profile: try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")),
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: fieldIdentity,
+            renderMode: .inlineAdjacent,
+            requestTicket: ticket,
+            requestStartedAt: Date()
+        )
+
+        #expect(presented?.0.visibleText == " make steady progress")
+        #expect(presented?.1.suggestionID == "stream")
+        #expect(presented?.1.candidateSelectionMetadata["streamingPartialIndex"] == "1")
+        #expect(presented?.1.latencyMilliseconds ?? -1 >= 0)
+    }
+
+    @Test("Drops a partial after the request field loses focus")
+    func dropsStaleFieldPartial() throws {
+        let orchestrator = SuggestionOrchestrator(engine: ModelResultTestCompletionEngine())
+        let request = CompletionRequest(
+            textBeforeCursor: "draft",
+            textAfterCursor: "",
+            appBundleIdentifier: "com.apple.TextEdit",
+            maxVisibleWords: 5,
+            mode: .phraseContinuation,
+            suggestionID: "stream"
+        )
+        let requestField = Self.makeFieldIdentity()
+        let ticket = orchestrator.beginRequest(request).ticket
+        orchestrator.startStreamingPresentation(suggestionID: "stream")
+
+        var presentationCount = 0
+        let host = hostWith(
+            input: try makeHostAndInput().1,
+            events: SuggestionModelResultTestEvents(),
+            orchestrator: orchestrator,
+            currentFieldIdentity: {
+                FocusedFieldIdentity(
+                    bundleIdentifier: "com.apple.Notes",
+                    processIdentifier: 42,
+                    elementIdentifier: 8
+                )
+            },
+            presentStreamingPartial: { _, _ in presentationCount += 1 }
+        )
+
+        host.handlePartial(
+            partialSuggestion: CompletionSuggestion(text: " make steady progress", maxVisibleWords: 5),
+            suggestionID: "stream",
+            request: request,
+            context: Self.makeContext(),
+            profile: try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")),
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: requestField,
+            renderMode: .inlineAdjacent,
+            requestTicket: ticket,
+            requestStartedAt: Date()
+        )
+
+        #expect(presentationCount == 0)
+    }
+
+    // MARK: - handleContinuationFailure (merged from SuggestionContinuationFailureHost)
+
+    @Test("Hides a current request after a model continuation failure")
+    func hidesCurrentRequestAfterFailure() throws {
+        let orchestrator = SuggestionOrchestrator(engine: ModelResultTestCompletionEngine())
+        let request = Self.makeFailureRequest()
+        let fieldIdentity = Self.makeFieldIdentity()
+        let ticket = orchestrator.beginRequest(request).ticket
+        orchestrator.startStreamingPresentation(suggestionID: request.suggestionID)
+
+        let events = SuggestionModelResultTestEvents()
+        let host = hostWith(
+            input: try makeHostAndInput().1,
+            events: events,
+            orchestrator: orchestrator,
+            currentSuggestionID: { request.suggestionID },
+            currentFieldIdentity: { fieldIdentity },
+            hasVisibleSuggestion: { false },
+            repositionVisibleSuggestion: { _, _ in events.record("reposition") },
+            hideSuggestion: { reason in events.record("hide:\(reason ?? "")") },
+            updateKeyboardEventTapSnapshot: { events.record("keyboard") }
+        )
+
+        host.handleContinuationFailure(
+            suggestionID: request.suggestionID,
+            requestTicket: ticket,
+            fieldIdentity: fieldIdentity,
+            context: Self.makeContext(),
+            profile: try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        )
+
+        #expect(events.values == [
+            "decision:\(SuggestionStatusText.notShown(reason: "engine-error"))",
+            "hide:engine-error"
+        ])
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: "make steady progress", maxVisibleWords: 5),
+            suggestionID: request.suggestionID,
+            mode: request.mode,
+            nowMilliseconds: 1
+        ))
+    }
+
+    @Test("Keeps the visible instant phrase and refreshes native state after failure")
+    func keepsVisibleInstantPhraseAfterFailure() throws {
+        let orchestrator = SuggestionOrchestrator(engine: ModelResultTestCompletionEngine())
+        let request = Self.makeFailureRequest()
+        let fieldIdentity = Self.makeFieldIdentity()
+        let ticket = orchestrator.beginRequest(request).ticket
+
+        let events = SuggestionModelResultTestEvents()
+        let host = hostWith(
+            input: try makeHostAndInput().1,
+            events: events,
+            orchestrator: orchestrator,
+            currentSuggestionID: { request.suggestionID },
+            currentFieldIdentity: { fieldIdentity },
+            hasVisibleSuggestion: { true },
+            repositionVisibleSuggestion: { _, _ in events.record("reposition") },
+            hideSuggestion: { _ in events.record("hide") },
+            updateKeyboardEventTapSnapshot: { events.record("keyboard") }
+        )
+
+        host.handleContinuationFailure(
+            suggestionID: request.suggestionID,
+            requestTicket: ticket,
+            fieldIdentity: fieldIdentity,
+            context: Self.makeContext(),
+            profile: try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        )
+
+        #expect(events.values == [
+            "decision:Shown: kept instant phrase after model error",
+            "reposition",
+            "keyboard"
+        ])
+    }
+
+    @Test("Leaves a stale field untouched after a model continuation failure")
+    func leavesStaleFieldUntouched() throws {
+        let orchestrator = SuggestionOrchestrator(engine: ModelResultTestCompletionEngine())
+        let request = Self.makeFailureRequest()
+        let fieldIdentity = Self.makeFieldIdentity()
+        let ticket = orchestrator.beginRequest(request).ticket
+
+        var hideCalled = false
+        let host = hostWith(
+            input: try makeHostAndInput().1,
+            events: SuggestionModelResultTestEvents(),
+            orchestrator: orchestrator,
+            currentSuggestionID: { request.suggestionID },
+            currentFieldIdentity: {
+                FocusedFieldIdentity(
+                    bundleIdentifier: "com.apple.Notes",
+                    processIdentifier: 42,
+                    elementIdentifier: 8
+                )
+            },
+            hasVisibleSuggestion: { true },
+            hideSuggestion: { _ in hideCalled = true }
+        )
+
+        host.handleContinuationFailure(
+            suggestionID: request.suggestionID,
+            requestTicket: ticket,
+            fieldIdentity: fieldIdentity,
+            context: Self.makeContext(),
+            profile: try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        )
+
+        #expect(!hideCalled)
     }
 
     private func makeHostAndInput() throws -> (
@@ -216,7 +424,9 @@ struct SuggestionModelResultHostTests {
         hasVisibleSuggestion: @escaping () -> Bool = { false },
         repositionVisibleSuggestion: @escaping (FocusedTextContext, CompatibilityProfile) -> Void = { _, _ in },
         hideSuggestion: @escaping (String?) -> Void = { _ in },
-        presentSuggestion: @escaping (CompletionSuggestion, SuggestionModelResultPresentation) -> Void = { _, _ in }
+        presentSuggestion: @escaping (CompletionSuggestion, SuggestionModelResultPresentation) -> Void = { _, _ in },
+        presentStreamingPartial: @escaping (CompletionSuggestion, SuggestionStreamingPartialPresentation) -> Void = { _, _ in },
+        updateKeyboardEventTapSnapshot: @escaping () -> Void = {}
     ) -> SuggestionModelResultHost {
         SuggestionModelResultHost(
             dependencies: SuggestionModelResultHostDependencies(
@@ -238,7 +448,9 @@ struct SuggestionModelResultHostTests {
                     )
                 },
                 recordAnnoyanceSignal: { signal, _, _, reason in events.record("annoyance:\(signal.rawValue):\(reason)") },
-                presentSuggestion: presentSuggestion
+                presentSuggestion: presentSuggestion,
+                presentStreamingPartial: presentStreamingPartial,
+                updateKeyboardEventTapSnapshot: updateKeyboardEventTapSnapshot
             )
         )
     }
@@ -276,6 +488,17 @@ struct SuggestionModelResultHostTests {
             bundleIdentifier: "com.apple.TextEdit",
             processIdentifier: 42,
             elementIdentifier: 7
+        )
+    }
+
+    private static func makeFailureRequest() -> CompletionRequest {
+        CompletionRequest(
+            textBeforeCursor: "draft",
+            textAfterCursor: "",
+            appBundleIdentifier: "com.apple.TextEdit",
+            maxVisibleWords: 5,
+            mode: .phraseContinuation,
+            suggestionID: "failure"
         )
     }
 }

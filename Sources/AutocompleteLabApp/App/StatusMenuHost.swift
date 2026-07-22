@@ -19,16 +19,11 @@ enum StatusMenuAction {
     case quit
 }
 
-@MainActor
-protocol StatusMenuActionHandling: AnyObject {
-    func handleStatusMenuAction(_ action: StatusMenuAction)
-}
-
 /// Owns the menu-bar item and its menu action targets. AppDelegate supplies
 /// status text and handles product behavior through the action surface.
 @MainActor
 final class StatusMenuHost: NSObject {
-    private weak var handler: (any StatusMenuActionHandling)?
+    private weak var appDelegate: AppDelegate?
     private let developerMenuEnabled: Bool
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
@@ -36,8 +31,8 @@ final class StatusMenuHost: NSObject {
     private var silenceFieldMenuItem: NSMenuItem?
     private var toggleAppMenuItem: NSMenuItem?
 
-    init(handler: any StatusMenuActionHandling, developerMenuEnabled: Bool) {
-        self.handler = handler
+    init(appDelegate: AppDelegate, developerMenuEnabled: Bool) {
+        self.appDelegate = appDelegate
         self.developerMenuEnabled = developerMenuEnabled
     }
 
@@ -193,7 +188,7 @@ final class StatusMenuHost: NSObject {
     }
 
     private func send(_ action: StatusMenuAction) {
-        handler?.handleStatusMenuAction(action)
+        appDelegate?.handleStatusMenuAction(action)
     }
 
     @objc private func handleSuggestNow() { send(.suggestNow) }

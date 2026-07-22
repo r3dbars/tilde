@@ -1,42 +1,31 @@
 import Foundation
 import AutocompleteLabCore
 
-@MainActor
-protocol RuntimeStatusHandling: AnyObject {
-    var modelRuntimeBundleForStatus: AppModelRuntimeBundle { get }
-    var isModelInstallInProgressForStatus: Bool { get }
-    var completionLengthDisplaySummaryForStatus: String { get }
-    func refreshModelAssetState(for state: LocalRuntimeState) -> LocalRuntimeState
-    func refreshRuntimeStatusChrome()
-    func rearmFocusedTextAfterRuntimeReadyForStatus()
-    func showRuntimeSettings()
-}
-
 /// Owns runtime readiness state and the user-facing transitions around warming,
 /// repair, and first-run model setup. AppDelegate keeps runtime replacement and
 /// model-install mechanics, while this host owns status decisions and one-time
 /// Settings guidance.
 @MainActor
 final class RuntimeStatusHost {
-    private weak var handler: (any RuntimeStatusHandling)?
+    private weak var appDelegate: AppDelegate?
 
     private(set) var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
     private(set) var hasSurfacedModelSetupUI = false
     private(set) var modelInstallStatusText: String?
 
-    init(handler: any RuntimeStatusHandling) {
-        self.handler = handler
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
     }
 
     var runtimeReadinessReport: RuntimeReadinessReport {
-        guard let handler else {
+        guard let appDelegate else {
             return RuntimeReadinessReport(
                 stage: .runtimeUnavailable,
                 summary: "Runtime status host unavailable",
                 action: .wait
             )
         }
-        return handler.modelRuntimeBundleForStatus.bootstrapPlan.readinessReport(for: currentRuntimeState)
+        return appDelegate.modelRuntimeBundle.bootstrapPlan.readinessReport(for: currentRuntimeState)
     }
 
     var modelInstallStatus: String? {
@@ -52,34 +41,34 @@ final class RuntimeStatusHost {
     }
 
     func apply(_ state: LocalRuntimeState) {
-        guard let handler else {
+        guard let appDelegate else {
             return
         }
 
         let wasReadyForSuggestions = runtimeReadinessReport.allowsSuggestions
-        currentRuntimeState = handler.refreshModelAssetState(for: state)
-        handler.refreshRuntimeStatusChrome()
+        currentRuntimeState = appDelegate.refreshModelAssetState(for: state)
+        appDelegate.refreshRuntimeChrome()
         let report = runtimeReadinessReport
         if report.allowsSuggestions,
-           !handler.isModelInstallInProgressForStatus,
+           !appDelegate.modelInstallLifecycleHost.isInstalling,
            modelInstallStatusText != nil {
             modelInstallStatusText = "Model install: ready"
-            handler.refreshRuntimeStatusChrome()
+            appDelegate.refreshRuntimeChrome()
         }
         if !wasReadyForSuggestions && report.allowsSuggestions {
-            handler.rearmFocusedTextAfterRuntimeReadyForStatus()
+            appDelegate.rearmFocusedTextAfterRuntimeReady()
         }
         if report.stage == .failed || report.action == .repairModel {
-            handler.showRuntimeSettings()
+            appDelegate.showSettings()
         } else if report.stage == .downloadNeeded, !hasSurfacedModelSetupUI {
             hasSurfacedModelSetupUI = true
-            handler.showRuntimeSettings()
+            appDelegate.showSettings()
         }
         DiagnosticsLog.shared.record(
             "runtime",
             metadata: [
                 "state": state.statusSummary,
-                "completionLength": handler.completionLengthDisplaySummaryForStatus,
+                "completionLength": appDelegate.completionLengthConfiguration.displaySummary,
                 "readinessStage": report.stage.rawValue,
                 "readinessAction": report.action.rawValue
             ]
