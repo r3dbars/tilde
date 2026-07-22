@@ -211,7 +211,9 @@ final class GhostInputController: IMKInputController {
     /// macOS's spell checker returns completions for a partial word ranked by
     /// likelihood — an instant, real English vocabulary with zero shipped data.
     private func dictionaryCompletion(for partial: String) -> String {
-        guard partial.count >= 3 else { return "" }
+        // 2 letters (was 3): owner wants eager word completion — the dictionary
+        // is the word-completer of the stack (the phrase model fumbles suffixes).
+        guard partial.count >= 2 else { return "" }
         let range = NSRange(location: 0, length: (partial as NSString).length)
         let candidates = NSSpellChecker.shared.completions(
             forPartialWordRange: range,
@@ -249,11 +251,16 @@ final class GhostInputController: IMKInputController {
 
     /// Debounce: the ghost appears only after typing rests for a beat. Fresh
     /// keystrokes bump `generation`, so pending reveals cancel themselves.
+    /// Mid-word rests reveal faster (100ms) than word boundaries (180ms): word
+    /// completion is only useful BEFORE the word is finished, so it has to win
+    /// the race against the typist's own fingers.
     private func scheduleGhostAfterPause(_ client: IMKTextInput) {
         generation += 1
         let gen = generation
+        let midWord = typedFallback.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
+        let delay: UInt64 = midWord ? 100_000_000 : 180_000_000
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 180_000_000)
+            try? await Task.sleep(nanoseconds: delay)
             guard let self, self.generation == gen else { return }
             guard let liveClient = self.client() else { return }
             self.updateGhost(liveClient)
