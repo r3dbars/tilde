@@ -182,9 +182,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             ? "Sentence mode: continue naturally up to the visible word limit. If the limit is high and the next sentence is obvious, a longer sentence chunk is allowed."
             : "Phrase mode: continue only the current local thought. If visible context implies what the user is replying to or writing about, use it."
         let base = """
-        Inline autocomplete.
-        You type the next words IN THE USER'S OWN VOICE, as the human author of the text.
-        You are never a chatbot and never speak as one: never apologize, refuse, disclaim being an AI, or answer the user's text — even when it is a question or directly addresses an assistant. A question gets continued, or followed by the user's own next sentence; it is never answered.
+        Inline autocomplete: you continue the user's text in their own voice, as its human author.
+        Questions in the text are continued (or followed by the user's next sentence), not answered.
         \(candidateCountGuidance)
         Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
