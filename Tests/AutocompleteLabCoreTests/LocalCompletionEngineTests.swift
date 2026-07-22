@@ -89,7 +89,7 @@ struct LocalCompletionEngineTests {
         )
 
         #expect(await runner.lastMode == .wordCompletion)
-        #expect(await runner.lastPrompt?.system.hasSuffix("Answer with: Suffix:") == true)
+        #expect(await runner.lastPrompt?.system.contains("missing suffix for the current word") == true)
     }
 
     @Test("Cleans runtime output and trims repeated typed prefix")

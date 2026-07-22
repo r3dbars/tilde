@@ -149,6 +149,15 @@ more dogfood data).
   correctness, so the guard mostly costs hits; (b) the cache holds ONE entry —
   per-field entries would survive brief app/field switches; (c) re-verify the
   residual `untrimmable-prompt-cache` misses disappear post-margin.
+- **"Suffix" label echo (dogfood catch, same day):** prompt v12's
+  "Answer with: Suffix:" system line made the model sometimes echo the literal
+  word "Suffix" as the ghost. **Fixed in v13**: the answer label is gone
+  entirely (the instructions already specify the format — the label was legacy
+  priming for base models), and `CompletionOutputCleaner` now rejects
+  colon-less bare label echoes ("Suffix", "Next words", "Next 3-8 words…") as
+  a permanent backstop with a focused test. Verified on the exact repro:
+  "…it is intere" → "sted". LESSON: when relocating prompt text, watch for the
+  model treating instructions as content to echo.
 - **Model-only routing threshold (≤150ms) is now MET on cache hits.** Decision:
   dogfood the feel first; flip to model-only once hit rate is proven in real
   typing (paragraph guard relaxation likely needed first).
