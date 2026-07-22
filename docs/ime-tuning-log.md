@@ -84,6 +84,26 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — screen context round
+
+- **Screen-context (OCR) wired into IME requests.** The pre-keyboard
+  `VisiblePageContextProvider` (ScreenCaptureKit + Vision OCR, cached,
+  permission-gated) was dormant; `GhostScreenContextBridge` now feeds it from
+  socket requests, deriving capture geometry from the requesting app's
+  frontmost window (CGWindowList — the IME has no AX geometry). Enabled via
+  the existing `VisiblePageContextEnabled` default (owner opted in; Screen
+  Recording granted + app relaunched). Server responses report `"page":bool`
+  for observability. **Verified live:** with this conversation on screen,
+  "I hope the " → "OCR pipeline is" — the model used on-screen text. **KEEP.**
+- **Mechanics:** first request in a field kicks the async capture (no context
+  yet); subsequent requests attach the cached OCR text. Refresh cadence is the
+  provider's own policy.
+- **OPEN:** (a) each OCR refresh changes the top of the prompt → prompt KV
+  cache resets — consider freezing page context per field session to protect
+  hit latency; (b) app denylist for never-capture apps; (c) measure suggestion
+  quality lift vs the extra ~200 prompt tokens; (d) the model self-censoring in
+  casual text may improve with page context (higher confidence) — re-probe.
+
 ## 2026-07-22 — edge-case hardening round
 
 - **Ghost committed by mouse click (code-audit catch):** `commitComposition` was

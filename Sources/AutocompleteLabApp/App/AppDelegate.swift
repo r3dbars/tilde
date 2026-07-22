@@ -91,10 +91,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
     // Rebuilds its engine per request so model repairs/installs are picked up live.
-    private lazy var ghostBrainServerHost = GhostBrainServerHost(engineProvider: { [weak self] in
-        guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
-        return RuntimeBackedCompletionEngine(runtime: self.modelRuntimeBundle.runtime)
-    })
+    private lazy var ghostScreenContextBridge = GhostScreenContextBridge(provider: visiblePageContextProvider)
+    private lazy var ghostBrainServerHost = GhostBrainServerHost(
+        engineProvider: { [weak self] in
+            guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
+            return RuntimeBackedCompletionEngine(runtime: self.modelRuntimeBundle.runtime)
+        },
+        screenContextResolver: { [bridge = ghostScreenContextBridge] app, field, text in
+            bridge.context(
+                appBundleIdentifier: app,
+                fieldIdentity: field,
+                textBeforeCursor: text,
+                enabled: UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled")
+            )
+        }
+    )
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let insertionVerification = InsertionVerification()
