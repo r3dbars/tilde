@@ -1,27 +1,18 @@
 import Foundation
 import AutocompleteLabCore
 
-@MainActor
-protocol ModelInstallLifecycleHandling: AnyObject {
-    var modelRuntimeBundleForInstall: AppModelRuntimeBundle { get }
-    func setModelInstallStatus(_ statusText: String?)
-    func refreshModelInstallUI()
-    func showModelInstallSettings()
-    func reloadModelRuntimeAfterInstall()
-}
-
 /// Owns model-download lifecycle wiring while AppDelegate owns runtime state
 /// replacement and readiness decisions after installation.
 @MainActor
 final class ModelInstallLifecycleHost {
     private let installHost: ModelInstallHost
-    private weak var handler: (any ModelInstallLifecycleHandling)?
+    private weak var appDelegate: AppDelegate?
 
     init(
-        handler: any ModelInstallLifecycleHandling,
+        appDelegate: AppDelegate,
         installHost: ModelInstallHost = ModelInstallHost()
     ) {
-        self.handler = handler
+        self.appDelegate = appDelegate
         self.installHost = installHost
     }
 
@@ -30,15 +21,15 @@ final class ModelInstallLifecycleHost {
     }
 
     func start() {
-        guard let handler, !installHost.isInstalling else {
+        guard let appDelegate, !installHost.isInstalling else {
             return
         }
 
-        let bundle = handler.modelRuntimeBundleForInstall
+        let bundle = appDelegate.modelRuntimeBundle
         let manifest = bundle.bootstrapPlan.preferredAsset
         let destinationURL = bundle.modelDirectoryURL
-        handler.setModelInstallStatus("Model install: preparing download")
-        handler.refreshModelInstallUI()
+        appDelegate.runtimeStatusHost.setModelInstallStatus("Model install: preparing download")
+        appDelegate.refreshRuntimeChrome()
         DiagnosticsLog.shared.record(
             "model-install-start",
             metadata: [
@@ -52,14 +43,14 @@ final class ModelInstallLifecycleHost {
             manifest: manifest,
             destinationURL: destinationURL,
             onProgress: { [weak self] statusText in
-                guard let handler = self?.handler else {
+                guard let appDelegate = self?.appDelegate else {
                     return
                 }
-                handler.setModelInstallStatus(statusText)
-                handler.refreshModelInstallUI()
+                appDelegate.runtimeStatusHost.setModelInstallStatus(statusText)
+                appDelegate.refreshRuntimeChrome()
             },
             onSuccess: { [weak self] installedURL in
-                guard let handler = self?.handler else {
+                guard let appDelegate = self?.appDelegate else {
                     return
                 }
                 DiagnosticsLog.shared.record(
@@ -69,11 +60,11 @@ final class ModelInstallLifecycleHost {
                         "target": installedURL.path
                     ]
                 )
-                handler.setModelInstallStatus("Model install: warming local runtime")
-                handler.reloadModelRuntimeAfterInstall()
+                appDelegate.runtimeStatusHost.setModelInstallStatus("Model install: warming local runtime")
+                appDelegate.reloadModelRuntimeAfterInstall()
             },
             onCancelled: { [weak self] in
-                guard let handler = self?.handler else {
+                guard let appDelegate = self?.appDelegate else {
                     return
                 }
                 DiagnosticsLog.shared.record(
@@ -82,12 +73,12 @@ final class ModelInstallLifecycleHost {
                         "model": manifest.model.rawValue
                     ]
                 )
-                handler.setModelInstallStatus("Model install canceled.")
-                handler.refreshModelInstallUI()
-                handler.showModelInstallSettings()
+                appDelegate.runtimeStatusHost.setModelInstallStatus("Model install canceled.")
+                appDelegate.refreshRuntimeChrome()
+                appDelegate.showSettings()
             },
             onFailure: { [weak self] reason in
-                guard let handler = self?.handler else {
+                guard let appDelegate = self?.appDelegate else {
                     return
                 }
                 DiagnosticsLog.shared.record(
@@ -97,9 +88,9 @@ final class ModelInstallLifecycleHost {
                         "reason": reason
                     ]
                 )
-                handler.setModelInstallStatus("Model install failed: \(reason)")
-                handler.refreshModelInstallUI()
-                handler.showModelInstallSettings()
+                appDelegate.runtimeStatusHost.setModelInstallStatus("Model install failed: \(reason)")
+                appDelegate.refreshRuntimeChrome()
+                appDelegate.showSettings()
             }
         )
     }
@@ -109,17 +100,17 @@ final class ModelInstallLifecycleHost {
             return
         }
 
-        guard let handler else {
+        guard let appDelegate else {
             installHost.cancel()
             return
         }
-        let model = handler.modelRuntimeBundleForInstall.bootstrapPlan.preferredAsset.model.rawValue
-        handler.setModelInstallStatus("Model install: canceling")
+        let model = appDelegate.modelRuntimeBundle.bootstrapPlan.preferredAsset.model.rawValue
+        appDelegate.runtimeStatusHost.setModelInstallStatus("Model install: canceling")
         DiagnosticsLog.shared.record(
             "model-install-cancel-requested",
             metadata: ["model": model]
         )
-        handler.refreshModelInstallUI()
+        appDelegate.refreshRuntimeChrome()
         installHost.cancel()
     }
 }
