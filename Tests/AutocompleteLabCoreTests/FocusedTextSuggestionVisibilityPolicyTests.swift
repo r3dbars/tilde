@@ -1,145 +1,126 @@
 import Testing
 @testable import AutocompleteLabCore
 
-@Suite("Focused text polling throttle suggestion visibility policy")
-struct FocusedTextPollingThrottleSuggestionVisibilityPolicyTests {
-    @Test("Preserves same-app visible suggestion during polling throttle")
-    func preservesSameAppVisibleSuggestionDuringThrottle() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
+@Suite("Focused text suggestion visibility policy")
+struct FocusedTextSuggestionVisibilityPolicyTests {
+    private let policy = FocusedTextSuggestionVisibilityPolicy()
 
+    @Test("Preserves a suggestion owned by the reference app")
+    func preservesSuggestionOwnedByReferenceApp() {
         #expect(!policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false
         ))
     }
 
-    @Test("Preserves virtual app suggestion when frontmost app is its host")
-    func preservesVirtualAppSuggestionWhenFrontmostAppIsHost() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
+    @Test("Preserves a virtual app suggestion owned by the host app")
+    func preservesVirtualAppSuggestionOwnedByHostApp() {
         #expect(!policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.anthropic.claude-code",
             currentSuggestionHostBundleIdentifier: "com.mitchellh.ghostty",
             currentSuggestionFieldIdentity: fieldIdentity(1, bundleIdentifier: "com.mitchellh.ghostty"),
             currentFieldIdentity: fieldIdentity(1, bundleIdentifier: "com.mitchellh.ghostty"),
-            frontmostBundleIdentifier: "com.mitchellh.ghostty",
+            referenceBundleIdentifier: "com.mitchellh.ghostty",
             isInvalidatedByUserTyping: false,
             currentSuggestionAgeMilliseconds: 120,
             maximumPreservedAgeMilliseconds: 750
         ))
     }
 
-    @Test("Hides suggestion invalidated by typing")
+    @Test("Hides a suggestion invalidated by typing")
     func hidesSuggestionInvalidatedByTyping() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: true
         ))
     }
 
-    @Test("Hides stale visible suggestion during polling throttle")
-    func hidesStaleVisibleSuggestionDuringThrottle() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
+    @Test("Requires a fresh suggestion when a maximum age is set")
+    func requiresFreshSuggestionWhenMaximumAgeIsSet() {
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false,
             currentSuggestionAgeMilliseconds: 901,
             maximumPreservedAgeMilliseconds: 750
         ))
-
+        #expect(policy.shouldHideVisibleSuggestion(
+            currentSuggestionBundleIdentifier: "com.apple.Notes",
+            currentSuggestionFieldIdentity: fieldIdentity(1),
+            currentFieldIdentity: fieldIdentity(1),
+            referenceBundleIdentifier: "com.apple.Notes",
+            isInvalidatedByUserTyping: false,
+            maximumPreservedAgeMilliseconds: 750
+        ))
         #expect(!policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false,
             currentSuggestionAgeMilliseconds: 240,
             maximumPreservedAgeMilliseconds: 750
         ))
     }
 
-    @Test("Hides visible suggestion with unknown age when freshness is required")
-    func hidesVisibleSuggestionWithUnknownAgeWhenFreshnessRequired() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
+    @Test("Hides a suggestion owned by a different app")
+    func hidesSuggestionOwnedByDifferentApp() {
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
-            isInvalidatedByUserTyping: false,
-            maximumPreservedAgeMilliseconds: 750
-        ))
-    }
-
-    @Test("Hides suggestion when frontmost app changes")
-    func hidesSuggestionWhenFrontmostAppChanges() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
-        #expect(policy.shouldHideVisibleSuggestion(
-            currentSuggestionBundleIdentifier: "com.apple.Notes",
-            currentSuggestionFieldIdentity: fieldIdentity(1),
-            currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.TextEdit",
+            referenceBundleIdentifier: "com.apple.TextEdit",
             isInvalidatedByUserTyping: false
         ))
     }
 
-    @Test("Hides suggestion when app ownership is unknown")
+    @Test("Hides a suggestion when app ownership is unknown")
     func hidesSuggestionWithUnknownAppOwnership() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: nil,
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false
         ))
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: nil,
+            referenceBundleIdentifier: nil,
             isInvalidatedByUserTyping: false
         ))
     }
 
-    @Test("Hides suggestion when field ownership is unknown or changed")
+    @Test("Hides a suggestion when field ownership is unknown or changed")
     func hidesSuggestionWithUnknownOrChangedFieldOwnership() {
-        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: nil,
             currentFieldIdentity: fieldIdentity(1),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false
         ))
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: nil,
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false
         ))
         #expect(policy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity(1),
             currentFieldIdentity: fieldIdentity(2),
-            frontmostBundleIdentifier: "com.apple.Notes",
+            referenceBundleIdentifier: "com.apple.Notes",
             isInvalidatedByUserTyping: false
         ))
     }

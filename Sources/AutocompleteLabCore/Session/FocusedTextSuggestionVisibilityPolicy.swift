@@ -1,14 +1,12 @@
-import Foundation
-
-public struct FocusedTextAXHealthSuggestionVisibilityPolicy: Equatable, Sendable {
+public struct FocusedTextSuggestionVisibilityPolicy: Equatable, Sendable {
     public init() {}
 
     public func shouldHideVisibleSuggestion(
-        during cooldown: FocusedTextAXHealthCooldown,
         currentSuggestionBundleIdentifier: String?,
         currentSuggestionHostBundleIdentifier: String? = nil,
         currentSuggestionFieldIdentity: FocusedFieldIdentity?,
         currentFieldIdentity: FocusedFieldIdentity?,
+        referenceBundleIdentifier: String?,
         isInvalidatedByUserTyping: Bool,
         currentSuggestionAgeMilliseconds: Int? = nil,
         maximumPreservedAgeMilliseconds: Int? = nil
@@ -25,13 +23,15 @@ public struct FocusedTextAXHealthSuggestionVisibilityPolicy: Equatable, Sendable
         }
 
         guard let currentSuggestionBundleIdentifier,
-              !currentSuggestionBundleIdentifier.isEmpty else {
+              !currentSuggestionBundleIdentifier.isEmpty,
+              let referenceBundleIdentifier,
+              !referenceBundleIdentifier.isEmpty else {
             return true
         }
 
-        let suggestionOwnsCooldownApp = currentSuggestionBundleIdentifier == cooldown.bundleIdentifier
-            || currentSuggestionHostBundleIdentifier == cooldown.bundleIdentifier
-        guard suggestionOwnsCooldownApp else {
+        let suggestionOwnsReferenceApp = currentSuggestionBundleIdentifier == referenceBundleIdentifier
+            || currentSuggestionHostBundleIdentifier == referenceBundleIdentifier
+        guard suggestionOwnsReferenceApp else {
             return true
         }
 

@@ -289,9 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
     private let focusedTextAXHealthHost = FocusedTextAXHealthHost()
     private let focusedTextContextDiagnosticsHost = FocusedTextContextDiagnosticsHost()
-    private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
-    private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
-        FocusedTextPollingThrottleSuggestionVisibilityPolicy()
+    private let focusedTextSuggestionVisibilityPolicy = FocusedTextSuggestionVisibilityPolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private lazy var suggestionChromeHost = SuggestionChromeHost()
@@ -3434,12 +3432,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if focusedTextAXHealthSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
-            during: cooldown,
+        if focusedTextSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
             currentSuggestionBundleIdentifier: currentSuggestionState.appBundleIdentifier,
             currentSuggestionHostBundleIdentifier: currentSuggestionHostBundleIdentifierForVisibility(),
             currentSuggestionFieldIdentity: currentSuggestionState.fieldIdentity,
             currentFieldIdentity: currentFieldIdentity,
+            referenceBundleIdentifier: cooldown.bundleIdentifier,
             isInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown,
             currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
             maximumPreservedAgeMilliseconds: maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds
@@ -3485,12 +3483,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if suggestionSession.hasVisibleSuggestion {
             let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
-            if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
+            if focusedTextSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
                 currentSuggestionBundleIdentifier: currentSuggestionState.appBundleIdentifier,
                 currentSuggestionHostBundleIdentifier: currentSuggestionHostBundleIdentifierForVisibility(),
                 currentSuggestionFieldIdentity: currentSuggestionState.fieldIdentity,
                 currentFieldIdentity: currentFieldIdentity,
-                frontmostBundleIdentifier: frontmostBundleIdentifier,
+                referenceBundleIdentifier: frontmostBundleIdentifier,
                 isInvalidatedByUserTyping: currentSuggestionState.invalidatedByUserKeyDown,
                 currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
                 maximumPreservedAgeMilliseconds: maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds
