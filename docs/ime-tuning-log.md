@@ -84,6 +84,24 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — GEMMA FULL POWER: cache + streaming + screen context
+
+- **llama slot cache engaged:** `--swa-full` (Gemma's sliding-window layers keep
+  a full, rollback-capable cache) + `--cache-reuse 256`. Measured via
+  `timings.prompt_n`: warm consecutive keystrokes re-read only single-digit to
+  low-double-digit tokens (vs the full ~400+-token prompt).
+- **Streaming over the llama path:** SSE from `/completion` (`stream: true`),
+  partials cleaned progressively through the SAME CompletionOutputCleaner and
+  forwarded down the existing socket-partial plumbing. Measured: **first ghost
+  word 36–122ms, finals 125–211ms.**
+- **Screen context joined the raw recipe:** `RawContinuationPrompt` gains a
+  "Reference notes visible on the writer's screen" block (framed: may be a
+  reply target/source/unrelated; use names/topics; never copy) placed BEFORE
+  the Text line so the burst-frozen snapshot stays in the cacheable prefix.
+  Verified attaching live (`screenContextAttached=true`, `page:true`).
+- Diagnostics now record firstChunkMilliseconds / promptTokensProcessed /
+  screenContextAttached per llama request.
+
 ## 2026-07-22 — LLAMA BRIDGE SHIPPED: Gemma E4B is the phrase engine
 
 - **The keyboard now runs Gemma 4 E4B for phrase continuations.** Architecture:
