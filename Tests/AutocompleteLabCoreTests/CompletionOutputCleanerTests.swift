@@ -266,6 +266,22 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Start the next sentence if needed.", after: "We shipped it.") == nil)
     }
 
+    @Test("Suppresses bare answer-label echoes without colons")
+    func suppressesBareAnswerLabelEchoes() {
+        // Models sometimes reply with the literal name of the answer field
+        // ("Suffix" appeared as a ghost during dogfood). Colon-less echoes slip
+        // past prefix stripping, so a whole-output label match must reject.
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Suffix", after: "it is intere", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("suffix", after: "it is intere", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("Next words", after: "Can we") == nil)
+        #expect(cleaner.clean("Next 3-8 words, or <NO_SUGGESTION>", after: "Can we") == nil)
+        // Real completions that merely CONTAIN a label word still pass.
+        #expect(cleaner.clean("sting", after: "it is intere", mode: .wordCompletion) != nil)
+        #expect(cleaner.clean("suffixes are common in English", after: "Grammar note: ") != nil)
+    }
+
     @Test("Suppresses no suggestion sentinel outputs")
     func suppressesNoSuggestionSentinelOutputs() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

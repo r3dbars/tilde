@@ -104,7 +104,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Do not brainstorm, rewrite"))
         #expect(prompt.system.contains("reason"))
         #expect(prompt.user.hasSuffix("Before cursor:\nI think we should"))
-        #expect(prompt.system.hasSuffix("Answer with: Next words:"))
+        #expect(!prompt.system.contains("Answer with:"))
     }
 
     @Test("Default daily-driver prompt asks for a three to eight word phrase")
@@ -117,7 +117,7 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("next 8 words or fewer"))
         #expect(prompt.system.contains("Length setting: medium. Prefer at least 3 words"))
-        #expect(prompt.system.hasSuffix("Answer with: Next 3-8 words, or <NO_SUGGESTION>:"))
+        #expect(!prompt.system.contains("Answer with:"))
     }
 
     @Test("Prompt app prompt avoids generic product filler")
@@ -198,7 +198,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.contains("- Keep OCR local"))
         #expect(!prompt.user.contains("Untitled 13"))
         #expect(prompt.user.contains("Before cursor:\nWe should"))
-        #expect(prompt.system.hasSuffix("Answer with: Next words:"))
+        #expect(!prompt.system.contains("Answer with:"))
         #expect(!prompt.user.contains("!!!"))
     }
 
@@ -398,7 +398,8 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
         #expect(prompt.system.contains("suffix would complete the wrong word"))
         #expect(prompt.system.contains("No spaces"))
-        #expect(prompt.system.hasSuffix("Answer with: Suffix:"))
+        #expect(!prompt.system.contains("Answer with:"))
+        #expect(!prompt.system.contains("Suffix:"))
     }
 
     @Test("Prompt allows extended visible word requests")
@@ -419,7 +420,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("easy to finish without making the user think about permissions twice"))
         #expect(!prompt.system.contains(#""The onboarding screen should make" -> "permission feel clear""#))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
-        #expect(prompt.system.hasSuffix("Answer with: Next 12-20 words, or <NO_SUGGESTION>:"))
+        #expect(!prompt.system.contains("Answer with:"))
     }
 
     @Test("High word slider overrides short kept style for length")
@@ -441,7 +442,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Recent kept style sketch: avg 1.23 words"))
         #expect(prompt.system.contains("Length setting overrides recent short-kept history"))
         #expect(prompt.system.contains("not to shrink the suggestion below the high word-count target"))
-        #expect(prompt.system.hasSuffix("Answer with: Next 12-20 words, or <NO_SUGGESTION>:"))
+        #expect(!prompt.system.contains("Answer with:"))
     }
 
     @Test("Prompt trims long context from the left")
