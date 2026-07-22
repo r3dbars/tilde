@@ -474,9 +474,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private let suggestionRequestScheduler = SuggestionRequestScheduler()
     private let pendingSuggestionRequestContinuityPolicy = PendingSuggestionRequestContinuityPolicy()
-    private let codexPromptPresentationRetryHost = CodexPromptPresentationRetryHost()
+    private let codexPromptPresentationRetryHost = GenerationGuardedDelayedTask()
     private lazy var insertionVerificationHost = InsertionVerificationHost(handler: self)
-    private let deferredTerminalHostAcceptanceHost = DeferredTerminalHostAcceptanceHost()
+    private let deferredTerminalHostAcceptanceHost = GenerationGuardedDelayedTask()
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private let acceptanceSurvivalTaskHost = AcceptanceSurvivalTaskHost()
     private lazy var suggestionRequestCancellationHost = SuggestionRequestCancellationHost(
@@ -485,7 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.codexPromptTargetContinuityHost.clearCooldownPreservation()
             },
             hasScheduledPresentationRetry: { [weak self] in
-                self?.codexPromptPresentationRetryHost.hasScheduledRetry == true
+                self?.codexPromptPresentationRetryHost.isScheduled == true
             },
             cancelPresentationRetry: { [weak self] in
                 self?.codexPromptPresentationRetryHost.cancel()
@@ -1318,7 +1318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
-    private let acceptedInsertionUndoExpirationHost = AcceptedInsertionUndoExpirationHost()
+    private let acceptedInsertionUndoExpirationHost = GenerationGuardedDelayedTask()
     private let acceptedInsertionUndoRecoveryMode = AcceptedInsertionUndoRecoveryMode.fromEnvironment()
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
@@ -3300,7 +3300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         case let .coolingDown(cooldown):
             let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
-                || codexPromptPresentationRetryHost.hasScheduledRetry
+                || codexPromptPresentationRetryHost.isScheduled
                 || suggestionSession.hasVisibleSuggestion
                 || suggestionIdleRetryState.hasPendingRetry
                 || manualSuggestionRequestHost.isPending
@@ -3348,7 +3348,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
-            || codexPromptPresentationRetryHost.hasScheduledRetry
+            || codexPromptPresentationRetryHost.isScheduled
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
             || manualSuggestionRequestHost.isPending
@@ -4020,7 +4020,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         promptBlockReason: String
     ) -> CodexPromptTargetInvalidationResolution {
         let hasActiveSuggestionWork = suggestionRequestScheduler.hasPendingRequest
-            || codexPromptPresentationRetryHost.hasScheduledRetry
+            || codexPromptPresentationRetryHost.isScheduled
             || suggestionSession.hasVisibleSuggestion
             || suggestionIdleRetryState.hasPendingRetry
             || manualSuggestionRequestHost.isPending
@@ -4051,7 +4051,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let shouldArmRetry = suggestionRequestScheduler.hasPendingRequest
-            || codexPromptPresentationRetryHost.hasScheduledRetry
+            || codexPromptPresentationRetryHost.isScheduled
             || suggestionSession.hasVisibleSuggestion
             || manualSuggestionRequestHost.isPending
         let cancelledPendingRequest = invalidatePendingSuggestionRequest()
@@ -5391,7 +5391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleAcceptedInsertionUndoExpiration(acceptanceID: String, expiresAt: Date) {
-        acceptedInsertionUndoExpirationHost.schedule(expiresAt: expiresAt) { [weak self] in
+        acceptedInsertionUndoExpirationHost.schedule(at: expiresAt) { [weak self] in
             guard let self,
                   self.pendingAcceptedInsertionUndo?.acceptanceID == acceptanceID else {
                 return
