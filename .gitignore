@@ -22,3 +22,4 @@ Data/
 # Local proof screenshots are regenerable and stay out of normal checkouts.
 docs/product/native-visual-qa/*.png
 docs/product/obsidian-proof-screenshots/*.png
+.gstack/
