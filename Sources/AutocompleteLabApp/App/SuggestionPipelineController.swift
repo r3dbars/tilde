@@ -9,7 +9,6 @@ struct FocusPollingCadenceSignals {
     var isTrustedForAccessibility: Bool
     var hasSupportedProfile: Bool
     var hasVisibleSuggestion: Bool
-    var hasPersonalCapture: Bool
     var lastFocusedTextChangeAt: Date?
 }
 
@@ -161,7 +160,7 @@ final class SuggestionPipelineController {
             now: now,
             lastPollAt: lastPollAttemptAt,
             isTrustedForAccessibility: signals.isTrustedForAccessibility,
-            hasSupportedProfile: signals.hasSupportedProfile || signals.hasPersonalCapture,
+            hasSupportedProfile: signals.hasSupportedProfile,
             hasVisibleSuggestion: signals.hasVisibleSuggestion,
             hasRecentTextChange: hasRecentTextChange
         )

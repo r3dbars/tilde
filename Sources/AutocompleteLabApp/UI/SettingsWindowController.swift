@@ -218,11 +218,9 @@ struct SettingsPrivacyState: Equatable {
     let screenshotTracingEnabled: Bool
     let screenshotTracingExpiresAt: Date?
     let visiblePageContextEnabled: Bool
-    let personalCaptureEnabled: Bool
     let screenCaptureAccessGranted: Bool
     let diagnosticsPath: String
     let tracePath: String
-    let personalCapturePath: String
 
     init(
         tracingPaused: Bool,
@@ -231,11 +229,9 @@ struct SettingsPrivacyState: Equatable {
         screenshotTracingEnabled: Bool,
         screenshotTracingExpiresAt: Date?,
         visiblePageContextEnabled: Bool,
-        personalCaptureEnabled: Bool = false,
         screenCaptureAccessGranted: Bool,
         diagnosticsPath: String,
-        tracePath: String,
-        personalCapturePath: String = ""
+        tracePath: String
     ) {
         self.tracingPaused = tracingPaused
         self.rawContentTracingEnabled = rawContentTracingEnabled
@@ -243,11 +239,9 @@ struct SettingsPrivacyState: Equatable {
         self.screenshotTracingEnabled = screenshotTracingEnabled
         self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
         self.visiblePageContextEnabled = visiblePageContextEnabled
-        self.personalCaptureEnabled = personalCaptureEnabled
         self.screenCaptureAccessGranted = screenCaptureAccessGranted
         self.diagnosticsPath = diagnosticsPath
         self.tracePath = tracePath
-        self.personalCapturePath = personalCapturePath
     }
 
     var statusText: String {
@@ -271,14 +265,6 @@ struct SettingsPrivacyState: Equatable {
         }
 
         return "Reads nearby on-screen text: \(visiblePageContextEnabled ? "on" : "off"). This happens on your Mac and only improves suggestions."
-    }
-
-    var personalCaptureStatusText: String {
-        "Writing journal: \(personalCaptureEnabled ? "on" : "off")"
-    }
-
-    var personalCaptureDetailText: String {
-        "Optional. Saves a daily Markdown file on this Mac so SteadyType can learn from your real writing. It stays out of any diagnostic report."
     }
 
     var sharingStatusText: String {
@@ -310,11 +296,7 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var pathText: String {
-        guard !personalCapturePath.isEmpty else {
-            return "Activity log: \(diagnosticsPath) | Event log: \(tracePath)"
-        }
-
-        return "Activity log: \(diagnosticsPath) | Event log: \(tracePath) | Writing journal: \(personalCapturePath)"
+        "Activity log: \(diagnosticsPath) | Event log: \(tracePath)"
     }
 }
 
@@ -419,7 +401,7 @@ struct SettingsTrustState: Equatable {
     }
 
     var typedTextText: String {
-        if privacy.rawContentTracingEnabled || privacy.personalCaptureEnabled {
+        if privacy.rawContentTracingEnabled {
             return "Your text: a local journal or detailed log is on."
         }
 
@@ -1017,9 +999,6 @@ final class SettingsWindowController: NSObject {
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let toggleVisiblePageContext: () -> Void
-    private let togglePersonalCapture: () -> Void
-    private let revealPersonalCaptureFolder: () -> Void
-    private let deletePersonalCapture: () -> Void
     private let deleteLocalLogs: () -> Void
     private let clearLearningData: () -> Void
     private let exportPrivacyBundle: () -> Void
@@ -1055,9 +1034,6 @@ final class SettingsWindowController: NSObject {
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         toggleVisiblePageContext: @escaping () -> Void,
-        togglePersonalCapture: @escaping () -> Void = {},
-        revealPersonalCaptureFolder: @escaping () -> Void = {},
-        deletePersonalCapture: @escaping () -> Void = {},
         deleteLocalLogs: @escaping () -> Void,
         clearLearningData: @escaping () -> Void,
         exportPrivacyBundle: @escaping () -> Void = {},
@@ -1089,9 +1065,6 @@ final class SettingsWindowController: NSObject {
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.toggleVisiblePageContext = toggleVisiblePageContext
-        self.togglePersonalCapture = togglePersonalCapture
-        self.revealPersonalCaptureFolder = revealPersonalCaptureFolder
-        self.deletePersonalCapture = deletePersonalCapture
         self.deleteLocalLogs = deleteLocalLogs
         self.clearLearningData = clearLearningData
         self.exportPrivacyBundle = exportPrivacyBundle

@@ -48,37 +48,4 @@ struct LocalArtifactPermissionsTests {
         #expect(try posixMode(of: root) == 0o700)
     }
 
-    @Test("Personal Capture journal writes an owner-only file in an owner-only directory")
-    func personalCaptureJournalIsOwnerOnly() throws {
-        let folderURL = makeTempDirectoryURL()
-        defer { try? FileManager.default.removeItem(at: folderURL) }
-
-        let writer = PersonalCaptureJournalWriter(folderURL: folderURL)
-        let context = PersonalCaptureJournalContext(
-            appDisplayName: "TextEdit",
-            appBundleIdentifier: "com.apple.TextEdit",
-            fieldIdentity: "com.apple.TextEdit|pid:1|element:2",
-            fieldKind: .multilineCompose,
-            fieldKindReason: "test",
-            source: "test"
-        )
-
-        writer.recordAcceptedSuggestion(
-            acceptedText: "the quick brown fox",
-            context: context,
-            suggestionID: "s1",
-            acceptanceID: "a1",
-            acceptMode: "acceptAllVisible"
-        )
-        writer.waitForPendingWrites()
-
-        let markdownFile = try #require(
-            try FileManager.default
-                .contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
-                .first { $0.pathExtension == "md" }
-        )
-
-        #expect(try posixMode(of: markdownFile) == 0o600)
-        #expect(try posixMode(of: folderURL) == 0o700)
-    }
 }

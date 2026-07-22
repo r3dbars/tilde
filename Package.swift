@@ -15,14 +15,6 @@ let package = Package(
         .executable(
             name: "SteadyType",
             targets: ["AutocompleteLabApp"]
-        ),
-        .executable(
-            name: "AutocompleteTraceReplay",
-            targets: ["AutocompleteTraceReplay"]
-        ),
-        .executable(
-            name: "SteadyTypeReplayEval",
-            targets: ["SteadyTypeReplayEval"]
         )
     ],
     dependencies: [
@@ -47,14 +39,6 @@ let package = Package(
                 .product(name: "Hub", package: "swift-transformers"),
                 .product(name: "Tokenizers", package: "swift-transformers")
             ]
-        ),
-        .executableTarget(
-            name: "AutocompleteTraceReplay",
-            dependencies: ["AutocompleteLabCore"]
-        ),
-        .executableTarget(
-            name: "SteadyTypeReplayEval",
-            dependencies: ["AutocompleteLabCore"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
