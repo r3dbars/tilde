@@ -1,14 +1,22 @@
 import Foundation
 
-/// Owns one transient Codex prompt presentation retry task.
-/// Presentation and AX validation remain in AppDelegate.
 @MainActor
-final class CodexPromptPresentationRetryHost {
-    private var retryTask: Task<Void, Never>?
+final class GenerationGuardedDelayedTask {
+    private var task: Task<Void, Never>?
     private var generation = 0
 
-    var hasScheduledRetry: Bool {
-        retryTask != nil
+    var isScheduled: Bool {
+        task != nil
+    }
+
+    func schedule(
+        at date: Date,
+        operation: @escaping @MainActor () -> Void
+    ) {
+        schedule(
+            afterMilliseconds: Int(date.timeIntervalSinceNow * 1_000),
+            operation: operation
+        )
     }
 
     func schedule(
@@ -18,7 +26,7 @@ final class CodexPromptPresentationRetryHost {
         cancel()
         generation += 1
         let scheduledGeneration = generation
-        retryTask = Task { @MainActor [weak self] in
+        task = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(max(0, delayMilliseconds)))
             guard !Task.isCancelled else {
                 return
@@ -28,13 +36,13 @@ final class CodexPromptPresentationRetryHost {
             guard self?.generation == scheduledGeneration else {
                 return
             }
-            self?.retryTask = nil
+            self?.task = nil
         }
     }
 
     func cancel() {
         generation += 1
-        retryTask?.cancel()
-        retryTask = nil
+        task?.cancel()
+        task = nil
     }
 }
