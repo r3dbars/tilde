@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>InlineGhostIME</string>
+    <key>CFBundleDisplayName</key>
+    <string>Inline Ghost (SteadyType Spike)</string>
+    <key>CFBundleIdentifier</key>
+    <string>bar.r3d.inputmethod.InlineGhost</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>InlineGhostIME</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>26.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+
+    <key>InputMethodConnectionName</key>
+    <string>InlineGhostIME_1_Connection</string>
+    <key>InputMethodServerControllerClass</key>
+    <string>GhostInputController</string>
+
+    <key>tsInputMethodCharacterRepertoireKey</key>
+    <array>
+        <string>Latn</string>
+    </array>
+
+    <key>TISInputSourceID</key>
+    <string>bar.r3d.inputmethod.InlineGhost</string>
+    <key>TISIntendedLanguage</key>
+    <string>en</string>
+</dict>
+</plist>
