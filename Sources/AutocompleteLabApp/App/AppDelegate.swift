@@ -1,6 +1,7 @@
 import AppKit
 import AutocompleteLabCore
 import CoreGraphics
+import ServiceManagement
 
 struct MenuBarStatusItemConfiguration: Equatable {
     let symbolName: String
@@ -1068,6 +1069,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appLifecycleHost.start()
         ghostBrainServerHost.start()
         llamaServerHost.start()
+        registerAsLoginItemIfNeeded()
+    }
+
+    /// The keyboard is only as smart as this app is alive: register as a login
+    /// item once so the brain survives reboots. The user keeps control — macOS
+    /// surfaces this in System Settings › General › Login Items, and a manual
+    /// disable there is respected (status becomes .notFound/.notRegistered and
+    /// we only attempt while .notRegistered once per launch).
+    private func registerAsLoginItemIfNeeded() {
+        guard SMAppService.mainApp.status == .notRegistered else { return }
+        try? SMAppService.mainApp.register()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
