@@ -282,6 +282,20 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("suffixes are common in English", after: "Grammar note: ") != nil)
     }
 
+    @Test("Suppresses assistant-persona leaks")
+    func suppressesAssistantPersonaLeaks() {
+        // Seen live: with an AI conversation on screen, the model slipped into
+        // chatbot persona ("I'm sorry, but as an AI chatbot developed"). Persona
+        // markers anywhere in a candidate must kill it; plain human apologies
+        // remain legitimate continuations.
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("I'm sorry, but as an AI chatbot developed", after: "the message you gave us? ") == nil)
+        #expect(cleaner.clean("As a language model I cannot say", after: "what do you think? ") == nil)
+        #expect(cleaner.clean("I cannot assist with that request", after: "can you help ") == nil)
+        #expect(cleaner.clean("I'm sorry about the delay", after: "Hey, I missed the meeting. ") != nil)
+    }
+
     @Test("Suppresses no suggestion sentinel outputs")
     func suppressesNoSuggestionSentinelOutputs() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

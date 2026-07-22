@@ -249,6 +249,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return .rejected(.promptInstructionEcho)
         }
 
+        guard !isAssistantPersonaLeak(withoutPromptEchoLabel) else {
+            return .rejected(.promptInstructionEcho)
+        }
+
         guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
             return .rejected(.noSuggestionSentinel)
         }
@@ -487,6 +491,28 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
             || normalized.hasPrefix("start the next sentence")
+    }
+
+    /// Chat-tuned models sometimes slip into the assistant persona — refusing,
+    /// apologizing "as an AI", or answering instead of continuing (seen live:
+    /// "I'm sorry, but as an AI chatbot developed"). Any persona marker anywhere
+    /// in a candidate kills it. Plain apologies ("I'm sorry about the delay")
+    /// remain legitimate continuations and pass.
+    private func isAssistantPersonaLeak(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        let markers = [
+            "as an ai",
+            "as a language model",
+            "as an assistant",
+            "ai chatbot",
+            "ai assistant",
+            "language model",
+            "i cannot assist",
+            "i can't assist",
+            "cannot help with that",
+            "i'm not able to help",
+        ]
+        return markers.contains { normalized.contains($0) }
     }
 
     /// Models occasionally answer with the literal name of the answer field —
