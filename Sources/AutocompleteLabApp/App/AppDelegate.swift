@@ -90,6 +90,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntimeBundle.runtime
     }
     private lazy var engine: any CompletionEngine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
+    // Rebuilds its engine per request so model repairs/installs are picked up live.
+    private lazy var ghostBrainServerHost = GhostBrainServerHost(engineProvider: { [weak self] in
+        guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
+        return RuntimeBackedCompletionEngine(runtime: self.modelRuntimeBundle.runtime)
+    })
     private lazy var insertionEngine = InsertionEngine(accessibilityClient: accessibilityClient)
     private let keyboardCaptureSafetyPolicy = KeyboardCaptureSafetyPolicy()
     private let insertionVerification = InsertionVerification()
@@ -1040,9 +1045,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appLifecycleHost.start()
+        ghostBrainServerHost.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        ghostBrainServerHost.stop()
         appLifecycleHost.stop()
     }
 
