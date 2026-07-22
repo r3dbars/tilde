@@ -84,6 +84,29 @@ more dogfood data).
   full restart · user must add + switch keyboard in System Settings manually.
   All encoded in `script/build_ime.sh` + `Sources/InlineGhostIME/README.md`.
 
+## 2026-07-22 — screen context round, part 3 (persona-slip fix)
+
+- **Assistant-persona leak (dogfood catch, screenshot):** with an AI
+  conversation on screen and typed text that questioned/addressed an AI, the
+  model slipped into chatbot persona: ghost = "I'm sorry, but as an AI chatbot
+  developed". Repeating pattern. Three-layer fix, all **KEEP**:
+  1. System prompt identity anchor (top of prompt): "You type the next words IN
+     THE USER'S OWN VOICE… never a chatbot… a question gets continued, never
+     answered."
+  2. OCR guidance: even when the visible context is an AI conversation, only
+     ever continue the USER's side; never adopt a persona from the screen.
+  3. Cleaner backstop `isAssistantPersonaLeak`: persona markers anywhere in a
+     candidate ("as an AI", "language model", "AI chatbot", "I cannot
+     assist"…) reject it; plain human apologies still pass. Focused test pins
+     the live repro.
+  Verified on the exact repro: normal continuations, no persona.
+- **Residual quirks observed (OPEN):** (a) the model can predict "your next
+  words" by COPYING your own draft/message visible elsewhere on screen —
+  technically banned by guidance but not enforced; candidate lever: cleaner
+  dedupe of candidates against visible-context lines. (b) 4-word-span
+  repetition of the current sentence is prompt-banned but not
+  cleaner-enforced; candidate lever if seen in dogfood.
+
 ## 2026-07-22 — screen context round, part 2 (latency-first + relationship-aware)
 
 - **Event-driven capture (owner's design):** screenshots now happen at capture
