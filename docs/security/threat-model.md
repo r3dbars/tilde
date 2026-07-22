@@ -5,6 +5,14 @@ autocomplete app (`Sources/AutocompleteLabApp`) and the pure policy core
 (`Sources/AutocompleteLabCore`). This complements — it does not replace — the privacy
 no-leak sentinel tests and the local privacy export proof.
 
+> **2026-07-22 update:** the opt-in Personal Capture journal/episode store and the
+> terminal-hosted Codex/Claude Code prompt support were removed in the simplification
+> series (PRs #286–#290). References to `PersonalCaptureJournalWriter`,
+> `PersonalCaptureEpisodeStore`, `PersonalCapturePolicy`, and terminal-host insertion
+> below describe the audited baseline, not current code. Any legacy
+> `Personal Capture` folder left by earlier builds is deleted via
+> Settings → "Delete local logs".
+
 This document is the source of truth for SteadyType's *security* posture (distinct from the
 *privacy/no-leak* proofs). Keep it short and decision-oriented. When you change insertion,
 identity, tracing, capture, event-tap, or model-asset behavior, update the matching finding.
