@@ -78,12 +78,14 @@ public enum CompletionPromptTemplate: String, Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    // v12: context-terminal user prompt — every instruction (including the answer
-    // label) lives in the system prompt, and the user prompt ENDS with the text
-    // before the cursor. Consecutive keystrokes then strictly extend the previous
-    // prompt's tokens, which is what lets the prompt KV cache append instead of
-    // missing on every request.
-    public static let promptStyleIdentifier = "screen-aware-continuation-v12"
+    // v12: context-terminal user prompt — instructions live in the system prompt
+    // and the user prompt ENDS with the text before the cursor, so consecutive
+    // keystrokes strictly extend the previous prompt's tokens and the prompt KV
+    // cache appends instead of missing.
+    // v13: the "Answer with: <label>" line is gone — models echoed the literal
+    // label ("Suffix") as a suggestion. The system instructions already specify
+    // the answer format; the cleaner also rejects bare label echoes as backstop.
+    public static let promptStyleIdentifier = "screen-aware-continuation-v13"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -124,7 +126,6 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             visiblePageContext: request.visiblePageContext,
             textAfterCursor: includesTextAfterCursor ? request.textAfterCursor : ""
         )
-        let answerLabel = suffixLabel(for: request.mode, visibleWords: effectiveMaxVisibleWords)
 
         if request.mode == .wordCompletion {
             let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
@@ -146,15 +147,13 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 Suffix examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For "The setting should be configu", return rable, not ration. For "privacy note should stay redac", return ted, not tion. Never return tion unless it completes the visible word.
                 Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
-                Answer with: \(answerLabel)
                 """,
                 user: userPrompt
             )
         }
 
         return CompletionPrompt(
-            system: phraseContinuationSystemPrompt(for: request, behaviorProfile: behaviorProfile)
-                + "\nAnswer with: \(answerLabel)",
+            system: phraseContinuationSystemPrompt(for: request, behaviorProfile: behaviorProfile),
             user: userPrompt
         )
     }
@@ -252,21 +251,6 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         behaviorProfile: AutocompleteBehaviorProfile
     ) -> Int {
         min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
-    }
-
-    private func suffixLabel(for mode: CompletionRequestMode, visibleWords: Int) -> String {
-        guard mode != .wordCompletion else {
-            return "Suffix:"
-        }
-
-        let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(
-            forVisibleWords: visibleWords
-        )
-        guard visibleWords >= 6 else {
-            return "Next words:"
-        }
-
-        return "Next \(preferredMinimum)-\(visibleWords) words, or \(Self.noSuggestionToken):"
     }
 
     /// Context-terminal on purpose: the "Before cursor" block comes LAST and the

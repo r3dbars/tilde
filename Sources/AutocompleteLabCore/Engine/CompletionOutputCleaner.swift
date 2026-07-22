@@ -245,6 +245,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return .rejected(.emptyOutput)
         }
 
+        guard !isBareAnswerLabelEcho(withoutPromptEchoLabel) else {
+            return .rejected(.promptInstructionEcho)
+        }
+
         guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
             return .rejected(.noSuggestionSentinel)
         }
@@ -483,6 +487,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
             || normalized.hasPrefix("start the next sentence")
+    }
+
+    /// Models occasionally answer with the literal name of the answer field —
+    /// "Suffix", "Next words" — instead of a completion. Colon-less echoes slip
+    /// past the prefix-stripping above, so an output that IS a label is rejected.
+    private func isBareAnswerLabelEcho(_ text: String) -> Bool {
+        var normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.hasSuffix(":") { normalized.removeLast() }
+        if ["suffix", "next words", "next word", "continuation", "completion", "suggestion"].contains(normalized) {
+            return true
+        }
+        return normalized.range(
+            of: #"^next \d+-\d+ words(, or .*)?$"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private func strippingPromptEchoLabel(from text: String) -> String {
