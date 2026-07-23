@@ -22,6 +22,27 @@ keep it only if the number moves.** Tuning stopped being vibes.
 Baseline: **EM@1 17.2%**, keystrokes/spoken 0.96, spoke 95.6%, p50 ~140ms.
 (Without screen context it was 14.5% — see the OCR result below.)
 
+## Diverse quiz — the representative baseline (2026-07-23)
+
+Discord alone was the *hardest* material (inside jokes, jargon, fragments), so
+17.2% understated the product. A balanced 2,000-question quiz across four
+registers (500 each, all with context) is the reference number going forward:
+
+| source | register | EM@1 (spoken) | keystrokes/guess |
+|---|---|---|---|
+| dailydialog | chat (clean) | **26.5%** | **1.9** |
+| blog | prose | 23.8% | 1.5 |
+| aeslc | email | 23.8% | 1.5 |
+| discord | chat (chaos) | 18.5% | 1.0 |
+| **overall** | — | **23.1%** | **1.4** |
+
+Takeaways: on writing that resembles real use (texts, email, prose) the ghost
+is meaningfully better than the Discord-only number; structured registers
+(email/prose) save the most keystrokes when right. Corpus:
+`~/.cache/steadytype-eval/diverse_eval.jsonl` (built from the four
+`*_eval.jsonl` via `script/fetch_{aeslc,blog,dailydialog}.py` + Discord).
+Tune and bake off models against THIS mix, not Discord alone.
+
 ## Screen context (OCR) is worth a lot
 
 Feeding the conversation being replied to (as OCR would) lifted **EM@1 14.5% →
