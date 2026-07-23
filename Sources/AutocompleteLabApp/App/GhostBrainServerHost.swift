@@ -121,6 +121,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     "model": env["STEADYTYPE_MODEL"] ?? "auto",
                     "model_path": env["STEADYTYPE_MODEL_PATH"] ?? "default",
                     "confidence": env["STEADYTYPE_CONFIDENCE"] ?? "0",
+                    "max_context_chars": env["STEADYTYPE_MAX_CONTEXT_CHARS"] ?? "3000",
+                    "max_screen_chars": env["STEADYTYPE_MAX_SCREEN_CHARS"] ?? "700",
+                    "echo_guard": env["STEADYTYPE_ECHO_GUARD_MIN_WORDS"] ?? "4",
+                    "top_p": env["STEADYTYPE_TOP_P"] ?? "default",
+                    "top_k": env["STEADYTYPE_TOP_K"] ?? "default",
+                    "min_p": env["STEADYTYPE_MIN_P"] ?? "default",
+                    "repeat_penalty": env["STEADYTYPE_REPEAT_PENALTY"] ?? "default",
                 ], to: connection)
                 return
             }

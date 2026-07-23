@@ -19,6 +19,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         let downloadURL: URL
         let expectedMinimumBytes: Int64
 
+        // Default model, one for every Mac (base beats instruct for our raw
+        // recipe; 1.6GB fits any machine — see docs/quiz-lessons.md bakeoff).
+        static let gemma2_2b = ModelTier(
+            fileName: "gemma-2-2b.Q4_K_M.gguf",
+            downloadURL: URL(string: "https://huggingface.co/RichardErkhov/google_-_gemma-2-2b-gguf/resolve/main/gemma-2-2b.Q4_K_M.gguf")!,
+            expectedMinimumBytes: 1_500_000_000
+        )
         static let e2b = ModelTier(
             fileName: "gemma-4-E2B_q4_0-it.gguf",
             downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf")!,
@@ -31,28 +38,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         )
 
         static var current: ModelTier {
-            // Tuning-sweep override: STEADYTYPE_MODEL=E2B|E4B pins the tier so the
-            // driver can A/B model size without spoofing hardware.
+            // Override: STEADYTYPE_MODEL=E2B|E4B pins an old Gemma-4 tier (bakeoff
+            // A/B). Default is the single Gemma 2 2B base model for all hardware.
             switch ProcessInfo.processInfo.environment["STEADYTYPE_MODEL"]?.uppercased() {
             case "E2B": return e2b
             case "E4B": return e4b
-            default: break
+            default: return gemma2_2b
             }
-            var memsize: Int64 = 0
-            var size = MemoryLayout<Int64>.size
-            sysctlbyname("hw.memsize", &memsize, &size, nil, 0)
-            if memsize > 0, memsize < 24 * 1024 * 1024 * 1024 {
-                return ModelTier(
-                    fileName: "gemma-4-E2B_q4_0-it.gguf",
-                    downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf")!,
-                    expectedMinimumBytes: 2_500_000_000
-                )
-            }
-            return ModelTier(
-                fileName: "gemma-4-E4B_q4_0-it.gguf",
-                downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/4b4a2c1d584be7264f87aac328a1bc739ce81b6c/gemma-4-E4B_q4_0-it.gguf")!,
-                expectedMinimumBytes: 4_000_000_000
-            )
         }
     }
 

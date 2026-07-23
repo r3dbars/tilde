@@ -27,23 +27,31 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
+        // All tuning knobs read from the environment so the auto-research loop
+        // can turn any dial without a rebuild (see script/research_loop.py).
+        let env = ProcessInfo.processInfo.environment
+        func envInt(_ k: String) -> Int? { env[k].flatMap(Int.init) }
+        func envDouble(_ k: String) -> Double? { env[k].flatMap(Double.init) }
+
         let register = ContinuationRegister.from(bundleIdentifier: request.appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: request.textBeforeCursor,
             screenContext: request.visiblePageContext?.promptText,
-            register: register
+            register: register,
+            maxContextCharacters: envInt("STEADYTYPE_MAX_CONTEXT_CHARS") ?? 3000,
+            maxScreenContextCharacters: envInt("STEADYTYPE_MAX_SCREEN_CHARS") ?? 700
         )
-        // Tuning-sweep override: STEADYTYPE_TEMPERATURE lets the driver confirm
-        // greedy (0) is best for exact-match without a rebuild. Default 0.
-        let temperature = ProcessInfo.processInfo.environment["STEADYTYPE_TEMPERATURE"]
-            .flatMap(Double.init) ?? 0
-        // Confidence gate: STEADYTYPE_CONFIDENCE (0..1) suppresses the whole
-        // suggestion when the model's probability on its FIRST token is below
-        // the bar — "stay quiet rather than show a shaky guess". 0 = off.
-        // n_probs:1 asks llama.cpp to report each token's logprob.
-        let confidenceThreshold = ProcessInfo.processInfo.environment["STEADYTYPE_CONFIDENCE"]
-            .flatMap(Double.init) ?? 0
-        let body: [String: Any] = [
+        // Greedy (temperature 0) is the default; the loop can explore warmer
+        // settings with the sampler knobs below.
+        let temperature = envDouble("STEADYTYPE_TEMPERATURE") ?? 0
+        // Confidence gate (0..1): suppress the whole suggestion when the model's
+        // first-token probability is below the bar. 0 = off. n_probs:1 asks
+        // llama.cpp to report each token's logprob.
+        let confidenceThreshold = envDouble("STEADYTYPE_CONFIDENCE") ?? 0
+        // Screen-echo guard: drop suggestions that copy >= N visible words from
+        // the screen. Tunable because a low N can over-suppress good guesses.
+        let echoGuardMinWords = envInt("STEADYTYPE_ECHO_GUARD_MIN_WORDS") ?? 4
+        var body: [String: Any] = [
             "prompt": recipe.prompt,
             "n_predict": min(register.generatedTokenBudget, request.mode.generatedTokenCeiling),
             "temperature": temperature,
@@ -52,6 +60,12 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             "stream": true,
             "n_probs": 1,
         ]
+        // Sampler knobs — only bite when temperature > 0; the loop pairs them
+        // with warmer temperatures to explore beyond greedy decoding.
+        if let v = envDouble("STEADYTYPE_TOP_P") { body["top_p"] = v }
+        if let v = envInt("STEADYTYPE_TOP_K") { body["top_k"] = v }
+        if let v = envDouble("STEADYTYPE_MIN_P") { body["min_p"] = v }
+        if let v = envDouble("STEADYTYPE_REPEAT_PENALTY") { body["repeat_penalty"] = v }
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -133,8 +147,9 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // Screen-echo guard: never "predict" words by copying a run of text the
         // user can already see on screen (their own draft elsewhere, the message
         // being replied to). Grounding is welcome; verbatim copying is not.
-        if let visible = suggestion?.visibleText.trimmingCharacters(in: .whitespaces).lowercased(),
-           visible.split(separator: " ").count >= 4,
+        if echoGuardMinWords > 0,
+           let visible = suggestion?.visibleText.trimmingCharacters(in: .whitespaces).lowercased(),
+           visible.split(separator: " ").count >= echoGuardMinWords,
            let screen = request.visiblePageContext?.text.lowercased(),
            screen.contains(visible) {
             suggestion = nil
