@@ -33,10 +33,14 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             screenContext: request.visiblePageContext?.promptText,
             register: register
         )
+        // Tuning-sweep override: STEADYTYPE_TEMPERATURE lets the driver confirm
+        // greedy (0) is best for exact-match without a rebuild. Default 0.
+        let temperature = ProcessInfo.processInfo.environment["STEADYTYPE_TEMPERATURE"]
+            .flatMap(Double.init) ?? 0
         let body: [String: Any] = [
             "prompt": recipe.prompt,
             "n_predict": min(register.generatedTokenBudget, request.mode.generatedTokenCeiling),
-            "temperature": 0,
+            "temperature": temperature,
             "cache_prompt": true,
             "stop": ["\n"],
             "stream": true,

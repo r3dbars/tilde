@@ -19,7 +19,25 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         let downloadURL: URL
         let expectedMinimumBytes: Int64
 
+        static let e2b = ModelTier(
+            fileName: "gemma-4-E2B_q4_0-it.gguf",
+            downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf")!,
+            expectedMinimumBytes: 2_500_000_000
+        )
+        static let e4b = ModelTier(
+            fileName: "gemma-4-E4B_q4_0-it.gguf",
+            downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/4b4a2c1d584be7264f87aac328a1bc739ce81b6c/gemma-4-E4B_q4_0-it.gguf")!,
+            expectedMinimumBytes: 4_000_000_000
+        )
+
         static var current: ModelTier {
+            // Tuning-sweep override: STEADYTYPE_MODEL=E2B|E4B pins the tier so the
+            // driver can A/B model size without spoofing hardware.
+            switch ProcessInfo.processInfo.environment["STEADYTYPE_MODEL"]?.uppercased() {
+            case "E2B": return e2b
+            case "E4B": return e4b
+            default: break
+            }
             var memsize: Int64 = 0
             var size = MemoryLayout<Int64>.size
             sysctlbyname("hw.memsize", &memsize, &size, nil, 0)

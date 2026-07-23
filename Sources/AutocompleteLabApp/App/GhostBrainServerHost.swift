@@ -109,6 +109,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
         Task.detached(priority: .userInitiated) { [weak self] in
             defer { close(connection) }
             guard let self, let payload = Self.readPayload(connection) else { return }
+            // Config probe: the tuning-sweep driver asks "what are you running?"
+            // and verifies the expected override is live before quizzing. Echoes
+            // launch-time knobs only — never any typed content.
+            if payload.configProbe {
+                let env = ProcessInfo.processInfo.environment
+                Self.write([
+                    "scaffold_chat": env["STEADYTYPE_SCAFFOLD_CHAT_FILE"] ?? "builtin",
+                    "token_budget": env["STEADYTYPE_TOKEN_BUDGET"] ?? "default",
+                    "temperature": env["STEADYTYPE_TEMPERATURE"] ?? "0",
+                    "model": env["STEADYTYPE_MODEL"] ?? "auto",
+                ], to: connection)
+                return
+            }
             let engine = await self.engineProvider()
             // Mid-word contexts want the engine's word-completion mode; word
             // boundaries want phrase continuation. App + field identity let the
@@ -156,6 +169,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         let app: String?
         let field: String?
         let page: String?
+        let configProbe: Bool
     }
 
     private static func readPayload(_ fd: Int32) -> RequestPayload? {
@@ -170,16 +184,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
         if let newline = data.firstIndex(of: 0x0A) {
             data = data.prefix(upTo: newline)
         }
-        guard
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let context = object["context"] as? String,
-            !context.isEmpty
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        if (object["config"] as? Bool) == true {
+            return RequestPayload(context: "", app: nil, field: nil, page: nil, configProbe: true)
+        }
+        guard let context = object["context"] as? String, !context.isEmpty
         else { return nil }
         return RequestPayload(
             context: context,
             app: object["app"] as? String,
             field: object["field"] as? String,
-            page: object["page"] as? String
+            page: object["page"] as? String,
+            configProbe: false
         )
     }
 

@@ -90,14 +90,21 @@ def normalize_word(word):
     return word.lower().strip(".,!?;:\"'()[]{}")
 
 
-def build_page(record, mode):
+def build_page(record, mode, turns=3, style="plain"):
     """Build the request's "page" value for a context mode: "" forces no
     screen context, a non-empty string is used as the OCR page text, and
-    None omits the field (live resolver behavior)."""
+    None omits the field (live resolver behavior).
+
+    turns limits how many prior messages are included (most recent kept);
+    style "labeled" prefixes each with "them: " to mark the other speaker."""
     if mode == "live":
         return None
     if mode == "prior":
         prior = [p for p in record.get("prior_messages", []) if p.strip()]
+        if turns >= 0:
+            prior = prior[-turns:] if turns else []
+        if style == "labeled":
+            prior = ["them: " + p for p in prior]
         return "\n".join(prior)
     return ""
 
@@ -261,7 +268,8 @@ def subsample(records, limit):
     return ordered[:limit]
 
 
-def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off"):
+def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
+             context_turns=3, context_style="plain", force_app=None):
     overall = new_bucket()
     by_register = {}
     by_source = {}
@@ -282,9 +290,10 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off"):
             continue
 
         context, golden = quiz
-        page = build_page(rec, context_mode)
+        page = build_page(rec, context_mode, turns=context_turns, style=context_style)
+        req_app = force_app or app
         try:
-            suggestion, latency_ms, page_attached = ask(context, app, sock_path=sock_path, page=page)
+            suggestion, latency_ms, page_attached = ask(context, req_app, sock_path=sock_path, page=page)
         except (OSError, ConnectionError) as e:
             # Never lose a partial run: stop here and report what completed.
             aborted = f"aborted at case {case_no}/{len(records)}: {e}"
@@ -490,11 +499,28 @@ def main():
         help="screen-context arm: off = force none (clean baseline), "
              "prior = send prior_messages as the OCR page, live = app resolver decides"
     )
+    parser.add_argument("--context-turns", type=int, default=3, help="max prior messages to include (--context prior)")
+    parser.add_argument("--context-style", choices=("plain", "labeled"), default="plain", help="prior-message formatting")
+    parser.add_argument("--force-app", default=None, help="override the request app id (register ablation)")
+    parser.add_argument("--config-only", action="store_true", help="print the app's active config JSON and exit")
+    parser.add_argument("--json", action="store_true", help="emit one machine-readable JSON line of overall metrics")
     parser.add_argument("--selftest", action="store_true", help="run offline self-test of cut/scoring logic and exit")
     args = parser.parse_args()
 
     if args.selftest:
         selftest()
+        return 0
+
+    if args.config_only:
+        s = connect_with_retry(args.sock, 10)
+        s.sendall((json.dumps({"v": 1, "config": True}) + "\n").encode())
+        buf = b""
+        while b"\n" not in buf:
+            c = s.recv(4096)
+            if not c:
+                break
+            buf += c
+        print(buf.split(b"\n", 1)[0].decode("utf-8"))
         return 0
 
     if not args.corpus:
@@ -508,9 +534,30 @@ def main():
 
     overall, by_register, by_source, mismatch_examples, aborted = run_eval(
         records, sleep_s=args.sleep, verbose_k=args.verbose, sock_path=args.sock,
-        context_mode=args.context
+        context_mode=args.context, context_turns=args.context_turns,
+        context_style=args.context_style, force_app=args.force_app
     )
-    print_report(overall, by_register, by_source, mismatch_examples, aborted)
+    if args.json:
+        total = overall["total"]
+        spoke = overall["spoke"]
+        lat = sorted(overall["latencies"]) or [0]
+        print(json.dumps({
+            "cases": total,
+            "spoke": spoke,
+            "spoke_rate": round(spoke / total, 4) if total else 0,
+            "em1": overall["em1_all"],
+            "em1_rate": round(overall["em1_all"] / total, 4) if total else 0,
+            "em2_rate": round(overall["em2_all"] / total, 4) if total else 0,
+            "em3_rate": round(overall["em3_all"] / total, 4) if total else 0,
+            "keystrokes_total": overall["keystrokes_total"],
+            "keystrokes_per_spoken": round(overall["keystrokes_total"] / spoke, 3) if spoke else 0,
+            "p50_ms": percentile(lat, 0.50),
+            "p95_ms": percentile(lat, 0.95),
+            "page_attached": overall["page_attached"],
+            "aborted": aborted,
+        }))
+    else:
+        print_report(overall, by_register, by_source, mismatch_examples, aborted)
     return 1 if aborted else 0
 
 
