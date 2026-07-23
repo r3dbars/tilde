@@ -110,7 +110,12 @@ if os.environ.get("SWEEP_SET") == "confidence":
 if os.environ.get("SWEEP_SET") == "models":
     import glob
     MODEL_DIR = os.path.expanduser("~/.cache/steadytype-eval/models")
-    VERSIONS = [("ref-E4B-default", {}, BASE_FLAGS, {})]
+    # Both Gemma 4 tiers as references (current shipping E4B + the low-RAM E2B),
+    # scored on the same diverse quiz as every bakeoff candidate.
+    VERSIONS = [
+        ("ref-gemma4-E4B", {}, BASE_FLAGS, {}),
+        ("ref-gemma4-E2B", {"STEADYTYPE_MODEL": "E2B"}, BASE_FLAGS, {"model": "E2B"}),
+    ]
     for path in sorted(glob.glob(os.path.join(MODEL_DIR, "*.gguf"))):
         stem = os.path.basename(path)[:-5]
         VERSIONS.append((

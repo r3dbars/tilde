@@ -98,6 +98,15 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             launch(binary: binary, modelPath: explicit)
             return
         }
+        // Bundled model: a self-contained distribution ships its GGUF inside the
+        // app (Contents/Resources/bundled-model.gguf) and uses it verbatim — no
+        // hardware tiering, no first-run download. Absent in dev builds, which
+        // fall through to the tiered download below.
+        let bundledModel = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
+        if FileManager.default.isReadableFile(atPath: bundledModel) {
+            launch(binary: binary, modelPath: bundledModel)
+            return
+        }
         let tier = ModelTier.current
         let modelURL = Self.modelsDirectory.appendingPathComponent(tier.fileName)
         if !Self.isUsableModelFile(at: modelURL, minimumBytes: tier.expectedMinimumBytes) {
