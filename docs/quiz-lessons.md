@@ -162,3 +162,22 @@ next real ceiling-raisers are a bigger model (qwen2.5-7b, +3-5 pts, slower/16GB+
 only) or PERSONALIZATION on the user's own writing — not prompt tuning.
 Perf note: removing the harness's 0.25s inter-question sleep cut per-version
 time ~13min -> ~3min (the pause was pure idle).
+
+## OCR-accuracy track (2026-07-23)
+
+The language quiz feeds CLEAN text as an OCR stand-in, so it never tested the
+eyes. script/ocr_eval.py fixes that: renders known-text images (easy: plain
+lines; HARD: realistic chat/email mockups — dark mode, small fonts, colored
+bubbles, distractor chrome), runs the app's Vision OCR (script/ocr_probe.swift,
+STEADYTYPE_OCR_* knobs), scores word-recall + latency by difficulty.
+
+LESSON (test difficulty matters): on EASY images, turning off language
+correction looked best (100% vs 99.8%, faster). On HARD/realistic images that
+REVERSED — language correction ON is clearly better (hard recall 97.9% vs 93.3%
+off), because OCR makes real errors on cluttered screens that correction fixes.
+The easy-only test gave a false win; the hard test caught it. **Keep the
+shipped default (accurate + language correction).** `fast` level is
+catastrophic on hard images (~52-60% recall) — never use it. minimumTextHeight:
+no effect. OCR is strong on realistic mockups (~98% recall) — the eyes are in
+good shape. CAVEAT: PIL mockups are still cleaner than real native-app
+screenshots (true subpixel AA, real clutter) — real captures are the next step.
