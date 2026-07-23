@@ -177,11 +177,14 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             return
         }
 
+        // OCR knobs (env-tunable so the OCR-accuracy harness + research loop can
+        // trade reading accuracy against speed). Defaults match the shipped app.
+        let ocrEnv = ProcessInfo.processInfo.environment
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
+        request.recognitionLevel = (ocrEnv["STEADYTYPE_OCR_LEVEL"] == "fast") ? .fast : .accurate
+        request.usesLanguageCorrection = (ocrEnv["STEADYTYPE_OCR_LANG_CORRECTION"] ?? "1") != "0"
         request.recognitionLanguages = ["en-US"]
-        request.minimumTextHeight = 0.006
+        request.minimumTextHeight = ocrEnv["STEADYTYPE_OCR_MIN_TEXT_HEIGHT"].flatMap(Float.init) ?? 0.006
 
         do {
             let handler = VNImageRequestHandler(cgImage: image, options: [:])

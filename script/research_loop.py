@@ -55,7 +55,9 @@ SCAFFOLD_FILES = {
 # champion. Cheap knobs (prompt/sampling/filters) churn fast; the model knob is
 # the one expensive dial.
 KNOBS = {
-    "model": ["gemma-2-2b", "smollm2-1.7b", "llama-3.2-3b", "qwen2.5-1.5b"],
+    # Model locked to Gemma 2 2B (owner's decision) — the loop tunes everything
+    # else around it. Restore the alternatives here to re-open the model bakeoff.
+    "model": ["gemma-2-2b"],
     "scaffold": ["builtin", "veryshort", "short", "mixed", "size6"],
     "budget": ["default", 16, 20, 24, 28],
     "temperature": [0, 0.1, 0.2],
