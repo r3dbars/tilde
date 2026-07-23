@@ -104,6 +104,27 @@ CONFIDENCE_VERSIONS = [
 if os.environ.get("SWEEP_SET") == "confidence":
     VERSIONS = CONFIDENCE_VERSIONS
 
+# Base-model re-tune (SWEEP_SET=retune): re-measure the "more predictive" levers
+# — suggestion length (token budget) and scaffold — on whatever model is pinned
+# via STEADYTYPE_MODEL_PATH (export it before running). Includes a length x
+# scaffold combo. Compared against the base-model default (baseline-control-A).
+RETUNE_VERSIONS = [
+    ("baseline-control-A", {}, BASE_FLAGS, {}),
+    ("budget-20", {"STEADYTYPE_TOKEN_BUDGET": "20"}, BASE_FLAGS, {"token_budget": "20"}),
+    ("budget-28", {"STEADYTYPE_TOKEN_BUDGET": "28"}, BASE_FLAGS, {"token_budget": "28"}),
+    ("budget-36", {"STEADYTYPE_TOKEN_BUDGET": "36"}, BASE_FLAGS, {"token_budget": "36"}),
+    ("scaffold-short", scaffold("chat_short.txt"), BASE_FLAGS, {"scaffold_chat": "short"}),
+    ("scaffold-mixed", scaffold("chat_mixed.txt"), BASE_FLAGS, {"scaffold_chat": "mixed"}),
+    ("scaffold-size6", scaffold("chat_size6.txt"), BASE_FLAGS, {"scaffold_chat": "size6"}),
+    ("context-labeled", {}, "--context prior --context-style labeled", {}),
+    ("combo-short+budget28",
+     dict(list(scaffold("chat_short.txt").items()) + [("STEADYTYPE_TOKEN_BUDGET", "28")]),
+     BASE_FLAGS, {"scaffold_chat": "short", "token_budget": "28"}),
+]
+
+if os.environ.get("SWEEP_SET") == "retune":
+    VERSIONS = RETUNE_VERSIONS
+
 # Model bakeoff (SWEEP_SET=models): one version per GGUF in the models dir, each
 # pointed at via STEADYTYPE_MODEL_PATH. Built dynamically so it picks up whatever
 # the downloader produced. The current default (E4B) is the reference row.
@@ -259,7 +280,10 @@ def run_version(label, env_overrides, flags, expect):
     print("  config OK:", json.dumps(cfg), flush=True)
     limit = os.environ.get("SWEEP_QUIZ_LIMIT")
     limit_flag = (" --limit " + limit) if limit else ""
-    cmd = "python3 %s --corpus %r %s%s --json --sock %r" % (EVAL, CORPUS, flags, limit_flag, SOCK)
+    # --sleep 0: the old 0.25s inter-question pause added ~8 min of pure idle
+    # per version. The app handles back-to-back requests fine (serialized socket
+    # writes + SIGPIPE-safe), and single-threaded keeps latency numbers honest.
+    cmd = "python3 %s --corpus %r %s%s --json --sleep 0 --sock %r" % (EVAL, CORPUS, flags, limit_flag, SOCK)
     t0 = time.time()
     out = sh(cmd)
     dur = int(time.time() - t0)
@@ -281,7 +305,7 @@ def league_table(rows):
     scored = [r for r in rows if "em1_rate" in r]
     if not scored:
         return "no scored versions"
-    base = next((r for r in scored if r["label"] == "baseline-control-A"), scored[0])
+    base = next((r for r in scored if r["label"].startswith("baseline")), scored[0])
     b_em1 = base["em1_rate"]
     b_ks = base["keystrokes_per_spoken"]
     scored.sort(key=lambda r: (r["em1_rate"], r["keystrokes_per_spoken"]), reverse=True)

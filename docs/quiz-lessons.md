@@ -148,3 +148,17 @@ curve against the quiz and pick the point where it feels right. Not yet built.
   (never quiz a stale build), a streaming results log, and a ranked league table.
 - Stability: `signal(SIGPIPE, SIG_IGN)` + `SO_NOSIGPIPE` — peer-vanish socket
   writes were silently killing the app under sustained quiz load (no crash report).
+
+## Base-model re-tune (Gemma 2 2B, diverse quiz, 2026-07-23)
+
+Re-ran the "more predictive" knobs on the new base model. Baseline (current
+default) already tops overall EM@1 (26.0%, spoke 90%, keystrokes 2.08) — the
+prompt knobs are tapped out. Longer budgets (28/36) and mined scaffolds only
+slide the SAME coverage/precision tradeoff as the confidence gate: choosier ->
+speaks 56-69% but precision-of-spoken 32-33% and keystrokes 2.4-2.5. Longer
+budgets also LOWER spoke rate (likely the 4+-word screen-echo guard suppressing
+longer suggestions — worth investigating as a possible easy win). Conclusion:
+next real ceiling-raisers are a bigger model (qwen2.5-7b, +3-5 pts, slower/16GB+
+only) or PERSONALIZATION on the user's own writing — not prompt tuning.
+Perf note: removing the harness's 0.25s inter-question sleep cut per-version
+time ~13min -> ~3min (the pause was pure idle).
