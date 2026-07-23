@@ -129,6 +129,13 @@ final class GhostInputController: IMKInputController {
                 acceptOneWord(client)
             }
             return true
+        case 50: // ` / ~ — one press accepts the whole ghost. Only swallowed
+            // while a ghost is showing; otherwise falls through and types a
+            // normal backtick/tilde via the printable-character path below.
+            if !ghost.isEmpty {
+                acceptWholeGhost(client)
+                return true
+            }
         case 53: // Escape — dismiss the ghost if present.
             guard !ghost.isEmpty else { return false }
             clearGhost(client)
@@ -182,7 +189,7 @@ final class GhostInputController: IMKInputController {
     /// Called when the client ends composition (mouse click, caret move, focus
     /// shift, programmatic edits). The default can COMMIT marked text — which
     /// would turn an unaccepted ghost into real inserted text. Never allow that:
-    /// the ghost is only ever inserted by an explicit Tab/Shift-Tab.
+    /// the ghost is only ever inserted by an explicit Tab/Shift-Tab/tilde.
     override func commitComposition(_ sender: Any!) {
         if let client = sender as? IMKTextInput {
             clearGhost(client)
