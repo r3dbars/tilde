@@ -453,3 +453,40 @@ more dogfood data).
   **OPEN:** ranker threshold for casual registers (0.75–0.85 candidates might
   deserve display in chat contexts); send fieldKind/behavior hints through the
   socket so profiles apply.
+
+## 2026-07-22 (later) — Golden-continuation quiz: first ground-truth scores
+
+- **Harness (KEEP):** `script/golden_eval.py` replays real human-finished
+  messages against the live socket: cut at a deterministic word boundary
+  (sha256-picked fraction), send the prefix (single trailing space = phrase
+  mode), score the suggestion against what the author actually wrote.
+  Metrics: spoke rate, ExactMatch@1/2/3, keystrokes saved, latency p50/p95.
+  `--context off|prior|live` selects the screen-context arm. Abort-safe
+  (partial report) + reconnect-retry across app restarts.
+- **Corpus (KEEP):** `script/fetch_eval_sets.py discord` sifts
+  mookiezi/Discord-Dialogues (HF, Apache-2.0, 7.3M exchanges) → deterministic
+  2,000-question quiz at `~/.cache/steadytype-eval/discord_eval.jsonl`
+  (data never enters the repo). 2.86M rejected as <5-word quips.
+- **Socket protocol (KEEP):** optional `"page"` field — explicit screen text
+  overrides the live OCR resolver; `""` forces none. Eval-only surface today;
+  in-memory like `context`, never logged.
+- **RESULTS (Gemma E4B q4_0, temp 0, chat register, Discord strangers):**
+  no context: spoke 94.4%, EM@1 14.5% (15.4% of spoken), EM@2 2.4%,
+  keystrokes 1419 (0.8/case), p50 139ms. With conversation-as-page (simulated
+  OCR): spoke 95.7%, EM@1 17.2% (18.0% of spoken), EM@2 3.0%, keystrokes
+  1832 (1.0/case), p50 144ms. **Screen context = +19% relative EM@1 and +29%
+  keystrokes for +5ms.** Misses are overwhelmingly plausible-but-different
+  (server jargon, inside jokes) → next lever is confidence gating
+  (llama.cpp logprobs → speak-less-be-right-more threshold), then scaffold
+  mining from the corpus; prompt wording alone won't close stranger-chat gap.
+- **SIGPIPE fix (KEEP, stability):** sustained quiz load killed the app twice
+  with zero crash report — writes to sockets whose peer vanished mid-stream.
+  `signal(SIGPIPE, SIG_IGN)` at server bind + `SO_NOSIGPIPE` per connection.
+  4,000-question marathon after the fix: zero deaths; RSS plateaued ~108MB,
+  fds steady.
+- **Tilde accept-all (KEEP, owner request):** keyCode 50 (`~`/backtick)
+  accepts the whole ghost in one press while a ghost is showing; otherwise
+  types normally. Tab still walks word-by-word.
+- **OPEN:** confidence gate + threshold sweep on the quiz; email/prose quiz
+  corpora (Enron/AESLC/blog loaders); iMessage personal quiz; send
+  prior-message count/format experiments through `--context prior`.

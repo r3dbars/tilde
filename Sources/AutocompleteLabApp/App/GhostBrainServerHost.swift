@@ -5,7 +5,7 @@ import Foundation
 ///
 /// The IME stays a thin, crash-proof pipe; this host answers its requests from the
 /// app's already-warm MLX engine. Wire protocol: one newline-delimited JSON request
-/// {"v":1,"context":"...","app":?,"field":?} → a STREAM of newline-delimited JSON
+/// {"v":1,"context":"...","app":?,"field":?,"page":?} → a STREAM of newline-delimited JSON
 /// responses: zero or more {"suggestion":"...","partial":true} as the model
 /// generates, then a final {"suggestion":"..."} and close. Partials put the first
 /// words on screen near time-to-first-token instead of time-to-last-token.
@@ -59,6 +59,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
         )
         unlink(Self.socketPath)
 
+        // A peer can vanish between accept and write (the IME drops connections
+        // mid-stream whenever typing resumes). Without this, writing to the dead
+        // socket raises SIGPIPE and silently kills the whole app — no crash
+        // report. Ignore it process-wide; such writes then fail with EPIPE.
+        signal(SIGPIPE, SIG_IGN)
+
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return }
 
@@ -97,6 +103,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
         var tv = timeval(tv_sec: 2, tv_usec: 0)
         setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var noSigpipe: Int32 = 1
+        setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
 
         Task.detached(priority: .userInitiated) { [weak self] in
             defer { close(connection) }
@@ -106,7 +114,15 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // boundaries want phrase continuation. App + field identity let the
             // prompt KV cache recognize consecutive keystrokes in the same field.
             let midWord = payload.context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
-            let pageContext = self.screenContextResolver(payload.app, payload.field, payload.context)
+            // An explicit "page" from the client (eval harness) overrides the
+            // live screen resolver; "" forces no context at all. Like context,
+            // it is used in-memory only and never logged or persisted.
+            let pageContext: VisiblePageContext?
+            if let page = payload.page {
+                pageContext = page.isEmpty ? nil : VisiblePageContext(text: page)
+            } else {
+                pageContext = self.screenContextResolver(payload.app, payload.field, payload.context)
+            }
             let request = CompletionRequest(
                 textBeforeCursor: payload.context,
                 appBundleIdentifier: payload.app,
@@ -139,6 +155,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         let context: String
         let app: String?
         let field: String?
+        let page: String?
     }
 
     private static func readPayload(_ fd: Int32) -> RequestPayload? {
@@ -161,7 +178,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
         return RequestPayload(
             context: context,
             app: object["app"] as? String,
-            field: object["field"] as? String
+            field: object["field"] as? String,
+            page: object["page"] as? String
         )
     }
 
