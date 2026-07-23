@@ -490,3 +490,13 @@ more dogfood data).
 - **OPEN:** confidence gate + threshold sweep on the quiz; email/prose quiz
   corpora (Enron/AESLC/blog loaders); iMessage personal quiz; send
   prior-message count/format experiments through `--context prior`.
+
+## 2026-07-23 — 23-version tuning sweep (see docs/quiz-lessons.md for the full writeup)
+
+Frozen 2,000-question Discord quiz, one knob per version, two baseline controls
+scored byte-identical (17.2% EM@1) => zero measurement noise. Winners: authentic
+short mined scaffold examples +1.3 EM@1 AND ~35ms faster (model was imitating the
+too-polished hand-written examples). Nulls: token budget, context depth (1 turn =
+5), register voice on chat text. Hurt: temp>0; **E2B −8.1 (M1 tier is a quality
+cliff, revisit before M1 test)**. Biggest untested lever: confidence gating.
+Machinery: script/tuning_sweep.py + launch-time env overrides + config-echo guard.
