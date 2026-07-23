@@ -104,6 +104,22 @@ CONFIDENCE_VERSIONS = [
 if os.environ.get("SWEEP_SET") == "confidence":
     VERSIONS = CONFIDENCE_VERSIONS
 
+# Model bakeoff (SWEEP_SET=models): one version per GGUF in the models dir, each
+# pointed at via STEADYTYPE_MODEL_PATH. Built dynamically so it picks up whatever
+# the downloader produced. The current default (E4B) is the reference row.
+if os.environ.get("SWEEP_SET") == "models":
+    import glob
+    MODEL_DIR = os.path.expanduser("~/.cache/steadytype-eval/models")
+    VERSIONS = [("ref-E4B-default", {}, BASE_FLAGS, {})]
+    for path in sorted(glob.glob(os.path.join(MODEL_DIR, "*.gguf"))):
+        stem = os.path.basename(path)[:-5]
+        VERSIONS.append((
+            "m-" + stem[:34],
+            {"STEADYTYPE_MODEL_PATH": path},
+            BASE_FLAGS,
+            {"model_path": os.path.basename(path)[:16]},
+        ))
+
 
 def kill_app():
     # Loop until truly dead: a stale instance still bound to the socket would
@@ -224,6 +240,12 @@ def run_version(label, env_overrides, flags, expect):
         got_model = running_model_gguf()
         if want_model != got_model:
             mismatches.append("model(gguf): want %s got %s" % (want_model, got_model))
+    # For an explicit GGUF path, confirm llama-server actually launched with it.
+    if env_overrides.get("STEADYTYPE_MODEL_PATH"):
+        want_base = os.path.basename(env_overrides["STEADYTYPE_MODEL_PATH"])
+        cmdline = sh("pgrep -fl 'llama-server.*17872'").stdout
+        if want_base not in cmdline:
+            mismatches.append("model(gguf path): %s not in llama-server cmdline" % want_base)
     if mismatches:
         print("  CONFIG MISMATCH — skipping:", "; ".join(mismatches), flush=True)
         return {"label": label, "error": "config mismatch: " + "; ".join(mismatches),
