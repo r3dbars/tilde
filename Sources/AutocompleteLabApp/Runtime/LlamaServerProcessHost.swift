@@ -90,6 +90,14 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "binary-missing"])
             return
         }
+        // Bakeoff override: STEADYTYPE_MODEL_PATH points llama-server at an
+        // arbitrary local GGUF, bypassing tiering/download entirely. The sweep
+        // driver pre-downloads each candidate and sets this per version.
+        if let explicit = ProcessInfo.processInfo.environment["STEADYTYPE_MODEL_PATH"],
+           FileManager.default.isReadableFile(atPath: explicit) {
+            launch(binary: binary, modelPath: explicit)
+            return
+        }
         let tier = ModelTier.current
         let modelURL = Self.modelsDirectory.appendingPathComponent(tier.fileName)
         if !Self.isUsableModelFile(at: modelURL, minimumBytes: tier.expectedMinimumBytes) {

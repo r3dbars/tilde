@@ -37,6 +37,12 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // greedy (0) is best for exact-match without a rebuild. Default 0.
         let temperature = ProcessInfo.processInfo.environment["STEADYTYPE_TEMPERATURE"]
             .flatMap(Double.init) ?? 0
+        // Confidence gate: STEADYTYPE_CONFIDENCE (0..1) suppresses the whole
+        // suggestion when the model's probability on its FIRST token is below
+        // the bar — "stay quiet rather than show a shaky guess". 0 = off.
+        // n_probs:1 asks llama.cpp to report each token's logprob.
+        let confidenceThreshold = ProcessInfo.processInfo.environment["STEADYTYPE_CONFIDENCE"]
+            .flatMap(Double.init) ?? 0
         let body: [String: Any] = [
             "prompt": recipe.prompt,
             "n_predict": min(register.generatedTokenBudget, request.mode.generatedTokenCeiling),
@@ -44,6 +50,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             "cache_prompt": true,
             "stop": ["\n"],
             "stream": true,
+            "n_probs": 1,
         ]
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
@@ -60,11 +67,27 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         var lastPartialVisibleText = ""
         var firstChunkMilliseconds: Int?
         var promptTokensProcessed: Int?
+        var firstTokenProbability: Double?
         for try await line in bytes.lines {
             guard line.hasPrefix("data: ") else { continue }
             guard let object = try? JSONSerialization.jsonObject(
                 with: Data(line.dropFirst(6).utf8)
             ) as? [String: Any] else { continue }
+
+            // Read the first generated token's probability and gate before we
+            // ever emit a partial, so a low-confidence guess is never shown.
+            if firstTokenProbability == nil,
+               let probs = object["completion_probabilities"] as? [[String: Any]],
+               let logprob = probs.first?["logprob"] as? Double {
+                firstTokenProbability = exp(logprob)
+                if confidenceThreshold > 0, exp(logprob) < confidenceThreshold {
+                    DiagnosticsLog.shared.record("llama-completion-gated", metadata: [
+                        "firstTokenProbability": String(format: "%.3f", exp(logprob)),
+                        "threshold": String(confidenceThreshold),
+                    ])
+                    return nil
+                }
+            }
 
             if let piece = object["content"] as? String, !piece.isEmpty {
                 if firstChunkMilliseconds == nil {
