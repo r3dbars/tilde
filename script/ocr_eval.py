@@ -54,6 +54,96 @@ def sample_texts():
     return texts
 
 
+def _font(px):
+    from PIL import ImageFont
+    return ImageFont.truetype(FONT, px)
+
+
+def _wrap(text, width):
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        if len(cur) + len(w) + 1 > width:
+            lines.append(cur); cur = w
+        else:
+            cur = (cur + " " + w).strip()
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def render_hard(records):
+    """Realistic mockups where the target text is surrounded by distractor
+    chrome (sidebars, names, timestamps), in colored bubbles, small fonts, and
+    low-contrast / dark-mode conditions — the cases that actually break OCR.
+    Ground truth is the TARGET message only, not the chrome."""
+    from PIL import Image, ImageDraw
+    idx = len(records)
+    out = []
+    DISTRACT = ["Alex Rivera", "9:41 AM", "Jordan", "Yesterday", "Design team",
+                "Re: budget", "typing…", "3 unread", "Inbox (12)", "Mom"]
+
+    def chat(text, dark, small, name):
+        nonlocal idx
+        W, H = 720, 300
+        bg = (24, 25, 28) if dark else (255, 255, 255)
+        side = (34, 35, 39) if dark else (244, 245, 247)
+        muted = (120, 122, 128)
+        bubble = (11, 94, 215) if not dark else (11, 94, 215)   # blue bubble
+        bubble_txt = (255, 255, 255)
+        img = Image.new("RGB", (W, H), bg)
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, 190, H], fill=side)
+        for i in range(5):
+            d.text((14, 18 + i * 42), DISTRACT[i % len(DISTRACT)], font=_font(12), fill=muted)
+            d.text((14, 34 + i * 42), DISTRACT[(i + 3) % len(DISTRACT)], font=_font(10), fill=muted)
+        d.text((210, 14), name, font=_font(14), fill=muted)
+        d.text((560, 14), "9:41 AM", font=_font(11), fill=muted)
+        fp = 12 if small else 15
+        lines = _wrap(text, 46 if small else 40)
+        bw = 470
+        bh = 16 + len(lines) * int(fp * 1.5) + 12
+        d.rounded_rectangle([210, 54, 210 + bw, 54 + bh], radius=14, fill=bubble)
+        for i, ln in enumerate(lines):
+            d.text((228, 66 + i * int(fp * 1.5)), ln, font=_font(fp), fill=bubble_txt)
+        d.text((228, 54 + bh + 6), "Delivered", font=_font(10), fill=muted)
+        name_out = "ocr_%02d_chat_%s%s.png" % (idx, "dark" if dark else "light", "_sm" if small else "")
+        img.save(os.path.join(OCR_DIR, name_out))
+        out.append({"image": name_out, "register": "chat", "style": "hard-chat",
+                    "difficulty": "hard", "text": text})
+        idx += 1
+
+    def email(text):
+        nonlocal idx
+        W = 720
+        lines = _wrap(text, 70)
+        H = 150 + len(lines) * 26
+        img = Image.new("RGB", (W, H), (255, 255, 255))
+        d = ImageDraw.Draw(img)
+        muted = (140, 142, 148)
+        d.text((24, 18), "From: Alex Rivera <alex@example.com>", font=_font(12), fill=muted)
+        d.text((24, 38), "To: me;  Cc: Jordan, Sam", font=_font(12), fill=muted)
+        d.text((24, 58), "Subject: Re: Q3 planning", font=_font(12), fill=muted)
+        d.line([24, 84, W - 24, 84], fill=(225, 226, 230))
+        for i, ln in enumerate(lines):
+            d.text((24, 100 + i * 26), ln, font=_font(15), fill=(35, 36, 40))
+        name_out = "ocr_%02d_email.png" % idx
+        img.save(os.path.join(OCR_DIR, name_out))
+        out.append({"image": name_out, "register": "email", "style": "hard-email",
+                    "difficulty": "hard", "text": text})
+        idx += 1
+
+    texts = [t for _, t in sample_texts()]
+    chat(texts[0], dark=False, small=False, name="Alex Rivera")
+    chat(texts[1], dark=True, small=False, name="Jordan")
+    chat(texts[2] if len(texts) > 2 else texts[0], dark=True, small=True, name="Design team")
+    chat(texts[3] if len(texts) > 3 else texts[0], dark=False, small=True, name="Mom")
+    for t in [t for r, t in sample_texts() if r == "email"][:2]:
+        email(t)
+    for t in [t for r, t in sample_texts() if r == "prose"][:2]:
+        email(t)
+    return out
+
+
 def generate():
     from PIL import Image, ImageDraw, ImageFont
     os.makedirs(OCR_DIR, exist_ok=True)
@@ -86,12 +176,15 @@ def generate():
             name = "ocr_%02d_%s.png" % (idx, style)
             img.save(os.path.join(OCR_DIR, name))
             records.append({"image": name, "register": reg, "style": style,
-                            "font_px": font_px, "text": text})
+                            "difficulty": "easy", "font_px": font_px, "text": text})
             idx += 1
+    records += render_hard(records)
     with open(GT_FILE, "w") as f:
         for r in records:
             f.write(json.dumps(r) + "\n")
-    print("generated %d test images -> %s" % (len(records), OCR_DIR))
+    hard = sum(1 for r in records if r.get("difficulty") == "hard")
+    print("generated %d test images (%d easy, %d hard) -> %s" % (
+        len(records), len(records) - hard, hard, OCR_DIR))
 
 
 def normalize(s):
@@ -125,27 +218,34 @@ def evaluate(env_extra, label=""):
         return None
     rows = [json.loads(l) for l in open(GT_FILE)]
     sims, recalls, lats = [], [], []
+    by_diff = {"easy": [], "hard": []}
+    per = []
     for r in rows:
         got, ms, rc = run_ocr(os.path.join(OCR_DIR, r["image"]), env_extra)
         sim, recall = score(r["text"], got)
         sims.append(sim); recalls.append(recall); lats.append(ms)
+        by_diff.setdefault(r.get("difficulty", "easy"), []).append(recall)
+        per.append((r, sim, recall))
     n = len(rows)
     res = {
         "label": label,
         "similarity": round(sum(sims) / n, 4),
         "word_recall": round(sum(recalls) / n, 4),
+        "recall_easy": round(sum(by_diff["easy"]) / max(1, len(by_diff["easy"])), 4),
+        "recall_hard": round(sum(by_diff["hard"]) / max(1, len(by_diff["hard"])), 4),
         "p50_ms": sorted(lats)[n // 2],
         "images": n,
     }
-    return res, list(zip(rows, sims, recalls))
+    return res, per
 
 
 def cmd_run(args):
     res, per = evaluate({}, "current-knobs")
     if not res:
         return 1
-    print("OCR accuracy (current knobs): similarity %.1f%%  word-recall %.1f%%  p50 %dms  over %d images" % (
-        100 * res["similarity"], 100 * res["word_recall"], res["p50_ms"], res["images"]))
+    print("OCR accuracy (current knobs): word-recall %.1f%%  [easy %.1f%% / HARD %.1f%%]  p50 %dms  over %d images" % (
+        100 * res["word_recall"], 100 * res["recall_easy"], 100 * res["recall_hard"],
+        res["p50_ms"], res["images"]))
     if args.verbose:
         for r, sim, rec in sorted(per, key=lambda x: x[1])[:6]:
             print("  worst: %-16s sim %.0f%% recall %.0f%%  %r" % (
@@ -167,13 +267,15 @@ def cmd_sweep(args):
     for env_extra, label in combos:
         res, _ = evaluate(env_extra, label)
         results.append(res)
-        print("  %-28s similarity %.1f%%  word-recall %.1f%%  p50 %dms" % (
-            label, 100 * res["similarity"], 100 * res["word_recall"], res["p50_ms"]), flush=True)
-    results.sort(key=lambda r: (r["word_recall"], r["similarity"]), reverse=True)
-    print("\n== best OCR config ==")
+        print("  %-28s recall %.1f%%  [easy %.1f%% / HARD %.1f%%]  p50 %dms" % (
+            label, 100 * res["word_recall"], 100 * res["recall_easy"],
+            100 * res["recall_hard"], res["p50_ms"]), flush=True)
+    # Rank on the HARD set — that's where reading quality actually matters.
+    results.sort(key=lambda r: (r["recall_hard"], r["word_recall"]), reverse=True)
+    print("\n== best OCR config (ranked on hard/realistic images) ==")
     b = results[0]
-    print("%s  ->  word-recall %.1f%%  similarity %.1f%%  p50 %dms" % (
-        b["label"], 100 * b["word_recall"], 100 * b["similarity"], b["p50_ms"]))
+    print("%s  ->  HARD recall %.1f%%  overall %.1f%%  p50 %dms" % (
+        b["label"], 100 * b["recall_hard"], 100 * b["word_recall"], b["p50_ms"]))
     return 0
 
 
