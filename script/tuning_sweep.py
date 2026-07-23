@@ -182,28 +182,21 @@ def wait_socket(timeout=180):
     return False
 
 
-def wait_model_ready(timeout=240):
-    """Poll the quiz's config probe AND a warm generation until the model
-    answers (health can lag the socket while the GGUF loads)."""
-    import socket
+def wait_model_ready(timeout=300):
+    """Wait until llama-server has actually LOADED the model, by polling its
+    /health endpoint for "ok". A socket response alone is not enough — the app
+    answers with an empty suggestion (fallback) while the model is still
+    loading, which would silently score a slow-loading model as 0%. After
+    health is ok, give the app a moment to notice via its own health poll."""
+    import urllib.request
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(45)
-            s.connect(SOCK)
-            s.sendall((json.dumps({"v": 1, "context": "hey I was just ",
-                                   "app": "com.hnc.Discord", "field": "warmup"}) + "\n").encode())
-            buf = b""
-            while b"\n" not in buf:
-                c = s.recv(4096)
-                if not c:
-                    break
-                buf += c
-            s.close()
-            if buf:
-                return True
-        except OSError:
+            with urllib.request.urlopen("http://127.0.0.1:17872/health", timeout=3) as r:
+                if b'"status":"ok"' in r.read():
+                    time.sleep(3)  # let the app's 2s health poll register it
+                    return True
+        except Exception:
             pass
         time.sleep(3)
     return False
