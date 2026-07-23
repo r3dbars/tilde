@@ -547,6 +547,7 @@ def main():
             "spoke_rate": round(spoke / total, 4) if total else 0,
             "em1": overall["em1_all"],
             "em1_rate": round(overall["em1_all"] / total, 4) if total else 0,
+            "em1_spoken_rate": round(overall["em1_spoken"] / spoke, 4) if spoke else 0,
             "em2_rate": round(overall["em2_all"] / total, 4) if total else 0,
             "em3_rate": round(overall["em3_all"] / total, 4) if total else 0,
             "keystrokes_total": overall["keystrokes_total"],

@@ -119,6 +119,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     "token_budget": env["STEADYTYPE_TOKEN_BUDGET"] ?? "default",
                     "temperature": env["STEADYTYPE_TEMPERATURE"] ?? "0",
                     "model": env["STEADYTYPE_MODEL"] ?? "auto",
+                    "model_path": env["STEADYTYPE_MODEL_PATH"] ?? "default",
+                    "confidence": env["STEADYTYPE_CONFIDENCE"] ?? "0",
                 ], to: connection)
                 return
             }

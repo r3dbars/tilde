@@ -24,7 +24,8 @@ import time
 ROOT = "/Users/redbars/Steadytype/.claude/worktrees/busy-kare-569e80"
 APP_BIN = os.path.join(ROOT, "dist/SteadyType.app/Contents/MacOS/SteadyType")
 EVAL = os.path.join(ROOT, "script/golden_eval.py")
-CORPUS = os.path.expanduser("~/.cache/steadytype-eval/discord_eval.jsonl")
+CORPUS = os.environ.get("SWEEP_CORPUS",
+                        os.path.expanduser("~/.cache/steadytype-eval/discord_eval.jsonl"))
 SCAFFOLDS = os.path.expanduser("~/.cache/steadytype-eval/scaffolds")
 SOCK = os.path.expanduser("~/Library/Application Support/SteadyType/ghost.sock")
 GGUF_DIR = os.path.expanduser("~/Library/Application Support/SteadyType/Models/GGUF")
@@ -86,6 +87,22 @@ VERSIONS = [
 
     ("baseline-control-B", {}, BASE_FLAGS, {}),
 ]
+
+# Confidence-gate threshold sweep (SWEEP_SET=confidence). Each suppresses the
+# suggestion when the model's first-token probability is below the threshold.
+CONFIDENCE_VERSIONS = [
+    ("confidence-off", {}, BASE_FLAGS, {"confidence": "0"}),
+    ("confidence-0.10", {"STEADYTYPE_CONFIDENCE": "0.10"}, BASE_FLAGS, {"confidence": "0.10"}),
+    ("confidence-0.15", {"STEADYTYPE_CONFIDENCE": "0.15"}, BASE_FLAGS, {"confidence": "0.15"}),
+    ("confidence-0.20", {"STEADYTYPE_CONFIDENCE": "0.20"}, BASE_FLAGS, {"confidence": "0.20"}),
+    ("confidence-0.25", {"STEADYTYPE_CONFIDENCE": "0.25"}, BASE_FLAGS, {"confidence": "0.25"}),
+    ("confidence-0.30", {"STEADYTYPE_CONFIDENCE": "0.30"}, BASE_FLAGS, {"confidence": "0.30"}),
+    ("confidence-0.40", {"STEADYTYPE_CONFIDENCE": "0.40"}, BASE_FLAGS, {"confidence": "0.40"}),
+    ("confidence-0.50", {"STEADYTYPE_CONFIDENCE": "0.50"}, BASE_FLAGS, {"confidence": "0.50"}),
+]
+
+if os.environ.get("SWEEP_SET") == "confidence":
+    VERSIONS = CONFIDENCE_VERSIONS
 
 
 def kill_app():
@@ -226,9 +243,10 @@ def run_version(label, env_overrides, flags, expect):
                 "stdout_tail": out.stdout[-400:], "stderr_tail": out.stderr[-400:]}
     row = {"label": label, "config": cfg, "flags": flags, "duration_s": dur}
     row.update(metrics)
-    print("  EM@1 %.1f%%  keystrokes/spoken %.2f  spoke %.1f%%  p50 %dms  (%dm%ds)" % (
-        100 * metrics["em1_rate"], metrics["keystrokes_per_spoken"],
-        100 * metrics["spoke_rate"], metrics["p50_ms"], dur // 60, dur % 60), flush=True)
+    print("  EM@1 %.1f%% (spoken %.1f%%)  keystrokes/spoken %.2f  spoke %.1f%%  p50 %dms p95 %dms  (%dm%ds)" % (
+        100 * metrics["em1_rate"], 100 * metrics.get("em1_spoken_rate", 0),
+        metrics["keystrokes_per_spoken"], 100 * metrics["spoke_rate"],
+        metrics["p50_ms"], metrics["p95_ms"], dur // 60, dur % 60), flush=True)
     return row
 
 
@@ -241,14 +259,14 @@ def league_table(rows):
     b_ks = base["keystrokes_per_spoken"]
     scored.sort(key=lambda r: (r["em1_rate"], r["keystrokes_per_spoken"]), reverse=True)
     lines = []
-    lines.append("%-22s %8s %8s %10s %8s %7s" % (
-        "version", "EM@1", "dEM@1", "kstrokes", "spoke", "p50ms"))
-    lines.append("-" * 70)
+    lines.append("%-20s %7s %8s %8s %9s %7s %7s" % (
+        "version", "EM@1", "EM@1spk", "spoke", "kstrokes", "p50ms", "p95ms"))
+    lines.append("-" * 74)
     for r in scored:
         d = 100 * (r["em1_rate"] - b_em1)
-        lines.append("%-22s %7.1f%% %+7.1f %10.2f %7.1f%% %6d" % (
-            r["label"], 100 * r["em1_rate"], d,
-            r["keystrokes_per_spoken"], 100 * r["spoke_rate"], r["p50_ms"]))
+        lines.append("%-20s %6.1f%% %7.1f%% %7.1f%% %9.2f %7d %7d" % (
+            r["label"], 100 * r["em1_rate"], 100 * r.get("em1_spoken_rate", 0),
+            100 * r["spoke_rate"], r["keystrokes_per_spoken"], r["p50_ms"], r["p95_ms"]))
     errs = [r for r in rows if "error" in r]
     if errs:
         lines.append("")
