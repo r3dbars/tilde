@@ -12,7 +12,12 @@ enum LlamaEngineError: Error {
 final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
 
     private let baseURL: URL
-    private let cleaner = CompletionOutputCleaner(maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords)
+    // STEADYTYPE_MAX_VISIBLE_WORDS caps how many words a suggestion may show
+    // (owner tuning 2026-07-24: shorter offers, higher precision).
+    private let cleaner = CompletionOutputCleaner(
+        maxVisibleWords: ProcessInfo.processInfo.environment["STEADYTYPE_MAX_VISIBLE_WORDS"].flatMap(Int.init)
+            ?? CompletionModelPolicy.mvp.maxVisibleWords
+    )
 
     init(baseURL: URL) {
         self.baseURL = baseURL
@@ -47,7 +52,15 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // Confidence gate (0..1): suppress the whole suggestion when the model's
         // first-token probability is below the bar. 0 = off. n_probs:1 asks
         // llama.cpp to report each token's logprob.
-        let confidenceThreshold = envDouble("STEADYTYPE_CONFIDENCE") ?? 0
+        var confidenceThreshold = envDouble("STEADYTYPE_CONFIDENCE") ?? 0
+        // Brave start, strict cruise: with only a few words on the page the
+        // model's first-token probability is naturally low (0.03–0.07 observed),
+        // so a uniform bar mutes exactly the moment the writer wants company.
+        // Under the short-context cutoff, halve the bar (both tunable).
+        let shortContextCutoff = envInt("STEADYTYPE_CONFIDENCE_SHORT_CUTOFF") ?? 60
+        if request.textBeforeCursor.count < shortContextCutoff {
+            confidenceThreshold = envDouble("STEADYTYPE_CONFIDENCE_SHORT") ?? confidenceThreshold / 2
+        }
         // Screen-echo guard: drop suggestions that copy >= N visible words from
         // the screen. Tunable because a low N can over-suppress good guesses.
         let echoGuardMinWords = envInt("STEADYTYPE_ECHO_GUARD_MIN_WORDS") ?? 4
@@ -140,7 +153,8 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
                 let clean = repaired.trimmingCharacters(in: .whitespaces)
                 suggestion = clean.isEmpty ? nil : CompletionSuggestion(
                     text: repaired,
-                    maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords
+                    maxVisibleWords: envInt("STEADYTYPE_MAX_VISIBLE_WORDS")
+                        ?? CompletionModelPolicy.mvp.maxVisibleWords
                 )
             }
         }
@@ -162,6 +176,18 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
             "mode": request.mode.rawValue,
         ])
+        // Owner-opt-in training capture: the situation the model saw (typed +
+        // screen) with what it guessed — inference-identical training context.
+        if let visible = suggestion?.visibleText, !visible.isEmpty {
+            TrainingSampleLog.record(
+                appBundle: request.appBundleIdentifier,
+                mode: request.mode.rawValue,
+                typedContext: request.textBeforeCursor,
+                screenContext: request.visiblePageContext?.text,
+                suggestion: visible,
+                firstTokenProbability: firstTokenProbability
+            )
+        }
         return suggestion
     }
 }
@@ -175,15 +201,18 @@ final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
     private let phraseEngine: any CompletionEngine
     private let fallbackEngine: any CompletionEngine
     private let phraseEngineIsHealthy: @Sendable () -> Bool
+    private let routeWordCompletions: @Sendable () -> Bool
 
     init(
         phraseEngine: any CompletionEngine,
         fallbackEngine: any CompletionEngine,
-        phraseEngineIsHealthy: @escaping @Sendable () -> Bool
+        phraseEngineIsHealthy: @escaping @Sendable () -> Bool,
+        routeWordCompletions: @escaping @Sendable () -> Bool = { false }
     ) {
         self.phraseEngine = phraseEngine
         self.fallbackEngine = fallbackEngine
         self.phraseEngineIsHealthy = phraseEngineIsHealthy
+        self.routeWordCompletions = routeWordCompletions
     }
 
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
@@ -194,7 +223,12 @@ final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
         for request: CompletionRequest,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
-        if request.mode != .wordCompletion, phraseEngineIsHealthy() {
+        // Word-completion requests historically belonged to the keyboard's
+        // dictionary layer, so the model answered them with silence. With the
+        // dictionary off (model-only A/B), routeWordCompletions hands the model
+        // the current word too — the cleaner already knows not to prepend a
+        // space in word mode.
+        if request.mode != .wordCompletion || routeWordCompletions(), phraseEngineIsHealthy() {
             do {
                 // nil here is the engine's low-confidence silence — respected,
                 // never retried on the fallback (both engines share the same
