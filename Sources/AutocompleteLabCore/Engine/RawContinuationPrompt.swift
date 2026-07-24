@@ -131,14 +131,32 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !bounded.isEmpty {
-                pieces += """
-                Reference notes visible on the writer's screen (may be a message being replied to, \
-                a document being discussed, or unrelated windows — use names and topics from it \
-                when they fit; never copy or continue it):
-                \(bounded)
+                // Screen framing is tunable (STEADYTYPE_SCREEN_FRAMING): the
+                // vague "notes" framing barely helps the model RESPOND to what's
+                // on screen; a direct "reply" framing tells it the screen is the
+                // message being answered. See the screen-response experiments.
+                let framing = ProcessInfo.processInfo.environment["STEADYTYPE_SCREEN_FRAMING"] ?? "notes"
+                switch framing {
+                case "reply":
+                    pieces += """
+                    The writer is replying to this message on screen. Respond to it directly — \
+                    answer its questions and use its topic and names; never copy it verbatim:
+                    \(bounded)
 
 
-                """
+                    """
+                case "minimal":
+                    pieces += "On screen:\n\(bounded)\n\n\n"
+                default:
+                    pieces += """
+                    Reference notes visible on the writer's screen (may be a message being replied to, \
+                    a document being discussed, or unrelated windows — use names and topics from it \
+                    when they fit; never copy or continue it):
+                    \(bounded)
+
+
+                    """
+                }
             }
         }
         prompt = pieces + "Text: " + trimmed + "\nContinuation:"
