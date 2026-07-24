@@ -29,7 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return ModeRoutedCompletionEngine(
                 phraseEngine: LlamaCompletionEngine(baseURL: llama.baseURL),
                 fallbackEngine: UnavailableCompletionEngine(reason: "llama engine unavailable"),
-                phraseEngineIsHealthy: { llama.isHealthy }
+                phraseEngineIsHealthy: { llama.isHealthy },
+                // Live-flippable: defaults write bar.r3d.steadytype ModelHandlesWordCompletions -bool true|false
+                routeWordCompletions: { UserDefaults.standard.bool(forKey: "ModelHandlesWordCompletions") }
             )
         },
         screenContextResolver: { [bridge = ghostScreenContextBridge] app, field, text in

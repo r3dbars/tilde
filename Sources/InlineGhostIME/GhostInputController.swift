@@ -185,6 +185,7 @@ final class GhostInputController: IMKInputController {
             }
         case 53: // Escape — dismiss the ghost if present.
             guard !ghost.isEmpty else { return false }
+            flushPendingRejection()
             GhostUsageLog.record(
                 event: .dismiss,
                 ghostText: ghost,
@@ -215,12 +216,11 @@ final class GhostInputController: IMKInputController {
            chars.count == 1,
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 0x20, scalar.value != 0x7F {
-            if !ghost.isEmpty {
+            if !ghost.isEmpty, pendingRejection == nil {
                 // Typing a normal character over a live ghost = writing something
-                // other than the suggestion. Open a rejection episode; the full
-                // replacement phrase accumulates below and flushes when the next
-                // ghost appears / on accept / on focus loss.
-                flushPendingRejection()
+                // other than the suggestion. Open a rejection episode against the
+                // FIRST rejected guess; ghosts that pop up mid-override are noise
+                // and must NOT chop the phrase (day-1 data was word fragments).
                 pendingRejection = PendingRejection(
                     ghost: ghost,
                     source: usageSource,
@@ -229,12 +229,15 @@ final class GhostInputController: IMKInputController {
                     replacement: chars
                 )
             } else if pendingRejection != nil {
-                // Still writing the override phrase (no ghost up) — keep building it.
+                // Still writing the override — keep building the one true phrase,
+                // across pauses and re-offered ghosts alike.
                 pendingRejection?.replacement.append(chars)
-                if let count = pendingRejection?.replacement.count,
-                   count > Self.maxReplacementChars {
-                    flushPendingRejection()
-                }
+            }
+            // The episode ends at a real boundary: sentence-ending punctuation,
+            // or the bound (a rich label doesn't need a paragraph).
+            if let count = pendingRejection?.replacement.count,
+               count > Self.maxReplacementChars || ".!?".contains(chars) {
+                flushPendingRejection()
             }
             clearGhost(client)
             let swallowAutoSpace = pendingAutoSpace && ".,!?;:".contains(chars)
@@ -262,6 +265,7 @@ final class GhostInputController: IMKInputController {
         clearGhost(client)
         if let chars = event.characters, chars.contains("\r") || chars.contains("\n") {
             typedFallback.append("\n")
+            flushPendingRejection() // newline ends the thought — close the episode
         }
         return false
     }
@@ -499,16 +503,34 @@ final class GhostInputController: IMKInputController {
         return FileManager.default.fileExists(atPath: electronFramework.path)
     }
 
+    /// Surfaces where a suggestion has NEVER once been accepted (usage data:
+    /// 0% across thousands of events) — search fields and settings panes.
+    /// Offering there is pure annoyance, so don't.
+    private static let mutedBundlePrefixes = [
+        "com.apple.Spotlight",
+        "com.apple.systempreferences",
+        "com.apple.Keyboard-Settings",
+    ]
+
     private func updateGhost(_ client: IMKTextInput) {
-        // A fresh ghost means the writer paused: any override they were typing is
-        // complete, so close its capture with the full phrase before offering more.
-        flushPendingRejection()
+        // NOTE: a fresh ghost does NOT flush a pending rejection — the writer is
+        // often mid-phrase when the next offer appears, and flushing here chopped
+        // day-1 labels into fragments. Episodes close on accept/Esc/focus loss/
+        // sentence end instead.
         generation += 1
+        if let bundle = client.bundleIdentifier(),
+           Self.mutedBundlePrefixes.contains(where: bundle.hasPrefix) {
+            return
+        }
         let context = contextBeforeCaret(client)
 
         // Fast layer: instant completions with real evidence (doc vocabulary,
-        // dictionary, doc bigrams) — no generic filler.
-        let suffix = predict(context: context)
+        // dictionary, doc bigrams) — no generic filler. GhostFastLayerEnabled=false
+        // hands everything (mid-word included) to the model: the A/B the usage
+        // numbers asked for.
+        let suffix = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
+            ? predict(context: context)
+            : ""
         ghost = suffix
         if !suffix.isEmpty {
             ghostSource = .fast
@@ -738,6 +760,8 @@ final class GhostInputController: IMKInputController {
     /// Accept everything, then predict a fresh chain. A trailing space is added so
     /// typing continues with the NEXT word instead of extending the accepted one.
     private func acceptWholeGhost(_ client: IMKTextInput) {
+        // Accepting re-engages with the ghost stream — any open override is done.
+        flushPendingRejection()
         var accepted = ghost
         recordAccept(accepted)
         GhostUsageLog.record(
@@ -761,6 +785,7 @@ final class GhostInputController: IMKInputController {
     /// Accept just the first word (with its surrounding spaces) and KEEP the rest of
     /// the chain marked — Tab-Tab-Tab walks a stable sentence, no re-rolling.
     private func acceptOneWord(_ client: IMKTextInput) {
+        flushPendingRejection()
         var chunk = ""
         var sawWord = false
         for character in ghost {

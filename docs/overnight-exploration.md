@@ -345,3 +345,66 @@ writing. Everything else is polish on top.
 
 _Deferred (needs verification, not shipped tonight): wiring AX-first reading into
 the live pipeline; semantic re-score (exact-match already showed +38% clearly)._
+
+## Register split across the owner's Macs (2026-07-24 evening)
+
+The work Mac (Q0KL4R3L24MBP) is Slack/business-register replies; the personal
+Mac is casual/chat. Day-1 accuracy: personal Mac 17.1% vs work Mac 11.7% — the
+gap is largely REGISTER MISMATCH: the personal model has only ever trained on
+iMessage casual voice, so business-you is a blind spot, not a weak spot.
+Implications:
+1. Work-Mac captures are the highest-value training stream right now (first
+   business-register examples the model will ever see) — include in every
+   retrain.
+2. Medium-term: use the existing ContinuationRegister per-app voice plumbing to
+   condition Slack vs Messages differently.
+3. Expect work-Mac accuracy to move MORE than personal-Mac after retrain #2
+   (blind-spot filling beats weak-spot sharpening).
+This is the real version of the planned "it just learned your work voice"
+progression moment in the Tilde window design.
+
+## THE DATA-VS-ACCURACY CURVE + retrain #2 (2026-07-24 evening, 32-minute run)
+
+Same LoRA recipe (mlx gemma-2-2b, 8 layers) at increasing data sizes, each
+scored on a FROZEN 500-case held-out slice of the owner's replies (never
+trained on), context=prior. Full pipeline per point: train -> fuse -> GGUF ->
+Q4_K_M -> live-app quiz. Runtime: ~3-5 min per point end to end.
+
+| trained on | EM@1 | meaning |
+|---|---|---|
+| 250 | 20.4% | 0.180 |
+| 1,000 | 23.6% | 0.208 |
+| 4,000 | **26.4%** | 0.205 |
+| 16,000 | 24.6% | 0.202 |
+| 30,637 | 26.0% | 0.207 |
+
+**THE KNEE IS ~4,000 EXAMPLES.** Steep 250->4k, then flat (±1% noise) to 31k.
+250 examples already deliver most of the personalization lift. Product
+implications:
+1. A new user feels personalization within DAYS (a few hundred phrases), and
+   hits full quality at ~4k — the Learning card's retrain threshold is now a
+   measured number.
+2. Data beyond 4k buys nothing today -> retrains can train on the ~4k most
+   RECENT (correction-weighted) examples: tracks the owner's current voice,
+   trains in ~2 minutes. Nightly retraining is computationally trivial.
+
+**Retrain #2 scoreboard (v1 = yesterday's 32k model; v2 = all data + today's
+751 corrections x2), 4-way per the owner's spec:**
+
+| model | context | EM@1 | meaning |
+|---|---|---|---|
+| v1 | prior | 25.4% | 0.215 |
+| v1 | off | 24.4% | 0.184 |
+| v2 | prior | 25.8% | 0.202 |
+| v2 | off | 23.2% | 0.186 |
+
+v2 edged v1 on the primary metric (EM@1 with context) and was auto-installed
+per the keep-only-if-better rule — but HONESTLY: +0.4pt is 2 cases in 500,
+within noise, and v1 scored slightly better on meaning. Verdict: **a tie.**
+One day of corrections (751) cannot move a 30k-corpus model — consistent with
+the knee: the marginal data was ~2% of the pool. The lever for retrain #3:
+recency/correction-WEIGHTED 4k training sets, not more volume.
+
+Context on/off (both models): screen/prior context adds +1.0-2.6 EM@1 pts and
+the largest meaning lift (v1: 0.184->0.215). Confirms screen context earns its
+permission.
