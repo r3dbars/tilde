@@ -59,7 +59,7 @@ def pick_cut_fraction(text):
     return CUT_FRACTIONS[idx]
 
 
-def build_quiz(text):
+def build_quiz(text, prefix_words=None):
     """Cut `text` at a word boundary to build (context, golden). Returns None
     if the record doesn't have enough words on both sides of the cut.
 
@@ -72,14 +72,20 @@ def build_quiz(text):
     instead of a word-completion request.
     """
     words = text.split()
-    if len(words) < MIN_CONTEXT_WORDS + MIN_GOLDEN_WORDS:
+    min_context = 1 if prefix_words is not None else MIN_CONTEXT_WORDS
+    if len(words) < min_context + MIN_GOLDEN_WORDS:
         return None
-    fraction = pick_cut_fraction(text)
-    cut = int(round(len(words) * fraction))
-    cut = max(MIN_CONTEXT_WORDS, min(cut, len(words) - MIN_GOLDEN_WORDS))
+    if prefix_words is not None:
+        # Reply-quiz mode: fixed short prefix (the first few words of the reply),
+        # predict the rest — tests "predict my response", not "finish my reply".
+        cut = max(1, min(prefix_words, len(words) - MIN_GOLDEN_WORDS))
+    else:
+        fraction = pick_cut_fraction(text)
+        cut = int(round(len(words) * fraction))
+        cut = max(MIN_CONTEXT_WORDS, min(cut, len(words) - MIN_GOLDEN_WORDS))
     context_words = words[:cut]
     golden_words = words[cut:]
-    if len(context_words) < MIN_CONTEXT_WORDS or len(golden_words) < MIN_GOLDEN_WORDS:
+    if len(context_words) < min_context or len(golden_words) < MIN_GOLDEN_WORDS:
         return None
     context = " ".join(context_words) + " "  # single trailing space: see docstring
     golden = " ".join(golden_words)
@@ -269,7 +275,8 @@ def subsample(records, limit):
 
 
 def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
-             context_turns=3, context_style="plain", force_app=None):
+             context_turns=3, context_style="plain", force_app=None,
+             prefix_words=None, min_prior=0):
     overall = new_bucket()
     by_register = {}
     by_source = {}
@@ -282,7 +289,12 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
         source = rec.get("source", "unknown")
         app = rec.get("app", "")
 
-        quiz = build_quiz(text)
+        # Reply-quiz filter: only records with enough on-screen content to
+        # actually be a reply situation.
+        if min_prior > 0 and len([p for p in rec.get("prior_messages", []) if p.strip()]) < min_prior:
+            continue
+
+        quiz = build_quiz(text, prefix_words=prefix_words)
         if quiz is None:
             overall["skipped"] += 1
             by_register.setdefault(register, new_bucket())["skipped"] += 1
@@ -502,6 +514,8 @@ def main():
     parser.add_argument("--context-turns", type=int, default=3, help="max prior messages to include (--context prior)")
     parser.add_argument("--context-style", choices=("plain", "labeled"), default="plain", help="prior-message formatting")
     parser.add_argument("--force-app", default=None, help="override the request app id (register ablation)")
+    parser.add_argument("--prefix-words", type=int, default=None, help="reply-quiz: fixed short prefix (first N words of the reply), predict the rest")
+    parser.add_argument("--min-prior", type=int, default=0, help="reply-quiz: only records with >= N prior messages (real reply situations)")
     parser.add_argument("--config-only", action="store_true", help="print the app's active config JSON and exit")
     parser.add_argument("--json", action="store_true", help="emit one machine-readable JSON line of overall metrics")
     parser.add_argument("--selftest", action="store_true", help="run offline self-test of cut/scoring logic and exit")
@@ -535,7 +549,8 @@ def main():
     overall, by_register, by_source, mismatch_examples, aborted = run_eval(
         records, sleep_s=args.sleep, verbose_k=args.verbose, sock_path=args.sock,
         context_mode=args.context, context_turns=args.context_turns,
-        context_style=args.context_style, force_app=args.force_app
+        context_style=args.context_style, force_app=args.force_app,
+        prefix_words=args.prefix_words, min_prior=args.min_prior
     )
     if args.json:
         total = overall["total"]
