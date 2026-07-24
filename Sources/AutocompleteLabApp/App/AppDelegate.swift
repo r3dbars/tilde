@@ -42,6 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
 
+    /// True only once this instance won the single-instance race and started
+    /// its hosts. `NSApp.terminate` still fires `applicationWillTerminate` for
+    /// the losing duplicate — whose teardown must not touch the primary's live
+    /// socket or engine.
+    private var startedServing = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Two instances fight over the ghost socket and double the engine's
         // memory — the older instance wins, this one bows out.
@@ -54,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        startedServing = true
 
         // Menu-bar agents get auto-terminated unless they say otherwise; the
         // keyboard is only as smart as this process is alive.
@@ -68,13 +75,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        guard startedServing else { return }
         llamaServerHost.stop()
         ghostBrainServerHost.stop()
     }
 
-    /// One line for the status menu: which engine is answering.
+    /// One line for the status menu: which engine is answering, and whether the
+    /// keyboard can actually reach it.
     func engineStatusLine() -> String {
-        llamaServerHost.isHealthy ? "Engine: Gemma (ready)" : "Engine: starting…"
+        guard llamaServerHost.isHealthy else { return "Engine: starting…" }
+        return ghostBrainServerHost.isServingKeyboard
+            ? "Engine: Gemma (ready)"
+            : "Engine: Gemma (keyboard link down)"
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login
