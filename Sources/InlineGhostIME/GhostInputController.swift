@@ -45,6 +45,26 @@ final class GhostInputController: IMKInputController {
         case .model: return .model
         }
     }
+
+    /// A ghost the writer began typing OVER (rejected). We hold the log open and
+    /// accumulate the FULL replacement phrase they write instead of accepting —
+    /// the richest training label there is (context → what they actually meant),
+    /// scorable for both exact match and meaning. Flushed as one `typedInstead`
+    /// when the override phrase ends: the next ghost appears, they accept, or
+    /// focus leaves. (The old capture logged only the first keystroke.)
+    private struct PendingRejection {
+        let ghost: String
+        let source: GhostUsageLog.Source
+        let appBundle: String?
+        let context: String
+        var replacement: String
+    }
+    private var pendingRejection: PendingRejection?
+
+    /// Longest override we accumulate before flushing mid-phrase; a rich label
+    /// doesn't need a whole paragraph, and this bounds memory if the writer
+    /// never pauses long enough for a fresh ghost to close the episode.
+    private static let maxReplacementChars = 160
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
@@ -98,6 +118,24 @@ final class GhostInputController: IMKInputController {
             let percent = Int((Double(accepted) / Double(total) * 100).rounded())
             return "Today: wrote \(accepted) words for you (\(percent)%)"
         }
+    }
+
+    /// Emit the deferred `typedInstead` once the override phrase is complete,
+    /// carrying the full replacement text instead of a lone keystroke. No-op when
+    /// nothing is pending or the writer only backspaced their divergence away.
+    private func flushPendingRejection() {
+        guard let pending = pendingRejection else { return }
+        pendingRejection = nil
+        let replacement = pending.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !replacement.isEmpty else { return }
+        GhostUsageLog.record(
+            event: .typedInstead,
+            ghostText: pending.ghost,
+            source: pending.source,
+            appBundle: pending.appBundle,
+            context: pending.context,
+            typedChar: replacement
+        )
     }
 
     private func recordAccept(_ text: String) {
@@ -160,6 +198,11 @@ final class GhostInputController: IMKInputController {
             pendingAutoSpace = false
             clearGhost(client)
             if !typedFallback.isEmpty { typedFallback.removeLast() }
+            // Keep an in-progress override phrase in sync so the training label
+            // reflects what the writer actually kept.
+            if pendingRejection?.replacement.isEmpty == false {
+                pendingRejection?.replacement.removeLast()
+            }
             return false
         default:
             break
@@ -173,14 +216,25 @@ final class GhostInputController: IMKInputController {
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 0x20, scalar.value != 0x7F {
             if !ghost.isEmpty {
-                GhostUsageLog.record(
-                    event: .typedInstead,
-                    ghostText: ghost,
+                // Typing a normal character over a live ghost = writing something
+                // other than the suggestion. Open a rejection episode; the full
+                // replacement phrase accumulates below and flushes when the next
+                // ghost appears / on accept / on focus loss.
+                flushPendingRejection()
+                pendingRejection = PendingRejection(
+                    ghost: ghost,
                     source: usageSource,
                     appBundle: client.bundleIdentifier(),
                     context: typedFallback,
-                    typedChar: chars
+                    replacement: chars
                 )
+            } else if pendingRejection != nil {
+                // Still writing the override phrase (no ghost up) — keep building it.
+                pendingRejection?.replacement.append(chars)
+                if let count = pendingRejection?.replacement.count,
+                   count > Self.maxReplacementChars {
+                    flushPendingRejection()
+                }
             }
             clearGhost(client)
             let swallowAutoSpace = pendingAutoSpace && ".,!?;:".contains(chars)
@@ -217,6 +271,7 @@ final class GhostInputController: IMKInputController {
     /// would turn an unaccepted ghost into real inserted text. Never allow that:
     /// the ghost is only ever inserted by an explicit Tab/Shift-Tab/tilde.
     override func commitComposition(_ sender: Any!) {
+        flushPendingRejection()
         if let client = sender as? IMKTextInput {
             clearGhost(client)
         }
@@ -225,6 +280,7 @@ final class GhostInputController: IMKInputController {
 
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
+        flushPendingRejection()
         Stats.flushIfDue(force: true)
         if let client = sender as? IMKTextInput { clearGhost(client) }
         typedFallback = ""
@@ -444,6 +500,9 @@ final class GhostInputController: IMKInputController {
     }
 
     private func updateGhost(_ client: IMKTextInput) {
+        // A fresh ghost means the writer paused: any override they were typing is
+        // complete, so close its capture with the full phrase before offering more.
+        flushPendingRejection()
         generation += 1
         let context = contextBeforeCaret(client)
 
