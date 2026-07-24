@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Thin blocking client for the SteadyType "ghost brain" — the menu-bar app hosts
 /// the MLX engine and serves completions over a local unix socket. One connection
@@ -16,6 +17,56 @@ enum GhostBrainClient {
 
     /// Total time we are willing to wait for the brain, per request.
     private static let timeout = timeval(tv_sec: 0, tv_usec: 700_000)
+
+    // MARK: - Reachability observability (redacted: event names only, never text)
+
+    /// Why the last attempt got no answer. The demotion to the Apple fallback
+    /// used to be completely silent — the only symptom was chatbot-style
+    /// suggestions. Now every reachability TRANSITION logs one redacted line
+    /// (visible in Console.app under subsystem bar.r3d.steadytype.ime) and the
+    /// input menu shows the current state.
+    enum UnreachableReason: String {
+        case socketMissing = "socket-missing"
+        case connectFailed = "connect-failed"
+        case requestFailed = "request-failed"
+        case noResponse = "no-response"
+    }
+
+    private static let log = Logger(subsystem: "bar.r3d.steadytype.ime", category: "brain")
+    private static let stateLock = NSLock()
+    private static var lastReason: UnreachableReason?
+    private static var everReached = false
+
+    /// One line for the input menu: is the personal model answering, or has the
+    /// keyboard demoted to the Apple fallback?
+    static func menuStatusLine() -> String {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard let reason = lastReason else {
+            return everReached ? "Brain: connected" : "Brain: not contacted yet"
+        }
+        return "Brain: unreachable (\(reason.rawValue)) — Apple fallback"
+    }
+
+    private static func noteReachable() {
+        stateLock.lock()
+        let wasDown = lastReason != nil
+        lastReason = nil
+        everReached = true
+        stateLock.unlock()
+        if wasDown { log.info("brain reachable again — personal model resumed") }
+    }
+
+    private static func noteUnreachable(_ reason: UnreachableReason) -> String? {
+        stateLock.lock()
+        let changed = lastReason != reason
+        lastReason = reason
+        stateLock.unlock()
+        if changed {
+            log.error("brain unreachable (\(reason.rawValue, privacy: .public)) — demoting to Apple fallback")
+        }
+        return nil
+    }
 
     /// Streams a completion: `onPartial` fires for each partial suggestion as the
     /// model generates (first words near time-to-first-token); the return value is
@@ -36,7 +87,7 @@ enum GhostBrainClient {
         }
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else { return noteUnreachable(.connectFailed) }
         defer { close(fd) }
 
         var tv = timeout
@@ -59,12 +110,17 @@ enum GhostBrainClient {
         let connected = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, size) }
         }
-        guard connected == 0 else { return nil }
+        guard connected == 0 else {
+            // The socket file vanishing is THE signature of the historical bug
+            // (a second app instance tearing down the shared path) — name it.
+            let fileExists = FileManager.default.fileExists(atPath: socketPath)
+            return noteUnreachable(fileExists ? .connectFailed : .socketMissing)
+        }
 
         var payload = request
         payload.append(0x0A) // newline delimiter
         let sent = payload.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
-        guard sent == payload.count else { return nil }
+        guard sent == payload.count else { return noteUnreachable(.requestFailed) }
 
         // Read newline-delimited JSON lines: partials as they generate, then the
         // final (no "partial" flag). On timeout/EOF, the last partial stands.
@@ -91,10 +147,15 @@ enum GhostBrainClient {
                     // The brain ANSWERED — empty means it chose silence. Return ""
                     // (not nil) so callers respect the silence instead of treating
                     // it as "brain unreachable" and falling back to another model.
+                    noteReachable()
                     return suggestion.isEmpty ? (lastPartial ?? "") : suggestion
                 }
             }
         }
+        if lastPartial == nil {
+            return noteUnreachable(.noResponse)
+        }
+        noteReachable()
         return lastPartial
     }
 }

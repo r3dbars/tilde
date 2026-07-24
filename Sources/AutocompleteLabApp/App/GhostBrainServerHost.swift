@@ -24,6 +24,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private let queue = DispatchQueue(label: "bar.r3d.steadytype.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
+    /// Identity (inode) of the socket file THIS process bound. Teardown may only
+    /// unlink the file while it still has this identity — a transient second
+    /// instance must never remove the primary's live socket.
+    private var boundFileID: UInt64?
+    private var socketWatchSource: DispatchSourceFileSystemObject?
 
     init(
         engineProvider: @escaping @MainActor () -> any CompletionEngine,
@@ -40,13 +45,23 @@ final class GhostBrainServerHost: @unchecked Sendable {
     func stop() {
         queue.async { [weak self] in
             guard let self else { return }
-            self.acceptSource?.cancel()
-            self.acceptSource = nil
-            if self.listenerFD >= 0 {
-                close(self.listenerFD)
-                self.listenerFD = -1
+            self.tearDownListener()
+            if GhostSocketLifecyclePolicy.shouldUnlinkOnStop(
+                didBindSocket: self.boundFileID != nil,
+                boundFileID: self.boundFileID,
+                currentFileID: Self.fileID(atPath: Self.socketPath)
+            ) {
+                unlink(Self.socketPath)
             }
-            unlink(Self.socketPath)
+            self.boundFileID = nil
+        }
+    }
+
+    /// For the status menu: this process is listening and the socket file the
+    /// keyboard connects to is present.
+    var isServingKeyboard: Bool {
+        queue.sync {
+            listenerFD >= 0 && FileManager.default.fileExists(atPath: Self.socketPath)
         }
     }
 
@@ -57,7 +72,18 @@ final class GhostBrainServerHost: @unchecked Sendable {
         try? FileManager.default.createDirectory(
             atPath: directory, withIntermediateDirectories: true
         )
-        unlink(Self.socketPath)
+        if FileManager.default.fileExists(atPath: Self.socketPath) {
+            let action = GhostSocketLifecyclePolicy.bindAction(
+                liveServerAnswersProbe: Self.probeConnect(Self.socketPath)
+            )
+            guard action == .replaceStaleSocket else {
+                // A live server (an older primary instance) already answers on
+                // this path — we are the duplicate; never steal its socket.
+                DiagnosticsLog.shared.record("ghost-socket-already-served", metadata: [:])
+                return
+            }
+            unlink(Self.socketPath)
+        }
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return }
@@ -82,11 +108,83 @@ final class GhostBrainServerHost: @unchecked Sendable {
         }
         chmod(Self.socketPath, 0o600)
         listenerFD = fd
+        boundFileID = Self.fileID(atPath: Self.socketPath)
 
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in self?.acceptOne() }
         source.resume()
         acceptSource = source
+        watchSocketFile()
+    }
+
+    private func tearDownListener() {
+        socketWatchSource?.cancel()
+        socketWatchSource = nil
+        acceptSource?.cancel()
+        acceptSource = nil
+        if listenerFD >= 0 {
+            close(listenerFD)
+            listenerFD = -1
+        }
+    }
+
+    /// Self-heal: if anything removes the socket file out from under us (the
+    /// historical offender was a transient second instance's teardown), new
+    /// keyboard connections silently fail even though this process is fine.
+    /// A socket file cannot be open(2)ed for a vnode watch, so watch the parent
+    /// directory and re-bind the moment our file's identity is gone.
+    private func watchSocketFile() {
+        let directory = (Self.socketPath as NSString).deletingLastPathComponent
+        let fd = open(directory, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: .write, queue: queue
+        )
+        source.setEventHandler { [weak self] in self?.socketDirectoryChanged() }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        socketWatchSource = source
+    }
+
+    private func socketDirectoryChanged() {
+        guard let bound = boundFileID,
+              Self.fileID(atPath: Self.socketPath) != bound else { return }
+        DiagnosticsLog.shared.record("ghost-socket-vanished-rebinding", metadata: [:])
+        tearDownListener()
+        boundFileID = nil
+        bindAndListen()
+    }
+
+    /// A file at the path only blocks binding if a server still answers on it;
+    /// a leftover from a dead process refuses the connection immediately.
+    private static func probeConnect(_ path: String) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var tv = timeval(tv_sec: 0, tv_usec: 250_000)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathOK = path.withCString { cPath -> Bool in
+            withUnsafeMutableBytes(of: &addr.sun_path) { raw in
+                guard strlen(cPath) < raw.count else { return false }
+                raw.baseAddress!.assumingMemoryBound(to: CChar.self)
+                    .update(from: cPath, count: strlen(cPath) + 1)
+                return true
+            }
+        }
+        guard pathOK else { return false }
+        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
+        return withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, size) == 0 }
+        }
+    }
+
+    private static func fileID(atPath path: String) -> UInt64? {
+        var status = stat()
+        guard stat(path, &status) == 0 else { return nil }
+        return UInt64(status.st_ino)
     }
 
     private func acceptOne() {

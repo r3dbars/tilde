@@ -450,6 +450,12 @@ final class GhostInputController: IMKInputController {
         let stats = NSMenuItem(title: Stats.todaySummary(), action: nil, keyEquivalent: "")
         stats.isEnabled = false
         menu.addItem(stats)
+        // Which voice is writing: the personal brain, or the Apple fallback
+        // because the brain socket is unreachable. Makes the silent demotion
+        // (chatbot-style suggestions) diagnosable at a glance.
+        let brain = NSMenuItem(title: GhostBrainClient.menuStatusLine(), action: nil, keyEquivalent: "")
+        brain.isEnabled = false
+        menu.addItem(brain)
         menu.addItem(.separator())
         let inline = NSMenuItem(
             title: "Inline suggestions (underlined)",
