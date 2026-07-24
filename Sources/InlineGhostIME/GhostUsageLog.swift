@@ -32,11 +32,25 @@ enum GhostUsageLog {
         case model
     }
 
-    private static let logDirectory = NSString(
-        string: "~/Library/Application Support/SteadyType/usage"
-    ).expandingTildeInPath
+    /// Log to iCloud Drive when available so multiple Macs feed one folder the
+    /// owner (and their tools) can read; per-host filename keeps machines'
+    /// streams separate. Falls back to local Application Support if iCloud is
+    /// absent. Redacted events only — never raw text — so this is safe to sync.
+    private static let logDirectory: String = {
+        let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
+            .expandingTildeInPath
+        let icloudRoot = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs")
+            .expandingTildeInPath
+        if FileManager.default.fileExists(atPath: icloudRoot) { return icloud }
+        return NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
+    }()
 
-    private static let logPath = logDirectory + "/ghost_events.jsonl"
+    private static let logPath: String = {
+        let host = Host.current().localizedName?
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-") ?? "mac"
+        return logDirectory + "/ghost_events_\(host).jsonl"
+    }()
 
     /// Serial + background: file I/O never runs on the keystroke-handling thread,
     /// and concurrent events stay ordered instead of interleaving mid-line.

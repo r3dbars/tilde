@@ -276,7 +276,8 @@ def subsample(records, limit):
 
 def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
              context_turns=3, context_style="plain", force_app=None,
-             prefix_words=None, min_prior=0):
+             prefix_words=None, min_prior=0, dump_path=None):
+    dump_f = open(dump_path, "w", encoding="utf-8") if dump_path else None
     overall = new_bucket()
     by_register = {}
     by_source = {}
@@ -310,6 +311,11 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
             # Never lose a partial run: stop here and report what completed.
             aborted = f"aborted at case {case_no}/{len(records)}: {e}"
             break
+        if dump_f is not None:
+            dump_f.write(json.dumps({
+                "prior": " ".join(p for p in rec.get("prior_messages", []) if p.strip()),
+                "golden": golden, "suggestion": suggestion,
+            }) + "\n")
         spoke = bool(suggestion.strip())
         em1 = exact_match_at_n(suggestion, golden, 1)
         em2 = exact_match_at_n(suggestion, golden, 2)
@@ -329,6 +335,8 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
         if sleep_s > 0:
             time.sleep(sleep_s)
 
+    if dump_f is not None:
+        dump_f.close()
     return overall, by_register, by_source, mismatch_examples, aborted
 
 
@@ -516,6 +524,7 @@ def main():
     parser.add_argument("--force-app", default=None, help="override the request app id (register ablation)")
     parser.add_argument("--prefix-words", type=int, default=None, help="reply-quiz: fixed short prefix (first N words of the reply), predict the rest")
     parser.add_argument("--min-prior", type=int, default=0, help="reply-quiz: only records with >= N prior messages (real reply situations)")
+    parser.add_argument("--dump", default=None, help="write {prior,golden,suggestion} per case to this JSONL (for semantic re-scoring)")
     parser.add_argument("--config-only", action="store_true", help="print the app's active config JSON and exit")
     parser.add_argument("--json", action="store_true", help="emit one machine-readable JSON line of overall metrics")
     parser.add_argument("--selftest", action="store_true", help="run offline self-test of cut/scoring logic and exit")
@@ -550,7 +559,7 @@ def main():
         records, sleep_s=args.sleep, verbose_k=args.verbose, sock_path=args.sock,
         context_mode=args.context, context_turns=args.context_turns,
         context_style=args.context_style, force_app=args.force_app,
-        prefix_words=args.prefix_words, min_prior=args.min_prior
+        prefix_words=args.prefix_words, min_prior=args.min_prior, dump_path=args.dump
     )
     if args.json:
         total = overall["total"]
