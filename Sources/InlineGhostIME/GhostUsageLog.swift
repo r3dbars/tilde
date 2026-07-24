@@ -1,16 +1,16 @@
 import Foundation
 
-/// Opt-in, OFF BY DEFAULT, local-only capture of ghost outcomes: what the owner
-/// accepts, dismisses, or types instead of a suggestion. This is ground truth for
-/// tuning acceptance-rate metrics against real usage — not a telemetry pipeline.
+/// Opt-in capture of ghost outcomes: what the owner accepts, dismisses, or types
+/// instead of a suggestion. Ground truth for BOTH acceptance metrics AND future
+/// personalization — the (context -> what I actually wrote) pairs and accept/
+/// reject labels this produces are the richest training + quiz data available.
 ///
-/// Enable with:
-///   defaults write com.steadytype.InlineGhostIME GhostUsageCaptureEnabled -bool true
-///
-/// Privacy: NEVER logs raw typed text or raw ghost text. Only counts, lengths,
-/// and (for the one case where the user's own keystroke matters) a coarse
-/// redacted character class. Writes go to a local file only — nothing is
-/// transmitted anywhere.
+/// PRIVACY (owner-configured, personal build): this DOES log raw text — the
+/// context, the suggestion, and the accepted/typed text — by the owner's explicit
+/// choice, for personalizing THEIR own model. It syncs to the owner's own iCloud
+/// Drive (their private account) so both their Macs feed one folder. It is never
+/// sent anywhere else. Disable anytime by setting the flag to false; purge by
+/// deleting the SteadyType-usage folder.
 enum GhostUsageLog {
 
     private static let enabledKey = "GhostUsageCaptureEnabled"
@@ -65,47 +65,40 @@ enum GhostUsageLog {
         return formatter
     }()
 
-    /// Records one ghost outcome. A no-op unless the owner has explicitly opted
-    /// in via `enabledKey`. Crash-proof: every failure along the way is
-    /// swallowed — usage capture must never be able to disrupt typing.
+    /// Records one ghost outcome with raw text for training/quiz use. A no-op
+    /// unless the owner has opted in via `enabledKey`. Crash-proof: every failure
+    /// is swallowed — capture must never disrupt typing.
     ///
-    /// `typedChar`, when present, is reduced to a coarse class (letter / digit /
-    /// space / punct / other) BEFORE it ever leaves this call frame. The raw
-    /// character is never written to disk, logged, or retained.
+    /// `context` is the text before the cursor (what the writer had typed — the
+    /// "prompt"); `ghostText` is the suggestion shown; `accepted` is the portion
+    /// actually taken (for accept events); `typedChar` is the character typed when
+    /// a suggestion was passed over. Context is bounded to a recent tail.
     static func record(
         event: Event,
-        ghostLen: Int,
+        ghostText: String,
         source: Source,
         appBundle: String?,
+        context: String? = nil,
+        accepted: String? = nil,
         typedChar: String? = nil
     ) {
         guard isEnabled else { return }
-        let redactedSignal = typedChar.map(redactedClass(for:))
+        let boundedContext = context.map { String($0.suffix(280)) }
 
         queue.async {
             var fields: [String: Any] = [
                 "ts": iso8601.string(from: Date()),
                 "event": event.rawValue,
-                "ghost_len": ghostLen,
+                "ghost": ghostText,
+                "ghost_len": ghostText.count,
                 "source": source.rawValue,
             ]
             if let appBundle { fields["app_bundle"] = appBundle }
-            if let redactedSignal { fields["typed_signal"] = redactedSignal }
+            if let boundedContext { fields["context"] = boundedContext }
+            if let accepted { fields["accepted"] = accepted }
+            if let typedChar { fields["typed"] = typedChar }
             appendLine(fields)
         }
-    }
-
-    /// Coarse character class only — the character itself is discarded here and
-    /// never touches this type's stored state or the log file.
-    private static func redactedClass(for chars: String) -> String {
-        guard let scalar = chars.unicodeScalars.first else { return "other" }
-        if CharacterSet.whitespacesAndNewlines.contains(scalar) { return "space" }
-        if CharacterSet.decimalDigits.contains(scalar) { return "digit" }
-        if CharacterSet.letters.contains(scalar) { return "letter" }
-        if CharacterSet.punctuationCharacters.contains(scalar) || CharacterSet.symbols.contains(scalar) {
-            return "punct"
-        }
-        return "other"
     }
 
     /// Runs on `queue` only. Best-effort append; any failure is silently
