@@ -36,6 +36,15 @@ final class GhostInputController: IMKInputController {
     /// What produced the ghost currently on screen (for per-source accept stats).
     private enum GhostSource: String { case fast, model }
     private var ghostSource: GhostSource = .fast
+
+    /// `ghostSource` translated for `GhostUsageLog` (kept as a separate type so
+    /// the opt-in usage log doesn't couple to this controller's internals).
+    private var usageSource: GhostUsageLog.Source {
+        switch ghostSource {
+        case .fast: return .fast
+        case .model: return .model
+        }
+    }
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
@@ -138,6 +147,12 @@ final class GhostInputController: IMKInputController {
             }
         case 53: // Escape — dismiss the ghost if present.
             guard !ghost.isEmpty else { return false }
+            GhostUsageLog.record(
+                event: .dismiss,
+                ghostLen: ghost.count,
+                source: usageSource,
+                appBundle: client.bundleIdentifier()
+            )
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.
@@ -156,6 +171,15 @@ final class GhostInputController: IMKInputController {
            chars.count == 1,
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 0x20, scalar.value != 0x7F {
+            if !ghost.isEmpty {
+                GhostUsageLog.record(
+                    event: .typedInstead,
+                    ghostLen: ghost.count,
+                    source: usageSource,
+                    appBundle: client.bundleIdentifier(),
+                    typedChar: chars
+                )
+            }
             clearGhost(client)
             let swallowAutoSpace = pendingAutoSpace && ".,!?;:".contains(chars)
             pendingAutoSpace = false
@@ -425,6 +449,12 @@ final class GhostInputController: IMKInputController {
         if !suffix.isEmpty {
             ghostSource = .fast
             show(suffix, client)
+            GhostUsageLog.record(
+                event: .shown,
+                ghostLen: suffix.count,
+                source: .fast,
+                appBundle: client.bundleIdentifier()
+            )
         }
 
         // Smart layer. Mid-word, the dictionary/doc completion is precise — when
@@ -565,6 +595,12 @@ final class GhostInputController: IMKInputController {
         ghost = text
         ghostSource = .model
         show(text, liveClient)
+        GhostUsageLog.record(
+            event: .shown,
+            ghostLen: text.count,
+            source: .model,
+            appBundle: liveClient.bundleIdentifier()
+        )
     }
 
     private func appleModelGhost(tail: String, gen: Int) async {
@@ -638,6 +674,12 @@ final class GhostInputController: IMKInputController {
     private func acceptWholeGhost(_ client: IMKTextInput) {
         var accepted = ghost
         recordAccept(accepted)
+        GhostUsageLog.record(
+            event: .acceptAll,
+            ghostLen: accepted.count,
+            source: usageSource,
+            appBundle: client.bundleIdentifier()
+        )
         clearGhost(client)
         if !accepted.hasSuffix(" ") {
             accepted += " "
@@ -664,6 +706,12 @@ final class GhostInputController: IMKInputController {
         }
         let remainder = String(ghost.dropFirst(chunk.count))
         recordAccept(chunk)
+        GhostUsageLog.record(
+            event: .acceptWord,
+            ghostLen: chunk.count,
+            source: usageSource,
+            appBundle: client.bundleIdentifier()
+        )
         ghost = ""
         inlineGhostVisible = false
         var insertion = chunk
