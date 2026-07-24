@@ -337,7 +337,10 @@ final class GhostInputController: IMKInputController {
     /// two quality rules on top: don't extend an already-complete common word,
     /// and prefer completing TO a common word over an obscure dictionary find.
     private func dictionaryCompletion(for partial: String) -> String {
-        guard partial.count >= 2 else { return "" }
+        // Require 3 letters before guessing (was 2): the overnight dictionary
+        // quiz found the 2-letter case was wrong ~80% of the time — firing on
+        // 3+ roughly halves the false-completion rate for a small coverage cost.
+        guard partial.count >= 3 else { return "" }
         let lowerPartial = partial.lowercased()
         if Self.commonWords.contains(lowerPartial) { return "" }
         let range = NSRange(location: 0, length: (partial as NSString).length)
@@ -347,7 +350,7 @@ final class GhostInputController: IMKInputController {
             language: "en",
             inSpellDocumentWithTag: 0
         ) ?? []).filter { candidate in
-            candidate.count >= partial.count + 2
+            candidate.count >= partial.count + 1   // was +2; +1 keeps 1-letter completions
                 && candidate.lowercased().hasPrefix(lowerPartial)
         }
         if let common = candidates.first(where: { Self.commonWords.contains($0.lowercased()) }) {
