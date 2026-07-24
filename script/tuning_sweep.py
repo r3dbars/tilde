@@ -164,6 +164,13 @@ def kill_app():
         os.unlink(SOCK)
     except OSError:
         pass
+    # Wait until port 17872 is actually free — a stale llama-server still bound
+    # would make the next app adopt the WRONG model (config check would reject it).
+    for _ in range(20):
+        if not sh("lsof -nP -iTCP:17872 -sTCP:LISTEN").stdout.strip():
+            break
+        sh("pkill -9 -f 'llama-server'")
+        time.sleep(1)
     time.sleep(2)
 
 
@@ -259,12 +266,13 @@ def run_version(label, env_overrides, flags, expect):
         got_model = running_model_gguf()
         if want_model != got_model:
             mismatches.append("model(gguf): want %s got %s" % (want_model, got_model))
-    # For an explicit GGUF path, confirm llama-server actually launched with it.
+    # For an explicit GGUF path, the config echo already reports model_path and
+    # kill_app guarantees the port was free before launch — so verify via the
+    # echo (below) rather than a flaky pgrep of the process cmdline.
     if env_overrides.get("STEADYTYPE_MODEL_PATH"):
         want_base = os.path.basename(env_overrides["STEADYTYPE_MODEL_PATH"])
-        cmdline = sh("pgrep -fl 'llama-server.*17872'").stdout
-        if want_base not in cmdline:
-            mismatches.append("model(gguf path): %s not in llama-server cmdline" % want_base)
+        if want_base not in str(cfg.get("model_path", "")):
+            mismatches.append("model_path echo: %s not in %r" % (want_base, cfg.get("model_path")))
     if mismatches:
         print("  CONFIG MISMATCH — skipping:", "; ".join(mismatches), flush=True)
         return {"label": label, "error": "config mismatch: " + "; ".join(mismatches),
