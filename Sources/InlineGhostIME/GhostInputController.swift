@@ -149,9 +149,10 @@ final class GhostInputController: IMKInputController {
             guard !ghost.isEmpty else { return false }
             GhostUsageLog.record(
                 event: .dismiss,
-                ghostLen: ghost.count,
+                ghostText: ghost,
                 source: usageSource,
-                appBundle: client.bundleIdentifier()
+                appBundle: client.bundleIdentifier(),
+                context: typedFallback
             )
             clearGhost(client)
             return true
@@ -174,9 +175,10 @@ final class GhostInputController: IMKInputController {
             if !ghost.isEmpty {
                 GhostUsageLog.record(
                     event: .typedInstead,
-                    ghostLen: ghost.count,
+                    ghostText: ghost,
                     source: usageSource,
                     appBundle: client.bundleIdentifier(),
+                    context: typedFallback,
                     typedChar: chars
                 )
             }
@@ -454,9 +456,10 @@ final class GhostInputController: IMKInputController {
             show(suffix, client)
             GhostUsageLog.record(
                 event: .shown,
-                ghostLen: suffix.count,
+                ghostText: suffix,
                 source: .fast,
-                appBundle: client.bundleIdentifier()
+                appBundle: client.bundleIdentifier(),
+                context: typedFallback
             )
         }
 
@@ -600,9 +603,10 @@ final class GhostInputController: IMKInputController {
         show(text, liveClient)
         GhostUsageLog.record(
             event: .shown,
-            ghostLen: text.count,
+            ghostText: text,
             source: .model,
-            appBundle: liveClient.bundleIdentifier()
+            appBundle: liveClient.bundleIdentifier(),
+            context: typedFallback
         )
     }
 
@@ -679,9 +683,11 @@ final class GhostInputController: IMKInputController {
         recordAccept(accepted)
         GhostUsageLog.record(
             event: .acceptAll,
-            ghostLen: accepted.count,
+            ghostText: accepted,
             source: usageSource,
-            appBundle: client.bundleIdentifier()
+            appBundle: client.bundleIdentifier(),
+            context: typedFallback,
+            accepted: accepted
         )
         clearGhost(client)
         if !accepted.hasSuffix(" ") {
@@ -711,9 +717,11 @@ final class GhostInputController: IMKInputController {
         recordAccept(chunk)
         GhostUsageLog.record(
             event: .acceptWord,
-            ghostLen: chunk.count,
+            ghostText: chunk,
             source: usageSource,
-            appBundle: client.bundleIdentifier()
+            appBundle: client.bundleIdentifier(),
+            context: typedFallback,
+            accepted: chunk
         )
         ghost = ""
         inlineGhostVisible = false
