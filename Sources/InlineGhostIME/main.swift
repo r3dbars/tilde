@@ -5,6 +5,11 @@ import InputMethodKit
 let connectionName = "InlineGhostIME_1_Connection"
 let bundleIdentifier = Bundle.main.bundleIdentifier ?? "bar.r3d.inputmethod.InlineGhost"
 
+// This is the owner's personal build: usage capture ON by default (records
+// accept/dismiss/typed-instead, redacted, local only) so real-acceptance ground
+// truth is collected. The user can disable it by setting the flag to false.
+UserDefaults.standard.register(defaults: ["GhostUsageCaptureEnabled": true])
+
 // Retain the server for the process lifetime; IMK dispatches client sessions to it.
 let server = IMKServer(name: connectionName, bundleIdentifier: bundleIdentifier)
 _ = server
