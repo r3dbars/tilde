@@ -35,8 +35,9 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // All tuning knobs read from the environment so the auto-research loop
         // can turn any dial without a rebuild (see script/research_loop.py).
         let env = ProcessInfo.processInfo.environment
-        func envInt(_ k: String) -> Int? { env[k].flatMap(Int.init) }
-        func envDouble(_ k: String) -> Double? { env[k].flatMap(Double.init) }
+        // env still wins; persisted "steadytype.<NAME>" defaults survive reboots.
+        func envInt(_ k: String) -> Int? { RuntimeSetting.int(String(k.dropFirst("STEADYTYPE_".count))) }
+        func envDouble(_ k: String) -> Double? { RuntimeSetting.double(String(k.dropFirst("STEADYTYPE_".count))) }
 
         let register = ContinuationRegister.from(bundleIdentifier: request.appBundleIdentifier)
         let recipe = RawContinuationPrompt(
@@ -68,7 +69,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // failed our RAW recipe — but the task can be ASKED as a question with
         // a proper chat template. STEADYTYPE_PROMPT_MODE=instruct tests that:
         // Gemma-template prompt framing screen+typed-text as an explicit task.
-        let instructMode = env["STEADYTYPE_PROMPT_MODE"] == "instruct"
+        let instructMode = RuntimeSetting.string("PROMPT_MODE") == "instruct"
         var stops = ["\n"]
         var servedPrompt = recipe.prompt
         if instructMode {

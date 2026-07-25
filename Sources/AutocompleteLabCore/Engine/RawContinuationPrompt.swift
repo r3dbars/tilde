@@ -38,8 +38,7 @@ public enum ContinuationRegister: String, Sendable {
     public var generatedTokenBudget: Int {
         // Tuning-sweep override: STEADYTYPE_TOKEN_BUDGET forces the budget for
         // all registers (the driver sweeps this against the frozen quiz).
-        if let raw = ProcessInfo.processInfo.environment["STEADYTYPE_TOKEN_BUDGET"],
-           let value = Int(raw), value > 0 {
+        if let value = RuntimeSetting.int("TOKEN_BUDGET"), value > 0 {
             return value
         }
         return self == .chat ? 14 : 20
@@ -54,8 +53,8 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         // Tuning-sweep override: STEADYTYPE_SCAFFOLD_<REGISTER>_FILE points at a
         // ready-made scaffold block (see script/mine_scaffolds.py). Lets the
         // driver A/B example sets without rebuilding. Absent/unreadable → builtin.
-        let envKey = "STEADYTYPE_SCAFFOLD_\(register.rawValue.uppercased())_FILE"
-        if let path = ProcessInfo.processInfo.environment[envKey],
+        let settingName = "SCAFFOLD_\(register.rawValue.uppercased())_FILE"
+        if let path = RuntimeSetting.string(settingName),
            let contents = try? String(contentsOfFile: path, encoding: .utf8),
            !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return contents
@@ -135,7 +134,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
                 // vague "notes" framing barely helps the model RESPOND to what's
                 // on screen; a direct "reply" framing tells it the screen is the
                 // message being answered. See the screen-response experiments.
-                let framing = ProcessInfo.processInfo.environment["STEADYTYPE_SCREEN_FRAMING"] ?? "notes"
+                let framing = RuntimeSetting.string("SCREEN_FRAMING") ?? "notes"
                 switch framing {
                 case "reply":
                     pieces += """
