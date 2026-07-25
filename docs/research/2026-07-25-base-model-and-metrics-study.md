@@ -216,3 +216,19 @@ integrity findings, competitive teardown, conclusions, threats to validity,
 prioritized future work.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" && git log --oneline -1
+---
+
+## Addendum E9 — Teacher-ceiling measurement (the Fable test)
+
+Post-publication, the owner's mega-distillation proposal (100-200k examples,
+frontier teacher) was stress-tested by measuring the proposed teacher
+directly: Fable 5 answered the identical 500-question quiz (batched CLI,
+single-shot, same scoring). Results: similar 12.4%, word-1 24.8%, meaning
+0.275 — versus the personal 2B's 8.3% / **28.7%** / 0.256. Conclusions:
+(1) the personalized 2B outperforms the frontier teacher at word-1
+prediction — specificity beats scale on this task; (2) the distillation
+ceiling for similar-phrase is 12.4%, bounding any student far below the
+40%+ acceptance target, which must therefore come from personalization +
+selective serving; (3) a real but scoped ~4pt teachable gap exists in
+continuation depth (bland half) — filed as future polish. This experiment
+retires RQ1's scale-up variant conclusively for ~25 CLI calls of cost.

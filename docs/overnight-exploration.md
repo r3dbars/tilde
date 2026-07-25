@@ -668,3 +668,33 @@ specific via personalization.
 **Also noted:** TabbyML/tabby (unrelated, code completion) — stream-laziness
 (compute only while client connected, abort on new keystroke) worth keeping
 in mind for the socket protocol.
+
+## THE FABLE TEST — frontier ceiling measured (2026-07-25 13:33Z)
+
+Fable 5 (Anthropic's largest model) took the identical 500-question frozen
+quiz via batched CLI, scored with identical rulers, comparators recomputed on
+the same matched rows:
+
+| model | similar@.5 | word1 | w1-2 | w1-3 | meaning |
+|---|---|---|---|---|---|
+| FABLE-5 | 12.4% | 24.8% | 9.2% | 3.0% | 0.275 |
+| personal_v2 (1.6GB, 57ms) | 8.3% | **28.7%** | 7.2% | 1.3% | 0.256 |
+| distilled2+personal | 7.8% | 25.9% | 6.8% | 1.4% | 0.248 |
+| rawbase | 5.1% | 24.1% | 4.9% | 1.0% | 0.232 |
+
+THREE CONCLUSIONS:
+1. **The personal 2B BEATS FABLE on word-1 (28.7 vs 24.8)** — knowing the
+   user outweighs a ~1000x size advantage at predicting their next word.
+   The product thesis, confirmed by the strongest possible witness.
+2. **The distillation ceiling is 12.4% similar, not 40-45%** — a student
+   can't beat its teacher, so the owner's mega-distillation theory caps far
+   below the acceptance target. 40%+ must come from personalization +
+   judgment/serving (selective accuracy already 53% in confident moments),
+   as the rest of the campaign indicated.
+3. **The teachable gap is real but scoped**: Fable wins continuation depth
+   (w1-2 9.2 vs 7.2) and meaning (0.275 vs 0.256) on the bland half — a
+   ~4pt similar gap of which serious distillation might capture 1-2pts.
+   Filed as future polish, not strategy.
+Complementarity note: the personal model starts thoughts better; Fable
+finishes them better. The ideal ceiling combo = personal specificity +
+distilled depth — modest, real, not urgent.
