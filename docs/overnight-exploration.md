@@ -798,3 +798,22 @@ chapter is now closed by exhaustion at all teacher strengths.
 Kept: distill3_all.jsonl (all candidates incl. rejects, scored) = ready
 DPO preference data — the one untried base-side lever. v2 + adaptive
 restored automatically; champion unchanged.
+
+## 2026-07-25 — Solid Week: mid-word swallow fixed (measured), honest status line
+
+**Mid-word finals (commit 79862ec2):** the cleaner rejected any word-mode
+final containing whitespace — the model streams a valid suffix then runs
+past the boundary, so partials flashed and finals vanished. Policy flip:
+word-scope to the first word (the payload), fragment rules applied to the
+raw candidate's first word (restatements validate). midword_eval before →
+after (personal_v2, 300 cases): exact-word 1.7% → 6.0%, spoke 4% → 11%.
+Still dictionary-first mid-word by design; the model now actually helps in
+the gaps instead of flickering. Note: p50 ~2060ms constant across ALL runs
+(incl. pre-fix) = harness/debounce overhead, not generation — separate
+investigation queued.
+
+**Never-silent status (Solid Week 4, in progress):** menu line now reads
+"Engine: Personal Gemma (ready)" vs "Generic" (surfaces identity loss, the
+worst silent failure), warns when the brain socket file is missing.
+`script/restart_app.sh` = the one blessed env-free restart path, identical
+to a post-reboot login-item launch.
