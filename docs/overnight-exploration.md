@@ -776,3 +776,25 @@ killed everything, relaunched via `open` with zero env — llama-server
 loaded the App Support personal model and served. Commit 0bfdb3bc.
 
 Trust rule adopted: configuration is state, not incantation.
+
+## 2026-07-25 — Distill3 (Fable teacher) final verdict: NO SWAP
+
+8,000 contexts, 3,955 kept pairs (842 strong), blended 9,662 with real
+replies; dual-capacity probe lora8 vs lora16 (similar 4.7% vs 6.3% —
+capacity helped, chose lora16); personal 4k stack on top; 1,500-case quiz.
+
+| model | similar★ | EM@1 | meaning |
+|---|---|---|---|
+| personal_v2 (champion) | 8.3% | 24.9% | 0.256 |
+| fable_personal (distill3 stack) | 7.3% | 18.0% | 0.151 |
+
+Success bar was similar ≥ 9.5%. Missed on every metric — EM down ~7pts.
+Third and strongest confirmation of imitation saturation: even the
+strongest available teacher (which itself measured similar 12.4%), the
+long-form format, and doubled LoRA capacity produce a student that gets
+WORSE at being the owner while chasing the teacher. The distillation
+chapter is now closed by exhaustion at all teacher strengths.
+
+Kept: distill3_all.jsonl (all candidates incl. rejects, scored) = ready
+DPO preference data — the one untried base-side lever. v2 + adaptive
+restored automatically; champion unchanged.
