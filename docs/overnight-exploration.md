@@ -836,3 +836,21 @@ quit). Rules adopted: (1) verify frontmost app immediately before AND after
 every synthetic keystroke; (2) quit Messages before any test typing;
 (3) never blind-Return. The screenshot-loop-before-shipping rule worked as
 designed — the rejection cost one afternoon, not a shipped regression.
+
+## 2026-07-25 late — the 2-second "latency bug" was our own ruler
+
+Deep-dive on the constant ~2.06s time-to-final. Elimination chain:
+finalization path (instant), llama (115ms cold, 2,276 t/s prefill, GPU
+fine), screen-context OCR (async, acquitted by A/B with it disabled).
+Answer: the ghost socket protocol is NEWLINE-TERMINATED JSON; the real
+keyboard appends "\n", but every eval probe (midword_eval, ad-hoc probes)
+sent bare JSON — the server sat in read() until its ~2s socket timeout,
+then served normally. The app was never slow: correctly-framed probes
+measure 0–11ms to first byte. All "p50 ~2060ms" numbers in prior midword
+runs are measurement artifacts; per-case truth is generation time only.
+
+Fixes: (1) server hardened — parses as soon as the payload is complete
+JSON, newline or not, so no client can trip this again; (2) midword_eval
+framing corrected. Lesson for the lab notebook: when a latency is
+suspiciously CONSTANT across every config, suspect the ruler before the
+runner.
