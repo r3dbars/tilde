@@ -230,6 +230,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
             guard n > 0 else { break }
             data.append(contentsOf: buffer[0..<n])
             if buffer[0..<n].contains(0x0A) { break }
+            // Defensive framing: the protocol is newline-terminated JSON, but a
+            // client that forgets the terminator (several eval harnesses did)
+            // otherwise stalls here until the socket timeout — measured as a
+            // phantom 2s "latency" that sent us bug-hunting. Serve as soon as
+            // the payload parses complete.
+            if (try? JSONSerialization.jsonObject(with: data)) != nil { break }
         }
         if let newline = data.firstIndex(of: 0x0A) {
             data = data.prefix(upTo: newline)
