@@ -698,3 +698,65 @@ THREE CONCLUSIONS:
 Complementarity note: the personal model starts thoughts better; Fable
 finishes them better. The ideal ceiling combo = personal specificity +
 distilled depth — modest, real, not urgent.
+
+## Owner directives + forecasts logged (2026-07-25 afternoon)
+
+**DISTILL 3 (Fable teacher) — RUNNING.** Owner directive: close the measured
+gap toward Fable's ceiling (similar 12.4, w1-2 9.2, w1-3 3.0, meaning 0.275)
+then re-stack the personal layer. Run design bakes in every prior lesson:
+8,000 contexts, long-form 10-30w completions, meaning-refereed vs real human,
+50/50 real-reply blend, ALL candidates saved with scores (kept AND rejected —
+the DPO goldmine), pilot-gated, and a DUAL-CAPACITY probe (LoRA-8 vs LoRA-16
+students — tests whether our training touch was too gentle). Early stats:
+keep-rate ~51% (> Sonnet's 45%), strong-match share up. Success bar: the new
+stack must beat personal_v2 on the scorecard (similar >= ~9.5% = capturing
+half the teacher gap). Expectation set honestly: matching the teacher fully
+is not physical; half the gap is a win.
+
+**PROJECTIONS ON RECORD (forecast, not measurement):** distillation + the
+matchmaker + flywheel weeks → similar 8.3 → ~11-13% (plausibly EXCEEDING
+Fable's 12.4, because the stack holds the ingredient Fable lacks: the user),
+word1 28.7 → ~30-32, w1-2 → ~8.5-10, live acceptance 20-27% → sustained
+35-40% with gates tuned on live data (world-title territory: Copilot-class
+acceptance on prose, 57ms, private). All to be verified on the frozen quiz;
+projections earn nothing until they survive the referee.
+
+**THE MATCHMAKER (retrieval-augmented personalization) — designed, queued.**
+On each incoming message: embed it (MiniLM, ~10ms), search the owner's 32k
+past exchanges (~5ms, brute-force, no DB), inject the 2-3 most similar past
+(situation → owner's actual reply) exemplars into the prompt; refresh once
+per incoming message (not per keystroke) and ride the prompt cache → felt
+typing lag ~zero; ~50MB local index. Value: +1-3 quiz pts (modest) but a
+MAGIC-MOMENTS machine on repeated situations (greetings, logistics, standard
+answers → near-certainty), free per-relationship voice (retrieved exemplars
+carry the thread's register), and instant learning (today's reply is
+retrievable tomorrow, no training). The fast-twitch memory beside the
+flywheel's slow-burn learning.
+
+**CONTEXT DOCTRINE (owner insight, adopted):** most "dumb AI" is BLIND AI —
+wrong outputs usually trace to missing context, not missing intelligence
+(proof: Fable lost word-1 to the personal 2B purely for lack of one input —
+the user). Three laws: right context beats more context (cotabby's budget
+scar); missing context cannot be compensated by IQ; context must be stated,
+not assumed (the held-right lesson). Tilde context roadmap, ranked:
+(1) recipient/thread identity via AX, (2) the matchmaker, (3) AX text
+instead of OCR (cleaner eyes), (4) budgeted context composition.
+
+**THE WRITING-MEMORY SYSTEM (owner vision, to build):** one diary, two
+readers. Structure (all in the owner's iCloud, never elsewhere):
+  raw/     — the existing capture streams (ghost_events + brain_samples):
+             machine food for nightly training (exists, running)
+  daily/YYYY-MM-DD.md — NEW: readable markdown diary per day ("in Slack,
+             replying to X, you wrote..., screen showed...") for AI AGENTS
+             to ingest — agents know what the owner is working on without
+             re-explanation
+  digest.md — NEW: rolling one-page summary agents load first
+Reader 1 = the keyboard (learns the owner's VOICE from raw). Reader 2 =
+agents like Claude (learn the owner's WORLD from markdown). The nightly
+organizer script that converts raw → daily/digest is ~a day of work; the
+hard part (capture with screen context) already runs. This extends the
+product from "keyboard that learns you" toward a personal context layer no
+cloud company can safely build — the same privacy moat, second application.
+
+**Standing queue after distill3 verdict:** manners sprint (mid-word fix
+first) → nightly auto-retrain → matchmaker → memory organizer → Tilde window.
