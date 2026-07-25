@@ -64,12 +64,33 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // Screen-echo guard: drop suggestions that copy >= N visible words from
         // the screen. Tunable because a low N can over-suppress good guesses.
         let echoGuardMinWords = envInt("STEADYTYPE_ECHO_GUARD_MIN_WORDS") ?? 4
+        // Owner's "holding it wrong" hypothesis (2026-07-25): instruct models
+        // failed our RAW recipe — but the task can be ASKED as a question with
+        // a proper chat template. STEADYTYPE_PROMPT_MODE=instruct tests that:
+        // Gemma-template prompt framing screen+typed-text as an explicit task.
+        let instructMode = env["STEADYTYPE_PROMPT_MODE"] == "instruct"
+        var stops = ["\n"]
+        var servedPrompt = recipe.prompt
+        if instructMode {
+            let tail = String(request.textBeforeCursor.suffix(envInt("STEADYTYPE_MAX_CONTEXT_CHARS") ?? 3000))
+            let screen = (request.visiblePageContext?.promptText).map { String($0.prefix(700)) }
+            var task = "You are the writer's silent autocomplete. "
+            if let screen, !screen.isEmpty {
+                task += "Their screen shows:\n\(screen)\n\n"
+            }
+            task += "They are typing and have written so far:\n\(tail)\n\n"
+            task += "Reply with ONLY the next few words they would type — continue their text "
+            task += "exactly from where it stops, in their own casual voice. No quotes, no "
+            task += "commentary, never repeat what is already written."
+            servedPrompt = "<start_of_turn>user\n\(task)<end_of_turn>\n<start_of_turn>model\n"
+            stops = ["\n", "<end_of_turn>"]
+        }
         var body: [String: Any] = [
-            "prompt": recipe.prompt,
+            "prompt": servedPrompt,
             "n_predict": min(register.generatedTokenBudget, request.mode.generatedTokenCeiling),
             "temperature": temperature,
             "cache_prompt": true,
-            "stop": ["\n"],
+            "stop": stops,
             "stream": true,
             "n_probs": 1,
         ]
@@ -95,25 +116,47 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         var firstChunkMilliseconds: Int?
         var promptTokensProcessed: Int?
         var firstTokenProbability: Double?
+        // Adaptive length ("go after the accuracy"): instead of a fixed word
+        // cap, cut the suggestion at the first token whose probability falls
+        // below this floor. The model runs as far as it stays SURE — two words
+        // on a shaky guess, fifteen on a confident one. 0 = off.
+        let tokenConfidenceFloor = envDouble("STEADYTYPE_TOKEN_CONFIDENCE_FLOOR") ?? 0
         for try await line in bytes.lines {
             guard line.hasPrefix("data: ") else { continue }
             guard let object = try? JSONSerialization.jsonObject(
                 with: Data(line.dropFirst(6).utf8)
             ) as? [String: Any] else { continue }
 
+            let chunkProbability = (object["completion_probabilities"] as? [[String: Any]])
+                .flatMap { $0.first?["logprob"] as? Double }
+                .map { exp($0) }
+
             // Read the first generated token's probability and gate before we
             // ever emit a partial, so a low-confidence guess is never shown.
-            if firstTokenProbability == nil,
-               let probs = object["completion_probabilities"] as? [[String: Any]],
-               let logprob = probs.first?["logprob"] as? Double {
-                firstTokenProbability = exp(logprob)
-                if confidenceThreshold > 0, exp(logprob) < confidenceThreshold {
+            if firstTokenProbability == nil, let p = chunkProbability {
+                firstTokenProbability = p
+                if confidenceThreshold > 0, p < confidenceThreshold {
                     DiagnosticsLog.shared.record("llama-completion-gated", metadata: [
-                        "firstTokenProbability": String(format: "%.3f", exp(logprob)),
+                        "firstTokenProbability": String(format: "%.3f", p),
                         "threshold": String(confidenceThreshold),
                     ])
                     return nil
                 }
+            }
+
+            // Confidence cliff: certainty dropped mid-thought — stop here and
+            // keep only the prefix the model was sure of. Tokens are not words,
+            // so also trim any dangling word-fragment at the cut.
+            if tokenConfidenceFloor > 0, !rawOutput.isEmpty,
+               let p = chunkProbability, p < tokenConfidenceFloor {
+                if !rawOutput.hasSuffix(" "), let lastSpace = rawOutput.lastIndex(of: " ") {
+                    let trimmed = String(rawOutput[..<lastSpace])
+                    // Never trim a lone word away to nothing.
+                    if !trimmed.trimmingCharacters(in: .whitespaces).isEmpty {
+                        rawOutput = trimmed
+                    }
+                }
+                break
             }
 
             if let piece = object["content"] as? String, !piece.isEmpty {

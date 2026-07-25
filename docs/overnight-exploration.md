@@ -408,3 +408,185 @@ recency/correction-WEIGHTED 4k training sets, not more volume.
 Context on/off (both models): screen/prior context adds +1.0-2.6 EM@1 pts and
 the largest meaning lift (v1: 0.184->0.215). Confirms screen context earns its
 permission.
+
+## Trial A — task-base drills verdict (2026-07-25 ~00:49Z)
+
+Drill raw Gemma on 13.8k PUBLIC reply pairs (7 corpora), then stack the
+personal 4k LoRA on top. Frozen 500-case owner quiz, context=prior:
+
+| model | EM@1 | meaning |
+|---|---|---|
+| raw base | 21.0% | 0.192 |
+| task-base (drills only) | 19.0% | 0.188 |
+| task-base + personal | 26.6% | 0.199 |
+| raw + personal (curve4000 comparator) | 26.4% | 0.205 |
+
+VERDICT: **generic public drills wash out.** Alone they slightly HURT on the
+owner's register (pull toward reddit/ubuntu voice); under the personal layer
+they're a statistical tie (+0.2pt = 1 case). Pretraining already taught the
+model average-human text — more average-human text isn't the lever. Base
+improvements must come from a *stronger teacher*, not more of the same:
+distillation (Claude answer key, human-anchored by meaning — Trial B, running)
+and later DPO on accept/reject. Personal layer remains the dominant term.
+
+## Trial B sneak peek — NEGATIVE, generation halted (2026-07-25 ~01:25Z)
+
+Distilled-early (590 Claude answer-key pairs, 400 iters): **13.0% EM@1 / 0.134
+meaning** vs raw base 21.0%/0.192. Same failure shape as logs-only-day1 (14.0%):
+small corpora of SHORT text fragments degrade the base — the model learns
+brevity/format, not judgment, and overfits fast. Full 6k generation stopped at
+~2,000 contexts (~815 kept pairs banked) to preserve credits pending a format
+fix. Hypotheses for the morning: (1) mix distill pairs with full-length corpus
+replies so outputs don't collapse short; (2) far fewer iters for small sets;
+(3) generate LONGER continuations (10-25 words) — also serves the owner's
+longer-suggestion goal; (4) score-filter harder (strong-only). The pilot chain
+itself works end to end — this is a data-format lesson, exactly what sneak
+peeks are for.
+
+## Distill v2 FINAL — the full ladder (2026-07-25 07:11Z, 12k-context run)
+
+Sonnet-5 teacher, 10-30 word completions, meaning-refereed vs real humans
+(3,970 kept pairs, 778 strong, 4% call failures), blended 50/50 with real
+replies (~9.4k training lines), 800 iters. Frozen 500-case owner quiz:
+
+| base alone | EM@1 | meaning |   | + personal 4k | EM@1 | meaning |
+|---|---|---|---|---|---|---|
+| raw | 21.0% | 0.192 |  | raw+p | 26.4% | 0.205 |
+| task-drills | 19.0% | 0.188 |  | drills+p | 26.6% | 0.199 |
+| distilled-long | 20.8% | 0.194 |  | distilled+p | 26.2% | 0.199 |
+
+VERDICT: **comprehensive tie — the imitation-saturation hypothesis is now
+strongly supported.** Three independent base-improvement mechanisms (public
+drills, short-form distillation, long-form human-anchored distillation at 12k
+scale) all fail to move the base or the personal-stacked top line. The 2B base
+appears saturated for imitation-style training on this task; pretraining
+already taught it everything imitation can teach.
+
+What this buys us: (1) certainty — stop spending on imitation, redirect to
+JUDGMENT training (DPO on preference pairs) and to newer base checkpoints;
+(2) the pipeline runs 12k-context generations overnight reliably (~5h, 4%
+failures, ~5M tokens on the 20x plan); (3) process lesson for DPO prep: v2
+only saved KEPT candidates — next generation run must save the rejects + sim
+scores too, since (kept, rejected) pairs are exactly the DPO training data.
+
+The product thesis is unchanged and strengthened: personalization (+5.4pts)
+and serving-side calibration (gates/muting/adaptive length, 12%->27% felt) are
+where the magic lives. The base floor rises when small-model checkpoints
+improve — a free ride we re-check per release.
+
+## Requiz @1500 + vintage test — the base-model question is CLOSED (2026-07-25 ~11:10Z)
+
+Full ladder re-scored on all 1,500 held-out cases (CI ±2.2pts vs ±3.9 at 500):
+
+| base alone | EM@1 | meaning |  | +personal 4k | EM@1 | meaning |
+|---|---|---|---|---|---|---|
+| gemma-2-2b raw | 21.1% | 0.190 |  | drills+p | 25.3% | 0.204 |
+| drills | 21.5% | 0.191 |  | distilled+p | 25.2% | 0.205 |
+| distilled (12k) | 21.2% | **0.202** |  | personal-v2 | 24.9% | 0.204 |
+| gemma-3-4b-pt | 19.7% | 0.188 |  | ~~personal-v1 27.1%~~ | INVALID | (leakage) |
+| gemma-3-1b-pt | 19.9% | 0.176 |  |  |  |  |
+
+Corrections vs the 500-case story: "drills hurt" was sampling noise (21.5 ≥
+21.1); the distilled base's MEANING gain is real (+0.012, the metric the
+similarity-refereed training optimized) but washes to a trace under the
+personal layer. INTEGRITY CATCH: personal-v1 trained on the full 32,337
+corpus BEFORE the test split — its quiz scores are train-test contaminated
+and disqualified; this also taints the curve's 32k point (the 4k-knee claim
+needs a clean rerun eventually). All CLEAN personal variants tie at 25.2±0.4;
+v2 (live) is legitimate.
+
+VINTAGE TEST: Gemma 3 4B base (19.7%) and 1B base (19.9%) both LOSE to
+Gemma 2 2B raw on this task — newer pretraining does not transfer to casual
+next-word continuation (consistent with gemma-3-12b's earlier 20.2%). Side
+note: the 1B nearly matches the 4B — remarkable per-size, a future
+instant-tier candidate if ever needed.
+
+**CAMPAIGN CONCLUSION: Gemma 2 2B stays champion. Every base-improvement
+avenue is now measured and closed: bigger (7B/12B), instruct (E4B), drills,
+short distillation, long human-anchored distillation at 12k scale, and newer
+vintages (1B/4B). The durable levers are the personal layer, serving-side
+calibration, and (untried) judgment/DPO training. Model hunt over — back to
+product.**
+
+## METRIC STANDARD CHANGE — usability is primary (owner directive, 2026-07-25)
+
+Owner: the #1 metric must be "did this produce a sentence that is similar /
+could be USED" — not exact word prediction. Imitation/EM stays as a data
+point, never the headline. New hierarchy for ALL future evals:
+  1. USABILITY RATE — LLM-judge: "would a reasonable person in this exact
+     situation have accepted this suggestion?" (script/judge — Claude CLI,
+     batched, samples per model; judge_pairs_*.jsonl keep per-pair verdicts)
+  2. Meaning score (cosine) — cheap proxy, CALIBRATED against the judge
+  3. EM@1 — strict floor only
+  4. Keystrokes — value delivered
+Ultimate validator: the owner's LIVE accepts (capture logs) — the judge gets
+audited against real acceptance once volume allows. Re-ranking today's ladder
+by usable@0.5 already flipped one verdict: the 12k distilled base is the BEST
+clean base (6.4% vs raw 5.3%, +21% rel) and distilled2+personal leads the
+stacked tier (8.5% vs v2 8.0%) — the distillation night worked on the metric
+that matters; EM had buried it. Judge confirmation run in flight.
+
+## Experimental-model survey + LFM probe (2026-07-25 ~12:02Z) — chapter closed
+
+Deep HF survey of experimental classes: micro-MoE (LFM2.5-8B-A1B), 1-bit
+(BitNet 2B), RWKV-7 linear, diffusion LMs (LLaDA-MoE). One credible candidate
+probed: LFM2.5-8B-A1B (instruct gguf; no Base gguf published). Arch loads in
+our llama-server; scores collapsed (EM@1 5.0%, similar 2.7%, ks 0.20) — chat-
+template-bound like the 12B-it faceplant, far beyond the usual instruct
+handicap. Not worth the Base conversion. Watchlist stays: Gemma 4 pt (top of
+queue when released), BitNet as a battery tier, diffusion LMs re-check in a
+year. THE MODEL CHAPTER IS FULLY CLOSED: gemma-2-2b + personal layer, by
+exhaustion of bigger/newer/instruct/tutored/experimental alternatives.
+
+## "Holding it wrong" — the owner's instruct challenge, tested (2026-07-25 ~12:10Z)
+
+Owner challenged the instruct-poison conclusion: our task ("given screen +
+reply-start, what comes next?") IS askable as a question — and the distillation
+teacher (Sonnet-5, an instruct model, prompted as a task) does it superbly. So
+the historical instruct failures may have been unfair: we always fed instructs
+the RAW base recipe, no chat template, no instruction.
+
+Built STEADYTYPE_PROMPT_MODE=instruct (proper Gemma chat template, task framed
+as an explicit question incl. screen context) and re-quizzed (500-case probes):
+
+| model | holding | EM@1 | similar | p50 |
+|---|---|---|---|---|
+| gemma-4-E4B-it | wrong (raw) | 18.5% | — | 137ms |
+| gemma-4-E4B-it | RIGHT (instruct) | 13.2% | **6.5%** | 150ms |
+| gemma-4-E2B-it | RIGHT (instruct) | 11.8% | 3.4% | 68ms |
+| gemma-2-2b base (ref) | raw | 21.1% | 5.3% | 140ms |
+
+FINDINGS — the owner was half right, and the half matters:
+1. Held right, E4B posts the best base-tier SIMILAR score ever recorded (6.5%)
+   — proper framing fixes COMPREHENSION. The old "instructs can't do this" was
+   too strong; corrected claim: **instructs understand the task when asked
+   properly, but PARAPHRASE rather than channel** (EM drops, similar rises —
+   right idea, its own words).
+2. The effect needs size: E2B held-right is fast (68ms) but weak (3.4%) —
+   comprehension-through-instructions doesn't survive at 2B-effective scale.
+3. Neither beats the champion stack on cost/benefit → instruct path shelved,
+   but the METHOD (instruct-mode env flag) stays in the engine for future
+   models, and personalization-LoRA-on-instruct remains an untested idea.
+
+## Model landscape sweep (2026-07-25)
+
+- **Qwen 3.6 exists**: official = 27B dense + 35B-A3B MoE only. No small
+  variants; thinking-tuned; 15-20GB RAM at 4-bit. Wrong lane — pass.
+- **Gemma 4 lineup**: E2B/E4B/12B/26B-A4B/31B, all released as -it… **AND as
+  suffix-less BASE repos (google/gemma-4-E2B, -E4B, -12B, …) that every
+  GGUF-centric search missed.** The #1 watchlist item was live all along —
+  Google publishes Gemma 4 base weights, just no base GGUFs.
+- Experimental classes surveyed + probed: LFM2.5-8B-A1B micro-MoE (arch loads,
+  scores collapsed 5.0%/2.7% — chat-template-bound), BitNet (battery-tier
+  watchlist), RWKV-7 (watchlist), diffusion LMs (re-check in a year).
+
+## IN FLIGHT: the fair fight — gemma-4-E2B BASE (the bet)
+
+Converting google/gemma-4-E2B (base safetensors → GGUF) for the first fair
+Gemma-4 test: newest arch, base flavor, our recipe. Stake: ~40 min compute.
+Win (similar ≥ ~6% raw) → personal-stack test → possible new champion +
+better platform trajectory. Tie → E-series speed-tier interest. Lose → the
+two-generation pattern confirms (modern pretraining trades away casual-text
+intuition) and the model chapter closes with zero what-ifs. Prior odds logged:
+25% win / 35% tie / 40% lose. NOTE: download may 401 (gated repo, no HF token
+on this machine) — owner accepts license + `huggingface-cli login` to unblock.
