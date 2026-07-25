@@ -817,3 +817,22 @@ investigation queued.
 worst silent failure), warns when the brain socket file is missing.
 `script/restart_app.sh` = the one blessed env-free restart path, identical
 to a post-reboot login-item launch.
+
+## 2026-07-25 evening — chip prototype: built, proven, parked
+
+Owner asked what ghost-display options exist beyond marked text. Built the
+chip (GhostDisplayMode=chip): Tilde-styled floating window under the caret,
+proven live in TextEdit including the ~ accept chain. Owner verdict on v1:
+"looks so bad" → clarified "the view we have now is fine but it could be
+better." Parked on branch chip-prototype-parked (v1 bugs noted in the
+commit). Direction settled: inline underline stays the daily driver; next
+polish lever is the STYLING MATRIX — lighter gray/thinner underline on the
+existing inline ghost, per-app, zero new UI.
+
+INCIDENT (process lesson, permanent): while permission dialogs blocked the
+screen, queued AppleScript keystrokes fired on Allow and typed the test
+sentence into a REAL Messages compose box (cleared before send; Messages
+quit). Rules adopted: (1) verify frontmost app immediately before AND after
+every synthetic keystroke; (2) quit Messages before any test typing;
+(3) never blind-Return. The screenshot-loop-before-shipping rule worked as
+designed — the rejection cost one afternoon, not a shipped regression.
