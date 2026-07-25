@@ -760,3 +760,19 @@ cloud company can safely build — the same privacy moat, second application.
 
 **Standing queue after distill3 verdict:** manners sprint (mid-word fix
 first) → nightly auto-retrain → matchmaker → memory organizer → Tilde window.
+
+## 2026-07-25 — Solid Week begins: reboot-proofing (trust pillar 1)
+
+Owner pivot: "make sure this is super solid with consistency and trust at
+the forefront — two mechanical pieces, the AI brain and the application."
+
+First fix, the landmine: the live app's entire identity (personal model
+path, scaffold, every tuning knob) lived only in the launching shell's
+environment. One reboot → login-item relaunch → generic model, silently.
+Shipped `RuntimeSetting` (env → persisted `steadytype.<NAME>` default →
+builtin), migrated personal.gguf + scaffold out of the eval cache into
+Application Support, persisted the live config as defaults, and proved it:
+killed everything, relaunched via `open` with zero env — llama-server
+loaded the App Support personal model and served. Commit 0bfdb3bc.
+
+Trust rule adopted: configuration is state, not incantation.
