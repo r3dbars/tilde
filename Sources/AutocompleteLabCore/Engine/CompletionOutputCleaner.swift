@@ -218,11 +218,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         let normalizedSuggestion = mode == .wordCompletion ? candidateText : ensureLeadingSpace(candidateText)
-        let trimmedSuggestion: String
+        var trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
         } else {
             trimmedSuggestion = normalizedSuggestion
+        }
+        // Mid-word finals arrive as full continuations ("ng home soon") because
+        // the model runs past the word boundary. The word being finished is the
+        // payload — keep it, drop the rest. Rejecting multi-word outputs here
+        // swallowed nearly every mid-word final live (partials showed, finals
+        // vanished; midword_eval spoke-rate 0-4%).
+        if mode == .wordCompletion {
+            trimmedSuggestion = String(
+                trimmedSuggestion.drop(while: \.isWhitespace).prefix(while: { !$0.isWhitespace })
+            )
         }
 
         guard !trimmedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -588,21 +598,25 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         let normalizedFragment = fragment.lowercased()
-        let normalizedRawCandidate = rawCandidate
+        // The raw candidate may run past the word boundary ("walking home
+        // soon" for fragment "walki") — the fragment rules apply to its FIRST
+        // word, which is the word being completed.
+        let normalizedRawFirstWord = rawCandidate
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+            .prefix(while: { !$0.isWhitespace })
 
         guard !normalizedFragment.isEmpty,
-              !normalizedRawCandidate.isEmpty,
-              normalizedRawCandidate.allSatisfy({ $0.isLetter }) else {
+              !normalizedRawFirstWord.isEmpty,
+              normalizedRawFirstWord.allSatisfy({ $0.isLetter }) else {
             return true
         }
 
-        if normalizedRawCandidate.hasPrefix(normalizedFragment) {
-            return normalizedRawCandidate.count > normalizedFragment.count
+        if normalizedRawFirstWord.hasPrefix(normalizedFragment) {
+            return normalizedRawFirstWord.count > normalizedFragment.count
         }
 
-        return !Self.commonWholeWords.contains(normalizedRawCandidate)
+        return !Self.commonWholeWords.contains(String(normalizedRawFirstWord))
     }
 
     private func isLowValueSingleWordPhrase(_ text: String) -> Bool {

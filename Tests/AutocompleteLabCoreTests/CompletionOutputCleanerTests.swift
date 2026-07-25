@@ -189,8 +189,17 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("candidate 1: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion) == nil)
+        // A word completion that runs past the word boundary keeps its first
+        // word instead of vanishing (rejecting these swallowed nearly every
+        // mid-word final live — partials showed, finals disappeared).
+        #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        // Full-word restatement with trailing continuation: the prefix trimmer
+        // converts " dictation" to the suffix, the word-scope keeps only it.
+        #expect(cleaner.clean(" dictation is fun", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        // A completion that starts a NEW common word instead of finishing the
+        // fragment is still rejected (would render as glued-together garbage).
+        #expect(cleaner.clean("hello there", after: "walki", mode: .wordCompletion) == nil)
         #expect(cleaner.clean(
             "occured -> occurred",
             after: "Correct this spelling: occured ->"
@@ -316,7 +325,8 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion) == nil)
+        // Runs past the word boundary → first word kept, not swallowed.
+        #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
     }
 
     @Test("Suppresses unrelated whole words in word completion mode")
