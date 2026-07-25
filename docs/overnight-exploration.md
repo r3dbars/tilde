@@ -590,3 +590,81 @@ two-generation pattern confirms (modern pretraining trades away casual-text
 intuition) and the model chapter closes with zero what-ifs. Prior odds logged:
 25% win / 35% tie / 40% lose. NOTE: download may 401 (gated repo, no HF token
 on this machine) — owner accepts license + `huggingface-cli login` to unblock.
+
+## THE BET RESOLVED — gemma-4-E2B BASE loses the fair fight (2026-07-25 12:22Z)
+
+Converted google/gemma-4-E2B base ourselves (tokenizer_config
+extra_special_tokens list-vs-dict patch needed for python3.9-era
+transformers). Frozen quiz, 500 cases: EM@1 20.0%, SIMILAR 3.7%, meaning
+0.184 — loses to gemma-2-2b raw (21.1 / 5.3 / 0.190) on every column, no
+handicap left to blame. The 40% branch of the logged bet.
+
+**TWO-GENERATION PATTERN CONFIRMED:** gemma-3 (1b/4b/12b) and gemma-4
+(E2B-base, E2B-it, E4B-it both holdings) ALL lose to gemma-2-2b at casual
+continuation. Modern pretraining (reasoning/code/multimodal-heavy) trades
+away casual-text intuition. THE MODEL CHAPTER IS CLOSED WITH A COMPLETE
+LEDGER — every size, flavor, generation, holding, and exotic architecture
+measured. Champion by total exhaustion: gemma-2-2b + personal layer.
+Re-bakeoff only on genuinely new base releases, as a periodic chore, not a
+hope.
+
+Companion insight from live data (same hour): the owner's REAL accepts are
+47% specific / 53% bland (n=17 multi-word) — bland has real acceptance
+value (explains Cotypist feeling great on a generic E-series engine).
+Strategy: match competitors on bland via serving polish; beat them on
+specific via the personal flywheel they can't copy.
+
+## Competitive teardown: Cotypist + cotabby (2026-07-25 afternoon)
+
+Owner flagged Cotypist "works amazingly" on gemma-4 E2B — investigated, plus
+the open-source cotabby project the owner remembered.
+
+**Cotypist (closed, confirmed via site/press):** gemma-4 E2B (~3GB) via
+llama.cpp, fully on-device, Apple Silicon, model picker by hardware tier,
+screen-aware context, Tab accept (repeat for word-at-a-time), "Personalize
+Word Choice" slider (vocabulary nudging — NOT weight-level personalization),
+free tier 100 words/day, ~$96/yr. Per OUR quiz, its engine class loses to our
+champion (E2B-base 3.7% similar vs 5.3%; E4B-it 18.5% EM raw-held) → their
+felt quality is SERVING-LAYER, not model. Our moat claim sharpens: they nudge
+word choice; we retrain weights on the owner's writing nightly.
+
+**cotabby (github.com/FuJacob/cotabby, AGPL-3.0 — patterns yes, CODE NEVER
+for a future closed product; KeyType/johnbean393 is the MIT-licensed cousin):**
+independent open reimplementation. Models: Qwen3.5-0.8B/2B-Base,
+gemma-4-E2B/E4B base i1-GGUFs, llama.cpp embedded, 2048-token ctx. Treats the
+model as a PURE TEXT CONTINUER (base, never instruct) — same philosophy we
+measured our way into.
+
+**Five techniques to reimplement (all serving-layer — where we proved the
+magic lives):**
+1. MID-WORD CONSTRAINT: caret inside a word → first sampled token must carry
+   no leading whitespace. Directly explains + fixes our swallowed-mid-word-
+   finals bug. Priority #1.
+2. EARLY STOP: cut decode at sentence boundary (decimal/abbrev/CJK-aware) AND
+   when the argmax token is end-of-generation — latency + anti-rambling, free.
+3. PREWARM-ON-FOCUS + KV-PREFIX REUSE: prefill on field focus; per keystroke
+   decode only the delta vs the cached prefix. Verify whether our
+   cache_prompt=true actually achieves incremental decode per keystroke.
+4. LATENCY-ADAPTIVE DEBOUNCE: debounce keyed to last observed generation
+   latency (fast machine → snappier; slow → calmer), not a fixed constant.
+5. PRIORITY-BUDGETED PROMPT SECTIONS: each context source (screen/clipboard/
+   persona/style) gets priority + min/max budget; caret text guaranteed and
+   never starved by OCR blobs. Also: NO app-metadata section for terminals/
+   code editors (biases small models toward code); sanitize window titles.
+
+**Their production negative result (validates the owner's instinct):** a
+confidence-suppression gate that WON their offline eval (+1pp composite,
+-27% wrong-shows) silently withheld ~56% of GOOD completions in real typing →
+shipped OFF. Offline golden sets under-represent real typing distribution.
+Rule for us: gates get tuned on LIVE accept data, never shipped on quiz wins
+alone ("noisy now, picky later" is now externally validated).
+
+**Bland-value companion finding (same day):** owner's real accepts = 47%
+specific / 53% bland → generic engines + great serving capture the bland
+half (Cotypist's whole game); only the personal flywheel wins the specific
+half. Strategy: match on bland via serving polish (items 1-5), win on
+specific via personalization.
+
+**Also noted:** TabbyML/tabby (unrelated, code completion) — stream-laziness
+(compute only while client connected, abort on new keystroke) worth keeping
+in mind for the socket protocol.
