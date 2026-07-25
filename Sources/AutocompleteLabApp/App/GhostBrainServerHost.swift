@@ -24,6 +24,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private let queue = DispatchQueue(label: "bar.r3d.steadytype.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
+    // Only the instance that actually bound the socket may unlink it. A
+    // duplicate instance bowing out runs the same stop() on its way to
+    // terminate — without this flag it unlinked the LIVE socket of the
+    // healthy first instance, silently cutting the keyboard off from the
+    // brain (the Apple-fallback persona leak, 2026-07-23).
+    private var ownsSocketFile = false
 
     init(
         engineProvider: @escaping @MainActor () -> any CompletionEngine,
@@ -46,7 +52,34 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 close(self.listenerFD)
                 self.listenerFD = -1
             }
-            unlink(Self.socketPath)
+            if self.ownsSocketFile {
+                unlink(Self.socketPath)
+                self.ownsSocketFile = false
+            }
+        }
+    }
+
+    /// True when a process is actively accepting on the socket path. A stale
+    /// file from a crashed instance refuses the connection; a live server
+    /// accepts it (we close immediately — no request is sent).
+    private static func socketIsAlive() -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathOK = socketPath.withCString { path -> Bool in
+            withUnsafeMutableBytes(of: &addr.sun_path) { raw in
+                guard strlen(path) < raw.count else { return false }
+                raw.baseAddress!.assumingMemoryBound(to: CChar.self)
+                    .update(from: path, count: strlen(path) + 1)
+                return true
+            }
+        }
+        guard pathOK else { return false }
+        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
+        return withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, size) == 0 }
         }
     }
 
@@ -57,6 +90,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
         try? FileManager.default.createDirectory(
             atPath: directory, withIntermediateDirectories: true
         )
+        // Never steal a live socket: if something is answering on the path,
+        // another brain instance is serving the keyboard — leave it alone.
+        // Only a stale file (crash leftover; connect refused) gets replaced.
+        if Self.socketIsAlive() {
+            DiagnosticsLog.shared.record("ghost-socket-live-abort", metadata: [:])
+            return
+        }
         unlink(Self.socketPath)
 
         // A peer can vanish between accept and write (the IME drops connections
@@ -88,6 +128,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         }
         chmod(Self.socketPath, 0o600)
         listenerFD = fd
+        ownsSocketFile = true
 
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in self?.acceptOne() }
