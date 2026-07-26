@@ -896,3 +896,30 @@ personal 20%.
 **Model earns the crown:** model-sourced accepts outnumber dictionary 2.5:1
 overall (365 vs 143) and 2:1 tonight — the personal Gemma is now the
 workhorse, dictionary the helper.
+
+## 2026-07-26 — Opener style experiment: honest negative, reverted in seconds
+
+Goal: fix "I'm"-heavy openers using the owner's real reply style (their
+true opener distribution: "i" 15.1%, "yeah" 7.5%, then what/oh/no/hey...).
+Built the right machinery: opener scaffold now file-overridable
+(STEADYTYPE_OPENER_SCAFFOLD_FILE / persisted default), mined 6 real
+message→reply pairs from the corpus, A/B'd on 6 unseen messages.
+
+RESULT: NEGATIVE — mode collapse. Randomly-selected real pairs were too
+idiosyncratic and taught the model to IGNORE the incoming message: all six
+answers became "I am going to the gym" (the owner's highest-frequency
+habit phrase — the personal prior with no message-grounding left). The
+handwritten builtin, though blander, actually RESPONDS to the message.
+Reverted live via one defaults delete (the RuntimeSetting architecture
+paying off: A/B/revert with zero rebuilds).
+
+Lessons: (1) example pairs must be message-RESPONSIVE, not just
+voice-authentic — curate for reply-relevance or select dynamically per
+message (the matchmaker is the real fix for opener style; this experiment
+is more evidence for it); (2) live A/B before believing any scaffold
+change; (3) also observed: greedy decoding + habit phrases = the same
+ghost recurring ("go to the gym" after "I would like to" — 162 gym
+messages in corpus; deterministic mirror, working as designed).
+
+Also this hour: PR hygiene complete — #322 merged to main (38 commits),
+13 stale/superseded PRs closed with explanations, open-PR list now empty.

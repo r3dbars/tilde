@@ -178,10 +178,21 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         prompt = pieces + "Text: " + trimmed + "\nContinuation:"
     }
 
-    /// Few-shot recipe for opener mode: real message→reply pairs teach the
-    /// model to open a reply in a casual first-person voice. Kept small — the
-    /// screen message carries the actual signal.
-    static let openerScaffold = """
+    /// Few-shot recipe for opener mode: message→reply pairs teach the model
+    /// how the writer opens replies. STEADYTYPE_OPENER_SCAFFOLD_FILE (or the
+    /// persisted default) points at a file mined from the writer's own
+    /// exchanges — real variety beats the builtin's generic voice, which
+    /// collapses to "I'm ..." under greedy decoding.
+    static var openerScaffold: String {
+        if let path = RuntimeSetting.string("OPENER_SCAFFOLD_FILE"),
+           let contents = try? String(contentsOfFile: path, encoding: .utf8),
+           !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return contents
+        }
+        return builtinOpenerScaffold
+    }
+
+    static let builtinOpenerScaffold = """
     The following are real chat messages, each followed by the short casual reply their recipient wrote back.
 
     Message: want to grab dinner tonight?
