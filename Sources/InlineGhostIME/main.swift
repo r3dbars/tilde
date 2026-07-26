@@ -14,6 +14,7 @@ let bundleIdentifier = Bundle.main.bundleIdentifier ?? "bar.r3d.inputmethod.Inli
 //   defaults write bar.r3d.inputmethod.InlineGhost GhostFastLayerEnabled -bool false
 UserDefaults.standard.register(defaults: [
     "GhostUsageCaptureEnabled": true,
+    "GhostSoundsEnabled": true,
     "GhostFastLayerEnabled": true,
 ])
 
