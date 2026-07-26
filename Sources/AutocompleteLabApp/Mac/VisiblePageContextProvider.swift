@@ -177,6 +177,14 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             return
         }
 
+        // Owner-opt-in trace thumbnails ("steadytype.TRACE_SHOTS"): a small
+        // JPEG per capture so the trace-grading bench can show WHAT the OCR
+        // read from. Local disk only (never iCloud, never the repo), pruned
+        // after 7 days by the writer itself.
+        if RuntimeSetting.string("TRACE_SHOTS") == "1" {
+            Self.saveTraceShot(image, capturedAt: startedAt)
+        }
+
         // OCR knobs (env-tunable so the OCR-accuracy harness + research loop can
         // trade reading accuracy against speed). Defaults match the shipped app.
         let ocrEnv = ProcessInfo.processInfo.environment
@@ -577,5 +585,33 @@ final class VisiblePageContextProvider: @unchecked Sendable {
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start) * 1_000))
+    }
+}
+
+extension VisiblePageContextProvider {
+    /// Downscaled JPEG beside the trace data; filename = capture epoch-ms so
+    /// the grading bench can join shots to suggestions by time.
+    static func saveTraceShot(_ image: CGImage, capturedAt: Date) {
+        let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()))
+            .appendingPathComponent("SteadyType/trace_shots", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Prune anything older than 7 days each time we write.
+        if let names = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey]) {
+            let cutoff = Date().addingTimeInterval(-7 * 86400)
+            for url in names {
+                if let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate, created < cutoff {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
+        let maxWidth: CGFloat = 900
+        let scale = min(1, maxWidth / CGFloat(image.width))
+        let size = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
+        let rep = NSBitmapImageRep(cgImage: image)
+        rep.size = size
+        guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.5]) else { return }
+        let name = String(Int(capturedAt.timeIntervalSince1970 * 1000)) + ".jpg"
+        try? data.write(to: dir.appendingPathComponent(name))
     }
 }
