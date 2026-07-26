@@ -13,6 +13,7 @@ import json, os, sys, shutil, subprocess, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import curve_run as cr
+import live_quiz
 
 NIGHTLY = os.path.expanduser("~/.cache/steadytype-eval/nightly")
 SCORES = os.path.join(NIGHTLY, "champion_scores.json")
@@ -41,7 +42,10 @@ def fresh_capture(days=7):
         for line in open(os.path.join(usage, name), errors="ignore"):
             try: e = json.loads(line)
             except Exception: continue
-            if e.get("ts", "") < cutoff: continue
+            ts = e.get("ts", "")
+            if ts < cutoff: continue
+            # Train/test hygiene: the exam slice is never trained on.
+            if live_quiz.in_exam_slice(ts): continue
             ctx = (e.get("context") or "")[-200:]
             if e.get("event") == "typed_instead" and len(e.get("typed", "")) > 2:
                 texts += [ctx + e["typed"]] * 3
@@ -73,13 +77,38 @@ def main():
             if not champ: nlog("baseline quiz failed, aborting"); return
             json.dump(champ, open(SCORES, "w"))
 
+        # Paper 2+3 exam sets (frozen for tonight so both models get the
+        # same questions), champion's live scores cached alongside.
+        exam = live_quiz.build_exam(); traps = live_quiz.build_traps()
+        if "live" not in champ:
+            cr.launch(LIVE_MODEL)
+            champ["live"] = live_quiz.run_paper("champ", exam)
+            champ["traps"] = live_quiz.run_traps("champ", traps)
+            json.dump(champ, open(SCORES, "w"))
+            nlog(f"champ live paper: {champ['live']} traps: {champ['traps']}")
+
         cand = cr.quiz(gguf, name)
         if not cand: nlog("candidate quiz failed; no swap"); return
+        cand["live"] = live_quiz.run_paper(name, exam)
+        cand["traps"] = live_quiz.run_traps(name, traps)
+        nlog(f"cand live paper: {cand['live']} traps: {cand['traps']}")
 
         em_ok = (cand["em1"] or 0) >= (champ["em1"] or 0) - 0.005
         me_ok = (cand["meaning"] or 0) >= (champ["meaning"] or 0) - 0.01
-        better = (cand["em1"] or 0) > (champ["em1"] or 0) or (cand["meaning"] or 0) > (champ["meaning"] or 0)
-        if em_ok and me_ok and better:
+        cl, xl = cand.get("live") or {}, champ.get("live") or {}
+        live_ok = not xl or not cl or (
+            cl.get("similar", 0) >= xl.get("similar", 0) - 0.02
+            and cl.get("word1", 0) >= xl.get("word1", 0) - 0.02)
+        trap_ok = not champ.get("traps") or not cand.get("traps") or (
+            cand["traps"].get("reoffend", 0) <= champ["traps"].get("reoffend", 0) + 0.02)
+        better = ((cand["em1"] or 0) > (champ["em1"] or 0)
+                  or (cand["meaning"] or 0) > (champ["meaning"] or 0)
+                  or (cl and xl and (cl.get("similar", 0) > xl.get("similar", 0)
+                                     or cl.get("word1", 0) > xl.get("word1", 0)))
+                  or (champ.get("traps") and cand.get("traps")
+                      and cand["traps"].get("reoffend", 1) < champ["traps"].get("reoffend", 0)))
+        nlog(f"gate: em_ok={em_ok} me_ok={me_ok} live_ok={live_ok} trap_ok={trap_ok} better={better}")
+        if em_ok and me_ok and live_ok and trap_ok and better:
             shutil.copy(gguf, LIVE_MODEL)
             json.dump(cand, open(SCORES, "w"))
             nlog(f"SWAP: {name} wins (EM {cand['em1']:.3f} vs {champ['em1']:.3f}, "
