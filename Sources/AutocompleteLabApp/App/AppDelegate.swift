@@ -29,7 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return ModeRoutedCompletionEngine(
                 phraseEngine: LlamaCompletionEngine(baseURL: llama.baseURL),
                 fallbackEngine: UnavailableCompletionEngine(reason: "llama engine unavailable"),
-                phraseEngineIsHealthy: { llama.isHealthy }
+                phraseEngineIsHealthy: { llama.isHealthy },
+                // Live-flippable: defaults write bar.r3d.steadytype ModelHandlesWordCompletions -bool true|false
+                routeWordCompletions: { UserDefaults.standard.bool(forKey: "ModelHandlesWordCompletions") }
             )
         },
         screenContextResolver: { [bridge = ghostScreenContextBridge] app, field, text in
@@ -80,13 +82,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ghostBrainServerHost.stop()
     }
 
-    /// One line for the status menu: which engine is answering, and whether the
-    /// keyboard can actually reach it.
+    /// One line for the status menu: which engine is answering. Honest by
+    /// rule — the app may fail, but never silently. The personal/generic
+    /// distinction surfaces the worst silent failure (identity loss).
     func engineStatusLine() -> String {
-        guard llamaServerHost.isHealthy else { return "Engine: starting…" }
-        return ghostBrainServerHost.isServingKeyboard
-            ? "Engine: Gemma (ready)"
-            : "Engine: Gemma (keyboard link down)"
+        guard ghostBrainServerHost.isServingKeyboard else {
+            return "⚠️ Brain socket down — quit and reopen"
+        }
+        guard llamaServerHost.isHealthy else {
+            return "Engine: starting…"
+        }
+        let personal = RuntimeSetting.string("MODEL_PATH") != nil
+        return personal ? "Engine: Personal Gemma (ready)" : "Engine: Generic Gemma (ready)"
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login

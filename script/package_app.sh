@@ -37,6 +37,14 @@ cp "$LLAMA_SERVER_BIN" "$APP/Contents/Helpers/llama-server"
 rm -rf "$APP/Contents/Library/InlineGhostIME.app"
 cp -R dist/InlineGhostIME.app "$APP/Contents/Library/InlineGhostIME.app"
 
+# Optional bundled model: ship a GGUF inside the app so it runs offline with no
+# first-run download (LlamaServerProcessHost prefers Contents/Resources/bundled-model.gguf).
+if [ -n "${BUNDLED_MODEL:-}" ]; then
+    echo "==> embedding bundled model ($(du -h "$BUNDLED_MODEL" | cut -f1))"
+    mkdir -p "$APP/Contents/Resources"
+    cp "$BUNDLED_MODEL" "$APP/Contents/Resources/bundled-model.gguf"
+fi
+
 echo "==> signing (inside out)"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP/Contents/Helpers/llama-server"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP/Contents/Library/InlineGhostIME.app"
