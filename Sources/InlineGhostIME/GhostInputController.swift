@@ -70,7 +70,7 @@ final class GhostInputController: IMKInputController {
     /// held briefly so a second Esc can mark it BAD with live intent — the
     /// highest-quality judgment signal there is, at the cost of one keystroke.
     private var lastDismissed: (ghost: String, context: String, source: GhostUsageLog.Source, at: Date)?
-    private static let flagWindowSeconds: TimeInterval = 1.2
+    private static let flagWindowSeconds: TimeInterval = 30
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
@@ -232,10 +232,19 @@ final class GhostInputController: IMKInputController {
                 acceptWholeGhost(client)
                 return true
             }
-        case 53: // Escape — dismiss ghost; a SECOND Esc within the window
-            // FLAGS the just-dismissed ghost as bad (in-the-moment eval).
+        case 53: // Escape — dismiss. SHIFT-Esc = the in-the-moment eval flag
+            // (double-Esc collided with host apps' own Esc-Esc shortcuts,
+            // e.g. Claude's rewind). Shift-Esc on a visible ghost dismisses
+            // AND flags it; within 30s of a dismiss/override it flags the
+            // last ghost.
+            let shifted = event.modifierFlags.contains(.shift)
+            if shifted, !ghost.isEmpty {
+                flushPendingRejection()
+                lastDismissed = (ghost, typedFallback, usageSource, Date())
+                clearGhost(client)
+            }
             if ghost.isEmpty {
-                if let last = lastDismissed,
+                if shifted, let last = lastDismissed,
                    Date().timeIntervalSince(last.at) < Self.flagWindowSeconds {
                     GhostUsageLog.record(
                         event: .flagged,
