@@ -27,6 +27,29 @@ if os.path.exists(p):
 
 gold, prefs, bench = [], [], []
 tags = collections.Counter()
+
+# In-the-moment flags + comments from the live double-Esc gesture: each is a
+# FAIL verdict with live intent — the highest-trust rows in the bench.
+import glob as _glob
+for f in _glob.glob(os.path.join(USAGE, "ghost_events_*.jsonl")):
+    for line in open(f, errors="ignore"):
+        try: e = json.loads(line)
+        except Exception: continue
+        if e.get("event") == "flagged":
+            tags["flagged-live"] += 1
+            bench.append({"context": e.get("context",""), "screen": "",
+                          "ghost": e.get("ghost",""), "event": "flagged",
+                          "typed": "", "app": e.get("app_bundle",""),
+                          "verdict": "fail", "tag": "flagged-live",
+                          "highlight": None, "comment_or_correction": None})
+        elif e.get("event") == "flag_comment":
+            tags["flag-comment"] += 1
+            bench.append({"context": e.get("context",""), "screen": "",
+                          "ghost": e.get("ghost",""), "event": "flag_comment",
+                          "typed": "", "app": e.get("app_bundle",""),
+                          "verdict": "fail", "tag": "flagged-live",
+                          "highlight": None,
+                          "comment_or_correction": e.get("typed") or e.get("comment")})
 for g in grades:
     t = g.get("trace") or {}
     tag = g.get("tag","")

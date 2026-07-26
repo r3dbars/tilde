@@ -246,6 +246,27 @@ final class GhostInputController: IMKInputController {
                     )
                     lastDismissed = nil
                     playFlagSound()
+                    // Open-coding box: say WHY in the moment. Non-blocking —
+                    // Esc or ignoring it costs nothing; Enter attaches the
+                    // comment to the flag for the pattern-mining pipeline.
+                    var lineRect = NSRect.zero
+                    _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineRect)
+                    let ghostText = last.ghost
+                    let ctx = last.context
+                    let src = last.source
+                    let app = client.bundleIdentifier()
+                    MainActor.assumeIsolated {
+                        GhostFlagPanel.shared.show(near: lineRect) { comment in
+                            GhostUsageLog.record(
+                                event: .flagComment,
+                                ghostText: ghostText,
+                                source: src,
+                                appBundle: app,
+                                context: ctx,
+                                typedChar: comment
+                            )
+                        }
+                    }
                     return true
                 }
                 return false
