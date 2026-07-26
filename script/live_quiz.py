@@ -26,7 +26,7 @@ def _events(kind):
             except Exception: continue
             if e.get("event") == kind: yield e
 
-def build_exam(days=14, limit=250):
+def build_exam(days=60, limit=600):
     """Balanced paper from the exam slice, all apps: half FRONTIER (moments
     the model failed — typed_instead; can we do better now?) and half
     HOLD-THE-LINE (whole-phrase accepts — do we still nail what worked?)."""
@@ -38,7 +38,7 @@ def build_exam(days=14, limit=250):
             if ts < cutoff or not in_exam_slice(ts): continue
             truth = (e.get(field) or "").strip()
             ctx = (e.get("context") or "")
-            if len(truth.split()) < 3 or len(ctx.strip()) < 8: continue
+            if len(truth.split()) < 2 or len(ctx.strip()) < 8: continue
             bucket.append({"ts": ts, "app": e.get("app_bundle",""), "context": ctx[-400:],
                            "truth": truth, "kind": kind})
     for b in (frontier, hold): b.sort(key=lambda c: c["ts"], reverse=True)
