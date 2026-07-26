@@ -47,6 +47,9 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             maxContextCharacters: envInt("STEADYTYPE_MAX_CONTEXT_CHARS") ?? 3000,
             maxScreenContextCharacters: envInt("STEADYTYPE_MAX_SCREEN_CHARS") ?? 700
         )
+        // Opener mode with nothing to ground it (no screen context) builds an
+        // empty prompt: stay silent rather than hallucinate from nothing.
+        guard !recipe.prompt.isEmpty else { return nil }
         // Greedy (temperature 0) is the default; the loop can explore warmer
         // settings with the sampler knobs below.
         let temperature = envDouble("STEADYTYPE_TEMPERATURE") ?? 0
@@ -201,6 +204,16 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
                         ?? CompletionModelPolicy.mvp.maxVisibleWords
                 )
             }
+        }
+        // Opener polish: on an empty field the model's separating space is
+        // meaningless — the ghost should start at the word, not " word".
+        if request.textBeforeCursor.isEmpty, let s = suggestion, s.text.first == " " {
+            let trimmed = String(s.text.drop(while: { $0 == " " }))
+            suggestion = trimmed.isEmpty ? nil : CompletionSuggestion(
+                text: trimmed,
+                maxVisibleWords: envInt("STEADYTYPE_MAX_VISIBLE_WORDS")
+                    ?? CompletionModelPolicy.mvp.maxVisibleWords
+            )
         }
         // Screen-echo guard: never "predict" words by copying a run of text the
         // user can already see on screen (their own draft elsewhere, the message

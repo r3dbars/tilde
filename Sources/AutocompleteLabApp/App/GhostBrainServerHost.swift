@@ -245,7 +245,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
         if (object["config"] as? Bool) == true {
             return RequestPayload(context: "", app: nil, field: nil, page: nil, configProbe: true)
         }
-        guard let context = object["context"] as? String, !context.isEmpty
+        // Empty context is legal: it requests an OPENER (reply's first words
+        // grounded in screen context alone).
+        guard let context = object["context"] as? String
         else { return nil }
         return RequestPayload(
             context: context,
