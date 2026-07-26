@@ -923,3 +923,16 @@ messages in corpus; deterministic mirror, working as designed).
 
 Also this hour: PR hygiene complete — #322 merged to main (38 commits),
 13 stale/superseded PRs closed with explanations, open-PR list now empty.
+
+## 2026-07-26 — Accept sounds shipped: zen press/long-press (uisfx, CC0)
+
+Owner-requested Klack-inspired reward sounds. Journey: system sounds v1
+(Tink/Glass) → two synthesis rounds (both rejected — physics beats sine
+math) → uisfx open-source pack (github.com/romainsimon/uisfx, CC0 public
+domain, license-clean for a future paid Tilde). Owner picked the ZEN
+personality: press.mp3 → tab_1/2/3.wav (Tab word-accept), long-press.mp3 →
+tilde.wav (whole-phrase accept). Architecture stayed minimal: ~25 lines,
+NSSound from Application Support/SteadyType/sounds/ (user-swappable, no
+rebuild), menu toggle, system-sound fallback. The tilde deliberately owns
+the richest sound — habit formation for the highest-value gesture; watch
+accept_all share (4-8% baseline) for the measurable effect.
