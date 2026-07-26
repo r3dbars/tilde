@@ -867,3 +867,32 @@ floor — a never-measured spike-era constant; quality gates decide now.
 Socket proof: real messages -> plausible openers ~150ms; junk screens ->
 cleaner zeroes them (observed live 3/3); no screen -> 1ms silence.
 Remaining proof: a real reply moment at the owner's keyboard.
+
+## 2026-07-26 — Full typing-log analysis (13,195 events, both Macs, 3 days)
+
+**North star moving fast: accept-vs-override rate 15% (07-24) → 31% (07-25)
+→ 52% (07-26).** Tonight in the hardest app (Claude desktop, screen full of
+AI text): 48%. Post-floor-0.08 window: 49%. Approaching the 35-40% target
+zone in three days of tuning (small-n caveat on day 3).
+
+**The Tab-walk revelation: 97% of all accepts are single words** (511/530;
+accept_all stuck at 4-8% all three days). The owner consumes long ghosts
+one Tab at a time — long suggestions ARE being used but each costs N
+keystrokes to take. Accept ergonomics is now the top felt-magic lever, not
+prediction quality.
+
+**Kill report (first hours) matches prediction:** lowValueSingleWordPhrase
+33, replaysCurrentSentence 15, startsSecondSentence 6, duplicatesVisible 5,
+persona/assistant filters ≈0 (1). The scary filters never fire; the
+mundane length/filler filters dominate the graveyard. Loosening candidates
+confirmed for the audit.
+
+**Terrain map (accept rate):** Messages 24% (67% tonight), TextEdit 60%,
+Claude desktop 19%→48%, Slack 13%, codex 13%, iTerm2 7%, Chrome 4%, atlas
+0/45. Terminals + browsers are hostile terrain — candidates for muting or
+a code register. Work-voice gap reconfirmed at volume: work Mac 11% vs
+personal 20%.
+
+**Model earns the crown:** model-sourced accepts outnumber dictionary 2.5:1
+overall (365 vs 143) and 2:1 tonight — the personal Gemma is now the
+workhorse, dictionary the helper.
