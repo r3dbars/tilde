@@ -5,6 +5,13 @@ import AppKit
 /// — the in-the-moment open-coding stream. Enter submits, Esc cancels; the
 /// panel is non-activating so the host app keeps its state and focus returns
 /// the instant it closes.
+/// Borderless windows refuse key focus by default; this override is the
+/// standard Spotlight-style exception so the comment field can actually
+/// receive typing without activating the whole IME process.
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
 final class GhostFlagPanel: NSObject, NSTextFieldDelegate {
 
@@ -53,7 +60,7 @@ final class GhostFlagPanel: NSObject, NSTextFieldDelegate {
 
     private func ensurePanel() -> NSPanel {
         if let existing = panel { return existing }
-        let p = NSPanel(
+        let p = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 38),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
