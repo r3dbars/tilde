@@ -26,6 +26,7 @@ enum GhostUsageLog {
         case dismiss
         case typedInstead = "typed_instead"
         case flagged
+        case flagComment = "flag_comment"
     }
 
     enum Source: String {
