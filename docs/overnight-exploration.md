@@ -936,3 +936,14 @@ NSSound from Application Support/SteadyType/sounds/ (user-swappable, no
 rebuild), menu toggle, system-sound fallback. The tilde deliberately owns
 the richest sound — habit formation for the highest-value gesture; watch
 accept_all share (4-8% baseline) for the measurable effect.
+
+## 2026-07-26 — The taste pipeline: owner grades become benchmark + curriculum
+
+Owner directive: evals are the quality engine; "bake my taste into the
+model." Built script/taste_pipeline.py: trace grades → (1) taste_bench
+(every ruling = a permanent personal-benchmark row; future model swaps must
+beat it), (2) taste_prefs (FAIL+typed-instead → chosen/rejected DPO pairs;
+gym rejection is pair #1), (3) taste_gold (replacement-phrase corrections →
+gold SFT pairs; 0 so far — coaching: corrections should be the literal
+words, not commentary). Targets: ~50 grades → first taste-tuned retrain;
+~200 → statistically sharp bench + apprentice-judge conversation.
