@@ -282,6 +282,20 @@ final class GhostInputController: IMKInputController {
         ghost = ""
     }
 
+    /// Called when focus lands in a field: if it's empty, ask the brain for a
+    /// proactive opener grounded in the visible screen (the message being
+    /// replied to). The delay gives the screen bridge time to capture, and the
+    /// guards make this a no-op the moment real typing or a ghost exists.
+    override func activateServer(_ sender: Any!) {
+        super.activateServer(sender)
+        guard let client = sender as? IMKTextInput else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self, self.ghost.isEmpty else { return }
+            guard self.contextBeforeCaret(client).isEmpty else { return }
+            self.requestModelGhost(client, context: "")
+        }
+    }
+
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
         flushPendingRejection()
@@ -642,7 +656,10 @@ final class GhostInputController: IMKInputController {
         // the engine mode. The prompt KV cache makes long context cheap after the
         // first request, so send generously. Require a little so answers aren't wild.
         let tail = String(context.suffix(3000))
-        guard tail.count >= 12 else { return }
+        // No arbitrary character floor (the old 12-char guard predates the
+        // personal model, screen grounding, and the confidence gate — quality
+        // gates decide what shows now, not context length). Empty context is
+        // the OPENER: propose a reply's first words from what's on screen.
 
         let gen = generation
         let hostApp = client.bundleIdentifier()

@@ -101,3 +101,20 @@ struct CapInducedDanglerRepairTests {
         #expect(RawContinuationPrompt.repairDanglingTail(" walk through the new proposal in detail.") == " walk through the new proposal in detail.")
     }
 }
+
+@Test("Opener mode: empty context + screen builds a reply prompt; no screen builds nothing")
+func openerMode() {
+    let withScreen = RawContinuationPrompt(
+        textBeforeCursor: "",
+        screenContext: "want to grab dinner tonight?",
+        register: .chat
+    )
+    #expect(withScreen.prompt.hasSuffix("Message: want to grab dinner tonight?\nReply:"))
+    #expect(withScreen.prompt.contains("real chat messages"))
+
+    let noScreen = RawContinuationPrompt(textBeforeCursor: "", screenContext: nil, register: .chat)
+    #expect(noScreen.prompt.isEmpty)
+
+    let whitespaceOnly = RawContinuationPrompt(textBeforeCursor: "   ", screenContext: nil, register: .chat)
+    #expect(whitespaceOnly.prompt.isEmpty)
+}
