@@ -36,7 +36,12 @@ public enum ContinuationRegister: String, Sendable {
     /// Suggested generation budget: chat wants shorter bursts; prose/email get
     /// room to finish the clause (cut-off fragments were the top quality wart).
     public var generatedTokenBudget: Int {
-        self == .chat ? 14 : 20
+        // Tuning-sweep override: STEADYTYPE_TOKEN_BUDGET forces the budget for
+        // all registers (the driver sweeps this against the frozen quiz).
+        if let value = RuntimeSetting.int("TOKEN_BUDGET"), value > 0 {
+            return value
+        }
+        return self == .chat ? 14 : 20
     }
 }
 
@@ -45,6 +50,15 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public let contextEndedInWhitespace: Bool
 
     public static func scaffold(for register: ContinuationRegister) -> String {
+        // Tuning-sweep override: STEADYTYPE_SCAFFOLD_<REGISTER>_FILE points at a
+        // ready-made scaffold block (see script/mine_scaffolds.py). Lets the
+        // driver A/B example sets without rebuilding. Absent/unreadable → builtin.
+        let settingName = "SCAFFOLD_\(register.rawValue.uppercased())_FILE"
+        if let path = RuntimeSetting.string(settingName),
+           let contents = try? String(contentsOfFile: path, encoding: .utf8),
+           !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return contents
+        }
         switch register {
         case .chat:
             return """
@@ -111,23 +125,76 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         )
         contextEndedInWhitespace = trimmed.count != tail.count
 
+        // Opener mode: nothing typed yet, but a message is visible on screen —
+        // propose the first words of a reply instead of waiting for the writer.
+        // Only fires with real screen context; an empty field with no screen is
+        // silence (nothing to ground a guess in).
+        if trimmed.isEmpty {
+            let bounded = screenContext.map {
+                String($0.prefix(max(120, maxScreenContextCharacters)))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            } ?? ""
+            if bounded.isEmpty {
+                prompt = ""
+                return
+            }
+            prompt = Self.openerScaffold + "Message: " + bounded + "\nReply:"
+            return
+        }
+
         var pieces = Self.scaffold(for: register)
         if let screenContext {
             let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !bounded.isEmpty {
-                pieces += """
-                Reference notes visible on the writer's screen (may be a message being replied to, \
-                a document being discussed, or unrelated windows — use names and topics from it \
-                when they fit; never copy or continue it):
-                \(bounded)
+                // Screen framing is tunable (STEADYTYPE_SCREEN_FRAMING): the
+                // vague "notes" framing barely helps the model RESPOND to what's
+                // on screen; a direct "reply" framing tells it the screen is the
+                // message being answered. See the screen-response experiments.
+                let framing = RuntimeSetting.string("SCREEN_FRAMING") ?? "notes"
+                switch framing {
+                case "reply":
+                    pieces += """
+                    The writer is replying to this message on screen. Respond to it directly — \
+                    answer its questions and use its topic and names; never copy it verbatim:
+                    \(bounded)
 
 
-                """
+                    """
+                case "minimal":
+                    pieces += "On screen:\n\(bounded)\n\n\n"
+                default:
+                    pieces += """
+                    Reference notes visible on the writer's screen (may be a message being replied to, \
+                    a document being discussed, or unrelated windows — use names and topics from it \
+                    when they fit; never copy or continue it):
+                    \(bounded)
+
+
+                    """
+                }
             }
         }
         prompt = pieces + "Text: " + trimmed + "\nContinuation:"
     }
+
+    /// Few-shot recipe for opener mode: real message→reply pairs teach the
+    /// model to open a reply in a casual first-person voice. Kept small — the
+    /// screen message carries the actual signal.
+    static let openerScaffold = """
+    The following are real chat messages, each followed by the short casual reply their recipient wrote back.
+
+    Message: want to grab dinner tonight?
+    Reply: yeah I'm down, what time?
+
+    Message: running about 10 min late, sorry!
+    Reply: no worries, see you soon.
+
+    Message: did you get a chance to look at the doc?
+    Reply: just did, looks good overall.
+
+
+    """
 
     /// Words a suggestion should never END on — a trailing article/preposition/
     /// conjunction is the signature of a token-limit cutoff mid-clause
