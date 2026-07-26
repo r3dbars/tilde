@@ -138,6 +138,17 @@ final class GhostInputController: IMKInputController {
         )
     }
 
+    /// Accept-reward sounds (owner request, Klack-inspired): a light tick for
+    /// a Tab word, a richer pop for the ~ whole-phrase jackpot — the tilde is
+    /// deliberately the most satisfying sound in the app (habit formation for
+    /// the gesture that saves the most keystrokes). Menu-toggleable.
+    private func playAcceptSound(whole: Bool) {
+        guard UserDefaults.standard.bool(forKey: "GhostSoundsEnabled") else { return }
+        let sound = NSSound(named: whole ? "Glass" : "Tink")
+        sound?.volume = 0.35
+        sound?.play()
+    }
+
     private func recordAccept(_ text: String) {
         let words = text.split(whereSeparator: { $0.isWhitespace }).count
         Stats.wordsAccepted += words
@@ -611,12 +622,26 @@ final class GhostInputController: IMKInputController {
         panel.target = self
         panel.state = panelMode ? .on : .off
         menu.addItem(panel)
+        menu.addItem(.separator())
+        let sounds = NSMenuItem(
+            title: "Accept sounds",
+            action: #selector(toggleSounds(_:)),
+            keyEquivalent: ""
+        )
+        sounds.target = self
+        sounds.state = UserDefaults.standard.bool(forKey: "GhostSoundsEnabled") ? .on : .off
+        menu.addItem(sounds)
         return menu
     }
 
     @objc private func selectInlineMode(_ sender: Any?) {
         UserDefaults.standard.set("inline", forKey: Self.displayModeKey)
         GhostPanel.candidates?.hide()
+    }
+
+    @objc private func toggleSounds(_ sender: Any?) {
+        let d = UserDefaults.standard
+        d.set(!d.bool(forKey: "GhostSoundsEnabled"), forKey: "GhostSoundsEnabled")
     }
 
     @objc private func selectPanelMode(_ sender: Any?) {
@@ -786,6 +811,7 @@ final class GhostInputController: IMKInputController {
         // Accepting re-engages with the ghost stream — any open override is done.
         flushPendingRejection()
         var accepted = ghost
+        playAcceptSound(whole: true)
         recordAccept(accepted)
         GhostUsageLog.record(
             event: .acceptAll,
@@ -821,6 +847,7 @@ final class GhostInputController: IMKInputController {
             }
         }
         let remainder = String(ghost.dropFirst(chunk.count))
+        playAcceptSound(whole: false)
         recordAccept(chunk)
         GhostUsageLog.record(
             event: .acceptWord,
