@@ -186,11 +186,21 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             }
         }
 
-        var suggestion = cleaner.clean(
+        let cleanResult = cleaner.cleanWithReason(
             recipe.normalizedContinuation(rawOutput),
             after: request.textBeforeCursor,
             mode: request.mode
         )
+        var suggestion = cleanResult.suggestion
+        // Rulebook-audit telemetry: WHICH filter killed a generation (reason
+        // enum only — never text). Feeds the filter-worth audit; see the
+        // cleaner-audit task. Only meaningful when the model actually spoke.
+        if suggestion == nil, !rawOutput.isEmpty, let reason = cleanResult.rejectionReason {
+            DiagnosticsLog.shared.record("llama-suggestion-rejected", metadata: [
+                "reason": String(describing: reason),
+                "mode": request.mode.rawValue,
+            ])
+        }
         // The display word-cap can slice a finished sentence back into a
         // dangling fragment ("…any thoughts on the proposal." capped at 8 words
         // ends on "the") — repair the visible tail after capping.
