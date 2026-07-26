@@ -854,3 +854,16 @@ JSON, newline or not, so no client can trip this again; (2) midword_eval
 framing corrected. Lesson for the lab notebook: when a latency is
 suspiciously CONSTANT across every config, suspect the ruler before the
 runner.
+
+## 2026-07-26 — Opener mode shipped (suggest before the first keystroke)
+
+Owner: "I would like for this app to suggest an idea to type right away."
+Built end to end: core opener recipe (empty context + screen -> few-shot
+Message/Reply prompt; no screen -> empty prompt = silence, tested), brain
+accepts empty-context requests, engine strips the meaningless leading
+space, keyboard fires on field focus (0.8s + 2.4s attempts; the first ask
+kicks the capture the second one uses). ALSO removed the 12-char request
+floor — a never-measured spike-era constant; quality gates decide now.
+Socket proof: real messages -> plausible openers ~150ms; junk screens ->
+cleaner zeroes them (observed live 3/3); no screen -> 1ms silence.
+Remaining proof: a real reply moment at the owner's keyboard.
