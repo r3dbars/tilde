@@ -25,6 +25,7 @@ enum GhostUsageLog {
         case acceptAll = "accept_all"
         case dismiss
         case typedInstead = "typed_instead"
+        case flagged
     }
 
     enum Source: String {

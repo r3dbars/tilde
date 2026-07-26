@@ -65,6 +65,12 @@ final class GhostInputController: IMKInputController {
     /// doesn't need a whole paragraph, and this bounds memory if the writer
     /// never pauses long enough for a fresh ghost to close the episode.
     private static let maxReplacementChars = 160
+
+    /// In-the-moment eval flag (double-Esc): the last ghost the writer saw,
+    /// held briefly so a second Esc can mark it BAD with live intent — the
+    /// highest-quality judgment signal there is, at the cost of one keystroke.
+    private var lastDismissed: (ghost: String, context: String, source: GhostUsageLog.Source, at: Date)?
+    private static let flagWindowSeconds: TimeInterval = 1.2
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
@@ -163,6 +169,24 @@ final class GhostInputController: IMKInputController {
         fallback?.play()
     }
 
+    /// Confirmation the flag landed ("noted — this will get better"). Uses
+    /// flag.wav from the sound pack when present, else a system sound.
+    private func playFlagSound() {
+        guard UserDefaults.standard.bool(forKey: "GhostSoundsEnabled") else { return }
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("SteadyType/sounds", isDirectory: true)
+        if let url = dir?.appendingPathComponent("flag.wav"),
+           FileManager.default.fileExists(atPath: url.path),
+           let custom = NSSound(contentsOf: url, byReference: true) {
+            custom.volume = Float(UserDefaults.standard.object(forKey: "GhostSoundVolume") as? Double ?? 0.4)
+            custom.play()
+            return
+        }
+        let fallback = NSSound(named: "Bottle")
+        fallback?.volume = 0.3
+        fallback?.play()
+    }
+
     private func recordAccept(_ text: String) {
         let words = text.split(whereSeparator: { $0.isWhitespace }).count
         Stats.wordsAccepted += words
@@ -208,8 +232,24 @@ final class GhostInputController: IMKInputController {
                 acceptWholeGhost(client)
                 return true
             }
-        case 53: // Escape — dismiss the ghost if present.
-            guard !ghost.isEmpty else { return false }
+        case 53: // Escape — dismiss ghost; a SECOND Esc within the window
+            // FLAGS the just-dismissed ghost as bad (in-the-moment eval).
+            if ghost.isEmpty {
+                if let last = lastDismissed,
+                   Date().timeIntervalSince(last.at) < Self.flagWindowSeconds {
+                    GhostUsageLog.record(
+                        event: .flagged,
+                        ghostText: last.ghost,
+                        source: last.source,
+                        appBundle: client.bundleIdentifier(),
+                        context: last.context
+                    )
+                    lastDismissed = nil
+                    playFlagSound()
+                    return true
+                }
+                return false
+            }
             flushPendingRejection()
             GhostUsageLog.record(
                 event: .dismiss,
@@ -218,6 +258,7 @@ final class GhostInputController: IMKInputController {
                 appBundle: client.bundleIdentifier(),
                 context: typedFallback
             )
+            lastDismissed = (ghost, typedFallback, usageSource, Date())
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.

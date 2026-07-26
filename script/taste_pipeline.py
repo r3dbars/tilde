@@ -34,7 +34,7 @@ for g in grades:
     row = {"context": t.get("context",""), "screen": t.get("screen",""),
            "ghost": t.get("ghost",""), "event": t.get("event",""),
            "typed": t.get("typed",""), "app": t.get("app",""),
-           "verdict": "pass" if tag == "PASS" else "fail",
+           "verdict": "pass" if (tag == "PASS" or tag.startswith("fine")) else "fail",
            "tag": tag, "highlight": g.get("highlight"),
            "comment_or_correction": g.get("instead")}
     if g.get("session") is not None:
