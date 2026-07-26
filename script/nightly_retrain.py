@@ -14,6 +14,9 @@ import json, os, sys, shutil, subprocess, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import curve_run as cr
 import live_quiz
+# Full 1,500-question held-out set nightly (owner: "as many as possible");
+# CI tightens from ±3.9 to ±2.2 points and the harness runs it in ~90s.
+cr.QUIZ_LIMIT = 1500
 
 NIGHTLY = os.path.expanduser("~/.cache/steadytype-eval/nightly")
 SCORES = os.path.join(NIGHTLY, "champion_scores.json")
