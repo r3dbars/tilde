@@ -153,7 +153,8 @@ final class GhostInputController: IMKInputController {
         if let url = dir?.appendingPathComponent(name),
            FileManager.default.fileExists(atPath: url.path),
            let custom = NSSound(contentsOf: url, byReference: true) {
-            custom.volume = 0.8
+            // Volume is live-tunable: defaults write bar.r3d.inputmethod.InlineGhost GhostSoundVolume 0.4
+            custom.volume = Float(UserDefaults.standard.object(forKey: "GhostSoundVolume") as? Double ?? 0.4)
             custom.play()
             return
         }
