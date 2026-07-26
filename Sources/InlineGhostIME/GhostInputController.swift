@@ -289,10 +289,16 @@ final class GhostInputController: IMKInputController {
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         guard let client = sender as? IMKTextInput else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            guard let self, self.ghost.isEmpty else { return }
-            guard self.contextBeforeCaret(client).isEmpty else { return }
-            self.requestModelGhost(client, context: "")
+        // Two attempts: the first request is usually what KICKS the screen
+        // capture (event-driven bridge), so the very first ask often finds no
+        // context yet and stays silent. The second, once the capture has had
+        // time to land, is the one that speaks.
+        for delay in [0.8, 2.4] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.ghost.isEmpty else { return }
+                guard self.contextBeforeCaret(client).isEmpty else { return }
+                self.requestModelGhost(client, context: "")
+            }
         }
     }
 
