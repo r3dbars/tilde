@@ -414,6 +414,7 @@ final class GhostInputController: IMKInputController {
         for delay in [0.8, 2.4] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, self.ghost.isEmpty else { return }
+                guard !self.caretIsMidLine(client) else { return }
                 guard self.contextBeforeCaret(client).isEmpty else { return }
                 self.requestModelGhost(client, context: "")
             }
@@ -650,7 +651,30 @@ final class GhostInputController: IMKInputController {
         "com.apple.Keyboard-Settings",
     ]
 
+    /// Editing detector: non-whitespace after the caret on the SAME line
+    /// means the writer is editing inside existing text — a continuation
+    /// ghost there is noise by definition (owner's #1 Slack friction:
+    /// mid-paragraph insertions ignoring surrounding text). Ghosts belong
+    /// only at the growing edge. Caret at end-of-line with more paragraphs
+    /// below is still fine.
+    private func caretIsMidLine(_ client: IMKTextInput) -> Bool {
+        let sel = client.selectedRange()
+        guard sel.location != NSNotFound else { return false }
+        let len = client.length()
+        guard len > sel.location else { return false }
+        let range = NSRange(location: sel.location, length: min(80, len - sel.location))
+        guard let after = client.attributedSubstring(from: range)?.string, !after.isEmpty else { return false }
+        if let nl = after.firstIndex(where: { $0.isNewline }) {
+            return after[..<nl].contains(where: { !$0.isWhitespace })
+        }
+        return after.contains(where: { !$0.isWhitespace })
+    }
+
     private func updateGhost(_ client: IMKTextInput) {
+        if caretIsMidLine(client) {
+            clearGhost(client)
+            return
+        }
         // NOTE: a fresh ghost does NOT flush a pending rejection — the writer is
         // often mid-phrase when the next offer appears, and flushing here chopped
         // day-1 labels into fragments. Episodes close on accept/Esc/focus loss/
