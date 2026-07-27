@@ -90,6 +90,19 @@ final class GhostInputController: IMKInputController {
         static var fastAccepts = 0
         static var modelAccepts = 0
         static var lastFlush = Date.distantPast
+        /// Active typing time: keystroke gaps under 5s count as engaged time —
+        /// the denominator for the window's words-per-minute stat.
+        static var activeSeconds = 0.0
+        static var lastKeystroke: Date?
+
+        static func touchActive() {
+            let now = Date()
+            if let last = lastKeystroke {
+                let gap = now.timeIntervalSince(last)
+                if gap < 5 { activeSeconds += gap }
+            }
+            lastKeystroke = now
+        }
 
         static var dayKey: String {
             let formatter = DateFormatter()
@@ -109,9 +122,11 @@ final class GhostInputController: IMKInputController {
             day["ghostsAccepted", default: 0] += ghostsAccepted
             day["fastAccepts", default: 0] += fastAccepts
             day["modelAccepts", default: 0] += modelAccepts
+            day["activeSeconds", default: 0] += Int(activeSeconds)
             defaults.set(day, forKey: dayKey)
             wordsAccepted = 0; charactersAccepted = 0; wordsTyped = 0
             ghostsShown = 0; ghostsAccepted = 0; fastAccepts = 0; modelAccepts = 0
+            activeSeconds = 0
         }
 
         static func todaySummary() -> String {
@@ -203,6 +218,13 @@ final class GhostInputController: IMKInputController {
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
+            return false
+        }
+        Stats.touchActive()
+        // Pause switch (set from the Tilde window/menu): ghosts stay off until
+        // the deadline passes; typing itself is never touched.
+        if UserDefaults.standard.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970 {
+            clearGhost(client)
             return false
         }
 
