@@ -40,7 +40,13 @@ enum GhostTypingJournal {
     }()
 
     private static func key(app: String?, field: String?) -> String {
-        "\(app ?? "-")#\(field ?? "-")"
+        // Key by app ONLY. IMKit's uniqueClientIdentifierString is NOT stable
+        // across callbacks (proven live on macOS 26: every keystroke returned
+        // a fresh id, shattering text into 1-char buffers that never reached
+        // the flush floor). The field parameter stays in the API for call-site
+        // clarity but must not participate in identity.
+        _ = field
+        return app ?? "-"
     }
 
     // MARK: - Feeding (called from the keystroke path; hops queues immediately)
