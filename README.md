@@ -43,7 +43,6 @@ builds and validates without launching.
 ```bash
 ./script/proof.sh fast             # the pre-merge gate (CI runs exactly this)
 swift test --jobs 1                # full suite
-./script/smoke_test.sh             # full suite + bundle verify (macOS)
 ./script/release_check.sh          # release gate incl. live network-egress proof
 ```
 

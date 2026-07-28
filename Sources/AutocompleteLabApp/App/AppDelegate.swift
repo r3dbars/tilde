@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("SteadyType serves the keyboard")
 
         statusMenuHost.start()
+        CaptureFerry.shared.start()
         ghostBrainServerHost.start()
         llamaServerHost.start()
         registerAsLoginItemIfNeeded()
