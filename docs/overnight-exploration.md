@@ -947,3 +947,25 @@ gym rejection is pair #1), (3) taste_gold (replacement-phrase corrections →
 gold SFT pairs; 0 so far — coaching: corrections should be the literal
 words, not commentary). Targets: ~50 grades → first taste-tuned retrain;
 ~200 → statistically sharp bench + apprentice-judge conversation.
+
+## 2026-07-28 — The four-employees gap analysis (owner explainer vs reality)
+
+Owner wrote the plain-language explainer (docs/how-tilde-works.md); grading
+it against the app produced the working roadmap:
+
+BUILT & STRONG: Watcher (keyboard), Writer (personal Gemma + nightly LoRA
+exam-gated), Judge (gates/rulebook/manners), speed stack (40ms, cache
+verified), evals (3-paper exam + flags + bench), Tab-walk, sounds.
+
+MISSING (the ADD list, ranked): (1) Memory's recall half — the MATCHMAKER
+(per-message retrieval from 32k exchanges) + phrase memory; (2) candidates
++ sounds-like-owner ranker (near-miss rate 28% says convertible); (3) true
+personal dictionary (fast layer is Apple's system dictionary — doesn't know
+Jamf/Transcripted; mine corpus proper nouns); (4) regret signal (accepted-
+then-immediately-deleted capture).
+
+DELETE list: (1) Judge bloat — merge/remove rulebook filters that don't
+earn their keep per kill-log + grades (audit #33); (2) ghost presence in
+hostile terrain (terminal 7%, browser chrome 9%).
+
+Execution order (owner): DELETION FIRST, piece by piece.
