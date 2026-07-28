@@ -49,12 +49,13 @@ enum GhostTypingJournal {
         guard GhostUsageLog.isEnabled else { return }
         queue.async {
             let k = key(app: app, field: field)
-            // Sweep OTHER buffers first: any field idle past the threshold is
-            // a finished thought (also our safety net if a focus-change flush
-            // ever misses — field identity across IMKit callbacks is not
-            // guaranteed stable).
-            for other in Array(buffers.keys) where other != k {
-                if buffers[other]?.isIdle() == true { flushLocked(other) }
+            // Sweep ALL idle buffers first — including this field's own: a
+            // keystroke after a long gap starts a new thought, so the stale
+            // text flushes before the new text lands. This is the safety net
+            // that works even when IMKit never delivers a focus callback
+            // (deactivateServer is not reliably called on app switch).
+            for existing in Array(buffers.keys) {
+                if buffers[existing]?.isIdle() == true { flushLocked(existing) }
             }
             buffers[k, default: TypingJournalBuffer()].append(characters)
             bufferApps[k] = app ?? "-"
