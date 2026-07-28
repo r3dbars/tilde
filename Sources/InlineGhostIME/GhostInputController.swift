@@ -344,6 +344,8 @@ final class GhostInputController: IMKInputController {
             pendingAutoSpace = false
             clearGhost(client)
             if !typedFallback.isEmpty { typedFallback.removeLast() }
+            GhostTypingJournal.backspace(app: client.bundleIdentifier(),
+                                         field: client.uniqueClientIdentifierString())
             // Keep an in-progress override phrase in sync so the training label
             // reflects what the writer actually kept.
             if pendingRejection?.replacement.isEmpty == false {
@@ -396,6 +398,8 @@ final class GhostInputController: IMKInputController {
                 client.insertText(chars, replacementRange: Self.unset)
             }
             typedFallback.append(chars)
+            GhostTypingJournal.typed(chars, app: client.bundleIdentifier(),
+                                     field: client.uniqueClientIdentifierString())
             if typedFallback.count > 2000 { typedFallback.removeFirst(500) }
             if chars == " ", typedFallback.dropLast().last?.isLetter == true {
                 Stats.wordsTyped += 1
@@ -410,6 +414,8 @@ final class GhostInputController: IMKInputController {
         clearGhost(client)
         if let chars = event.characters, chars.contains("\r") || chars.contains("\n") {
             typedFallback.append("\n")
+            GhostTypingJournal.typed("\n", app: client.bundleIdentifier(),
+                                     field: client.uniqueClientIdentifierString())
             flushPendingRejection() // newline ends the thought — close the episode
         }
         return false
@@ -450,6 +456,10 @@ final class GhostInputController: IMKInputController {
 
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
+        if let client = sender as? IMKTextInput {
+            GhostTypingJournal.fieldEnded(app: client.bundleIdentifier(),
+                                          field: client.uniqueClientIdentifierString())
+        }
         flushPendingRejection()
         Stats.flushIfDue(force: true)
         if let client = sender as? IMKTextInput { clearGhost(client) }
@@ -994,6 +1004,8 @@ final class GhostInputController: IMKInputController {
         }
         client.insertText(accepted, replacementRange: Self.unset)
         typedFallback.append(accepted)
+        GhostTypingJournal.typed(accepted, app: client.bundleIdentifier(),
+                                 field: client.uniqueClientIdentifierString())
         updateGhost(client)
     }
 
@@ -1033,6 +1045,8 @@ final class GhostInputController: IMKInputController {
         }
         client.insertText(insertion, replacementRange: Self.unset)
         typedFallback.append(insertion)
+        GhostTypingJournal.typed(insertion, app: client.bundleIdentifier(),
+                                 field: client.uniqueClientIdentifierString())
         guard !remainder.isEmpty else { updateGhost(client); return }
         ghost = remainder
         show(remainder, client)

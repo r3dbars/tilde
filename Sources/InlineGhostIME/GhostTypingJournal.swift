@@ -1,0 +1,114 @@
+import AutocompleteLabCore
+import Foundation
+
+/// The full typing journal: everything the owner writes (ghost-assisted or
+/// not), accumulated per field and flushed as scrubbed entries — the raw
+/// stream that feeds training, the matchmaker's memory, and (later) the
+/// daily markdown the agent layer reads.
+///
+/// Deliberately rides the SAME switch as suggestion capture
+/// (GhostUsageCaptureEnabled): one consent, one concept — "Learns from
+/// typing" (owner decision 2026-07-28: no separate journal mode).
+///
+/// PRIVACY: secure fields never reach input methods (macOS structural
+/// guarantee); muted apps are excluded by the caller; every entry passes
+/// SensitiveTextScrubber before persisting; storage is the owner's own
+/// SteadyType-usage folder alongside the existing capture. Purge = delete
+/// the folder; stop = flip the toggle.
+enum GhostTypingJournal {
+
+    private static let queue = DispatchQueue(label: "com.steadytype.typingJournal", qos: .utility)
+
+    /// One buffer per (app, field) so interleaved windows don't garble each
+    /// other. Bounded; stale fields are flushed when the map grows.
+    private static var buffers: [String: TypingJournalBuffer] = [:]
+    private static var bufferApps: [String: String] = [:]
+
+    private static let logDirectory: String = {
+        let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
+            .expandingTildeInPath
+        let icloudRoot = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs")
+            .expandingTildeInPath
+        if FileManager.default.fileExists(atPath: icloudRoot) { return icloud }
+        return NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
+    }()
+
+    private static let logPath: String = {
+        let host = Host.current().localizedName?
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-") ?? "mac"
+        return logDirectory + "/typing_journal_\(host).jsonl"
+    }()
+
+    private static func key(app: String?, field: String?) -> String {
+        "\(app ?? "-")#\(field ?? "-")"
+    }
+
+    // MARK: - Feeding (called from the keystroke path; hops queues immediately)
+
+    static func typed(_ characters: String, app: String?, field: String?) {
+        guard GhostUsageLog.isEnabled else { return }
+        queue.async {
+            let k = key(app: app, field: field)
+            buffers[k, default: TypingJournalBuffer()].append(characters)
+            bufferApps[k] = app ?? "-"
+            let buffer = buffers[k]!
+            if buffer.isOverSizeCap || buffer.isIdle() {
+                flushLocked(k)
+            }
+            if buffers.count > 12 { flushAllLocked() }
+        }
+    }
+
+    static func backspace(app: String?, field: String?) {
+        guard GhostUsageLog.isEnabled else { return }
+        queue.async {
+            buffers[key(app: app, field: field)]?.backspace()
+        }
+    }
+
+    /// Field focus ended (app switch, field switch, deactivate) — the natural
+    /// end of a thought. Flush that field's entry.
+    static func fieldEnded(app: String?, field: String?) {
+        guard GhostUsageLog.isEnabled else { return }
+        queue.async {
+            flushLocked(key(app: app, field: field))
+        }
+    }
+
+    // MARK: - Writing (queue-confined)
+
+    private static func flushLocked(_ k: String) {
+        guard var buffer = buffers[k], let entry = buffer.flush() else {
+            buffers[k] = nil; bufferApps[k] = nil
+            return
+        }
+        buffers[k] = nil
+        let record: [String: Any] = [
+            "ts": ISO8601DateFormatter().string(from: Date()),
+            "app_bundle": bufferApps[k] ?? "-",
+            "text": entry,
+        ]
+        bufferApps[k] = nil
+        write(record)
+    }
+
+    private static func flushAllLocked() {
+        for k in Array(buffers.keys) { flushLocked(k) }
+    }
+
+    private static func write(_ record: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: record) else { return }
+        try? FileManager.default.createDirectory(
+            atPath: logDirectory, withIntermediateDirectories: true
+        )
+        guard let handle = FileHandle(forWritingAtPath: logPath) ?? {
+            FileManager.default.createFile(atPath: logPath, contents: nil)
+            return FileHandle(forWritingAtPath: logPath)
+        }() else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data)
+        try? handle.write(contentsOf: Data("\n".utf8))
+    }
+}
