@@ -270,10 +270,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return .rejected(.invalidWordCompletion)
         }
 
-        if mode.isContinuation,
-           isLowValueSingleWordPhrase(suggestion.visibleText) {
-            return .rejected(.lowValueSingleWordPhrase)
-        }
+        // lowValueSingleWordPhrase RETIRED 2026-07-28: 3,186 of 4,416 total
+        // kills (72%) while the owner accepts single words at 46% — the
+        // confidence floor + rejected-ghost bench now police junk upstream.
+        // (Kill-log audit; "independent thresholds compound into silence.")
 
         if mode.isContinuation,
            isLowSignalPhrase(suggestion.visibleText) {
