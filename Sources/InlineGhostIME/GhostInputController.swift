@@ -673,10 +673,6 @@ final class GhostInputController: IMKInputController {
     /// 0% across thousands of events) — search fields and settings panes.
     /// Offering there is pure annoyance, so don't.
     private static let mutedBundlePrefixes = [
-        // Terminals muted 2026-07-28: 7% accept rate — hostile terrain by
-        // measurement; deletion of presence, not code.
-        "com.googlecode.iterm2",
-        "com.apple.Terminal",
         "com.apple.Spotlight",
         "com.apple.systempreferences",
         "com.apple.Keyboard-Settings",
