@@ -456,10 +456,7 @@ final class GhostInputController: IMKInputController {
 
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
-        if let client = sender as? IMKTextInput {
-            GhostTypingJournal.fieldEnded(app: client.bundleIdentifier(),
-                                          field: client.uniqueClientIdentifierString())
-        }
+        GhostTypingJournal.focusChanged()
         flushPendingRejection()
         Stats.flushIfDue(force: true)
         if let client = sender as? IMKTextInput { clearGhost(client) }

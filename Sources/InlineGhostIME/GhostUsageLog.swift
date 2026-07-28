@@ -38,14 +38,13 @@ enum GhostUsageLog {
     /// owner (and their tools) can read; per-host filename keeps machines'
     /// streams separate. Falls back to local Application Support if iCloud is
     /// absent. Redacted events only — never raw text — so this is safe to sync.
-    private static let logDirectory: String = {
-        let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
-            .expandingTildeInPath
-        let icloudRoot = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs")
-            .expandingTildeInPath
-        if FileManager.default.fileExists(atPath: icloudRoot) { return icloud }
-        return NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
-    }()
+    /// LOCAL-ONLY by design (2026-07-28): every keyboard re-sign invalidates
+    /// its iCloud TCC grant, which silently killed captures for hours. The
+    /// keyboard now writes only where it needs no permission; the app (which
+    /// holds the user's iCloud consent and is always running) ferries new
+    /// bytes to the synced folder. Minimal privileges for the keystroke path.
+    private static let logDirectory =
+        NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
 
     private static let logPath: String = {
         let host = Host.current().localizedName?

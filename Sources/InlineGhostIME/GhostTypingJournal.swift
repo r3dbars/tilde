@@ -24,14 +24,13 @@ enum GhostTypingJournal {
     private static var buffers: [String: TypingJournalBuffer] = [:]
     private static var bufferApps: [String: String] = [:]
 
-    private static let logDirectory: String = {
-        let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
-            .expandingTildeInPath
-        let icloudRoot = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs")
-            .expandingTildeInPath
-        if FileManager.default.fileExists(atPath: icloudRoot) { return icloud }
-        return NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
-    }()
+    /// LOCAL-ONLY by design (2026-07-28): every keyboard re-sign invalidates
+    /// its iCloud TCC grant, which silently killed captures for hours. The
+    /// keyboard now writes only where it needs no permission; the app (which
+    /// holds the user's iCloud consent and is always running) ferries new
+    /// bytes to the synced folder. Minimal privileges for the keystroke path.
+    private static let logDirectory =
+        NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
 
     private static let logPath: String = {
         let host = Host.current().localizedName?
@@ -50,10 +49,16 @@ enum GhostTypingJournal {
         guard GhostUsageLog.isEnabled else { return }
         queue.async {
             let k = key(app: app, field: field)
+            // Sweep OTHER buffers first: any field idle past the threshold is
+            // a finished thought (also our safety net if a focus-change flush
+            // ever misses — field identity across IMKit callbacks is not
+            // guaranteed stable).
+            for other in Array(buffers.keys) where other != k {
+                if buffers[other]?.isIdle() == true { flushLocked(other) }
+            }
             buffers[k, default: TypingJournalBuffer()].append(characters)
             bufferApps[k] = app ?? "-"
-            let buffer = buffers[k]!
-            if buffer.isOverSizeCap || buffer.isIdle() {
+            if buffers[k]?.isOverSizeCap == true {
                 flushLocked(k)
             }
             if buffers.count > 12 { flushAllLocked() }
@@ -67,12 +72,13 @@ enum GhostTypingJournal {
         }
     }
 
-    /// Field focus ended (app switch, field switch, deactivate) — the natural
-    /// end of a thought. Flush that field's entry.
-    static func fieldEnded(app: String?, field: String?) {
+    /// Focus moved (app switch, field switch, deactivate) — every open
+    /// thought is over. Flush all buffers rather than trusting IMKit to hand
+    /// back the same field identity it gave us at typing time.
+    static func focusChanged() {
         guard GhostUsageLog.isEnabled else { return }
         queue.async {
-            flushLocked(key(app: app, field: field))
+            flushAllLocked()
         }
     }
 

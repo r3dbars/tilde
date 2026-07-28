@@ -51,8 +51,8 @@ public struct RawContinuationPrompt: Equatable, Sendable {
 
     public static func scaffold(for register: ContinuationRegister) -> String {
         // Tuning-sweep override: STEADYTYPE_SCAFFOLD_<REGISTER>_FILE points at a
-        // ready-made scaffold block (see script/mine_scaffolds.py). Lets the
-        // driver A/B example sets without rebuilding. Absent/unreadable → builtin.
+        // ready-made scaffold block. Lets a driver A/B example sets without
+        // rebuilding. Absent/unreadable → builtin.
         let settingName = "SCAFFOLD_\(register.rawValue.uppercased())_FILE"
         if let path = RuntimeSetting.string(settingName),
            let contents = try? String(contentsOfFile: path, encoding: .utf8),

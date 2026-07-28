@@ -32,8 +32,8 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
-        // All tuning knobs read from the environment so the auto-research loop
-        // can turn any dial without a rebuild (see script/research_loop.py).
+        // All tuning knobs read from the environment so tuning drivers can
+        // turn any dial without a rebuild.
         let env = ProcessInfo.processInfo.environment
         // env still wins; persisted "steadytype.<NAME>" defaults survive reboots.
         func envInt(_ k: String) -> Int? { RuntimeSetting.int(String(k.dropFirst("STEADYTYPE_".count))) }
