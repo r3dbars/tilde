@@ -61,6 +61,31 @@ final class GhostInputController: IMKInputController {
     }
     private var pendingRejection: PendingRejection?
 
+    /// Change 2 (2026-07-27): social awareness. Ghost phrases the writer
+    /// rejected (typed over, dismissed, flagged) are benched for a cooldown
+    /// instead of re-offering themselves all afternoon ("I'm going to the
+    /// gym" showed 276 times in one day). Keyed by first 3 words, lowercased.
+    private var benchedGhosts: [String: Date] = [:]
+    private static let benchSeconds: TimeInterval = 30 * 60
+
+    private func benchKey(_ text: String) -> String {
+        text.lowercased().split(separator: " ").prefix(3).joined(separator: " ")
+    }
+
+    private func bench(_ text: String) {
+        guard !text.isEmpty else { return }
+        if benchedGhosts.count > 60 {
+            let cutoff = Date()
+            benchedGhosts = benchedGhosts.filter { $0.value > cutoff }
+        }
+        benchedGhosts[benchKey(text)] = Date().addingTimeInterval(Self.benchSeconds)
+    }
+
+    private func isBenched(_ text: String) -> Bool {
+        guard let until = benchedGhosts[benchKey(text)] else { return false }
+        return until > Date()
+    }
+
     /// Longest override we accumulate before flushing mid-phrase; a rich label
     /// doesn't need a whole paragraph, and this bounds memory if the writer
     /// never pauses long enough for a fresh ghost to close the episode.
@@ -149,6 +174,7 @@ final class GhostInputController: IMKInputController {
         pendingRejection = nil
         let replacement = pending.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !replacement.isEmpty else { return }
+        bench(pending.ghost)
         GhostUsageLog.record(
             event: .typedInstead,
             ghostText: pending.ghost,
@@ -311,6 +337,7 @@ final class GhostInputController: IMKInputController {
                 context: typedFallback
             )
             lastDismissed = (ghost, typedFallback, usageSource, Date())
+            bench(ghost)
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.
@@ -690,9 +717,15 @@ final class GhostInputController: IMKInputController {
         // dictionary, doc bigrams) — no generic filler. GhostFastLayerEnabled=false
         // hands everything (mid-word included) to the model: the A/B the usage
         // numbers asked for.
-        let suffix = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
+        // Change 3 (2026-07-27): the instant layer had gone sloppy — single-
+        // letter fragments ("t" x81 in one day, 19% accept vs the model's
+        // 51%). Precision rules: suffix must be >=2 chars and the typed
+        // fragment >=3 letters before the dictionary may speak.
+        let rawSuffix = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
             ? predict(context: context)
             : ""
+        let fragment = context.reversed().prefix(while: { $0.isLetter }).count
+        let suffix = (rawSuffix.count >= 2 && fragment >= 3 && !isBenched(rawSuffix)) ? rawSuffix : ""
         ghost = suffix
         if !suffix.isEmpty {
             ghostSource = .fast
@@ -858,6 +891,8 @@ final class GhostInputController: IMKInputController {
     @MainActor
     private func present(_ text: String, ifStill gen: Int) {
         guard generation == gen, let liveClient = client() else { return }
+        // Change 2: never re-offer a phrase the writer recently rejected.
+        guard !isBenched(text) else { return }
         ghost = text
         ghostSource = .model
         show(text, liveClient)
