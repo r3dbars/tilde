@@ -969,3 +969,20 @@ earn their keep per kill-log + grades (audit #33); (2) ghost presence in
 hostile terrain (terminal 7%, browser chrome 9%).
 
 Execution order (owner): DELETION FIRST, piece by piece.
+
+## 2026-07-28 — Matchmaker: the simplest plan (owner-directed)
+
+Two owner decisions reshaped it: NO history import (capture-only memory,
+users start from zero — owner dogfoods the cold start), and SIMPLEST
+implementation. Two simplifications: (1) v1 keys = the writer's OWN typed
+context ("when I started a sentence like this, how did I finish it?") —
+sidesteps the screen-OCR extraction problem entirely, works in all apps;
+incoming-message keys deferred to v2. (2) Prefer Apple NLEmbedding (built
+into macOS, zero new processes) over a second embed-server — decided by
+retrieval eyeball at Sitting 1. Pre-mortem survivors baked in: similarity
+floor (thin memory injects NOTHING — the mined-scaffold lesson),
+same-register-first retrieval, typed-instead entries preferred over
+ghost-assisted (echo-chamber guard), index local-only never synced, frozen
+snapshots for evals. Three sittings: build+eyeball (kill test: owner nods
+at retrievals) → offline A/B (gate: similar★ up, nothing down) → wire
+behind a toggle + live week judged by acceptance/flags.
