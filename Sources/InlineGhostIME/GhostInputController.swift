@@ -426,6 +426,9 @@ final class GhostInputController: IMKInputController {
     /// would turn an unaccepted ghost into real inserted text. Never allow that:
     /// the ghost is only ever inserted by an explicit Tab/Shift-Tab/tilde.
     override func commitComposition(_ sender: Any!) {
+        // macOS delivers commitComposition (not deactivateServer) reliably on
+        // app/focus switches — flush the journal here too, or entries strand.
+        GhostTypingJournal.focusChanged()
         flushPendingRejection()
         if let client = sender as? IMKTextInput {
             clearGhost(client)
