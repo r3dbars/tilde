@@ -39,6 +39,11 @@ def fresh_capture(days=7):
     """Corrections x3, whole-phrase accepts x2 from both Macs' capture."""
     cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
     texts = []
+    # Train/test hygiene, both rules: the SESSION exam slice (2026-07-29 —
+    # whole typing sessions stay together, fixing the twin leak the
+    # matchmaker A/B exposed) AND the legacy per-event slice, so rows that
+    # were exam-held under the old rule never become trainable.
+    smap = live_quiz.build_session_map()
     usage = os.path.expanduser("~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
     for name in os.listdir(usage):
         if not name.startswith("ghost_events"): continue
@@ -47,8 +52,9 @@ def fresh_capture(days=7):
             except Exception: continue
             ts = e.get("ts", "")
             if ts < cutoff: continue
-            # Train/test hygiene: the exam slice is never trained on.
             if live_quiz.in_exam_slice(ts): continue
+            sid = smap.get(ts)
+            if sid and live_quiz.session_in_exam(sid): continue
             ctx = (e.get("context") or "")[-200:]
             if e.get("event") == "typed_instead" and len(e.get("typed", "")) > 2:
                 texts += [ctx + e["typed"]] * 3
