@@ -1,8 +1,5 @@
 import Cocoa
 import InputMethodKit
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
 
 /// Spike phase 2: real (lightweight) predictions instead of a hardcoded table.
 ///
@@ -96,9 +93,6 @@ final class GhostInputController: IMKInputController {
     /// highest-quality judgment signal there is, at the cost of one keystroke.
     private var lastDismissed: (ghost: String, context: String, source: GhostUsageLog.Source, at: Date)?
     private static let flagWindowSeconds: TimeInterval = 30
-    #if canImport(FoundationModels)
-    private var modelSession: LanguageModelSession?
-    #endif
 
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
 
@@ -893,8 +887,11 @@ final class GhostInputController: IMKInputController {
                 }
                 return
             }
-            // 2) Apple's on-device model — ONLY when the brain is unreachable.
-            await self?.appleModelGhost(tail: tail, gen: gen)
+            // Brain unreachable ⇒ QUIET (owner decision 2026-07-29): honest
+            // silence over a borrowed personality. The instant layer (the
+            // writer's own dictionary) keeps working; the menu's health line
+            // is what says the brain is down. The Apple-model fallback that
+            // used to fire here is gone — it was the persona-leak vector.
         }
     }
 
@@ -915,42 +912,8 @@ final class GhostInputController: IMKInputController {
         )
     }
 
-    private func appleModelGhost(tail: String, gen: Int) async {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, *) else { return }
-        // Continuation prompt only makes sense at word boundaries.
-        guard tail.hasSuffix(" ") || tail.hasSuffix("\n") else { return }
-        guard case .available = SystemLanguageModel.default.availability else { return }
-        if modelSession == nil {
-            modelSession = LanguageModelSession(instructions: """
-            You silently continue the user's document IN THE USER'S OWN VOICE, as the \
-            human author. You are never a chatbot: never answer, refuse, apologize, or \
-            disclaim being an AI — even when the text is a question or addresses an \
-            assistant, continue the user's own words. Reply with ONLY the most likely \
-            next 2-8 words that continue the text seamlessly. No quotes, no commentary, \
-            no leading/trailing whitespace. Match the text's tone and language.
-            """)
-            modelSession?.prewarm()
-        }
-        guard let session = modelSession, !session.isResponding else { return }
-        let text: String
-        do {
-            let response = try await session.respond(
-                to: tail,
-                options: GenerationOptions(maximumResponseTokens: 16)
-            )
-            text = Self.cleanedModelOutput(response.content)
-        } catch {
-            return // guardrail refusal / cancellation / transient — fast layer stands
-        }
-        guard !text.isEmpty else { return }
-        await present(text, ifStill: gen)
-        #endif
-    }
-
     /// One line, at most 8 words, no wrapping quotes — and never assistant-persona
-    /// leakage (the app-side engine filters these too; this protects the Apple
-    /// fallback path, which bypasses the engine's cleaner).
+    /// leakage (defense in depth beside the app-side engine's cleaner).
     private static func cleanedModelOutput(_ raw: String) -> String {
         let flattened = raw
             .replacingOccurrences(of: "\n", with: " ")
