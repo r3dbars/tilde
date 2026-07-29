@@ -19,6 +19,49 @@ EXAM_CACHE = os.path.expanduser("~/.cache/steadytype-eval/nightly/live_exam.json
 def in_exam_slice(ts):
     return int(hashlib.md5(ts.encode()).hexdigest(), 16) % 5 == 0
 
+# --- session-aware exam slice (2026-07-29) -------------------------------
+# Hashing per-event timestamps put keystrokes of the SAME sentence on both
+# sides of the train/exam split: the matchmaker A/B found 77/99 live-paper
+# questions had a same-session twin on the train side. Sessions (same app,
+# gaps under SESSION_GAP_S) are the unit that must stay together.
+SESSION_GAP_S = 600
+
+def build_session_map(events=None):
+    """ts -> session id ("app|first-ts-of-session") for every captured ghost
+    event. Pass pre-loaded events to reuse; loads all kinds by default so
+    session boundaries reflect real typing gaps, not just one event type."""
+    if events is None:
+        events = []
+        for f in glob.glob(USAGE + "/ghost_events_*.jsonl"):
+            for line in open(f, errors="ignore"):
+                try: e = json.loads(line)
+                except Exception: continue
+                if e.get("ts"): events.append({"ts": e["ts"], "app": e.get("app_bundle", "")})
+    by_app = {}
+    for e in sorted(events, key=lambda x: (x.get("app_bundle") or x.get("app") or "", x["ts"])):
+        app = e.get("app_bundle") or e.get("app") or ""
+        by_app.setdefault(app, []).append(e["ts"])
+    smap = {}
+    for app, stamps in by_app.items():
+        start = None; prev = None
+        for ts in stamps:
+            if prev is None or _gap_seconds(prev, ts) > SESSION_GAP_S:
+                start = ts
+            smap[ts] = f"{app}|{start}"
+            prev = ts
+    return smap
+
+def _gap_seconds(a, b):
+    try:
+        ta = datetime.datetime.fromisoformat(a.replace("Z", "+00:00"))
+        tb = datetime.datetime.fromisoformat(b.replace("Z", "+00:00"))
+        return abs((tb - ta).total_seconds())
+    except ValueError:
+        return SESSION_GAP_S + 1
+
+def session_in_exam(session_id):
+    return int(hashlib.md5(session_id.encode()).hexdigest(), 16) % 5 == 0
+
 def _events(kind):
     for f in glob.glob(USAGE + "/ghost_events_*.jsonl"):
         for line in open(f, errors="ignore"):
@@ -31,11 +74,14 @@ def build_exam(days=60, limit=600):
     the model failed — typed_instead; can we do better now?) and half
     HOLD-THE-LINE (whole-phrase accepts — do we still nail what worked?)."""
     cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+    smap = build_session_map()
     frontier, hold = [], []
     for kind, bucket, field in (("typed_instead", frontier, "typed"), ("accept_all", hold, "accepted")):
         for e in _events(kind):
             ts = e.get("ts", "")
-            if ts < cutoff or not in_exam_slice(ts): continue
+            if ts < cutoff: continue
+            sid = smap.get(ts)
+            if not sid or not session_in_exam(sid): continue
             truth = (e.get(field) or "").strip()
             ctx = (e.get("context") or "")
             if len(truth.split()) < 2 or len(ctx.strip()) < 8: continue
