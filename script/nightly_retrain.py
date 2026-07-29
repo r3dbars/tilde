@@ -53,7 +53,7 @@ def fresh_capture(days=7):
             ts = e.get("ts", "")
             if ts < cutoff: continue
             if live_quiz.in_exam_slice(ts): continue
-            sid = smap.get(ts)
+            sid = smap.get((e.get("app_bundle", ""), ts))
             if sid and live_quiz.session_in_exam(sid): continue
             ctx = (e.get("context") or "")[-200:]
             if e.get("event") == "typed_instead" and len(e.get("typed", "")) > 2:

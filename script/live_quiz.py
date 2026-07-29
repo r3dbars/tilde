@@ -27,27 +27,34 @@ def in_exam_slice(ts):
 SESSION_GAP_S = 600
 
 def build_session_map(events=None):
-    """ts -> session id ("app|first-ts-of-session") for every captured ghost
-    event. Pass pre-loaded events to reuse; loads all kinds by default so
-    session boundaries reflect real typing gaps, not just one event type."""
+    """(app, ts) -> session id ("app|first-ts-of-session").
+
+    Keyed by app AND timestamp, never timestamp alone: capture stamps are
+    one-second resolution, and this Mac's own log has 11 timestamps shared by
+    two different apps (plus one shared across both Macs). A ts-only key let
+    whichever app sorted last silently overwrite the other's session — which
+    could put a row on the wrong side of the train/exam split, the exact bug
+    session-splitting exists to prevent.
+    """
     if events is None:
         events = []
         for f in glob.glob(USAGE + "/ghost_events_*.jsonl"):
             for line in open(f, errors="ignore"):
                 try: e = json.loads(line)
                 except Exception: continue
+                if not isinstance(e, dict): continue
                 if e.get("ts"): events.append({"ts": e["ts"], "app": e.get("app_bundle", "")})
     by_app = {}
-    for e in sorted(events, key=lambda x: (x.get("app_bundle") or x.get("app") or "", x["ts"])):
+    for e in events:
         app = e.get("app_bundle") or e.get("app") or ""
         by_app.setdefault(app, []).append(e["ts"])
     smap = {}
     for app, stamps in by_app.items():
         start = None; prev = None
-        for ts in stamps:
+        for ts in sorted(stamps):
             if prev is None or _gap_seconds(prev, ts) > SESSION_GAP_S:
                 start = ts
-            smap[ts] = f"{app}|{start}"
+            smap[(app, ts)] = f"{app}|{start}"
             prev = ts
     return smap
 
@@ -80,7 +87,7 @@ def build_exam(days=60, limit=600):
         for e in _events(kind):
             ts = e.get("ts", "")
             if ts < cutoff: continue
-            sid = smap.get(ts)
+            sid = smap.get((e.get("app_bundle", ""), ts))
             if not sid or not session_in_exam(sid): continue
             truth = (e.get(field) or "").strip()
             ctx = (e.get("context") or "")
