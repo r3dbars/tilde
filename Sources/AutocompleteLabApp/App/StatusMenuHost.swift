@@ -26,7 +26,6 @@ final class StatusMenuHost: NSObject {
 
     /// The keyboard's own defaults domain — it reads these as `.standard`.
     private let keyboard = UserDefaults(suiteName: "bar.r3d.inputmethod.InlineGhost")
-    private static let defaultSoundVolume = 0.4
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -126,8 +125,14 @@ final class StatusMenuHost: NSObject {
         keyboard?.object(forKey: "GhostUsageCaptureEnabled") as? Bool ?? true
     }
 
+    /// The keyboard's real sound gate is this Bool, checked before anything
+    /// plays; GhostSoundVolume only scales custom .wav playback AFTER the gate
+    /// (the built-in fallback sounds ignore it entirely, so muting by volume
+    /// would not have silenced them). Absent reads as ON because the keyboard
+    /// registers it true — and register(defaults:) is process-local, so from
+    /// here the key looks unset on a fresh install.
     private var soundsEnabled: Bool {
-        (keyboard?.object(forKey: "GhostSoundVolume") as? Double ?? Self.defaultSoundVolume) > 0
+        keyboard?.object(forKey: "GhostSoundsEnabled") as? Bool ?? true
     }
 
     private var pausedUntil: Date? {
@@ -144,20 +149,10 @@ final class StatusMenuHost: NSObject {
         keyboard?.set(!learningEnabled, forKey: "GhostUsageCaptureEnabled")
     }
 
-    /// Muting must not forget a hand-tuned volume: stash the level being
-    /// silenced and restore exactly that, not a hardcoded default. (Live
-    /// volumes in the wild are not the default — this Mac sits at 0.8.)
+    /// Flips the gate only — GhostSoundVolume stays whatever the writer tuned
+    /// it to (0.8 on this Mac), so unmuting restores their level, not a default.
     @objc private func toggleSounds(_ sender: Any?) {
-        guard let keyboard else { return }
-        if soundsEnabled {
-            let current = keyboard.object(forKey: "GhostSoundVolume") as? Double
-                ?? Self.defaultSoundVolume
-            keyboard.set(current, forKey: "GhostSoundVolumeBeforeMute")
-            keyboard.set(0.0, forKey: "GhostSoundVolume")
-        } else {
-            let restored = keyboard.object(forKey: "GhostSoundVolumeBeforeMute") as? Double
-            keyboard.set(max(0.05, restored ?? Self.defaultSoundVolume), forKey: "GhostSoundVolume")
-        }
+        keyboard?.set(!soundsEnabled, forKey: "GhostSoundsEnabled")
     }
 
     @objc private func togglePause(_ sender: Any?) {
