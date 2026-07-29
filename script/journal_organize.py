@@ -21,6 +21,7 @@ Runs nightly via bar.r3d.steadytype.journal-organizer (4:15 AM, after the
 """
 import datetime
 import glob
+import hashlib
 import json
 import os
 from collections import defaultdict
@@ -28,6 +29,12 @@ from collections import defaultdict
 USAGE = os.path.expanduser(
     "~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
 DAILY = os.path.join(USAGE, "daily")
+# Accumulated entries, one JSON line each, deduped by content hash. The day
+# pages are rendered from THIS, never from whatever device files happen to be
+# readable during a given run — otherwise a Mac that is merely offline (or an
+# iCloud file not yet materialised) would silently erase entries that were
+# already published to a day page.
+STORE = os.path.join(DAILY, ".entries.jsonl")
 
 APP_NAMES = {
     "com.anthropic.claudefordesktop": "Claude",
@@ -52,31 +59,64 @@ def app_name(bundle):
     return (bundle or "unknown").rsplit(".", 1)[-1] or "unknown"
 
 
+def entry_id(ts, app, text):
+    return hashlib.sha1(f"{ts}\x00{app}\x00{text}".encode("utf-8")).hexdigest()[:16]
+
+
+def read_jsonl(path):
+    """Yield dict rows, skipping anything malformed. A single bad line must
+    never abort the run: the source stream is append-only and never pruned, so
+    one truncated write would otherwise break every future run forever. Valid
+    JSON that isn't an object (a bare number from a partial write) counts as
+    malformed."""
+    if not os.path.exists(path):
+        return
+    for line in open(path, errors="ignore"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(row, dict):
+            yield row
+
+
 def load_entries():
-    entries = []
+    """Union of the accumulated store and every device file readable now."""
+    seen = {}
+
+    def absorb(row):
+        ts = row.get("ts")
+        text = (row.get("text") or "").strip()
+        if not ts or not text:
+            return
+        app = row.get("app_bundle", "")
+        try:
+            when = datetime.datetime.fromisoformat(
+                ts.replace("Z", "+00:00")).astimezone()
+        except (ValueError, AttributeError):
+            return
+        seen[entry_id(ts, app, text)] = {
+            "ts": ts, "app": app, "text": text, "when": when,
+        }
+
+    for row in read_jsonl(STORE):
+        absorb(row)
     for path in glob.glob(os.path.join(USAGE, "typing_journal_*.jsonl")):
-        for line in open(path, errors="ignore"):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                e = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            ts, text = e.get("ts"), (e.get("text") or "").strip()
-            if not ts or not text:
-                continue
-            try:
-                when = datetime.datetime.fromisoformat(
-                    ts.replace("Z", "+00:00")).astimezone()
-            except ValueError:
-                continue
-            entries.append({
-                "when": when,
-                "app": e.get("app_bundle", ""),
-                "text": text,
-            })
-    entries.sort(key=lambda e: e["when"])
+        for row in read_jsonl(path):
+            absorb(row)
+
+    entries = sorted(seen.values(), key=lambda e: e["when"])
+    os.makedirs(DAILY, exist_ok=True)
+    tmp = STORE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        for e in entries:
+            f.write(json.dumps(
+                {"ts": e["ts"], "app_bundle": e["app"], "text": e["text"]},
+                ensure_ascii=False) + "\n")
+    os.replace(tmp, STORE)     # atomic: a crash mid-write cannot truncate it
     return entries
 
 
