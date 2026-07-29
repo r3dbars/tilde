@@ -24,8 +24,9 @@ final class StatusMenuHost: NSObject {
     private var learningItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
 
-    /// The keyboard's own defaults domain — it reads these as `.standard`.
-    private let keyboard = UserDefaults(suiteName: "bar.r3d.inputmethod.InlineGhost")
+    /// Every setting, its domain and its default live in TildeSettings, which
+    /// is unit-tested against the keyboard's actual sources.
+    private let settings = TildeSettings()
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -117,56 +118,29 @@ final class StatusMenuHost: NSObject {
 
     // MARK: - Settings the keyboard obeys (its own domain)
 
-    private var suggestionsEnabled: Bool {
-        keyboard?.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
-    }
-
-    private var learningEnabled: Bool {
-        keyboard?.object(forKey: "GhostUsageCaptureEnabled") as? Bool ?? true
-    }
-
-    /// The keyboard's real sound gate is this Bool, checked before anything
-    /// plays; GhostSoundVolume only scales custom .wav playback AFTER the gate
-    /// (the built-in fallback sounds ignore it entirely, so muting by volume
-    /// would not have silenced them). Absent reads as ON because the keyboard
-    /// registers it true — and register(defaults:) is process-local, so from
-    /// here the key looks unset on a fresh install.
-    private var soundsEnabled: Bool {
-        keyboard?.object(forKey: "GhostSoundsEnabled") as? Bool ?? true
-    }
-
-    private var pausedUntil: Date? {
-        let stamp = keyboard?.double(forKey: "GhostPausedUntil") ?? 0
-        let date = Date(timeIntervalSince1970: stamp)
-        return date > Date() ? date : nil
-    }
-
     @objc private func toggleSuggestions(_ sender: Any?) {
-        keyboard?.set(!suggestionsEnabled, forKey: "GhostSuggestionsEnabled")
+        settings.suggestionsEnabled.toggle()
     }
 
     @objc private func toggleLearning(_ sender: Any?) {
-        keyboard?.set(!learningEnabled, forKey: "GhostUsageCaptureEnabled")
+        settings.learningEnabled.toggle()
     }
 
     /// Flips the gate only — GhostSoundVolume stays whatever the writer tuned
-    /// it to (0.8 on this Mac), so unmuting restores their level, not a default.
+    /// it to, so unmuting restores their level rather than a default.
     @objc private func toggleSounds(_ sender: Any?) {
-        keyboard?.set(!soundsEnabled, forKey: "GhostSoundsEnabled")
+        settings.soundsEnabled.toggle()
     }
 
     @objc private func togglePause(_ sender: Any?) {
-        let resuming = pausedUntil != nil
-        keyboard?.set(resuming ? 0 : Date().timeIntervalSince1970 + 3600,
-                      forKey: "GhostPausedUntil")
+        if settings.pausedUntil != nil { settings.resume() }
+        else { settings.pause(for: 3600) }
     }
 
     // MARK: - Settings the app obeys (app domain)
 
     @objc private func toggleScreenContext(_ sender: Any?) {
-        let defaults = UserDefaults.standard
-        defaults.set(!defaults.bool(forKey: "VisiblePageContextEnabled"),
-                     forKey: "VisiblePageContextEnabled")
+        settings.screenAware.toggle()
     }
 
     // MARK: - Actions
@@ -201,12 +175,12 @@ extension StatusMenuHost: NSMenuDelegate {
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
 
-        suggestionsItem?.state = suggestionsEnabled ? .on : .off
-        screenItem?.state = UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled") ? .on : .off
-        soundsItem?.state = soundsEnabled ? .on : .off
-        learningItem?.state = learningEnabled ? .on : .off
+        suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
+        screenItem?.state = settings.screenAware ? .on : .off
+        soundsItem?.state = settings.soundsEnabled ? .on : .off
+        learningItem?.state = settings.learningEnabled ? .on : .off
 
-        if let until = pausedUntil {
+        if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
             pauseItem?.title = "Resume Tilde (paused \(minutes)m)"
         } else {
