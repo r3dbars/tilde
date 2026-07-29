@@ -241,9 +241,12 @@ final class GhostInputController: IMKInputController {
             return false
         }
         Stats.touchActive()
-        // Pause switch (set from the Tilde window/menu): ghosts stay off until
-        // the deadline passes; typing itself is never touched.
-        if UserDefaults.standard.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970 {
+        // Master switch and pause (both set from the menu bar): ghosts stay
+        // off; typing itself is never touched. Absent key = on, so an
+        // untouched install suggests.
+        let suggestionsOn = UserDefaults.standard.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
+        let pausedUntil = UserDefaults.standard.double(forKey: "GhostPausedUntil")
+        if !suggestionsOn || pausedUntil > Date().timeIntervalSince1970 {
             clearGhost(client)
             return false
         }
