@@ -55,7 +55,6 @@ def app_name(bundle):
 def load_entries():
     entries = []
     for path in glob.glob(os.path.join(USAGE, "typing_journal_*.jsonl")):
-        device = os.path.basename(path)[len("typing_journal_"):-len(".jsonl")]
         for line in open(path, errors="ignore"):
             line = line.strip()
             if not line:
@@ -76,7 +75,6 @@ def load_entries():
                 "when": when,
                 "app": e.get("app_bundle", ""),
                 "text": text,
-                "device": device,
             })
     entries.sort(key=lambda e: e["when"])
     return entries

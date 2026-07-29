@@ -35,13 +35,7 @@ final class StatusMenuHost: NSObject {
     func start() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        // Template mono in the status bar (docs/brand/BRAND.md): the blue
-        // underline is a dock/product mark; up here it would read as a badge
-        // that never clears.
-        let mark = NSImage(systemSymbolName: "tilde", accessibilityDescription: "Tilde")
-            ?? NSImage(systemSymbolName: "keyboard.badge.ellipsis", accessibilityDescription: "Tilde")
-        mark?.isTemplate = true
-        item.button?.image = mark
+        item.button?.image = Self.menuBarMark()
 
         let menu = NSMenu()
 
@@ -63,6 +57,36 @@ final class StatusMenuHost: NSObject {
         menu.delegate = self
         item.menu = menu
         statusItem = item
+    }
+
+    /// The status-bar mark, drawn rather than borrowed: there is no "tilde" SF
+    /// Symbol (verified — NSImage(systemSymbolName:) returns nil), so asking
+    /// for one silently yielded the old keyboard glyph and the brand mark never
+    /// appeared. Template image = macOS recolors it for light/dark and for the
+    /// highlighted menu, which is why the blue underline stays out of the menu
+    /// bar (docs/brand/BRAND.md).
+    private static func menuBarMark() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { _ in
+            let path = NSBezierPath()
+            // One crest, one midline crossing, one trough; endpoints in 180°
+            // rotational balance about the centre — the mark's construction.
+            path.move(to: NSPoint(x: 2.5, y: 7.0))
+            path.curve(to: NSPoint(x: 9.0, y: 9.0),
+                       controlPoint1: NSPoint(x: 4.5, y: 12.0),
+                       controlPoint2: NSPoint(x: 7.0, y: 12.0))
+            path.curve(to: NSPoint(x: 15.5, y: 11.0),
+                       controlPoint1: NSPoint(x: 11.0, y: 6.0),
+                       controlPoint2: NSPoint(x: 13.5, y: 6.0))
+            path.lineWidth = 2.0
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     // MARK: - Row builders
@@ -120,8 +144,20 @@ final class StatusMenuHost: NSObject {
         keyboard?.set(!learningEnabled, forKey: "GhostUsageCaptureEnabled")
     }
 
+    /// Muting must not forget a hand-tuned volume: stash the level being
+    /// silenced and restore exactly that, not a hardcoded default. (Live
+    /// volumes in the wild are not the default — this Mac sits at 0.8.)
     @objc private func toggleSounds(_ sender: Any?) {
-        keyboard?.set(soundsEnabled ? 0.0 : Self.defaultSoundVolume, forKey: "GhostSoundVolume")
+        guard let keyboard else { return }
+        if soundsEnabled {
+            let current = keyboard.object(forKey: "GhostSoundVolume") as? Double
+                ?? Self.defaultSoundVolume
+            keyboard.set(current, forKey: "GhostSoundVolumeBeforeMute")
+            keyboard.set(0.0, forKey: "GhostSoundVolume")
+        } else {
+            let restored = keyboard.object(forKey: "GhostSoundVolumeBeforeMute") as? Double
+            keyboard.set(max(0.05, restored ?? Self.defaultSoundVolume), forKey: "GhostSoundVolume")
+        }
     }
 
     @objc private func togglePause(_ sender: Any?) {
