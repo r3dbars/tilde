@@ -851,7 +851,7 @@ final class GhostInputController: IMKInputController {
         inlineGhostVisible = true
     }
 
-    // MARK: - Model layer: SteadyType MLX brain first, Apple on-device model fallback
+    // MARK: - Model layer: the personal brain, or silence
 
     private func requestModelGhost(_ client: IMKTextInput, context: String) {
         // Mid-word AND word-boundary contexts both go to the brain; the server picks
