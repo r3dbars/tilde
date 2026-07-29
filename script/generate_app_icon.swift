@@ -4,7 +4,9 @@ import AppKit
 import Foundation
 
 let outputPath = CommandLine.arguments.dropFirst().first ?? "dist/SteadyType.app/Contents/Resources/AppIcon.icns"
-let sourcePath = CommandLine.arguments.dropFirst(2).first ?? "Assets/AppIcon/steadytype-icon.png"
+// Source of record: docs/brand/icon-v1.png (owner, 2026-07-29) → cropped to the
+// squircle, superellipse alpha, 824-in-1024 macOS grid = tilde-icon-master.png.
+let sourcePath = CommandLine.arguments.dropFirst(2).first ?? "Assets/AppIcon/tilde-icon-master.png"
 let outputURL = URL(fileURLWithPath: outputPath)
 let sourceURL = URL(fileURLWithPath: sourcePath)
 let fileManager = FileManager.default
