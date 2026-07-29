@@ -64,14 +64,14 @@ final class GhostKeyboardInstallerHost {
     private func promptToEnableKeyboard() {
         DispatchQueue.main.async {
             let alert = NSAlert()
-            alert.messageText = "One step to turn on SteadyType's keyboard"
+            alert.messageText = "One step to turn on Tilde's keyboard"
             alert.informativeText = """
-            SteadyType types its suggestions through a macOS keyboard called \
-            InlineGhostIME. macOS asks that you add it yourself:
+            Tilde types its suggestions through a macOS keyboard. macOS asks \
+            that you add it yourself:
 
             1. System Settings → Keyboard → Input Sources → Edit… → +
-            2. Search "inline", select InlineGhostIME, click Add
-            3. Pick InlineGhostIME from the keyboard menu in the menu bar
+            2. Search "Tilde", select it, click Add
+            3. Pick Tilde from the keyboard menu in the menu bar
 
             If it does not appear in the list yet, log out and back in once — \
             macOS scans for new keyboards at login.

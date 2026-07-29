@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Menu-bar agents get auto-terminated unless they say otherwise; the
         // keyboard is only as smart as this process is alive.
-        ProcessInfo.processInfo.disableAutomaticTermination("SteadyType serves the keyboard")
+        ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
         statusMenuHost.start()
         CaptureFerry.shared.start()

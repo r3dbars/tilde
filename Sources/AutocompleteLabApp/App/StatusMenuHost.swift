@@ -21,7 +21,7 @@ final class StatusMenuHost: NSObject {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(
             systemSymbolName: "keyboard.badge.ellipsis",
-            accessibilityDescription: "SteadyType"
+            accessibilityDescription: "Tilde"
         )
 
         // Minimal wireframe (owner-approved 2026-07-26): today stat, health,
