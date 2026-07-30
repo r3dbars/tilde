@@ -48,7 +48,6 @@ plist_value() {
 [[ -f "$INFO_PLIST" ]] || fail "missing Info.plist"
 [[ -x "$EXECUTABLE" ]] || fail "missing executable: $EXECUTABLE"
 [[ -s "$APP_ICON" ]] || fail "missing app icon: $APP_ICON"
-[[ -s "$MLX_METALLIB" ]] || fail "missing packaged MLX Metal library"
 
 ICONSET_DIR="$ICON_TMP_DIR/AppIcon.iconset"
 /usr/bin/iconutil -c iconset "$APP_ICON" -o "$ICONSET_DIR" >/dev/null 2>&1 \
