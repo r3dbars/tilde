@@ -13,6 +13,14 @@ Honest framing, because this technique invites self-deception:
     judging models that behave similarly, and least trustworthy judging the
     large changes actually worth making. It shrinks the loop; it does not
     replace live typing.
+  * What it actually learned is CONTEXT, not content: which app, what hour.
+    It is a "should I speak right now?" judge, not a "are these words good?"
+    judge. Useful as a selectivity lever; useless as a quality score.
+  * Raw scores are NOT probabilities. Class-balancing (needed because only
+    ~7% of rows are positive) inflates them badly — the first version
+    predicted 35-60% where the true rate was 2.6%. A Platt calibration is
+    fitted on a held-out slice and its effect measured, so the printed
+    probabilities mean what they say.
   * It is only worth having if it beats the obvious baseline. Length alone
     already correlates -0.27 with acceptance, so a judge that merely
     rediscovers "short is good" adds nothing. That comparison is printed.
@@ -39,6 +47,7 @@ ACCEPTS = ("accept_word", "accept_all")
 REJECTS = ("typed_instead", "dismiss", "flagged")
 RESOLVE_WINDOW_S = 45
 SESSION_GAP_S = 600
+EDGES = [0, .02, .05, .1, .2, .35, .6, 1.01]
 
 
 def parse(value):
@@ -164,14 +173,22 @@ def main():
     print(f"resolved rows: {len(rows):,}   accepted: {y_all.sum():,} "
           f"({100*y_all.mean():.1f}%)")
 
-    # Split by SESSION, so one sentence cannot appear on both sides.
+    # Three-way split BY SESSION so one sentence cannot appear in two slices:
+    # train fits the ranker, calib fits the probability mapping, test judges
+    # both. Calibrating on the training slice would report a fit to itself.
     sessions = sorted({r["session"] for r in rows})
-    test = {s for s in sessions
-            if int(hashlib.md5(s.encode()).hexdigest(), 16) % 5 == 0}
-    tr = [i for i, r in enumerate(rows) if r["session"] not in test]
-    te = [i for i, r in enumerate(rows) if r["session"] in test]
-    print(f"sessions: {len(sessions):,}  ->  train {len(tr):,} rows / "
-          f"test {len(te):,} rows (session-split)")
+
+    def bucket(session):
+        return int(hashlib.md5(session.encode()).hexdigest(), 16) % 5
+
+    test_s = {s for s in sessions if bucket(s) == 0}
+    calib_s = {s for s in sessions if bucket(s) == 1}
+    tr = [i for i, r in enumerate(rows)
+          if r["session"] not in test_s and r["session"] not in calib_s]
+    ca = [i for i, r in enumerate(rows) if r["session"] in calib_s]
+    te = [i for i, r in enumerate(rows) if r["session"] in test_s]
+    print(f"sessions: {len(sessions):,}  ->  train {len(tr):,} / "
+          f"calibrate {len(ca):,} / test {len(te):,} rows (session-split)")
 
     X, names = featurise(rows)
     y = y_all
@@ -179,8 +196,15 @@ def main():
     from sklearn.linear_model import LogisticRegression
     model = LogisticRegression(max_iter=2000, class_weight="balanced")
     model.fit(X[tr], y[tr])
-    p = model.predict_proba(X[te])[:, 1]
-    model_auc = auc(y[te], p)
+    raw_test = model.predict_proba(X[te])[:, 1]
+    model_auc = auc(y[te], raw_test)
+
+    # Platt scaling: a 1-D logistic mapping raw score -> honest probability,
+    # fitted on the calibration sessions only. Chosen over isotonic because
+    # with ~27 held-out sessions isotonic overfits the steps.
+    platt = LogisticRegression(max_iter=2000)
+    platt.fit(model.predict_proba(X[ca])[:, 1].reshape(-1, 1), y[ca])
+    p = platt.predict_proba(raw_test.reshape(-1, 1))[:, 1]
 
     # The baseline that must be beaten: shorter is better, nothing else.
     base = -X[te][:, 0]
@@ -199,17 +223,33 @@ def main():
         print(f"  {name:<22}{w:+.2f}")
 
     # Calibration: when it says 30%, is it right 30% of the time?
-    print("\ncalibration on held-out sessions")
-    edges = [0, .05, .1, .2, .35, .6, 1.01]
-    for lo, hi in zip(edges, edges[1:]):
+    def ece(scores):
+        """Expected calibration error — average gap between promise and truth."""
+        total, err = 0, 0.0
+        for lo, hi in zip(EDGES, EDGES[1:]):
+            m = (scores >= lo) & (scores < hi)
+            if m.sum() == 0:
+                continue
+            err += m.sum() * abs(scores[m].mean() - y[te][m].mean())
+            total += m.sum()
+        return err / max(1, total)
+
+    print(f"\ncalibration error (lower is better)")
+    print(f"  before (raw scores)  : {ece(raw_test):.3f}")
+    print(f"  after  (Platt-fitted): {ece(p):.3f}")
+
+    print("\nwhen it predicts X, how often was it right?")
+    print(f"  {'predicted':<16}{'n':>7}{'promised':>10}{'actual':>9}")
+    for lo, hi in zip(EDGES, EDGES[1:]):
         m = (p >= lo) & (p < hi)
         if m.sum() < 25:
             continue
-        print(f"  predicted {lo:.2f}-{hi:.2f}: n={m.sum():>5,}  "
-              f"actually accepted {100*y[te][m].mean():>5.1f}%")
+        print(f"  {lo:.2f}-{hi:.2f}      {m.sum():>7,}"
+              f"{100*p[m].mean():>9.1f}%{100*y[te][m].mean():>8.1f}%")
 
     json.dump({"auc": float(model_auc), "baseline_auc": float(base_auc),
-               "n_train": len(tr), "n_test": len(te),
+               "ece_raw": float(ece(raw_test)), "ece_calibrated": float(ece(p)),
+               "n_train": len(tr), "n_calib": len(ca), "n_test": len(te),
                "features": names, "weights": model.coef_[0].tolist(),
                "intercept": float(model.intercept_[0])},
               open(OUT, "w"), indent=1)
