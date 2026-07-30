@@ -29,7 +29,7 @@ echo "==> blessed restart"
 ./script/restart_app.sh
 
 echo "==> smoke"
-./script/real_app_smoke.sh || echo "SMOKE FAILED — investigate before typing on"
+./script/real_app_smoke.sh textedit --skip-build || echo "SMOKE FAILED — investigate before typing on"
 
 echo
 echo "Done. Check: input menu says Tilde; menu bar icon tooltip says Tilde;"
