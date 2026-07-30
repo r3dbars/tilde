@@ -27,6 +27,10 @@ enum GhostUsageLog {
         case typedInstead = "typed_instead"
         case flagged
         case flagComment = "flag_comment"
+        /// A Tab-walk ended with words left on the table. Carries the offer and
+        /// how far the writer got — the per-word label the accept rows can't
+        /// express on their own.
+        case walkStopped = "walk_stopped"
     }
 
     enum Source: String {
@@ -81,7 +85,8 @@ enum GhostUsageLog {
         appBundle: String?,
         context: String? = nil,
         accepted: String? = nil,
-        typedChar: String? = nil
+        typedChar: String? = nil,
+        walk: Walk? = nil
     ) {
         guard isEnabled else { return }
         let boundedContext = context.map { String($0.suffix(280)) }
@@ -98,8 +103,39 @@ enum GhostUsageLog {
             if let boundedContext { fields["context"] = boundedContext }
             if let accepted { fields["accepted"] = accepted }
             if let typedChar { fields["typed"] = typedChar }
+            if let walk {
+                fields["offered"] = walk.offered
+                fields["offered_words"] = walk.offeredWords
+                fields["taken_words"] = walk.takenWords
+                fields["walk_id"] = walk.id
+            }
             appendLine(fields)
         }
+    }
+
+    /// What was on the table when a word was taken, and how far the writer had
+    /// walked by then.
+    ///
+    /// Why this exists (2026-07-29): `accept_word` logged ONLY the single word
+    /// taken, so the offer it came from was lost. That made every Tab-walk a
+    /// one-bit signal ("a word was accepted") when it is really a per-word
+    /// label — taking 4 of an 8-word offer says the model was right through
+    /// word 4 and wrong at word 5. Across 620 reconstructed walks, 471 stopped
+    /// after a single word, and there was no way to know what they stopped ON.
+    /// That stopping point is the strongest training signal the app produces
+    /// and it was being thrown away on every press.
+    ///
+    /// `id` ties the presses of one walk together so the chain reassembles
+    /// exactly, instead of being guessed from timestamp gaps.
+    struct Walk {
+        /// The full suggestion on screen when this walk began.
+        let offered: String
+        /// Words in that original offer.
+        let offeredWords: Int
+        /// Words taken so far, including this press (1-based).
+        let takenWords: Int
+        /// Stable across every press of a single walk.
+        let id: String
     }
 
     /// Runs on `queue` only. Best-effort append; any failure is silently
