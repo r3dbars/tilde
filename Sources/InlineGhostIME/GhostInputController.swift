@@ -88,6 +88,49 @@ final class GhostInputController: IMKInputController {
     /// never pauses long enough for a fresh ghost to close the episode.
     private static let maxReplacementChars = 160
 
+    /// The Tab-walk in progress: what was offered when it began, and how many
+    /// words have been taken since. Tab-Tab-Tab walks a stable sentence, so
+    /// every press after the first is consuming the SAME original offer — and
+    /// where the writer stops is the label worth having. Cleared whenever a
+    /// fresh ghost arrives or the chain is abandoned.
+    private struct WalkInProgress {
+        let offered: String
+        let offeredWords: Int
+        let id: String
+        var takenWords: Int
+    }
+    private var walkInProgress: WalkInProgress?
+
+    private static func wordCount(_ text: String) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace }).count
+    }
+
+    /// Close an open walk and log where it stopped.
+    ///
+    /// The per-press `accept_word` rows say what was taken; this final row says
+    /// what was LEFT — the model was right through `taken_words` and wrong at
+    /// the next one. Without it a walk that simply stops is indistinguishable
+    /// from a walk still in progress, which is the whole reason the stopping
+    /// point was previously unrecoverable.
+    private func closeWalk(appBundle: String?) {
+        guard let walk = walkInProgress else { return }
+        walkInProgress = nil
+        // A walk that consumed the entire offer didn't stop early — there was
+        // nothing left to reject, so there is no abandonment to record.
+        guard walk.takenWords < walk.offeredWords else { return }
+        GhostUsageLog.record(
+            event: .walkStopped,
+            ghostText: walk.offered,
+            source: usageSource,
+            appBundle: appBundle,
+            context: typedFallback,
+            walk: GhostUsageLog.Walk(offered: walk.offered,
+                                     offeredWords: walk.offeredWords,
+                                     takenWords: walk.takenWords,
+                                     id: walk.id)
+        )
+    }
+
     /// In-the-moment eval flag (double-Esc): the last ghost the writer saw,
     /// held briefly so a second Esc can mark it BAD with live intent — the
     /// highest-quality judgment signal there is, at the cost of one keystroke.
@@ -934,6 +977,7 @@ final class GhostInputController: IMKInputController {
     private func clearGhost(_ client: IMKTextInput) {
         generation += 1
         modelTask?.cancel()
+        closeWalk(appBundle: client.bundleIdentifier())
         guard !ghost.isEmpty else { return }
         GhostPanel.candidates?.hide()
         if inlineGhostVisible {
@@ -993,13 +1037,34 @@ final class GhostInputController: IMKInputController {
         let remainder = String(ghost.dropFirst(chunk.count))
         playAcceptSound(whole: false)
         recordAccept(chunk)
+
+        // A walk consumes ONE offer across several presses. Open it on the
+        // first Tab (recording the whole sentence that was on the table) and
+        // advance it on each subsequent press, so the log can say "took 4 of
+        // 8" instead of merely "a word was accepted".
+        if walkInProgress == nil {
+            walkInProgress = WalkInProgress(
+                offered: ghost,
+                offeredWords: Self.wordCount(ghost),
+                id: UUID().uuidString,
+                takenWords: 0
+            )
+        }
+        walkInProgress?.takenWords += 1
+
         GhostUsageLog.record(
             event: .acceptWord,
             ghostText: chunk,
             source: usageSource,
             appBundle: client.bundleIdentifier(),
             context: typedFallback,
-            accepted: chunk
+            accepted: chunk,
+            walk: walkInProgress.map {
+                GhostUsageLog.Walk(offered: $0.offered,
+                                   offeredWords: $0.offeredWords,
+                                   takenWords: $0.takenWords,
+                                   id: $0.id)
+            }
         )
         ghost = ""
         inlineGhostVisible = false
