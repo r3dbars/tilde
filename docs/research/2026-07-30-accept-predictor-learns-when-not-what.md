@@ -28,10 +28,26 @@ editing guard, and a real selectivity lever. Just not the one advertised.
 
 ## Two things that stop it being usable today
 
-**The probabilities are wrong.** Where it predicts 35-60%, the true rate is
-2.6%. Ranking is sound; the numbers are not. An artifact of class-balancing
-during training, fixable with a calibration pass that has not been done. Safe
-as "rank these and suppress the bottom"; unsafe as "this is 40% likely".
+**The probabilities were wrong — now fixed, and the fix exposed the real
+limit.** The first version predicted 35-60% where the true rate was 2.6%, an
+artifact of the class-balancing needed for a 7%-positive dataset. A Platt
+calibration fitted on a held-out slice cut calibration error from **0.312 to
+0.008** (40x).
+
+But honest probabilities collapse into a narrow band: every held-out row now
+scores between 0% and 5%. Nothing earns a confident yes. That follows from
+what it knows — app and hour can prove a moment is hopeless but never that one
+is promising. The old scores looked decisive only because balancing inflated
+them.
+
+**So it is a reliable "don't bother" detector, not a "go for it" detector.**
+It can say Atlas at 3pm is dead ground; it cannot say this suggestion is good.
+The original hope — an offline judge for scoring new models — is closed off by
+this, which is worth knowing after an afternoon rather than a week.
+
+(AUC moved 0.798 -> 0.778 when the calibration slice was carved out of
+training. At 135 sessions that difference is probably noise; it is the honest
+cost of measuring calibration on data the model never saw.)
 
 **The sample is thin.** 17,001 resolved rows, but only **135 sessions**, 27 of
 them held out. Sessions are the real unit here, and 27 is not many.
