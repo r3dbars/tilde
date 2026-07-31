@@ -132,4 +132,22 @@ def main():
     nlog(f"======== NIGHTLY {stamp} done ========")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:                                  # noqa: BLE001
+        # A scheduled job that dies silently is worse than one that fails:
+        # the 3:30 AM run crashed with PermissionError (launchd's python has
+        # no iCloud TCC grant) every night for four nights before anyone
+        # noticed, because the traceback went only to launchd's log. Whatever
+        # goes wrong, say so where the scorecard and the owner will see it.
+        nlog(f"NIGHTLY FAILED: {type(exc).__name__}: {exc}")
+        if isinstance(exc, PermissionError):
+            nlog("  cause: launchd python cannot read iCloud (TCC). Fix: "
+                 "System Settings -> Privacy & Security -> Full Disk Access "
+                 "-> add /usr/bin/python3, or run once by hand from a "
+                 "terminal that has it.")
+        subprocess.run(["osascript", "-e",
+                        'display notification "Nightly retrain FAILED — see '
+                        'journal.log" with title "Tilde"'],
+                       capture_output=True)
+        raise

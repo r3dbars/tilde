@@ -106,8 +106,26 @@ def main():
         else:
             print("  3. sounds like you (similar*)    —     (next nightly writes it)")
         print()
-        health = "ok" if (app_up and brain_up) else "BROKEN — check app/brain"
-        print(f"  health: {health} · last keystroke {last}")
+        nightly_done = None
+        jpath = os.path.join(EVAL, "nightly", "journal.log")
+        if os.path.exists(jpath):
+            for line in open(jpath, errors="ignore"):
+                if "done ========" in line:
+                    nightly_done = line[:10]
+        problems = []
+        if not (app_up and brain_up):
+            problems.append("app/brain down")
+        if nightly_done is None:
+            problems.append("nightly has never completed")
+        else:
+            import datetime as _dt
+            age = (_dt.date.today()
+                   - _dt.date.fromisoformat(nightly_done)).days
+            if age > 2:
+                problems.append(f"nightly hasn't completed in {age} days")
+        health = "ok" if not problems else "BROKEN — " + "; ".join(problems)
+        print(f"  health: {health}")
+        print(f"  last keystroke {last} · last nightly {nightly_done or '—'}")
         print()
         print("  1 is the product. 2 is the annoyance. 3 is the voice.")
         print("  If none of them moved, nothing else matters today.")
