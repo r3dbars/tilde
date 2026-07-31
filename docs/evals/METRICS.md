@@ -1,5 +1,9 @@
 # Tilde metrics — every number, ranked by how much it should change your mind
 
+> **Start with `docs/HOW-TILDE-IMPROVES.md`** — the one-page version. This
+> file is the deep reference for when one of the three watched numbers moves
+> and you need to know why.
+
 Current values are from capture 2026-07-24..28 (22,230 suggestions shown) and
 the latest exam runs. Live version: `python3 script/scorecard.py`.
 
