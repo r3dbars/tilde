@@ -14,7 +14,8 @@ by ghosts shown. It is the only single number that captures both halves:
 raise it by suggesting better, or by interrupting less. A system that is
 always right but never speaks scores 0, and so does one that never shuts up.
 
-Run: python3 script/scorecard.py [--days N]
+Run: python3 script/scorecard.py            # the 3 numbers that matter
+     python3 script/scorecard.py --full     # every diagnostic
 """
 import argparse
 import glob
@@ -50,6 +51,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=7,
                     help="window for the behaviour numbers")
+    ap.add_argument("--full", action="store_true",
+                    help="show every diagnostic, not just the 3 watched numbers")
     args = ap.parse_args()
 
     events = [e for e in rows("ghost_events_*.jsonl") if e.get("ts")]
@@ -80,6 +83,35 @@ def main():
             wid = e["walk_id"]
             deepest[wid] = max(deepest.get(wid, 0), int(e.get("taken_words") or 0))
         walk_depth = sum(deepest.values()) / len(deepest)
+
+    # ---- the simple view: three numbers and a health line -------------
+    if not args.full:
+        similar = None
+        scores = os.path.join(EVAL, "nightly", "champion_scores.json")
+        if os.path.exists(scores):
+            champ = json.load(open(scores))
+            similar = (champ.get("live") or {}).get("similar")
+        app_up = subprocess.run(["pgrep", "-x", "SteadyType"],
+                                capture_output=True).returncode == 0
+        brain_up = subprocess.run(["pgrep", "-f", "llama-server.*17872"],
+                                  capture_output=True).returncode == 0
+        last = max(e["ts"] for e in events)
+
+        print("TILDE — the three numbers        (--full for everything)")
+        print()
+        print(f"  1. words earned per suggestion   {per_shown:.2f}    target 1.00")
+        print(f"  2. accepted when shown           {100*accept_rate:.1f}%")
+        if similar is not None:
+            print(f"  3. sounds like you (similar*)    {100*similar:.1f}%")
+        else:
+            print("  3. sounds like you (similar*)    —     (next nightly writes it)")
+        print()
+        health = "ok" if (app_up and brain_up) else "BROKEN — check app/brain"
+        print(f"  health: {health} · last keystroke {last}")
+        print()
+        print("  1 is the product. 2 is the annoyance. 3 is the voice.")
+        print("  If none of them moved, nothing else matters today.")
+        return
 
     print("=" * 58)
     print(f"TILDE SCORECARD           last {active_days} day(s) of typing")
