@@ -190,4 +190,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except PermissionError as exc:
+        # launchd's python has no iCloud TCC grant (same failure as the
+        # nightly). Fail with one clear line instead of a traceback.
+        print(f"BLOCKED by macOS permissions: {exc}\n"
+              "Fix: System Settings -> Privacy & Security -> Full Disk "
+              "Access -> add /usr/bin/python3.")
+        raise SystemExit(1)
