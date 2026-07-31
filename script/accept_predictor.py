@@ -132,28 +132,80 @@ def sessionise(rows):
     return rows
 
 
+NEVER_END = {"a","an","the","of","on","in","to","at","by","as","if","and",
+             "or","but","with","for","from","that","than","so","my","your",
+             "our","their","his","her","its","is","are","was","be","been",
+             "will","would","can","could","should","very","more","most",
+             "quite","really"}
+STOPWORDS = NEVER_END | {"i","you","we","they","he","she","it","this","these",
+                         "those","have","has","had","do","does","did","not"}
+
+
+def content_features(ghost, context):
+    """What the WORDS look like — the part v1 never examined.
+
+    Each feature encodes a rejection reason already observed in the wild:
+    fragments ("jus t fin"), echoes of what was just typed, the "I'm" opener
+    bias, danglers that end mid-clause, bare stopword runs.
+    """
+    words = ghost.split()
+    n = len(words)
+    lower = ghost.lower().strip()
+    ctx_tail = context[-80:].lower()
+    ctx_words = set(ctx_tail.split()[-12:])
+
+    frag_tokens = sum(1 for w in words
+                      if len(w) == 1 and w.lower() not in ("a", "i"))
+    echo = (sum(1 for w in words if w.lower().strip(".,!?") in ctx_words)
+            / n) if n else 0.0
+    stop_frac = (sum(1 for w in words
+                     if w.lower().strip(".,!?") in STOPWORDS) / n) if n else 0.0
+    last = words[-1].lower().strip(".,!?\"'") if words else ""
+
+    return [
+        float(n),
+        len(ghost) / 20.0,
+        1.0 if n and words[0][:1].islower() else 0.0,
+        1.0 if lower.startswith(("i'm", "i am", "i ")) else 0.0,
+        float(frag_tokens),
+        echo,
+        stop_frac,
+        1.0 if last in NEVER_END else 0.0,
+        1.0 if ghost.rstrip().endswith((".", "!", "?")) else 0.0,
+        1.0 if n == 1 and len(ghost.strip()) <= 2 else 0.0,
+        (sum(len(w) for w in words) / n / 8.0) if n else 0.0,
+    ]
+
+
+CONTENT_NAMES = ["c_words", "c_chars", "c_lowercase_start", "c_i_opener",
+                 "c_frag_tokens", "c_echo_of_context", "c_stopword_frac",
+                 "c_ends_dangling", "c_ends_sentence", "c_tiny",
+                 "c_mean_wordlen"]
+
+
 def featurise(rows):
     apps = [a for a, _ in Counter(r["app"] for r in rows).most_common(8)]
     names = (["words", "chars", "ends_space", "has_punct", "src_model",
               "ctx_len", "ctx_midword", "hour_morning", "hour_afternoon"]
              + [f"app_{a.rsplit('.',1)[-1][:12]}" for a in apps])
-    X = []
+    X_ctx, X_con = [], []
     for r in rows:
         g, ctx = r["ghost"], r["context"]
         hour = int(r["ts"][11:13])
         local = (hour - 5) % 24                       # UTC -> local
-        X.append([
-            len(g.split()),
-            len(g) / 20.0,
-            1.0 if g.endswith(" ") else 0.0,
-            1.0 if any(c in g for c in ".,!?") else 0.0,
+        X_ctx.append([
             1.0 if r["source"] == "model" else 0.0,
             min(len(ctx), 200) / 200.0,
             0.0 if (ctx.endswith(" ") or not ctx) else 1.0,
             1.0 if 5 <= local < 12 else 0.0,
             1.0 if 12 <= local < 18 else 0.0,
         ] + [1.0 if r["app"] == a else 0.0 for a in apps])
-    return np.array(X, dtype=float), names
+        X_con.append(content_features(g, ctx))
+    ctx_names = (["src_model", "ctx_len", "ctx_midword",
+                  "hour_morning", "hour_afternoon"]
+                 + [f"app_{a.rsplit('.',1)[-1][:12]}" for a in apps])
+    return (np.array(X_ctx, dtype=float), ctx_names,
+            np.array(X_con, dtype=float), CONTENT_NAMES)
 
 
 def auc(y, p):
@@ -190,24 +242,38 @@ def main():
     print(f"sessions: {len(sessions):,}  ->  train {len(tr):,} / "
           f"calibrate {len(ca):,} / test {len(te):,} rows (session-split)")
 
-    X, names = featurise(rows)
+    X_ctx, ctx_names, X_con, con_names = featurise(rows)
     y = y_all
 
     from sklearn.linear_model import LogisticRegression
-    model = LogisticRegression(max_iter=2000, class_weight="balanced")
-    model.fit(X[tr], y[tr])
-    raw_test = model.predict_proba(X[te])[:, 1]
+
+    def fit_score(X):
+        m = LogisticRegression(max_iter=2000, class_weight="balanced")
+        m.fit(X[tr], y[tr])
+        return m, m.predict_proba(X[te])[:, 1]
+
+    X_all = np.hstack([X_ctx, X_con])
+    names = ctx_names + con_names
+
+    ctx_model, ctx_p = fit_score(X_ctx)
+    con_model, con_p = fit_score(X_con)
+    model, raw_test = fit_score(X_all)
     model_auc = auc(y[te], raw_test)
+
+    print(f"\nTHE QUESTION: does reading the words add anything?")
+    print(f"  context only (app+hour, v1)   : AUC {auc(y[te], ctx_p):.3f}")
+    print(f"  content only (the words)      : AUC {auc(y[te], con_p):.3f}")
+    print(f"  both                          : AUC {model_auc:.3f}")
 
     # Platt scaling: a 1-D logistic mapping raw score -> honest probability,
     # fitted on the calibration sessions only. Chosen over isotonic because
     # with ~27 held-out sessions isotonic overfits the steps.
     platt = LogisticRegression(max_iter=2000)
-    platt.fit(model.predict_proba(X[ca])[:, 1].reshape(-1, 1), y[ca])
+    platt.fit(model.predict_proba(X_all[ca])[:, 1].reshape(-1, 1), y[ca])
     p = platt.predict_proba(raw_test.reshape(-1, 1))[:, 1]
 
     # The baseline that must be beaten: shorter is better, nothing else.
-    base = -X[te][:, 0]
+    base = -X_con[te][:, 0]
     base_auc = auc(y[te], base)
 
     print(f"\nAUC on held-out sessions")

@@ -89,3 +89,37 @@ The finding worth keeping even if the tool is discarded: **the app already has
 a measurable signal for when to stay quiet, independent of getting smarter.**
 Browsers, meeting apps and weekday afternoons are known-bad terrain, and the
 keyboard could act on that today.
+
+## Postscript: v2 read the words, and the comparison settled it
+
+Rebuilt with 11 content features (fragments, echoes of context, stopword
+runs, dangling endings, openers) and trained three variants on the identical
+session split:
+
+| variant | AUC |
+|---|---|
+| context only (app + hour) | **0.813** |
+| content only (the words) | 0.678 |
+| both | 0.778 |
+
+The words carry real signal (0.678 is far from coin-flip) but the situation
+carries more, and combining them helps nothing at this data size.
+
+**The explanation is survivor bias, and it reframes the whole question:**
+every row in this dataset already passed the app's ~15-filter cleaner before
+being shown. Fragments, echoes and junk were killed before they could be
+measured — the cleaner already spent the content signal upstream. **The
+cleaner IS the content model.** Among suggestions good enough to survive it,
+what remains to predict is mostly whether the moment was right.
+
+So the division of labour is already correct in the product: filters judge
+words before display; this predictor judges moments. The gap identified
+earlier stands unchanged — for PHRASES the cleaner has no confidence
+instrument (p_first scores one token), and that, not another accept
+predictor, is still the missing piece.
+
+One content detail worth keeping: suggestions that start lowercase are far
+more accepted (+1.97) — mid-sentence continuations beat sentence starters.
+The "I" opener also scored positive here (+1.51), which cuts against the
+flagged opener bias; at 27 test sessions, treat both as leads, not findings.
+
