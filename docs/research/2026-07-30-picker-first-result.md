@@ -54,3 +54,39 @@ climbs, in order of cheapness:
 
 Not wired into the app. The in-app cost question (5x generation per
 keystroke) only becomes relevant if the offline number firms up.
+
+## Full-scale replication (n=1500, 154k training candidates) — the sober version
+
+| arm | word-1 | similar★ | meaning |
+|---|---|---|---|
+| one shot | 24.1 | 6.9 | 0.234 |
+| picker (full pool) | 22.3 | 8.2 | 0.255 |
+| oracle ceiling | 29.4 | 14.8 | 0.336 |
+
+- similar★ **+1.3** (+54/−35 flips, **p=0.056**) — the gray zone, a hair from
+  proof. The 4k-pool +1.6 shrank exactly as the winner's-curse prediction said.
+- word-1 **−1.8** (+47/−74, **p=0.018**) — the trade is now statistically
+  REAL, not noise. 7.5x more training data collected LESS of the gap (16% vs
+  23%): the 9 features are the ceiling, not the data.
+- **The phrases-only hybrid does not rescue word-1** (−1.9, p=0.009): greedy
+  output on this exam is almost always multi-word, so the hybrid ≈ the full
+  picker. The word-1 cost lives inside the phrase swaps themselves — picking
+  for meaning genuinely picks different first words.
+
+**Verdict: parked, on the record.** Under the standing ship-gate ("similar★
+up, nothing regresses") a statistically significant word-1 regression fails.
+Two levers now show the same shape — matchmaker +1.4 and picker +1.3 similar★,
+each trading word-1 — which suggests meaning-vs-exactness is a real frontier,
+not an artifact. Whether that trade is acceptable for phrase mode (where
+exact-first-word matters less than being worth reading) is an owner decision,
+not a lab one.
+
+Revival conditions, in order of likelihood to matter: (1) walk-stopping
+labels from deployed capture — per-word human verdicts, strictly richer than
+cosine-to-truth proxies; (2) matchmaker retrieval-sim as a picker feature;
+(3) an owner decision that phrase-mode gates on meaning, not word-1.
+
+Prediction scorecard (pre-registered before the run): "gain shrinks to
++1.0-1.5" — CORRECT (+1.3). "crosses into proven" — WRONG (p=0.056).
+"word-1 dip persists and is structural" — CORRECT, now significant. Bucket 2
+("gray zone", assigned 25%) is what happened.
