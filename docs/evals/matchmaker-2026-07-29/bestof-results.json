@@ -1,0 +1,29 @@
+{
+ "one_shot": {
+  "n": 500,
+  "word1": 0.256,
+  "word12": 0.06,
+  "word123": 0.016,
+  "similar": 0.082,
+  "meaning": 0.249,
+  "spoke": 0.998
+ },
+ "best_of_5": {
+  "n": 500,
+  "word1": 0.234,
+  "word12": 0.054,
+  "word123": 0.014,
+  "similar": 0.084,
+  "meaning": 0.243,
+  "spoke": 1.0
+ },
+ "oracle_5": {
+  "n": 500,
+  "word1": 0.292,
+  "word12": 0.078,
+  "word123": 0.018,
+  "similar": 0.152,
+  "meaning": 0.339,
+  "spoke": 1.0
+ }
+}
