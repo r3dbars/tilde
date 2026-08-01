@@ -23,6 +23,14 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         self.baseURL = baseURL
     }
 
+    /// System dictionary + personal lexicon, loaded once per process. The
+    /// lexicon file is optional — a fresh install constrains against the
+    /// system dictionary alone until the nightly job writes one.
+    private static let vocabulary: WordVocabulary? = WordVocabulary.load(
+        lexiconURL: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SteadyType/lexicon.txt")
+    )
+
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         try await suggestion(for: request) { _ in }
     }
@@ -104,6 +112,18 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         if let v = envInt("STEADYTYPE_TOP_K") { body["top_k"] = v }
         if let v = envDouble("STEADYTYPE_MIN_P") { body["min_p"] = v }
         if let v = envDouble("STEADYTYPE_REPEAT_PENALTY") { body["repeat_penalty"] = v }
+        // Mid-word, the model must finish the word being typed — untethered it
+        // emits a leading space 96.6% of the time (midword_quiz 2026-08-01;
+        // word-1 1.2% raw vs 46.0% trie-constrained). STEADYTYPE_MIDWORD_GRAMMAR=0
+        // disables; instruct mode keeps its own prompt contract.
+        if request.mode == .wordCompletion, !instructMode,
+           RuntimeSetting.int("MIDWORD_GRAMMAR") != 0,
+           let grammar = MidwordGrammar.grammar(
+               textBeforeCursor: request.textBeforeCursor,
+               vocabulary: Self.vocabulary
+           ) {
+            body["grammar"] = grammar
+        }
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
