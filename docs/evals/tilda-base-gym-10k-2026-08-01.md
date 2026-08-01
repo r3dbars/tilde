@@ -2,8 +2,8 @@
 
 ## Status
 
-Run launched 2026-08-01. This document records the setup and will be updated
-with the aggregate result and research-loop decisions when the run finishes.
+Completed 2026-08-01 on the canonical local Phase 1 gym. The personal app was
+restored after the run. No production branch or app defaults changed.
 
 ## Goal
 
@@ -47,11 +47,20 @@ writing surfaces without reading personal typing history or screenshots.
 
 ## Auto-research loop
 
-The first pass is the frozen baseline. Candidate changes must use the same
-10,000-case corpus and scoring rules. A candidate is kept only when it improves
-the aggregate utility without worsening interruption, error, latency, or
-privacy guardrails. Failure clusters are recorded as the next research queue;
-no candidate is promoted automatically to the personal layer or production.
+The first pass was the frozen baseline. A second pass replayed the same
+10,000 synthetic rows (six model outputs containing a prohibited digit shape
+were replaced with an aggregate-safe `[redacted]` sentinel) through the
+offline policy tournament. The tournament ran 1,000 deterministic policy
+experiments, passed its 10-case adversarial verifier, and rechecked six
+winner packets successfully.
+
+The important finding is that the first utility function over-rewards silence:
+its full-exam champion set a 53-character minimum suggestion length and spoke
+zero times. That reduced interruptions to 0, but also produced 0 safe accepts
+and 10,000 missed opportunities. It is not a product improvement and was not
+promoted. The next loop must enforce a usefulness floor (safe accepts and
+missed-opportunity limits) before ranking interruption reductions. No candidate
+was promoted to the model, personal layer, or production.
 
 ## Model note
 
@@ -61,6 +70,26 @@ its persisted personal configuration after the benchmark.
 
 ## Evidence
 
-The run directory and exact command are recorded in the coordinating task
-ledger. Add the final aggregate-only scorecard, failure clusters, and the next
-experiment here after completion.
+Run artifacts live outside the repository at
+`~/.cache/steadytype-eval/gym/runs/base-10k-20260801/`; raw synthetic traces
+are disposable and were not committed. Aggregate evidence:
+
+- Corpus: 600 deterministic synthetic messages, 16,582 possible word cuts;
+  the run selected exactly 10,000. Corpus SHA-256:
+  `eabbb6aeb5e26d8b20641f34920fe4589e5b11a937d5bd63afb4127f6986fa30`.
+- Model: generic Gemma 2 2B base GGUF, 1,708,581,792 bytes; model SHA-256:
+  `01e4078857ea9680422769a67f97646dd944a9a0713c4430abe586cf135c7de5`.
+- Baseline: 9,051 spoke (90.51%); 880 safe accepts (8.80%); 8,171
+  interruptions (81.71%); 949 missed opportunities (9.49%); 0 protocol
+  errors; 6,405 keystrokes saved; p50 latency 49 ms, p95 107 ms; all 10,000
+  requests reported `page_attached: false`.
+- Failure piles: 7,441 wrong-first-word, 730 wrong-tail, and 8,171 total
+  interruptions. The 880 clean rows are the useful seed set for the next
+  quality pass.
+- Research: 1,000 offline policy experiments over a 10,000-row redacted
+  synthetic trace; verifier 10/10 PASS and winner recheck PASS. The champion
+  was rejected because it silenced everything.
+
+This is synthetic quality/runtime evidence only. It does not prove native
+caret placement, keyboard acceptance, insertion verification, or real-user
+accepted-and-kept behavior.
