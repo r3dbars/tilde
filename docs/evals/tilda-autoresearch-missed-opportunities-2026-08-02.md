@@ -163,6 +163,11 @@ The repeated confirmation also completed on 2026-08-02 and rejected all six
 screen candidates. See `tilda-autoresearch-confirm-2026-08-02.md` for the
 aggregate results and latency-variance note.
 
+The aggregate-only miss probe and research-only partial fallback are recorded
+in `tilda-miss-reasons-partial-fallback-2026-08-02.md`. The fallback reduced
+silence by turning it into wrong offers, so the final-frame safety rule stays
+in place.
+
 ### Campaign 2: verify interactions — about 36,000 requests
 
 - Take the six best single-knob candidates.
