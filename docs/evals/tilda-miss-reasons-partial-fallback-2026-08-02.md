@@ -30,6 +30,17 @@ offers. It fails the interruption guard by a wide margin and must stay
 rejected. The lesson is simple: a missing final is a reliability signal, not
 permission to insert an arbitrary partial.
 
+Stricter minimum-word thresholds did not rescue the idea. On another 3,000
+case run, the normal baseline was 308 safe accepts, 478 misses, and 2,214
+interruptions. Minimum 2/3/4-word fallbacks produced respectively:
+
+- 308 / 286 / 2,406;
+- 295 / 330 / 2,375;
+- 300 / 356 / 2,344.
+
+The first number is safe accepts, the second misses, and the third
+interruptions. Every threshold still violated the interruption guard.
+
 ## Next research target
 
 Keep the final-frame safety rule. Use the partial bucket to guide a bounded
