@@ -144,12 +144,17 @@ same interruption, latency, and privacy gates.
 Count one test as one local model request. A configuration run is a batch of
 tests.
 
-### Campaign 1: diagnose and screen — about 42,000 requests
+### Campaign 1: diagnose and screen — 54,000 requests
 
 - Repeat the baseline twice on the 10,000-case holdout: 20,000 requests.
 - Run 34 one-knob candidates on a balanced 1,000-case screen: 34,000
   requests.
 - Keep only candidates that beat the screen gates. Do not combine knobs yet.
+
+The screen completed on 2026-08-02. Its ledger and lessons are in
+`tilda-autoresearch-screen-2026-08-02.md`. The screen did not promote a
+candidate; the next stage repeats the six closest candidates at 3,000 cases
+before any full-holdout confirmation.
 
 The 34 candidates should cover the confidence/gate, retrieval, prompt, and
 output groups before touching model weights.
@@ -169,7 +174,7 @@ output groups before touching model weights.
   code-like text, punctuation, stale memory, echo traps, and expected-silence
   cases.
 
-This gives roughly 140,000 new local requests in a disciplined campaign,
+This gives roughly 152,000 new local requests in a disciplined campaign,
 without wasting 100,000 requests on every weak combination.
 
 ## Keep/revert rules
