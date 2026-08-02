@@ -159,12 +159,21 @@ before any full-holdout confirmation.
 The 34 candidates should cover the confidence/gate, retrieval, prompt, and
 output groups before touching model weights.
 
+The repeated confirmation also completed on 2026-08-02 and rejected all six
+screen candidates. See `tilda-autoresearch-confirm-2026-08-02.md` for the
+aggregate results and latency-variance note.
+
 ### Campaign 2: verify interactions — about 36,000 requests
 
 - Take the six best single-knob candidates.
 - Run each on a fresh 3,000-case balanced subset twice: 36,000 requests.
 - Test only the pairs that have a plausible dependency, such as retrieval
   count plus similarity floor or confidence threshold plus context length.
+
+The first repeated confirmation stage completed without a winner. The next
+stage adds aggregate-only miss-reason proxies and screens the remaining
+supported generation and scheduling controls on a fresh split before any
+pairing or full-holdout promotion.
 
 ### Campaign 3: full confirmation — about 64,000 requests
 
