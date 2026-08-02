@@ -180,6 +180,32 @@ stage adds aggregate-only miss-reason proxies and screens the remaining
 supported generation and scheduling controls on a fresh split before any
 pairing or full-holdout promotion.
 
+The expanded 25-knob screen and its follow-up confirmation also completed. The
+two provisional candidates were `TOKEN_BUDGET=8` and `MAX_SCREEN_CHARS=700`.
+On a fresh 3,000-case split repeated twice, the token budget reduced misses by
+28.5 but added 28.5 interruptions; the screen cap was indistinguishable from
+baseline. Both were rejected. See
+`tilda-autoresearch-expanded-screen-2026-08-02.md` and
+`tilda-autoresearch-expanded-confirmation-2026-08-02.md`.
+
+Scheduling was measured separately on 1,000 synthetic cases with seven
+debounce policies. Zero debounce revealed 212/820 model suggestions before
+the next synthetic key; 100 ms revealed 62 and 200 ms revealed 2. This is a
+timing upper bound, not a quality promotion, because the probe lacks real
+accepted/kept event labels. See
+`tilda-autoresearch-scheduling-2026-08-02.md`.
+
+Two fresh 10,000-case per-surface retrieval confirmations rejected the
+proposed browser/email/messages/notes/slack/writing retrieval policy. A
+3,000-case weak-match fallback screen rejected available-only,
+zero-on-weak-match, and same-surface-only policies. A separate 3,000-case
+true-empty retry probe recovered zero safe accepts and added two
+interruptions. These results keep the source defaults and narrow the next
+work to better event-level labels and exemplar ranking, not broader speaking.
+See `tilda-autoresearch-per-surface-retrieval-2026-08-02.md`,
+`tilda-autoresearch-weak-retrieval-2026-08-02.md`, and
+`tilda-autoresearch-empty-retry-2026-08-02.md`.
+
 ### Campaign 3: full confirmation — about 64,000 requests
 
 - Choose the top three configurations.
@@ -190,6 +216,11 @@ pairing or full-holdout promotion.
 
 This gives roughly 152,000 new local requests in a disciplined campaign,
 without wasting 100,000 requests on every weak combination.
+
+No configuration reached Campaign 3 because none survived the preceding
+guardrails. The final stubbed adversarial verifier still passes 14 tests across
+four rule-gated decks, including expected silence, echo/interruption piles,
+partial-stream failures, and the aggregate-only output contract.
 
 ## Keep/revert rules
 
@@ -216,6 +247,9 @@ The autoresearch run should return:
 - rejected configurations and why they lost;
 - a recommendation for the next local pilot.
 
-The first implementation target is therefore not “train a new model.” It is a
-small, measurable retrieval-plus-gating policy that makes Tilda speak in more
-of the right moments while staying quiet in the wrong ones.
+Current recommendation: keep the source configuration unchanged. The first
+implementation target is therefore not “train a new model.” It is a small,
+measurable event-level evaluator that distinguishes empty model output from
+confidence/cleaner suppression and captures accepted/kept versus dismissed or
+typed-over outcomes. That signal is needed before another long autoresearch
+loop can safely improve coverage without simply making Tilda speak more.
