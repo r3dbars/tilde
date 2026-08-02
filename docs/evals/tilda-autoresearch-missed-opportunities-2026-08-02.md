@@ -147,11 +147,11 @@ tests.
 ### Campaign 1: diagnose and screen — about 42,000 requests
 
 - Repeat the baseline twice on the 10,000-case holdout: 20,000 requests.
-- Run 32 one-knob candidates on a balanced 1,000-case screen: 32,000
+- Run 34 one-knob candidates on a balanced 1,000-case screen: 34,000
   requests.
 - Keep only candidates that beat the screen gates. Do not combine knobs yet.
 
-The 32 candidates should cover the confidence/gate, retrieval, prompt, and
+The 34 candidates should cover the confidence/gate, retrieval, prompt, and
 output groups before touching model weights.
 
 ### Campaign 2: verify interactions — about 36,000 requests
