@@ -3,7 +3,6 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="Tilde"
-HELPER_NAME="TildeTextEventHelper"
 BUNDLE_ID="bar.r3d.tilde"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
@@ -18,13 +17,11 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
-HELPER_BINARY="$APP_MACOS/$HELPER_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ENTITLEMENTS_PLIST="$ROOT_DIR/script/Tilde.entitlements"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
 GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
-MLX_METALLIB="$SWIFT_BUILD_ROOT/mlx-metal/default.metallib"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
@@ -240,8 +237,7 @@ running_app_process_rows() {
         command = $0
         sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", command)
       }
-      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") &&
-        command !~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "[[:space:]].*--privacy-export-proof([[:space:]]|$)") {
+      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") {
         print pid "\t" command
       }
     '
@@ -471,7 +467,6 @@ run_swift_build_product() {
 
 run_swift_build() {
   run_swift_build_product "$APP_NAME"
-  run_swift_build_product "$HELPER_NAME"
 }
 
 swift_build_bin_path() {
@@ -483,96 +478,16 @@ swift_build_bin_path() {
 }
 
 run_swift_package_resolve
-./script/patch_mlx_swift_lm.sh
 run_swift_build
 BUILD_BINARY="$(swift_build_bin_path)/$APP_NAME"
-BUILD_HELPER_BINARY="$(swift_build_bin_path)/$HELPER_NAME"
 
-build_mlx_metallib_if_needed() {
-  if [[ -f "$MLX_METALLIB" ]]; then
-    return 0
-  fi
 
-  local mlx_checkout="$SWIFT_BUILD_ROOT/checkouts/mlx-swift"
-  local mlx_root="$mlx_checkout/Source/Cmlx/mlx"
-  local kernel_dir="$mlx_root/mlx/backend/metal/kernels"
-  local build_dir
-  build_dir="$(dirname "$MLX_METALLIB")"
-
-  if [[ ! -d "$kernel_dir" ]]; then
-    echo "warning: MLX checkout not found; real MLX runtime may fail to load Metal kernels" >&2
-    return 0
-  fi
-
-  mkdir -p "$build_dir"
-
-  local kernels=(
-    arg_reduce
-    conv
-    gemv
-    layer_norm
-    random
-    rms_norm
-    rope
-    scaled_dot_product_attention
-    fence
-    arange
-    binary
-    binary_two
-    copy
-    fft
-    reduce
-    quantized
-    fp_quantized
-    scan
-    softmax
-    logsumexp
-    sort
-    ternary
-    unary
-    steel/conv/kernels/steel_conv
-    steel/conv/kernels/steel_conv_3d
-    steel/conv/kernels/steel_conv_general
-    steel/gemm/kernels/steel_gemm_fused
-    steel/gemm/kernels/steel_gemm_gather
-    steel/gemm/kernels/steel_gemm_masked
-    steel/gemm/kernels/steel_gemm_splitk
-    steel/gemm/kernels/steel_gemm_segmented
-    gemv_masked
-    steel/attn/kernels/steel_attention
-  )
-
-  local air_files=()
-  local kernel
-  for kernel in "${kernels[@]}"; do
-    local air_file="$build_dir/$(basename "$kernel").air"
-    xcrun -sdk macosx metal \
-      -x metal \
-      -Wall \
-      -Wextra \
-      -fno-fast-math \
-      -Wno-c++17-extensions \
-      -Wno-c++20-extensions \
-      -c "$kernel_dir/$kernel.metal" \
-      -I"$mlx_root" \
-      -o "$air_file"
-    air_files+=("$air_file")
-  done
-
-  xcrun -sdk macosx metallib "${air_files[@]}" -o "$MLX_METALLIB"
-}
-
-build_mlx_metallib_if_needed
 
 rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_MACOS"
-mkdir -p "$APP_RESOURCES/mlx-swift_Cmlx.bundle"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
-cp "$BUILD_HELPER_BINARY" "$HELPER_BINARY"
-cp "$MLX_METALLIB" "$APP_RESOURCES/mlx-swift_Cmlx.bundle/default.metallib"
 cp "$GENERATED_APP_ICON" "$APP_ICON"
 chmod +x "$APP_BINARY"
-chmod +x "$HELPER_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -611,10 +526,8 @@ PLIST
 
 SIGNING_IDENTITY="$(find_signing_identity)"
 if [[ -n "$SIGNING_IDENTITY" ]]; then
-  codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$HELPER_BINARY" >/dev/null
   sign_app_bundle "$SIGNING_IDENTITY"
 else
-  codesign --force --options runtime --sign - "$HELPER_BINARY" >/dev/null
   codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign - "$APP_BUNDLE" >/dev/null
   echo "warning: no stable code signing identity found; Accessibility may ask again after rebuilds" >&2
 fi
