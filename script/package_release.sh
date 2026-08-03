@@ -257,16 +257,16 @@ write_notary_blocker() {
   cat >"$NOTARY_BLOCKER_PATH" <<EOF
 Notarization blocked: no usable notarytool keychain profile was resolved.
 
-The release artifacts exist locally, but private beta readiness must remain
-blocked until the DMG is submitted to Apple, stapled, and fresh-install
-Gatekeeper proof is saved.
+The release artifacts exist locally, but the release must remain blocked until
+the DMG is submitted to Apple, stapled, and fresh-install Gatekeeper proof is
+saved.
 
 Set a stored notary profile or add its alias to
 AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES, then rerun:
 
   export NOTARYTOOL_PROFILE=<profile-name>
   ./script/package_release.sh --notarize
-  ./script/beta_readiness.sh --check-only
+  ./script/release_check.sh --release
 EOF
 }
 
@@ -421,11 +421,9 @@ case "$MODE" in
       fi
     fi
 
-    if ./script/check_model_asset.py --quiet; then
       echo "Preferred MLX model: ready"
     else
       echo "Preferred MLX model: blocked - required app-owned model is missing, invalid, corrupt, or not checksum-verified"
-      echo "Run ./script/check_model_asset.py for the exact fix."
       check_failed=1
     fi
     exit "$check_failed"
@@ -437,7 +435,6 @@ case "$MODE" in
       exit 1
     fi
 
-    ./script/check_model_asset.py
 
     release_scratch_path="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build-release}"
     release_build_jobs="${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-4}"

@@ -3,7 +3,15 @@
 Status: first adversarial security pass (2026-06-13). Scope: the standalone macOS
 autocomplete app (`Sources/AutocompleteLabApp`) and the pure policy core
 (`Sources/AutocompleteLabCore`). This complements — it does not replace — the privacy
-no-leak sentinel tests and `docs/product/proof-manifest.json`.
+no-leak sentinel tests and the local privacy export proof.
+
+> **2026-07-22 update:** the opt-in Personal Capture journal/episode store and the
+> terminal-hosted Codex/Claude Code prompt support were removed in the simplification
+> series (PRs #286–#290). References to `PersonalCaptureJournalWriter`,
+> `PersonalCaptureEpisodeStore`, `PersonalCapturePolicy`, and terminal-host insertion
+> below describe the audited baseline, not current code. Any legacy
+> `Personal Capture` folder left by earlier builds is deleted via
+> Settings → "Delete local logs".
 
 This document is the source of truth for Tilde's *security* posture (distinct from the
 *privacy/no-leak* proofs). Keep it short and decision-oriented. When you change insertion,
@@ -86,7 +94,7 @@ local-threat-model and defense-in-depth hardening.
 | F1 | (2) Field changed between request & accept | Accepted text was written without binding the AX write to the validated field identity — an insertion-time TOCTOU that could redirect text into a field/app that stole focus | MEDIUM (impact high, likelihood low) | **Fixed** |
 | F2 | (3) Capture/trace files | Diagnostic & capture artifacts (incl. verbatim Personal Capture, opt-in raw-content traces, and screenshots) created world-readable (`0644` in `0755` dirs) | MEDIUM | **Fixed** |
 | F3 | (1) Bundle-ID / identity spoofing | Per-app trust, sensitivity, and capability decisions rest solely on the forgeable `CFBundleIdentifier`; no code-signature / Team-ID verification anywhere | MEDIUM | Mitigated + recommendation |
-| F4 | (5) Model asset integrity | Shipped model integrity is trust-on-first-use (no known-good hashes for the active model); HTTPS but no pinning; on-disk weights tamperable | MEDIUM | Partially mitigated + recommendation |
+| F4 | (5) Model asset integrity | The shipped Qwen default has pinned known-good hashes; explicitly selected legacy manifests remain weaker, HTTPS has no pinning, and on-disk weights remain tamperable | MEDIUM | Mitigated + recommendation |
 | F5 | (4) Event-tap | Acceptance honors synthetic / other-process key events (no event-source filtering) | LOW | Documented |
 | F6 | (3) Capture/trace files | `diagnostics.log` grows unbounded (475 MB observed locally); no rotation | LOW | Documented |
 
@@ -187,7 +195,7 @@ worth the complexity here.
 `NSWorkspace.shared.frontmostApplication.bundleIdentifier`; that string is the *only* key into
 the per-app trust model — `AppDelegate.effectiveProfile(for:)` → `profileStore.profile(for:
 app.bundleIdentifier)` (and ~10 other `profile(for: bundleIdentifier)` sites),
-`Configuration/HostCompatibilityPolicy.swift`, `Compatibility/CompatibilityRouter.swift`. A
+and `Configuration/CompatibilityProfile.swift` (denylist + profile store). A
 repo-wide search for `SecCode` / `SecStaticCode` / `teamIdentifier` / `SecRequirement` returns
 **nothing** — code-signing identity is never verified.
 
@@ -213,7 +221,7 @@ designated requirement). Treat an unverifiable signature as untrusted (diagnosti
 relax a *safety* control purely on bundle id. Track as a follow-up; ranked MEDIUM because the
 current demonstrable harm is limited.
 
-### F4 — Model-asset integrity is trust-on-first-use for the shipped model (Area 5) — MEDIUM — Partially mitigated + recommendation
+### F4 — Legacy selectable model manifests lack the default's integrity guarantees (Area 5) — MEDIUM — Mitigated + recommendation
 
 **Where:** `Runtime/LocalModelAssetInstaller.swift` (`HubClient.default.downloadSnapshot`),
 `Runtime/ModelAssetInstaller.swift` (`finalizeDownloadedSnapshot`),
@@ -224,25 +232,26 @@ model manifests in `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swi
 1. **Transport** is HTTPS via the Hugging Face SDK with an **immutable pinned revision** (commit
    hash) — good. But there is **no certificate/host pinning** in app code, so a rogue CA / MITM
    (A3) that can also satisfy the SDK's checks is not additionally constrained by us.
-2. **Known-good hashes are incomplete.** `ExpectedFile` SHA-256s exist for some manifests
-   (e.g. `qwen35FourBMLX4Bit`) and *are* enforced
-   (`ModelAssetIntegrityReceipt.validateExpectedFiles` → "known-good checksum mismatch"). But the
-   model actually shipped/active here (`Gemma4E4BItOptiQ`) has **no `expectedFiles`**, and the
-   validator **silently passes** when `expectedFiles` is empty. The integrity receipt is then
-   computed *from whatever was downloaded* — trust-on-first-use: a tampered asset present at first
-   install would be blessed and would match its own receipt thereafter.
+2. **The normal-launch default is anchored.** `qwen35FourBMLX4Bit` has baked `ExpectedFile`
+   byte counts and SHA-256s, and they are enforced
+   (`ModelAssetIntegrityReceipt.validateExpectedFiles` → "known-good checksum mismatch"). Some
+   explicitly selected legacy manifests, including `Gemma4E4BItOptiQ`, still have no pinned
+   source or `expectedFiles`; they therefore retain a weaker structural-only posture instead of
+   the default's signed-binary trust anchor.
 3. **On-disk tamper (A2):** model weights live under
    `~/Library/Application Support/Tilde/Models/...`; a same-user process could replace the
-   files. The post-receipt validator (recompute-and-compare) catches changes made *after* the
-   receipt, but not the no-known-good-hash gap above.
+   files. For receipt-backed manifests, the validator (recompute-and-compare) catches changes made
+   *after* the receipt; legacy manifests without pinned source metadata do not get that check.
 
-**Partial mitigation (added):** the model directory is now created `0700`
+**Mitigations:** normal launch now selects receipt-backed Qwen with immutable source metadata and
+baked expected hashes. The model directory is also created `0700`
 (`ModelAssetInstaller`/`LocalModelAssetInstaller`), reducing the cross-user tamper surface.
 
 **Recommendation (not implemented — needs the canonical hashes):**
-- Populate `expectedFiles` (byte count + SHA-256) for **every shipped manifest**, so first-install
+- Populate immutable source metadata and `expectedFiles` (byte count + SHA-256) for **every
+  selectable manifest**, so first-install
   integrity is anchored to values baked into the signed app binary rather than to first-seen
-  bytes. Treat empty `expectedFiles` as a *weaker* posture and log it.
+  bytes. Treat missing source metadata or empty `expectedFiles` as a *weaker* posture and log it.
 - Consider a signed model manifest fetched alongside the asset, and/or cert pinning for the
   download host.
 - Verification already runs before MLX load (`MLXModelRuntime.verifyModelAssetIntegrity`); keep
@@ -288,8 +297,9 @@ Availability/footprint issue, not a disclosure one (contents are redacted via
   permissions on content-bearing artifacts.
 - **(4) Event-tap exposure / hijack** → F5. Least-privilege and self-healing; no source filtering
   (LOW).
-- **(5) Model-asset download + integrity** → F4. HTTPS + pinned revision + receipt + pre-load
-  verification; gap is incomplete known-good hashes (TOFU for the shipped model) and no pinning.
+- **(5) Model-asset download + integrity** → F4. The default uses HTTPS + pinned revision + baked
+  hashes + receipt + pre-load verification; gaps remain for weaker explicitly selected legacy
+  manifests and the lack of certificate pinning.
 
 ---
 

@@ -174,60 +174,6 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("ready.", after: "The draft is")?.visibleText == " ready.")
     }
 
-    @Test("Cleans numbered multiline candidates")
-    func cleansNumberedMultilineCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
-        let suggestions = cleaner.cleanCandidates(
-            """
-            1. make this feel calm
-            2. make this feel calm
-            3. make this easier to ship
-            """,
-            after: "Can we",
-            mode: .phraseContinuation
-        )
-
-        #expect(suggestions.map(\.visibleText) == [
-            " make this feel calm",
-            " make this easier to ship"
-        ])
-    }
-
-    @Test("Cleans bulleted multiline candidates")
-    func cleansBulletedMultilineCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
-        let suggestions = cleaner.cleanCandidates(
-            """
-            - keep this small
-            * make it easy to trust
-            A. return exactly <NO_SUGGESTION>
-            """,
-            after: "We should",
-            mode: .phraseContinuation
-        )
-
-        #expect(suggestions.map(\.visibleText) == [
-            " keep this small",
-            " make it easy to trust"
-        ])
-    }
-
-    @Test("Suppresses unsafe multiline candidates")
-    func suppressesUnsafeMultilineCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-        let suggestions = cleaner.cleanCandidates(
-            """
-            1. <NO_SUGGESTION>
-            2. press Enter to send the prompt
-            3. Inline autocomplete. Return only the continuation.
-            """,
-            after: "Can you",
-            mode: .phraseContinuation
-        )
-
-        #expect(suggestions.isEmpty)
-    }
-
     @Test("Suppresses repeated list marker candidates")
     func suppressesRepeatedListMarkerCandidates() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -243,8 +189,17 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("candidate 1: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion) == nil)
+        // A word completion that runs past the word boundary keeps its first
+        // word instead of vanishing (rejecting these swallowed nearly every
+        // mid-word final live — partials showed, finals disappeared).
+        #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        // Full-word restatement with trailing continuation: the prefix trimmer
+        // converts " dictation" to the suffix, the word-scope keeps only it.
+        #expect(cleaner.clean(" dictation is fun", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        // A completion that starts a NEW common word instead of finishing the
+        // fragment is still rejected (would render as glued-together garbage).
+        #expect(cleaner.clean("hello there", after: "walki", mode: .wordCompletion) == nil)
         #expect(cleaner.clean(
             "occured -> occurred",
             after: "Correct this spelling: occured ->"
@@ -264,6 +219,36 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("No spaces or punctuation.", after: "hel", mode: .wordCompletion) == nil)
         #expect(cleaner.clean("Continue the current sentence naturally.", after: "Can we") == nil)
         #expect(cleaner.clean("Start the next sentence if needed.", after: "We shipped it.") == nil)
+    }
+
+    @Test("Suppresses bare answer-label echoes without colons")
+    func suppressesBareAnswerLabelEchoes() {
+        // Models sometimes reply with the literal name of the answer field
+        // ("Suffix" appeared as a ghost during dogfood). Colon-less echoes slip
+        // past prefix stripping, so a whole-output label match must reject.
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Suffix", after: "it is intere", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("suffix", after: "it is intere", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("Next words", after: "Can we") == nil)
+        #expect(cleaner.clean("Next 3-8 words, or <NO_SUGGESTION>", after: "Can we") == nil)
+        // Real completions that merely CONTAIN a label word still pass.
+        #expect(cleaner.clean("sting", after: "it is intere", mode: .wordCompletion) != nil)
+        #expect(cleaner.clean("suffixes are common in English", after: "Grammar note: ") != nil)
+    }
+
+    @Test("Suppresses assistant-persona leaks")
+    func suppressesAssistantPersonaLeaks() {
+        // Seen live: with an AI conversation on screen, the model slipped into
+        // chatbot persona ("I'm sorry, but as an AI chatbot developed"). Persona
+        // markers anywhere in a candidate must kill it; plain human apologies
+        // remain legitimate continuations.
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("I'm sorry, but as an AI chatbot developed", after: "the message you gave us? ") == nil)
+        #expect(cleaner.clean("As a language model I cannot say", after: "what do you think? ") == nil)
+        #expect(cleaner.clean("I cannot assist with that request", after: "can you help ") == nil)
+        #expect(cleaner.clean("I'm sorry about the delay", after: "Hey, I missed the meeting. ") != nil)
     }
 
     @Test("Suppresses no suggestion sentinel outputs")
@@ -340,7 +325,8 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion) == nil)
+        // Runs past the word boundary → first word kept, not swallowed.
+        #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
     }
 
     @Test("Suppresses unrelated whole words in word completion mode")
@@ -410,5 +396,28 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner()
 
         #expect(cleaner.clean("   ") == nil)
+    }
+
+    @Test("Reports privacy-safe output rejection reasons")
+    func reportsOutputRejectionReasons() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.cleanWithReason("   ") == .rejected(.emptyOutput))
+        #expect(cleaner.cleanWithReason("<NO_SUGGESTION>") == .rejected(.noSuggestionSentinel))
+        #expect(cleaner.cleanWithReason("press Enter to send", after: "Now") == .rejected(.unsafePromptAction))
+        #expect(cleaner.cleanWithReason("dictation", after: "dic", mode: .wordCompletion).suggestion?.visibleText == "tation")
+    }
+
+    @Test("Cleaner result exposes redacted trace metadata")
+    func cleanerResultExposesRedactedTraceMetadata() {
+        let rejected = CompletionCleanResult.rejected(.lowSignalPhrase)
+        let accepted = CompletionCleanResult.accepted(CompletionSuggestion(text: " ready now"))
+
+        #expect(rejected.traceMetadata == [
+            "completionCleanResult": "rejected",
+            "completionCleanRejectionReason": "lowSignalPhrase"
+        ])
+        #expect(accepted.traceMetadata == ["completionCleanResult": "accepted"])
+        #expect(!rejected.traceMetadata.values.contains("private typed text"))
     }
 }

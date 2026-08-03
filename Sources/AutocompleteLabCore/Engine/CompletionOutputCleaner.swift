@@ -1,7 +1,63 @@
 import Foundation
 
+public enum CompletionCleanRejectionReason: String, Codable, Equatable, Sendable {
+    case unsafeHiddenOrControlCharacter
+    case emptyOutput
+    case noSuggestionSentinel
+    case promptInstructionEcho
+    case repeatedListMarker
+    case assistantMeta
+    case genericChatFiller
+    case unsafePromptAction
+    case startsSecondSentence
+    case visibleUIChrome
+    case assistantResponseToPrompt
+    case restartsCurrentSentence
+    case replaysCurrentSentence
+    case adviceOrToneDrift
+    case emptyAfterPrefixTrimming
+    case duplicatesVisibleTypedWords
+    case repeatsEarlierContext
+    case belowMinimumVisibleWords
+    case invalidWordCompletion
+    case lowValueSingleWordPhrase
+    case lowSignalPhrase
+    case duplicateCandidate
+}
+
+public enum CompletionCleanResult: Equatable, Sendable {
+    case accepted(CompletionSuggestion)
+    case rejected(CompletionCleanRejectionReason)
+
+    public var suggestion: CompletionSuggestion? {
+        guard case let .accepted(suggestion) = self else {
+            return nil
+        }
+        return suggestion
+    }
+
+    public var rejectionReason: CompletionCleanRejectionReason? {
+        guard case let .rejected(reason) = self else {
+            return nil
+        }
+        return reason
+    }
+
+    public var traceMetadata: [String: String] {
+        switch self {
+        case .accepted:
+            return ["completionCleanResult": "accepted"]
+        case let .rejected(reason):
+            return [
+                "completionCleanResult": "rejected",
+                "completionCleanRejectionReason": reason.rawValue
+            ]
+        }
+    }
+}
+
 public struct CompletionOutputCleaner: Equatable, Sendable {
-    private static let noSuggestionToken = CompletionPromptBuilder.noSuggestionToken.lowercased()
+    private static let noSuggestionToken = "<no_suggestion>"
 
     public let minimumVisibleWords: Int
     public let maxVisibleWords: Int
@@ -15,67 +71,39 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     public func clean(_ rawOutput: String) -> CompletionSuggestion? {
-        clean(rawOutput, after: nil)
+        cleanWithReason(rawOutput).suggestion
     }
 
     public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
-        clean(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
+        cleanWithReason(rawOutput, after: textBeforeCursor).suggestion
     }
 
-    public func cleanCandidates(
+    public func clean(
         _ rawOutput: String,
         after textBeforeCursor: String?,
-        mode: CompletionRequestMode,
-        limit: Int = 3
-    ) -> [CompletionSuggestion] {
-        let maxCandidateCount = max(1, limit)
-        var seen: Set<String> = []
-        var suggestions: [CompletionSuggestion] = []
-
-        for candidateLine in candidateLines(from: rawOutput) {
-            guard let suggestion = clean(candidateLine, after: textBeforeCursor, mode: mode) else {
-                continue
-            }
-
-            let key = normalizedCandidateKey(suggestion.visibleText)
-            guard seen.insert(key).inserted else {
-                continue
-            }
-
-            suggestions.append(suggestion)
-            if suggestions.count >= maxCandidateCount {
-                break
-            }
-        }
-
-        return suggestions
+        mode: CompletionRequestMode
+    ) -> CompletionSuggestion? {
+        cleanWithReason(rawOutput, after: textBeforeCursor, mode: mode).suggestion
     }
 
-    public func cleanBestCandidate(
+    public func cleanWithReason(_ rawOutput: String) -> CompletionCleanResult {
+        cleanWithReason(rawOutput, after: nil)
+    }
+
+    public func cleanWithReason(
+        _ rawOutput: String,
+        after textBeforeCursor: String?
+    ) -> CompletionCleanResult {
+        cleanWithReason(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
+    }
+
+    public func cleanWithReason(
         _ rawOutput: String,
         after textBeforeCursor: String?,
-        mode: CompletionRequestMode,
-        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
-        limit: Int = 3,
-        ranker: CompletionCandidateRanker = CompletionCandidateRanker()
-    ) -> CompletionCandidateSelection {
-        let candidates = cleanCandidates(
-            rawOutput,
-            after: textBeforeCursor,
-            mode: mode,
-            limit: limit
-        )
-        return ranker.selection(
-            candidates,
-            mode: mode,
-            textBeforeCursor: textBeforeCursor,
-            behaviorProfileID: behaviorProfileID
-        )
-    }
-
-    public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
+        mode: CompletionRequestMode
+    ) -> CompletionCleanResult {
         guard !containsUnsafePromptHiddenOrControlCharacter(rawOutput) else {
-            return nil
+            return .rejected(.unsafeHiddenOrControlCharacter)
         }
 
         let withoutThinking = rawOutput
@@ -93,11 +121,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
 
         guard !withoutThinking.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         guard !isNoSuggestionSentinel(withoutThinking) else {
-            return nil
+            return .rejected(.noSuggestionSentinel)
         }
 
         let singleLine = withoutThinking
@@ -106,25 +134,33 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         guard !singleLine.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         guard !looksLikePromptInstructionEcho(singleLine) else {
-            return nil
+            return .rejected(.promptInstructionEcho)
         }
 
         let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
 
         guard !withoutPromptEchoLabel.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
+        }
+
+        guard !isBareAnswerLabelEcho(withoutPromptEchoLabel) else {
+            return .rejected(.promptInstructionEcho)
+        }
+
+        guard !isAssistantPersonaLeak(withoutPromptEchoLabel) else {
+            return .rejected(.promptInstructionEcho)
         }
 
         guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
-            return nil
+            return .rejected(.noSuggestionSentinel)
         }
 
         guard !looksLikePromptInstructionEcho(withoutPromptEchoLabel) else {
-            return nil
+            return .rejected(.promptInstructionEcho)
         }
 
         let candidateText = strippingCorrectionArrowEcho(
@@ -133,86 +169,96 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         )
 
         guard !candidateText.isEmpty else {
-            return nil
+            return .rejected(.emptyOutput)
         }
 
         if mode.isContinuation,
            looksLikeRepeatedListMarker(candidateText) {
-            return nil
+            return .rejected(.repeatedListMarker)
         }
 
         guard !looksLikeAssistantMeta(candidateText) else {
-            return nil
+            return .rejected(.assistantMeta)
         }
 
         guard !looksLikeGenericChatFiller(candidateText) else {
-            return nil
+            return .rejected(.genericChatFiller)
         }
 
         guard !looksLikeUnsafePromptAction(candidateText) else {
-            return nil
+            return .rejected(.unsafePromptAction)
         }
 
         if mode.isContinuation,
            startsSecondSentence(candidateText) {
-            return nil
+            return .rejected(.startsSecondSentence)
         }
 
         guard !looksLikeVisibleUIChromeCandidate(candidateText, mode: mode) else {
-            return nil
+            return .rejected(.visibleUIChrome)
         }
 
         if let textBeforeCursor,
            looksLikeAssistantResponseToPrompt(candidateText, after: textBeforeCursor) {
-            return nil
+            return .rejected(.assistantResponseToPrompt)
         }
 
         if let textBeforeCursor,
            restartsCurrentSentence(candidateText, after: textBeforeCursor) {
-            return nil
+            return .rejected(.restartsCurrentSentence)
         }
 
         if let textBeforeCursor,
            replaysCurrentSentenceSpan(candidateText, after: textBeforeCursor) {
-            return nil
+            return .rejected(.replaysCurrentSentence)
         }
 
         guard !isAdviceOrToneDriftPhrase(candidateText) else {
-            return nil
+            return .rejected(.adviceOrToneDrift)
         }
 
         let normalizedSuggestion = mode == .wordCompletion ? candidateText : ensureLeadingSpace(candidateText)
-        let trimmedSuggestion: String
+        var trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
         } else {
             trimmedSuggestion = normalizedSuggestion
         }
+        // Mid-word finals arrive as full continuations ("ng home soon") because
+        // the model runs past the word boundary. The word being finished is the
+        // payload — keep it, drop the rest. Rejecting multi-word outputs here
+        // swallowed nearly every mid-word final live (partials showed, finals
+        // vanished; midword_eval spoke-rate 0-4%).
+        if mode == .wordCompletion {
+            trimmedSuggestion = String(
+                trimmedSuggestion.drop(while: \.isWhitespace).prefix(while: { !$0.isWhitespace })
+            )
+        }
 
         guard !trimmedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
+            return .rejected(.emptyAfterPrefixTrimming)
         }
 
         if mode.isContinuation,
            let textBeforeCursor,
            duplicatesVisibleTypedWords(trimmedSuggestion, after: textBeforeCursor) {
-            return nil
+            return .rejected(.duplicatesVisibleTypedWords)
         }
 
         if mode.isContinuation,
            let textBeforeCursor,
            replaysCurrentSentenceSpan(trimmedSuggestion, after: textBeforeCursor) {
-            return nil
+            return .rejected(.replaysCurrentSentence)
         }
 
         if let textBeforeCursor,
            repeatsEarlierContext(trimmedSuggestion, after: textBeforeCursor) {
-            return nil
+            return .rejected(.repeatsEarlierContext)
         }
 
         let suggestion = CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
         guard mode == .wordCompletion || suggestion.visibleWordCount >= minimumVisibleWords else {
-            return nil
+            return .rejected(.belowMinimumVisibleWords)
         }
 
         if mode == .wordCompletion,
@@ -221,29 +267,29 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
                 rawCandidate: candidateText,
                 after: textBeforeCursor
            ) {
-            return nil
+            return .rejected(.invalidWordCompletion)
         }
 
         if mode.isContinuation,
            isLowValueSingleWordPhrase(suggestion.visibleText) {
-            return nil
+            return .rejected(.lowValueSingleWordPhrase)
         }
 
         if mode.isContinuation,
            isLowSignalPhrase(suggestion.visibleText) {
-            return nil
+            return .rejected(.lowSignalPhrase)
         }
 
         if mode.isContinuation,
            isAdviceOrToneDriftPhrase(suggestion.visibleText) {
-            return nil
+            return .rejected(.adviceOrToneDrift)
         }
 
         if looksLikeVisibleUIChromeCandidate(suggestion.visibleText, mode: mode) {
-            return nil
+            return .rejected(.visibleUIChrome)
         }
 
-        return suggestion
+        return .accepted(suggestion)
     }
 
     private func candidateLines(from rawOutput: String) -> [String] {
@@ -357,6 +403,43 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
             || normalized.hasPrefix("start the next sentence")
+    }
+
+    /// Chat-tuned models sometimes slip into the assistant persona — refusing,
+    /// apologizing "as an AI", or answering instead of continuing (seen live:
+    /// "I'm sorry, but as an AI chatbot developed"). Any persona marker anywhere
+    /// in a candidate kills it. Plain apologies ("I'm sorry about the delay")
+    /// remain legitimate continuations and pass.
+    private func isAssistantPersonaLeak(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        let markers = [
+            "as an ai",
+            "as a language model",
+            "as an assistant",
+            "ai chatbot",
+            "ai assistant",
+            "language model",
+            "i cannot assist",
+            "i can't assist",
+            "cannot help with that",
+            "i'm not able to help",
+        ]
+        return markers.contains { normalized.contains($0) }
+    }
+
+    /// Models occasionally answer with the literal name of the answer field —
+    /// "Suffix", "Next words" — instead of a completion. Colon-less echoes slip
+    /// past the prefix-stripping above, so an output that IS a label is rejected.
+    private func isBareAnswerLabelEcho(_ text: String) -> Bool {
+        var normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.hasSuffix(":") { normalized.removeLast() }
+        if ["suffix", "next words", "next word", "continuation", "completion", "suggestion"].contains(normalized) {
+            return true
+        }
+        return normalized.range(
+            of: #"^next \d+-\d+ words(, or .*)?$"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private func strippingPromptEchoLabel(from text: String) -> String {
@@ -515,21 +598,25 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         let normalizedFragment = fragment.lowercased()
-        let normalizedRawCandidate = rawCandidate
+        // The raw candidate may run past the word boundary ("walking home
+        // soon" for fragment "walki") — the fragment rules apply to its FIRST
+        // word, which is the word being completed.
+        let normalizedRawFirstWord = rawCandidate
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+            .prefix(while: { !$0.isWhitespace })
 
         guard !normalizedFragment.isEmpty,
-              !normalizedRawCandidate.isEmpty,
-              normalizedRawCandidate.allSatisfy({ $0.isLetter }) else {
+              !normalizedRawFirstWord.isEmpty,
+              normalizedRawFirstWord.allSatisfy({ $0.isLetter }) else {
             return true
         }
 
-        if normalizedRawCandidate.hasPrefix(normalizedFragment) {
-            return normalizedRawCandidate.count > normalizedFragment.count
+        if normalizedRawFirstWord.hasPrefix(normalizedFragment) {
+            return normalizedRawFirstWord.count > normalizedFragment.count
         }
 
-        return !Self.commonWholeWords.contains(normalizedRawCandidate)
+        return !Self.commonWholeWords.contains(String(normalizedRawFirstWord))
     }
 
     private func isLowValueSingleWordPhrase(_ text: String) -> Bool {
@@ -749,8 +836,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private static let noSuggestionWrapperCharacters = CharacterSet(charactersIn: "\"'`")
 
-    private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
-        .union(lowValueSingleWordPhrases)
+    // Inlined from the deleted WordCompletionCandidateRanker's default word list.
+    private static let commonWholeWords = Set([
+        "about", "accurate", "actually", "again", "also", "always", "app",
+        "application", "around", "available", "because",
+        "before", "being", "better", "between", "bring", "build", "change",
+        "computer", "context", "conversation", "could",
+        "decent", "decently", "definitely", "dictation", "different",
+        "document", "everything", "fast",
+        "first", "going", "hello", "help", "hey", "important",
+        "instant", "interesting", "kind", "language", "launch",
+        "make", "meaning", "need", "notes",
+        "option", "people", "really",
+        "reliable", "right", "should", "slow", "something",
+        "system", "their", "there", "these", "thing",
+        "think", "this", "trying", "typing", "understand", "want",
+        "what", "when", "where", "which", "while", "window",
+        "without", "working", "would", "writing",
+    ]).union(lowValueSingleWordPhrases)
 
     private static let visibleUIChromeTokens: Set<String> = [
         "automations",
