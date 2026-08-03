@@ -18,7 +18,7 @@ subject to a hard latency ceiling (a config that is slower than LATENCY_BUDGET
 is DISQUALIFIED, never crowned — the product must stay instant).
 
 Reuses the launch/verify/quiz machinery in script/tuning_sweep.py. Data + logs
-live under ~/.cache/steadytype-eval (never committed).
+live under ~/.cache/tilde-eval (never committed).
 """
 import json
 import os
@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tuning_sweep as ts
 
-CACHE = os.path.expanduser("~/.cache/steadytype-eval")
+CACHE = os.path.expanduser("~/.cache/tilde-eval")
 ts.CORPUS = os.path.join(CACHE, "diverse_eval.jsonl")     # the referee's questions
 MODELS = os.path.join(CACHE, "models")
 SCAFFOLDS = os.path.join(CACHE, "scaffolds")
@@ -76,25 +76,25 @@ DEFAULTS = {k: v[0] for k, v in KNOBS.items()}
 def recipe_to_version(recipe):
     """Translate a recipe dict into (env_overrides, quiz_flags, expect) for
     tuning_sweep.run_version."""
-    env = {"STEADYTYPE_MODEL_PATH": MODEL_PATHS[recipe["model"]]}
+    env = {"TILDE_MODEL_PATH": MODEL_PATHS[recipe["model"]]}
     if recipe["scaffold"] != "builtin":
-        env["STEADYTYPE_SCAFFOLD_CHAT_FILE"] = SCAFFOLD_FILES[recipe["scaffold"]]
+        env["TILDE_SCAFFOLD_CHAT_FILE"] = SCAFFOLD_FILES[recipe["scaffold"]]
     if recipe["budget"] != "default":
-        env["STEADYTYPE_TOKEN_BUDGET"] = str(recipe["budget"])
+        env["TILDE_TOKEN_BUDGET"] = str(recipe["budget"])
     if recipe["temperature"]:
-        env["STEADYTYPE_TEMPERATURE"] = str(recipe["temperature"])
+        env["TILDE_TEMPERATURE"] = str(recipe["temperature"])
     if recipe["top_p"] != "default":
-        env["STEADYTYPE_TOP_P"] = str(recipe["top_p"])
+        env["TILDE_TOP_P"] = str(recipe["top_p"])
     if recipe["min_p"] != "default":
-        env["STEADYTYPE_MIN_P"] = str(recipe["min_p"])
+        env["TILDE_MIN_P"] = str(recipe["min_p"])
     if recipe["repeat_penalty"] != "default":
-        env["STEADYTYPE_REPEAT_PENALTY"] = str(recipe["repeat_penalty"])
+        env["TILDE_REPEAT_PENALTY"] = str(recipe["repeat_penalty"])
     if recipe["confidence"]:
-        env["STEADYTYPE_CONFIDENCE"] = str(recipe["confidence"])
+        env["TILDE_CONFIDENCE"] = str(recipe["confidence"])
     if recipe["max_context"] != 3000:
-        env["STEADYTYPE_MAX_CONTEXT_CHARS"] = str(recipe["max_context"])
+        env["TILDE_MAX_CONTEXT_CHARS"] = str(recipe["max_context"])
     if recipe["echo_guard"] != 4:
-        env["STEADYTYPE_ECHO_GUARD_MIN_WORDS"] = str(recipe["echo_guard"])
+        env["TILDE_ECHO_GUARD_MIN_WORDS"] = str(recipe["echo_guard"])
     flags = "--context prior"
     if recipe["context_turns"] != 3:
         flags += " --context-turns %d" % recipe["context_turns"]

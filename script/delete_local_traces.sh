@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TRACE_FOLDER="${AUTOCOMPLETE_LAB_TRACE_FOLDER:-$HOME/Library/Logs/SteadyType}"
-STATE_FOLDER="${AUTOCOMPLETE_LAB_STATE_FOLDER:-$HOME/Library/Application Support/SteadyType}"
+TRACE_FOLDER="${AUTOCOMPLETE_LAB_TRACE_FOLDER:-$HOME/Library/Logs/Tilde}"
+STATE_FOLDER="${AUTOCOMPLETE_LAB_STATE_FOLDER:-$HOME/Library/Application Support/Tilde}"
 
 canonical_path() {
   local path="$1"
@@ -51,8 +51,8 @@ require_safe_folder() {
   canonical_home_library="$(canonical_path "$home_path/Library")"
   canonical_home_logs="$(canonical_path "$home_path/Library/Logs")"
   canonical_home_application_support="$(canonical_path "$home_path/Library/Application Support")"
-  default_logs="$(canonical_path "$home_path/Library/Logs/SteadyType")"
-  default_state="$(canonical_path "$home_path/Library/Application Support/SteadyType")"
+  default_logs="$(canonical_path "$home_path/Library/Logs/Tilde")"
+  default_state="$(canonical_path "$home_path/Library/Application Support/Tilde")"
   canonical_tmp="$(canonical_path "${tmp_path%/}")"
 
   case "$canonical" in
@@ -68,7 +68,7 @@ require_safe_folder() {
   fi
 
   if path_is_within "$canonical" "$canonical_home"; then
-    echo "refusing to delete $label traces from non-SteadyType folder: $path" >&2
+    echo "refusing to delete $label traces from non-Tilde folder: $path" >&2
     exit 2
   fi
 
@@ -78,7 +78,7 @@ require_safe_folder() {
     return
   fi
 
-  echo "refusing to delete $label traces from non-SteadyType folder: $path" >&2
+  echo "refusing to delete $label traces from non-Tilde folder: $path" >&2
   exit 2
 }
 
@@ -111,4 +111,4 @@ done
 
 delete_file "$STATE_FOLDER/compatibility-learning.json"
 
-echo "Deleted SteadyType local traces: $TRACE_FOLDER"
+echo "Deleted Tilde local traces: $TRACE_FOLDER"

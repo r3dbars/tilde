@@ -10,7 +10,7 @@ import Foundation
 /// choice, for personalizing THEIR own model. It syncs to the owner's own iCloud
 /// Drive (their private account) so both their Macs feed one folder. It is never
 /// sent anywhere else. Disable anytime by setting the flag to false; purge by
-/// deleting the SteadyType-usage folder.
+/// deleting the Tilde-usage folder.
 enum GhostUsageLog {
 
     private static let enabledKey = "GhostUsageCaptureEnabled"
@@ -37,12 +37,12 @@ enum GhostUsageLog {
     /// streams separate. Falls back to local Application Support if iCloud is
     /// absent. Redacted events only — never raw text — so this is safe to sync.
     private static let logDirectory: String = {
-        let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
+        let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage")
             .expandingTildeInPath
         let icloudRoot = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs")
             .expandingTildeInPath
         if FileManager.default.fileExists(atPath: icloudRoot) { return icloud }
-        return NSString(string: "~/Library/Application Support/SteadyType/usage").expandingTildeInPath
+        return NSString(string: "~/Library/Application Support/Tilde/usage").expandingTildeInPath
     }()
 
     private static let logPath: String = {
@@ -54,7 +54,7 @@ enum GhostUsageLog {
 
     /// Serial + background: file I/O never runs on the keystroke-handling thread,
     /// and concurrent events stay ordered instead of interleaving mid-line.
-    private static let queue = DispatchQueue(label: "com.steadytype.ghostUsageLog", qos: .utility)
+    private static let queue = DispatchQueue(label: "com.tilde.ghostUsageLog", qos: .utility)
 
     /// Touched only from `queue` — safe without a lock.
     private static var didEnsureDirectory = false

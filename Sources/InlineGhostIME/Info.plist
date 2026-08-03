@@ -5,7 +5,7 @@
     <key>CFBundleName</key>
     <string>InlineGhostIME</string>
     <key>CFBundleDisplayName</key>
-    <string>Inline Ghost (SteadyType Spike)</string>
+    <string>Inline Ghost (Tilde Spike)</string>
     <key>CFBundleIdentifier</key>
     <string>bar.r3d.inputmethod.InlineGhost</string>
     <key>CFBundleVersion</key>

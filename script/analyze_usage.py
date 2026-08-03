@@ -15,8 +15,8 @@ import os
 import sys
 from collections import defaultdict
 
-ICLOUD = os.path.expanduser("~/Library/Mobile Documents/com~apple~CloudDocs/SteadyType-usage")
-LOCAL = os.path.expanduser("~/Library/Application Support/SteadyType/usage")
+ICLOUD = os.path.expanduser("~/Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage")
+LOCAL = os.path.expanduser("~/Library/Application Support/Tilde/usage")
 
 
 def find_logs():
@@ -54,7 +54,7 @@ def main():
     typed = sum(1 for e in events if e.get("event") == "typed_instead")
     accepts = aw + aa
 
-    print("=== SteadyType real usage (%d events across %d log file(s)) ===" % (len(events), len(files)))
+    print("=== Tilde real usage (%d events across %d log file(s)) ===" % (len(events), len(files)))
     print("ghosts shown:      %d" % shown)
     print("accepted:          %d  (%d word-by-word, %d whole)" % (accepts, aw, aa))
     print("dismissed (Esc):   %d" % dis)

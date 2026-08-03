@@ -149,7 +149,7 @@ summarize_and_exit() {
   exit 0
 }
 
-echo "SteadyType fast proof gate (mode: ${MODE})"
+echo "Tilde fast proof gate (mode: ${MODE})"
 echo "Repo: ${ROOT_DIR}"
 
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff

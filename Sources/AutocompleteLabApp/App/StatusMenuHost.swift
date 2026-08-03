@@ -20,7 +20,7 @@ final class StatusMenuHost: NSObject {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(
             systemSymbolName: "keyboard.badge.ellipsis",
-            accessibilityDescription: "SteadyType"
+            accessibilityDescription: "Tilde"
         )
 
         let menu = NSMenu()
@@ -49,7 +49,7 @@ final class StatusMenuHost: NSObject {
         menu.addItem(feedback)
         menu.addItem(.separator())
 
-        let quit = NSMenuItem(title: "Quit SteadyType", action: #selector(quit(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Tilde", action: #selector(quit(_:)), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
 
@@ -76,7 +76,7 @@ final class StatusMenuHost: NSObject {
 
 extension StatusMenuHost: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        engineStatusItem?.title = appDelegate?.engineStatusLine() ?? "SteadyType"
+        engineStatusItem?.title = appDelegate?.engineStatusLine() ?? "Tilde"
         screenContextItem?.state = UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled") ? .on : .off
     }
 }

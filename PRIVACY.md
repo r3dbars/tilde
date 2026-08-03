@@ -1,6 +1,6 @@
-# SteadyType Privacy
+# Tilde Privacy
 
-SteadyType is local-first. That is a product requirement, not a preference.
+Tilde is local-first. That is a product requirement, not a preference.
 
 ## What Accessibility is used for
 
@@ -51,8 +51,8 @@ traces at any time with `script/delete_local_traces.sh` or from the app.
 - Turn off optional local capture features from Settings if enabled.
 - Delete local traces from Diagnostics or `script/delete_local_traces.sh`.
 - Quit from the menu bar when you do not want the app watching typing.
-- Full removal: delete the app bundle, `~/Library/Application Support/SteadyType`,
-  and `~/Library/Logs/SteadyType`.
+- Full removal: delete the app bundle, `~/Library/Application Support/Tilde`,
+  and `~/Library/Logs/Tilde`.
 
 ## Dependencies
 

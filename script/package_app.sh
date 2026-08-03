@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build a self-contained, notarized SteadyType.app for installation on any
+# Build a self-contained, notarized Tilde.app for installation on any
 # Apple Silicon Mac running macOS 26:
-#   - SteadyType.app (menu-bar brain) with
+#   - Tilde.app (menu-bar brain) with
 #       Contents/Helpers/llama-server        (static binary, no dylib deps)
 #       Contents/Library/InlineGhostIME.app  (the keyboard; auto-installed at launch)
 #   - The Gemma GGUF downloads on first launch (hardware-tiered E2B/E4B).
@@ -30,7 +30,7 @@ echo "==> building app + keyboard"
 ./script/build_and_run.sh --verify > /dev/null
 ./script/build_ime.sh --no-install > /dev/null
 
-APP="dist/SteadyType.app"
+APP="dist/Tilde.app"
 echo "==> embedding helpers"
 mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Library"
 cp "$LLAMA_SERVER_BIN" "$APP/Contents/Helpers/llama-server"
@@ -49,16 +49,16 @@ echo "==> signing (inside out)"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP/Contents/Helpers/llama-server"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP/Contents/Library/InlineGhostIME.app"
 codesign --force --options runtime \
-    --entitlements script/SteadyType.entitlements \
+    --entitlements script/Tilde.entitlements \
     --sign "$SIGN_IDENTITY" "$APP"
 
 echo "==> notarizing"
-ditto -c -k --keepParent "$APP" dist/SteadyType-notarize.zip
-xcrun notarytool submit dist/SteadyType-notarize.zip --keychain-profile "$NOTARY_PROFILE" --wait
+ditto -c -k --keepParent "$APP" dist/Tilde-notarize.zip
+xcrun notarytool submit dist/Tilde-notarize.zip --keychain-profile "$NOTARY_PROFILE" --wait
 xcrun stapler staple "$APP" > /dev/null
 
 STAMP=$(date +%Y%m%d)
-OUT="dist/SteadyType-$STAMP.zip"
+OUT="dist/Tilde-$STAMP.zip"
 ditto -c -k --keepParent "$APP" "$OUT"
 echo "==> packaged: $OUT"
 spctl -a -t exec -vv "$APP" 2>&1 | head -2

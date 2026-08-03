@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mine few-shot scaffold candidates for the chat register from the local
 Discord-Dialogues corpus. Emits ready-to-use scaffold blocks (identical format
-to RawContinuationPrompt.scaffold(.chat)) under ~/.cache/steadytype-eval/
+to RawContinuationPrompt.scaffold(.chat)) under ~/.cache/tilde-eval/
 scaffolds/ for the tuning sweep. Deterministic: candidates ordered by sha256,
 no randomness. Data stays outside the repo.
 """
@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-CACHE = os.path.expanduser("~/.cache/steadytype-eval")
+CACHE = os.path.expanduser("~/.cache/tilde-eval")
 DISCORD_DIR = os.path.join(CACHE, "discord")
 OUT_DIR = os.path.join(CACHE, "scaffolds")
 

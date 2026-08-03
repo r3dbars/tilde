@@ -13,7 +13,7 @@ OTHER_FILE_MAX=3000
 SCRIPTS_MAX=35
 DOCS_MAX=30
 APP_DELEGATE="Sources/AutocompleteLabApp/App/AppDelegate.swift"
-COUNTS="$(mktemp "${TMPDIR:-/tmp}/steadytype-complexity.XXXXXX")"
+COUNTS="$(mktemp "${TMPDIR:-/tmp}/tilde-complexity.XXXXXX")"
 trap 'rm -f "$COUNTS"' EXIT
 
 is_truthy() {
@@ -35,7 +35,7 @@ app_delegate_lines=0
 scripts="$(find script -maxdepth 1 -type f -print | awk 'END { print NR + 0 }')"
 docs="$(find docs -type f -print | awk 'END { print NR + 0 }')"
 
-echo "SteadyType complexity budget"
+echo "Tilde complexity budget"
 printf '  production Swift LOC: %d / %d\n' "$total" "$TOTAL_MAX"
 printf '  AppDelegate LOC:      %d / %d\n' "$app_delegate_lines" "$APP_DELEGATE_MAX"
 printf '  scripts:              %d / %d\n' "$scripts" "$SCRIPTS_MAX"

@@ -11,7 +11,7 @@
 #   4. check_runtime_network_egress.py
 #                                  the running app opens no unexpected network
 #                                  sockets — the privacy promise, observed live.
-#                                  Requires SteadyType to be running; launch it and
+#                                  Requires Tilde to be running; launch it and
 #                                  type in a few apps while this samples.
 #
 # This replaces the old beta_readiness.sh. Cheap pre-merge checks live in
@@ -57,8 +57,8 @@ echo "== [3/4] model asset =="
 
 echo
 echo "== [4/4] runtime network egress (privacy proof) =="
-if ! pgrep -x SteadyType >/dev/null 2>&1; then
-  echo "SteadyType is not running. Launch the built app (./script/build_and_run.sh)," >&2
+if ! pgrep -x Tilde >/dev/null 2>&1; then
+  echo "Tilde is not running. Launch the built app (./script/build_and_run.sh)," >&2
   echo "type in a couple of apps so autocomplete is exercised, then re-run this gate." >&2
   exit 1
 fi

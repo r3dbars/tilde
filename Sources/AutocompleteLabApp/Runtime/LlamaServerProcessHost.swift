@@ -39,9 +39,9 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         )
 
         static var current: ModelTier {
-            // Override: STEADYTYPE_MODEL=E2B|E4B pins an old Gemma-4 tier (bakeoff
+            // Override: TILDE_MODEL=E2B|E4B pins an old Gemma-4 tier (bakeoff
             // A/B). Default is the single Gemma 2 2B base model for all hardware.
-            switch ProcessInfo.processInfo.environment["STEADYTYPE_MODEL"]?.uppercased() {
+            switch ProcessInfo.processInfo.environment["TILDE_MODEL"]?.uppercased() {
             case "E2B": return e2b
             case "E4B": return e4b
             default: return gemma2_2b
@@ -83,7 +83,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "binary-missing"])
             return
         }
-        // Bakeoff override: STEADYTYPE_MODEL_PATH points llama-server at an
+        // Bakeoff override: TILDE_MODEL_PATH points llama-server at an
         // arbitrary local GGUF, bypassing tiering/download entirely. The sweep
         // driver pre-downloads each candidate and sets this per version.
         if let explicit = RuntimeSetting.string("MODEL_PATH"),
@@ -118,7 +118,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     static var modelsDirectory: URL {
         (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory()))
-            .appendingPathComponent("SteadyType/Models/GGUF", isDirectory: true)
+            .appendingPathComponent("Tilde/Models/GGUF", isDirectory: true)
     }
 
     /// Dev machines that used `llama-server -hf` already hold the GGUF in the

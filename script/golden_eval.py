@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Golden-continuation eval harness for the ghost brain (Smart Compose-style).
 
-Replays real, human-finished messages against the RUNNING SteadyType ghost
+Replays real, human-finished messages against the RUNNING Tilde ghost
 brain and scores how well its suggestions predict what the author actually
 typed next. Each corpus record's "text" is treated as ground truth: we cut it
 at a deterministic word boundary to build a (context, golden-continuation)
@@ -10,7 +10,7 @@ script/quality_probe.py, and compare the returned suggestion against the
 golden continuation.
 
 Corpus JSONL contract (one JSON object per line), data lives OUTSIDE the repo
-under ~/.cache/steadytype-eval and is never committed:
+under ~/.cache/tilde-eval and is never committed:
     {"source": "discord|imessage|enron|aeslc|blog",
      "register": "chat|email|prose",
      "app": "<host app bundle id>",
@@ -29,8 +29,8 @@ own "text".
 
 Run with --selftest to validate the cut + scoring logic offline (no socket,
 no corpus file needed). Otherwise pass one or more --corpus files and the
-SteadyType app must already be running (unix socket at
-~/Library/Application Support/SteadyType/ghost.sock).
+Tilde app must already be running (unix socket at
+~/Library/Application Support/Tilde/ghost.sock).
 """
 import argparse
 import hashlib
@@ -39,7 +39,7 @@ import socket
 import sys
 import time
 
-SOCK = "/Users/redbars/Library/Application Support/SteadyType/ghost.sock"
+SOCK = "/Users/redbars/Library/Application Support/Tilde/ghost.sock"
 
 CUT_FRACTIONS = (0.4, 0.6, 0.8)
 MIN_CONTEXT_WORDS = 3

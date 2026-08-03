@@ -36,7 +36,7 @@ public enum ContinuationRegister: String, Sendable {
     /// Suggested generation budget: chat wants shorter bursts; prose/email get
     /// room to finish the clause (cut-off fragments were the top quality wart).
     public var generatedTokenBudget: Int {
-        // Tuning-sweep override: STEADYTYPE_TOKEN_BUDGET forces the budget for
+        // Tuning-sweep override: TILDE_TOKEN_BUDGET forces the budget for
         // all registers (the driver sweeps this against the frozen quiz).
         if let value = RuntimeSetting.int("TOKEN_BUDGET"), value > 0 {
             return value
@@ -50,7 +50,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public let contextEndedInWhitespace: Bool
 
     public static func scaffold(for register: ContinuationRegister) -> String {
-        // Tuning-sweep override: STEADYTYPE_SCAFFOLD_<REGISTER>_FILE points at a
+        // Tuning-sweep override: TILDE_SCAFFOLD_<REGISTER>_FILE points at a
         // ready-made scaffold block (see script/mine_scaffolds.py). Lets the
         // driver A/B example sets without rebuilding. Absent/unreadable → builtin.
         let settingName = "SCAFFOLD_\(register.rawValue.uppercased())_FILE"
@@ -147,7 +147,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !bounded.isEmpty {
-                // Screen framing is tunable (STEADYTYPE_SCREEN_FRAMING): the
+                // Screen framing is tunable (TILDE_SCREEN_FRAMING): the
                 // vague "notes" framing barely helps the model RESPOND to what's
                 // on screen; a direct "reply" framing tells it the screen is the
                 // message being answered. See the screen-response experiments.
@@ -179,7 +179,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     }
 
     /// Few-shot recipe for opener mode: message→reply pairs teach the model
-    /// how the writer opens replies. STEADYTYPE_OPENER_SCAFFOLD_FILE (or the
+    /// how the writer opens replies. TILDE_OPENER_SCAFFOLD_FILE (or the
     /// persisted default) points at a file mined from the writer's own
     /// exchanges — real variety beats the builtin's generic voice, which
     /// collapses to "I'm ..." under greedy decoding.

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT_DIR/script/check_complexity_budget.sh"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-complexity-test.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tilde-complexity-test.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 unset PROOF_STRUCTURAL_CHANGE PROOF_DIFF_BASE PROOF_STRUCTURAL_LOC_EXCEPTION
 

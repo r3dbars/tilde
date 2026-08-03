@@ -1,6 +1,6 @@
 # Can the base model be made smarter, and are we measuring what matters?
 
-**A research report — SteadyType/Tilde project**
+**A research report — Tilde/Tilde project**
 Date: 2026-07-24 → 2026-07-25 · Author: owner + Claude (research assistant)
 Status: complete · Companion lab notebook: `docs/overnight-exploration.md`
 
@@ -129,7 +129,7 @@ intuition.** Chapter closed by exhaustion; re-bakeoff is a periodic chore on
 new base releases.
 
 ### E6. "Holding it wrong" — instruct framing (RQ3, owner's challenge)
-Built STEADYTYPE_PROMPT_MODE=instruct (chat template, task-as-question,
+Built TILDE_PROMPT_MODE=instruct (chat template, task-as-question,
 screen context included).
 | model | framing | EM@1 | similar | p50 |
 |---|---|---|---|---|

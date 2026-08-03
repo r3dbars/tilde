@@ -1,8 +1,8 @@
 import Foundation
 
 /// One resolution rule for every tuning knob:
-///   1. STEADYTYPE_<NAME> environment variable (eval sweeps, always wins)
-///   2. persisted default "steadytype.<NAME>" (survives reboots — the app's
+///   1. TILDE_<NAME> environment variable (eval sweeps, always wins)
+///   2. persisted default "tilde.<NAME>" (survives reboots — the app's
 ///      REAL configuration; a login-item relaunch must behave identically to
 ///      a hand-launched tuned session)
 ///   3. caller's built-in fallback
@@ -14,10 +14,10 @@ import Foundation
 public enum RuntimeSetting {
 
     public static func string(_ name: String) -> String? {
-        if let env = ProcessInfo.processInfo.environment["STEADYTYPE_" + name], !env.isEmpty {
+        if let env = ProcessInfo.processInfo.environment["TILDE_" + name], !env.isEmpty {
             return env
         }
-        if let stored = UserDefaults.standard.string(forKey: "steadytype." + name), !stored.isEmpty {
+        if let stored = UserDefaults.standard.string(forKey: "tilde." + name), !stored.isEmpty {
             return stored
         }
         return nil

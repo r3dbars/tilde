@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with
 code in this repository. Read it with `AGENTS.md`, which carries the product
 stance and working rules.
 
-SteadyType is an open-source macOS menu bar app for quiet, local inline writing
+Tilde is an open-source macOS menu bar app for quiet, local inline writing
 suggestions near the caret. On-device MLX inference, Apple Silicon, macOS 26,
 SwiftPM (`swift-tools 6.2`). The app cannot build on Linux; the pure
 `AutocompleteLabCore` tests can run anywhere with a Swift toolchain.

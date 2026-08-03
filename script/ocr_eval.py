@@ -5,7 +5,7 @@ The language quiz feeds the model CLEAN text as a stand-in for OCR, so it never
 tests whether the OCR actually reads the screen correctly. This does: it renders
 images with KNOWN ground-truth text (real messages/emails/prose from the diverse
 corpus, at varied sizes/contrast), runs them through the app's exact Vision OCR
-settings (script/ocr_probe.swift, honoring the STEADYTYPE_OCR_* knobs), and
+settings (script/ocr_probe.swift, honoring the TILDE_OCR_* knobs), and
 scores the reading against the truth.
 
 Metrics per image: similarity (difflib ratio on normalized text) and word recall
@@ -16,7 +16,7 @@ Usage:
   python3 script/ocr_eval.py --run              # score current OCR knobs (from env)
   python3 script/ocr_eval.py --sweep            # try knob combos, rank them
 
-Data lives under ~/.cache/steadytype-eval/ocr_test (never committed).
+Data lives under ~/.cache/tilde-eval/ocr_test (never committed).
 """
 import argparse
 import difflib
@@ -27,7 +27,7 @@ import subprocess
 import sys
 import time
 
-CACHE = os.path.expanduser("~/.cache/steadytype-eval")
+CACHE = os.path.expanduser("~/.cache/tilde-eval")
 OCR_DIR = os.path.join(CACHE, "ocr_test")
 GT_FILE = os.path.join(OCR_DIR, "ground_truth.jsonl")
 PROBE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ocr_probe.swift")
@@ -257,11 +257,11 @@ def cmd_sweep(args):
     # each knob combo to try; None = default
     combos = [
         ({}, "accurate+langcorr (default)"),
-        ({"STEADYTYPE_OCR_LEVEL": "fast"}, "fast+langcorr"),
-        ({"STEADYTYPE_OCR_LANG_CORRECTION": "0"}, "accurate+noLangcorr"),
-        ({"STEADYTYPE_OCR_LEVEL": "fast", "STEADYTYPE_OCR_LANG_CORRECTION": "0"}, "fast+noLangcorr"),
-        ({"STEADYTYPE_OCR_MIN_TEXT_HEIGHT": "0.003"}, "accurate+smallerMinHeight"),
-        ({"STEADYTYPE_OCR_MIN_TEXT_HEIGHT": "0.012"}, "accurate+largerMinHeight"),
+        ({"TILDE_OCR_LEVEL": "fast"}, "fast+langcorr"),
+        ({"TILDE_OCR_LANG_CORRECTION": "0"}, "accurate+noLangcorr"),
+        ({"TILDE_OCR_LEVEL": "fast", "TILDE_OCR_LANG_CORRECTION": "0"}, "fast+noLangcorr"),
+        ({"TILDE_OCR_MIN_TEXT_HEIGHT": "0.003"}, "accurate+smallerMinHeight"),
+        ({"TILDE_OCR_MIN_TEXT_HEIGHT": "0.012"}, "accurate+largerMinHeight"),
     ]
     results = []
     for env_extra, label in combos:
