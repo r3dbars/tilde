@@ -2,11 +2,11 @@
 """Generate the accept-sound pack: three pitch-variant thocks for Tab-word
 accepts and a two-note ding for the tilde whole-phrase accept. All audio is
 synthesized (original, no licensing). Output: ~/Library/Application
-Support/SteadyType/sounds/ — the keyboard prefers these over system sounds;
+Support/Tilde/sounds/ — the keyboard prefers these over system sounds;
 drop in your own .wav files with the same names to customize."""
 import math, struct, wave, os, random
 SR = 44100
-outdir = os.path.expanduser("~/Library/Application Support/SteadyType/sounds")
+outdir = os.path.expanduser("~/Library/Application Support/Tilde/sounds")
 os.makedirs(outdir, exist_ok=True)
 
 def write(name, samples):

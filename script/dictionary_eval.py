@@ -3,8 +3,8 @@
 
 CPU-only. Talks to the compiled `dict_probe` binary (script/dict_probe.swift)
 over stdin/stdout in batches — never touches the GPU, the dist app,
-script/build_and_run.sh, or any SteadyType/llama-server process. All data it
-writes goes under ~/.cache/steadytype-eval.
+script/build_and_run.sh, or any Tilde/llama-server process. All data it
+writes goes under ~/.cache/tilde-eval.
 
 Builds a quiz set of real words (>=5 letters) pulled from the owner's own
 vocabulary (imessage_eval.jsonl) and general chat (diverse_eval.jsonl), cuts
@@ -50,7 +50,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROBE_BIN = SCRIPT_DIR / "dict_probe"
-EVAL_DIR = Path.home() / ".cache" / "steadytype-eval"
+EVAL_DIR = Path.home() / ".cache" / "tilde-eval"
 IMESSAGE_FILE = EVAL_DIR / "imessage_eval.jsonl"
 DIVERSE_FILE = EVAL_DIR / "diverse_eval.jsonl"
 OUT_RESULTS = EVAL_DIR / "dictionary_layer_eval_v2.jsonl"
@@ -60,22 +60,22 @@ OUT_SUMMARY = EVAL_DIR / "dictionary_layer_summary.json"
 WORD_RE = re.compile(r"[A-Za-z']+")
 
 DEFAULT_CONFIG = {
-    "STEADYTYPE_DICT_MIN_LETTERS": "2",
-    "STEADYTYPE_DICT_MIN_SUFFIX": "2",
-    "STEADYTYPE_DICT_MAX_OBSCURE_LEN": "9",
-    "STEADYTYPE_DICT_PREFER_COMMON": "1",
-    "STEADYTYPE_DICT_COMMON_ONLY": "0",
-    "STEADYTYPE_DICT_BLOCK_COMPLETE_COMMON": "1",
+    "TILDE_DICT_MIN_LETTERS": "2",
+    "TILDE_DICT_MIN_SUFFIX": "2",
+    "TILDE_DICT_MAX_OBSCURE_LEN": "9",
+    "TILDE_DICT_PREFER_COMMON": "1",
+    "TILDE_DICT_COMMON_ONLY": "0",
+    "TILDE_DICT_BLOCK_COMPLETE_COMMON": "1",
 }
 
 # Coordinate-ascent search space. Keys must match DEFAULT_CONFIG.
 KNOB_CANDIDATES = {
-    "STEADYTYPE_DICT_MIN_LETTERS": ["1", "2", "3"],
-    "STEADYTYPE_DICT_MIN_SUFFIX": ["1", "2", "3", "4"],
-    "STEADYTYPE_DICT_MAX_OBSCURE_LEN": ["4", "6", "9", "12", "999"],
-    "STEADYTYPE_DICT_PREFER_COMMON": ["1", "0"],
-    "STEADYTYPE_DICT_COMMON_ONLY": ["0", "1"],
-    "STEADYTYPE_DICT_BLOCK_COMPLETE_COMMON": ["1", "0"],
+    "TILDE_DICT_MIN_LETTERS": ["1", "2", "3"],
+    "TILDE_DICT_MIN_SUFFIX": ["1", "2", "3", "4"],
+    "TILDE_DICT_MAX_OBSCURE_LEN": ["4", "6", "9", "12", "999"],
+    "TILDE_DICT_PREFER_COMMON": ["1", "0"],
+    "TILDE_DICT_COMMON_ONLY": ["0", "1"],
+    "TILDE_DICT_BLOCK_COMPLETE_COMMON": ["1", "0"],
 }
 
 FALSE_COMPLETION_PENALTY = 3.0  # utility cost of a wrong instant guess, in keystroke-equivalents

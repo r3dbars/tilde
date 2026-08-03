@@ -13,7 +13,7 @@ Two scoring paths, auto-selected:
 
 1. Embedding path (preferred): if `sentence-transformers` is importable, we
    embed golden_reply and suggestion with a small local model
-   (all-MiniLM-L6-v2, cached under ~/.cache/steadytype-eval/models) and score
+   (all-MiniLM-L6-v2, cached under ~/.cache/tilde-eval/models) and score
    via cosine similarity, with a light bonus for suggestion/prior_context
    relevance. No text ever leaves the machine -- HF_HUB_OFFLINE is set once
    the model is cached locally.
@@ -41,7 +41,7 @@ Two scoring paths, auto-selected:
    This is a heuristic, not a semantic model: it will miss paraphrases that
    don't share tokens or synonym-table entries (e.g. "let's push it" vs
    "can we delay that"), and the synonym table only covers common short
-   conversational replies (SteadyType's actual domain). Re-run --selftest
+   conversational replies (Tilde's actual domain). Re-run --selftest
    after editing the synonym/stopword tables.
 
 CLI:
@@ -50,7 +50,7 @@ CLI:
     python3 script/reply_score.py --prior P --golden G --suggestion S
 
 Never writes anywhere in the repo. Any cached model / output the caller asks
-to save belongs under ~/.cache/steadytype-eval/ (see CLAUDE.md).
+to save belongs under ~/.cache/tilde-eval/ (see CLAUDE.md).
 """
 import argparse
 import json
@@ -60,7 +60,7 @@ import re
 import sys
 from collections import Counter
 
-CACHE_DIR = os.path.expanduser("~/.cache/steadytype-eval")
+CACHE_DIR = os.path.expanduser("~/.cache/tilde-eval")
 MODEL_CACHE_DIR = os.path.join(CACHE_DIR, "models")
 
 # ---------------------------------------------------------------------------
@@ -68,11 +68,11 @@ MODEL_CACHE_DIR = os.path.join(CACHE_DIR, "models")
 # importable -- this script never installs anything itself (installing a
 # multi-GB torch/transformers chain mid-experiment is exactly the "too
 # heavy" case documented above). Force the heuristic even if the package
-# happens to be present with STEADYTYPE_FORCE_HEURISTIC=1.
+# happens to be present with TILDE_FORCE_HEURISTIC=1.
 # ---------------------------------------------------------------------------
 _EMBEDDER = None
 _EMBEDDINGS_AVAILABLE = False
-if not os.environ.get("STEADYTYPE_FORCE_HEURISTIC"):
+if not os.environ.get("TILDE_FORCE_HEURISTIC"):
     try:
         os.environ.setdefault("HF_HOME", MODEL_CACHE_DIR)
         os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", MODEL_CACHE_DIR)
@@ -137,7 +137,7 @@ STOPWORDS = frozenset(
 
 # Small hand-built synonym table for common short-reply "intents" -- this is
 # the piece that lets semantically-equivalent short replies match even with
-# zero shared vocabulary. Deliberately narrow: tuned to SteadyType's actual
+# zero shared vocabulary. Deliberately narrow: tuned to Tilde's actual
 # domain (chat/email reply suggestions), not general-purpose paraphrase.
 _SYNONYM_CLUSTERS = {
     "AGREE": [

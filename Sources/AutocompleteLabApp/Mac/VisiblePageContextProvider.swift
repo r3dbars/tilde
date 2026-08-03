@@ -177,7 +177,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
             return
         }
 
-        // Owner-opt-in trace thumbnails ("steadytype.TRACE_SHOTS"): a small
+        // Owner-opt-in trace thumbnails ("tilde.TRACE_SHOTS"): a small
         // JPEG per capture so the trace-grading bench can show WHAT the OCR
         // read from. Local disk only (never iCloud, never the repo), pruned
         // after 7 days by the writer itself.
@@ -189,10 +189,10 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         // trade reading accuracy against speed). Defaults match the shipped app.
         let ocrEnv = ProcessInfo.processInfo.environment
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = (ocrEnv["STEADYTYPE_OCR_LEVEL"] == "fast") ? .fast : .accurate
-        request.usesLanguageCorrection = (ocrEnv["STEADYTYPE_OCR_LANG_CORRECTION"] ?? "1") != "0"
+        request.recognitionLevel = (ocrEnv["TILDE_OCR_LEVEL"] == "fast") ? .fast : .accurate
+        request.usesLanguageCorrection = (ocrEnv["TILDE_OCR_LANG_CORRECTION"] ?? "1") != "0"
         request.recognitionLanguages = ["en-US"]
-        request.minimumTextHeight = ocrEnv["STEADYTYPE_OCR_MIN_TEXT_HEIGHT"].flatMap(Float.init) ?? 0.006
+        request.minimumTextHeight = ocrEnv["TILDE_OCR_MIN_TEXT_HEIGHT"].flatMap(Float.init) ?? 0.006
 
         do {
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
@@ -594,7 +594,7 @@ extension VisiblePageContextProvider {
     static func saveTraceShot(_ image: CGImage, capturedAt: Date) {
         let dir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory()))
-            .appendingPathComponent("SteadyType/trace_shots", isDirectory: true)
+            .appendingPathComponent("Tilde/trace_shots", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         // Prune anything older than 7 days each time we write.
         if let names = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey]) {

@@ -5,7 +5,7 @@ human-finished messages against the live ghost socket, cuts each at a word
 boundary, and scores the ghost's guess against what the author actually wrote
 next. Metrics: **spoke rate**, **ExactMatch@1/2/3**, **keystrokes saved**,
 **latency p50/p95**. Corpora are built by `script/fetch_eval_sets.py` and live
-outside the repo under `~/.cache/steadytype-eval/` (never committed).
+outside the repo under `~/.cache/tilde-eval/` (never committed).
 
 The rule this unlocks: **change one knob → re-run the same frozen questions →
 keep it only if the number moves.** Tuning stopped being vibes.
@@ -39,7 +39,7 @@ registers (500 each, all with context) is the reference number going forward:
 Takeaways: on writing that resembles real use (texts, email, prose) the ghost
 is meaningfully better than the Discord-only number; structured registers
 (email/prose) save the most keystrokes when right. Corpus:
-`~/.cache/steadytype-eval/diverse_eval.jsonl` (built from the four
+`~/.cache/tilde-eval/diverse_eval.jsonl` (built from the four
 `*_eval.jsonl` via `script/fetch_{aeslc,blog,dailydialog}.py` + Discord).
 Tune and bake off models against THIS mix, not Discord alone.
 
@@ -143,8 +143,8 @@ curve against the quiz and pick the point where it feels right. Not yet built.
   loaders being added for a diverse quiz).
 - `script/mine_scaffolds.py` — mine casual scaffold candidates from the corpus.
 - `script/tuning_sweep.py` — relaunch-per-version driver with launch-time env
-  overrides (`STEADYTYPE_SCAFFOLD_<REG>_FILE`, `STEADYTYPE_TOKEN_BUDGET`,
-  `STEADYTYPE_TEMPERATURE`, `STEADYTYPE_MODEL`), a config-echo verification guard
+  overrides (`TILDE_SCAFFOLD_<REG>_FILE`, `TILDE_TOKEN_BUDGET`,
+  `TILDE_TEMPERATURE`, `TILDE_MODEL`), a config-echo verification guard
   (never quiz a stale build), a streaming results log, and a ranked league table.
 - Stability: `signal(SIGPIPE, SIG_IGN)` + `SO_NOSIGPIPE` — peer-vanish socket
   writes were silently killing the app under sustained quiz load (no crash report).
@@ -169,7 +169,7 @@ The language quiz feeds CLEAN text as an OCR stand-in, so it never tested the
 eyes. script/ocr_eval.py fixes that: renders known-text images (easy: plain
 lines; HARD: realistic chat/email mockups — dark mode, small fonts, colored
 bubbles, distractor chrome), runs the app's Vision OCR (script/ocr_probe.swift,
-STEADYTYPE_OCR_* knobs), scores word-recall + latency by difficulty.
+TILDE_OCR_* knobs), scores word-recall + latency by difficulty.
 
 LESSON (test difficulty matters): on EASY images, turning off language
 correction looked best (100% vs 99.8%, faster). On HARD/realistic images that

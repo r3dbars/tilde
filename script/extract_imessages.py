@@ -21,7 +21,7 @@ import sqlite3
 import sys
 
 DB = os.path.expanduser("~/Library/Messages/chat.db")
-OUT = os.path.expanduser("~/.cache/steadytype-eval/imessage_eval.jsonl")
+OUT = os.path.expanduser("~/.cache/tilde-eval/imessage_eval.jsonl")
 URL_RE = re.compile(r"https?://|www\.")
 MAX_PRIOR = 3
 PRIOR_TRIM = 200

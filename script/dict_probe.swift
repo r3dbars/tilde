@@ -9,19 +9,19 @@
 //
 // Every heuristic in the shipped function is exposed as an env-var knob:
 //
-//   STEADYTYPE_DICT_MIN_LETTERS       (default 2)  min prefix length required
-//   STEADYTYPE_DICT_MIN_SUFFIX        (default 2)  min added-suffix length
-//   STEADYTYPE_DICT_MAX_OBSCURE_LEN   (default 9)  cap on suffix length for a
+//   TILDE_DICT_MIN_LETTERS       (default 2)  min prefix length required
+//   TILDE_DICT_MIN_SUFFIX        (default 2)  min added-suffix length
+//   TILDE_DICT_MAX_OBSCURE_LEN   (default 9)  cap on suffix length for a
 //                                                   non-common-word candidate
-//   STEADYTYPE_DICT_PREFER_COMMON     (default 1)  look for a common-word
+//   TILDE_DICT_PREFER_COMMON     (default 1)  look for a common-word
 //                                                   candidate before falling
 //                                                   back to spellchecker's #1
-//   STEADYTYPE_DICT_COMMON_ONLY       (default 0)  never complete to a
+//   TILDE_DICT_COMMON_ONLY       (default 0)  never complete to a
 //                                                   non-common word at all
-//   STEADYTYPE_DICT_BLOCK_COMPLETE_COMMON (default 1) don't extend a partial
+//   TILDE_DICT_BLOCK_COMPLETE_COMMON (default 1) don't extend a partial
 //                                                   that is already a
 //                                                   complete common word
-//   STEADYTYPE_DICT_LANGUAGE          (default en)
+//   TILDE_DICT_LANGUAGE          (default en)
 //
 // Protocol: reads word-prefixes from stdin, one per line. For each, prints
 // one output line: "<suffix>\t<elapsed_ns>" (suffix may be empty, may
@@ -31,7 +31,7 @@
 // per-datapoint process spawn).
 //
 //   swiftc -O script/dict_probe.swift -o <bin> && <bin> < prefixes.txt
-//   STEADYTYPE_DICT_MIN_SUFFIX=3 <bin> < prefixes.txt
+//   TILDE_DICT_MIN_SUFFIX=3 <bin> < prefixes.txt
 import Cocoa
 
 // Keep this set byte-for-byte identical to GhostInputController.commonWords.
@@ -65,13 +65,13 @@ func envString(_ name: String, _ def: String) -> String {
     ProcessInfo.processInfo.environment[name] ?? def
 }
 
-let minLetters = envInt("STEADYTYPE_DICT_MIN_LETTERS", 2)
-let minSuffix = envInt("STEADYTYPE_DICT_MIN_SUFFIX", 2)
-let maxObscureLen = envInt("STEADYTYPE_DICT_MAX_OBSCURE_LEN", 9)
-let preferCommon = envBool("STEADYTYPE_DICT_PREFER_COMMON", true)
-let commonOnly = envBool("STEADYTYPE_DICT_COMMON_ONLY", false)
-let blockCompleteCommon = envBool("STEADYTYPE_DICT_BLOCK_COMPLETE_COMMON", true)
-let language = envString("STEADYTYPE_DICT_LANGUAGE", "en")
+let minLetters = envInt("TILDE_DICT_MIN_LETTERS", 2)
+let minSuffix = envInt("TILDE_DICT_MIN_SUFFIX", 2)
+let maxObscureLen = envInt("TILDE_DICT_MAX_OBSCURE_LEN", 9)
+let preferCommon = envBool("TILDE_DICT_PREFER_COMMON", true)
+let commonOnly = envBool("TILDE_DICT_COMMON_ONLY", false)
+let blockCompleteCommon = envBool("TILDE_DICT_BLOCK_COMPLETE_COMMON", true)
+let language = envString("TILDE_DICT_LANGUAGE", "en")
 
 func dictionaryCompletion(for partial: String) -> String {
     guard partial.count >= minLetters else { return "" }

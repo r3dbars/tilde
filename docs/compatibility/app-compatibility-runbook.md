@@ -1,6 +1,6 @@
 # App Compatibility Runbook
 
-This runbook defines what "works" means for the Mac autocomplete lab.
+This runbook defines what "works" means for the Mac tilde.
 
 The MVP goal is not broad support. It is a small allowlist that proves the writing loop feels helpful and does not break trust.
 

@@ -3,7 +3,7 @@ import AutocompleteLabCore
 import CoreGraphics
 import ServiceManagement
 
-/// SteadyType's brain-caretaker. The product is the InlineGhostIME input
+/// Tilde's brain-caretaker. The product is the InlineGhostIME input
 /// method; this app exists to run its engines and utilities:
 ///   - GhostBrainServerHost: the unix socket the keyboard talks to
 ///   - LlamaServerProcessHost + LlamaCompletionEngine: the Gemma engine
@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 phraseEngine: LlamaCompletionEngine(baseURL: llama.baseURL),
                 fallbackEngine: UnavailableCompletionEngine(reason: "llama engine unavailable"),
                 phraseEngineIsHealthy: { llama.isHealthy },
-                // Live-flippable: defaults write bar.r3d.steadytype ModelHandlesWordCompletions -bool true|false
+                // Live-flippable: defaults write bar.r3d.tilde ModelHandlesWordCompletions -bool true|false
                 routeWordCompletions: { UserDefaults.standard.bool(forKey: "ModelHandlesWordCompletions") }
             )
         },
@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Menu-bar agents get auto-terminated unless they say otherwise; the
         // keyboard is only as smart as this process is alive.
-        ProcessInfo.processInfo.disableAutomaticTermination("SteadyType serves the keyboard")
+        ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
         statusMenuHost.start()
         ghostBrainServerHost.start()

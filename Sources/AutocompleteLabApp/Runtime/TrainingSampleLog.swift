@@ -22,15 +22,15 @@ enum TrainingSampleLog {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let icloud = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
         let directory = FileManager.default.fileExists(atPath: icloud.path)
-            ? icloud.appendingPathComponent("SteadyType-usage", isDirectory: true)
-            : home.appendingPathComponent("Library/Application Support/SteadyType/usage", isDirectory: true)
+            ? icloud.appendingPathComponent("Tilde-usage", isDirectory: true)
+            : home.appendingPathComponent("Library/Application Support/Tilde/usage", isDirectory: true)
         let host = (Host.current().localizedName ?? "mac")
             .replacingOccurrences(of: " ", with: "-")
             .replacingOccurrences(of: "/", with: "-")
         return directory.appendingPathComponent("brain_samples_\(host).jsonl")
     }()
 
-    private static let queue = DispatchQueue(label: "com.steadytype.trainingSampleLog", qos: .utility)
+    private static let queue = DispatchQueue(label: "com.tilde.trainingSampleLog", qos: .utility)
 
     /// Touched only from `queue` — serial confinement stands in for Sendable.
     nonisolated(unsafe) private static let iso8601: ISO8601DateFormatter = {

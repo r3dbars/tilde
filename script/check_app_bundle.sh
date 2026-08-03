@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_MODE=0
-APP_BUNDLE="$ROOT_DIR/dist/SteadyType.app"
+APP_BUNDLE="$ROOT_DIR/dist/Tilde.app"
 
 fail() {
   echo "bundle check failed: $*" >&2
@@ -17,7 +17,7 @@ for arg in "$@"; do
       ;;
     -h|--help)
       cat <<'EOF'
-Usage: script/check_app_bundle.sh [--release] [path/to/SteadyType.app]
+Usage: script/check_app_bundle.sh [--release] [path/to/Tilde.app]
 
 Checks the local app bundle shape, signature, and hardened runtime.
 Use --release to also require a Developer ID Application signature.
@@ -34,7 +34,7 @@ EOF
 done
 
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
-EXECUTABLE="$APP_BUNDLE/Contents/MacOS/SteadyType"
+EXECUTABLE="$APP_BUNDLE/Contents/MacOS/Tilde"
 APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 ICON_TMP_DIR="$(mktemp -d)"
 ENTITLEMENTS_TMP="$ICON_TMP_DIR/entitlements.plist"
@@ -64,9 +64,9 @@ for icon_file in \
 done
 
 [[ "$(plist_value CFBundlePackageType)" == "APPL" ]] || fail "CFBundlePackageType is not APPL"
-[[ "$(plist_value CFBundleExecutable)" == "SteadyType" ]] || fail "CFBundleExecutable mismatch"
+[[ "$(plist_value CFBundleExecutable)" == "Tilde" ]] || fail "CFBundleExecutable mismatch"
 [[ "$(plist_value CFBundleIconFile)" == "AppIcon" ]] || fail "CFBundleIconFile mismatch"
-[[ "$(plist_value CFBundleIdentifier)" == "bar.r3d.steadytype" ]] || fail "CFBundleIdentifier mismatch"
+[[ "$(plist_value CFBundleIdentifier)" == "bar.r3d.tilde" ]] || fail "CFBundleIdentifier mismatch"
 [[ -n "$(plist_value CFBundleShortVersionString)" ]] || fail "missing CFBundleShortVersionString"
 [[ -n "$(plist_value CFBundleVersion)" ]] || fail "missing CFBundleVersion"
 [[ "$(plist_value LSUIElement)" == "true" ]] || fail "LSUIElement must be true for menu bar agent"

@@ -175,8 +175,8 @@ struct DiagnosticValueRedactorTests {
         #expect(
             DiagnosticsMetadataRedactor.logSafeValue(
                 forKey: "runtimeCacheDirectory",
-                value: "/Users/redbars/Library/Application Support/SteadyType/cache"
-            ) == "String(59 chars)"
+                value: "/Users/redbars/Library/Application Support/Tilde/cache"
+            ) == "String(54 chars)"
         )
         #expect(
             DiagnosticsMetadataRedactor.logSafeValue(
@@ -187,8 +187,8 @@ struct DiagnosticValueRedactorTests {
         #expect(
             DiagnosticsMetadataRedactor.logSafeValue(
                 forKey: "runtimeLabel",
-                value: "bundle=/Applications/SteadyType.app/Contents/MacOS/SteadyType"
-            ) == "String(61 chars)"
+                value: "bundle=/Applications/Tilde.app/Contents/MacOS/Tilde"
+            ) == "String(51 chars)"
         )
         #expect(
             DiagnosticsMetadataRedactor.logSafeValue(

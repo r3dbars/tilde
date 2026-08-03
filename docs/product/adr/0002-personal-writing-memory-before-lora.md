@@ -6,7 +6,7 @@
 
 ## Context
 
-SteadyType needs to learn Justin's writing without making the dogfood app harder
+Tilde needs to learn Justin's writing without making the dogfood app harder
 to understand or operate. Fine-tuning a model could eventually help, but it also
 adds training, model-version, rollback, and privacy work before we know whether
 personalization improves the typing loop.
