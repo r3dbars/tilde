@@ -1,8 +1,8 @@
-# SteadyType
+# Tilde
 
-![SteadyType cover](Assets/GitHub/steadytype-cover.png)
+![Tilde cover](Assets/GitHub/tilde-cover.png)
 
-SteadyType is a small Mac app for quiet writing suggestions near your cursor.
+Tilde is a small Mac app for quiet writing suggestions near your cursor.
 
 It watches the active text field, shows a short suggestion, and only inserts text when you accept it. The question for this beta is simple: does this make writing feel easier, or does it get in the way?
 
@@ -40,7 +40,7 @@ fail-closed where possible; screenshots from bad apps become the adapter queue.
 
 ## Privacy
 
-SteadyType is local-first. Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines are not uploaded by default.
+Tilde is local-first. Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines are not uploaded by default.
 
 Diagnostics are local and redacted unless a tester explicitly opts into a short-lived raw or screenshot trace for debugging.
 
@@ -52,7 +52,7 @@ suggestions. It is not telemetry, not a beta requirement, and not enabled for
 customers or testers by default.
 
 When enabled, it also writes local Suggestion Episode JSONL and a daily
-scorecard. Those files connect what was typed, what SteadyType suggested, what
+scorecard. Those files connect what was typed, what Tilde suggested, what
 the user did, model/prompt version, placement, latency, and kept checkpoints.
 
 Useful docs:

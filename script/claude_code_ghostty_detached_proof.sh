@@ -1022,17 +1022,17 @@ reset_stale_only_ghostty_host_before_start() {
   ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
   [[ -n "$ghostty_pids" ]] || return 0
 
-  marker="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-STEADYTYPECLAUDECODEPROOF}"
+  marker="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-TILDECLAUDECODEPROOF}"
   timeout_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_CHECK_TIMEOUT_SECONDS:-3}"
   if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
     timeout_seconds=3
   fi
-  ax_tmp="$(mktemp "${TMPDIR:-/tmp}/steadytype-ghostty-ax-reset.XXXXXX")"
+  ax_tmp="$(mktemp "${TMPDIR:-/tmp}/tilde-ghostty-ax-reset.XXXXXX")"
   AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" /usr/bin/osascript >"$ax_tmp" 2>/dev/null <<'APPLESCRIPT' &
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
-set proofDirectoryMarker to "steadytype-claude-code-proof"
-set appleScriptProbePrefix to "SteadyType AppleScript Probe"
-set submitProbePrefix to "SteadyType Submit Probe"
+set proofDirectoryMarker to "tilde-claude-code-proof"
+set appleScriptProbePrefix to "Tilde AppleScript Probe"
+set submitProbePrefix to "Tilde Submit Probe"
 set windowCount to 0
 set unsafeWindowCount to 0
 tell application "System Events"
@@ -1081,7 +1081,7 @@ APPLESCRIPT
     return 0
   fi
 
-  reset_reason="System Events reported only SteadyType proof/probe Ghostty AX windows (${ax_window_count})"
+  reset_reason="System Events reported only Tilde proof/probe Ghostty AX windows (${ax_window_count})"
   printf 'Detached Ghostty proof resetting stale-only Ghostty host before launch: %s (%s)\n' "$(printf '%s' "$ghostty_pids" | tr '\n' ' ')" "$reset_reason" >>"$log_file"
   while IFS= read -r proof_pid; do
     [[ -z "$proof_pid" ]] && continue
@@ -1148,7 +1148,7 @@ start_run() {
     worker_script="$runner_script"
   fi
   plist_file="$run_dir/launch-agent.plist"
-  launch_label="bar.r3d.steadytype.ghostty-detached-proof.$timestamp.$$"
+  launch_label="bar.r3d.tilde.ghostty-detached-proof.$timestamp.$$"
   launch_domain="gui/$(id -u)"
 
   if [[ "$DRY_RUN" == "1" ]]; then

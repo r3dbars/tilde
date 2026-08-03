@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_PROMPTS_PATH = ROOT_DIR / "docs/evals/small-model-blind-prompts-2026-06-12.jsonl"
-DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Models"
+DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/Tilde/Models"
 OPT_IN_ENV = "AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT"
 
 

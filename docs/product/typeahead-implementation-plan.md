@@ -65,7 +65,7 @@ Proof:
 
 ### Runtime/Privacy Proof Card
 
-TypeAhead's strongest wedge is "local." SteadyType should show current proof
+TypeAhead's strongest wedge is "local." Tilde should show current proof
 without broad claims:
 
 - runtime: local MLX ready/missing/repairing,

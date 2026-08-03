@@ -40,7 +40,7 @@ struct WordCompletionCandidateRankerTests {
     @Test("uses visible page words as instant partial word context")
     func usesVisiblePageWordsAsInstantPartialWordContext() throws {
         let context = try #require(VisiblePageContext(text: """
-        SteadyType should recognize Obsidian context
+        Tilde should recognize Obsidian context
         Transcripted is the product name on the page
         Screen Recording permission appears in Settings
         """))

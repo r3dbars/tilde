@@ -20,7 +20,7 @@ or beta UX.
 The preferred beta model asset is Qwen3.5 4B 4-bit:
 
 ```text
-~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/Tilde/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
 ```
 
 The matching development download alias is:
@@ -39,7 +39,7 @@ download completes.
 
 The default model source is pinned to Hugging Face revision
 `32f3e8ecf65426fc3306969496342d504bfa13f3`. Install and repair flows write a
-local `.steadytype-model-integrity.json` receipt with file sizes and SHA-256
+local `.tilde-model-integrity.json` receipt with file sizes and SHA-256
 hashes. `./script/check_model_asset.py` verifies that receipt before beta use.
 
 Sources:
@@ -143,7 +143,7 @@ subprocess for every prompt row, cold-loading the whole model 36+ times in a
 single run. That is why a blind audit could not finish even the first model in
 two minutes. `script/local_completion_batch.py` loads the model once and streams
 every row through it, and it prefers the installed local asset directory under
-`~/Library/Application Support/SteadyType/Models/...` over a Hugging Face repo
+`~/Library/Application Support/Tilde/Models/...` over a Hugging Face repo
 id so it never silently re-downloads weights.
 
 The audit scripts use this batch path:
@@ -163,13 +163,13 @@ model, so a wedged run fails fast with a timeout note instead of hanging.
 Use the MLX/Hugging Face directory format under:
 
 ```text
-~/Library/Application Support/SteadyType/Models/<ModelName>/MLX/<AssetFolder>
+~/Library/Application Support/Tilde/Models/<ModelName>/MLX/<AssetFolder>
 ```
 
 The preferred beta asset currently resolves to:
 
 ```text
-~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/Tilde/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
 ```
 
 The directory should contain at least:
@@ -177,7 +177,7 @@ The directory should contain at least:
 - `config.json`
 - tokenizer files such as `tokenizer.json` or `tokenizer_config.json`
 - one or more `.safetensors` weight files
-- `.steadytype-model-integrity.json`
+- `.tilde-model-integrity.json`
 
 The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
 

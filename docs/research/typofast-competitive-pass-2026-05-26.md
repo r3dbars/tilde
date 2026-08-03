@@ -3,13 +3,13 @@
 Competitor: [blefo/typofast](https://github.com/blefo/typofast)
 Snapshot studied: [`4ddc96f8975e66d2829766c6ccff2a2e74d89aa5`](https://github.com/blefo/typofast/tree/4ddc96f8975e66d2829766c6ccff2a2e74d89aa5)
 
-This pass treats TypoFast as public product evidence, not a clone target. We should copy no code, assets, UI, prompts, branding, or trade dress. The useful old SteadyType learning still holds: keep the app tiny, local-first, non-annoying, proof-gated, and honest about what has not been proven.
+This pass treats TypoFast as public product evidence, not a clone target. We should copy no code, assets, UI, prompts, branding, or trade dress. The useful old Tilde learning still holds: keep the app tiny, local-first, non-annoying, proof-gated, and honest about what has not been proven.
 
 ## Executive Takeaway
 
 TypoFast is a thin but useful signal. It shows the same product pull we care about: local, fast, system-wide writing suggestions with a tiny accept loop. Its best transferable ideas are fast stale-request rejection, local OCR context, clear per-app disable controls, and simple performance counters. Its biggest risks are broad "any app" expectation-setting, default-on OCR, raw debug logging of typed text/prompts, and weak public trust material.
 
-The highest-leverage SteadyType improvement from this pass is to keep OCR context useful while filtering the active typed line before it enters prompt context. That lets screen context help with reply/topic evidence without letting OCR echo the exact sentence the user is currently writing.
+The highest-leverage Tilde improvement from this pass is to keep OCR context useful while filtering the active typed line before it enters prompt context. That lets screen context help with reply/topic evidence without letting OCR echo the exact sentence the user is currently writing.
 
 ## Source Findings
 
@@ -153,6 +153,6 @@ Full Swift result: 1333 tests in 179 suites passed.
 
 Follow-up notes:
 
-- The first `./script/build_and_run.sh --verify` wrapper used a bad zsh variable and did not produce a reliable exit. The direct-launch retry passed and produced `dist/SteadyType.app` with bundle id `bar.r3d.steadytype` and build `1451`.
+- The first `./script/build_and_run.sh --verify` wrapper used a bad zsh variable and did not produce a reliable exit. The direct-launch retry passed and produced `dist/Tilde.app` with bundle id `bar.r3d.tilde` and build `1451`.
 - The first privacy export attempt was blocked by an active sibling `real_app_smoke.sh codex --manual-gate`; after the lock cleared, the current build privacy export proof passed.
 - `./script/check_proof_manifest.sh` initially failed because `hostPolicy.policyVersion` was stale. The manifest was updated to `2026-05-23.1`, matching `HostCompatibilityPolicy.currentPolicyVersion`, without changing proof states.

@@ -14,7 +14,7 @@ for expected in \
   "Duration target: 10 minute(s)" \
   "Computed text: 9090 generated chars" \
   "Underlying command: script/typing_performance_soak.sh --characters 9090 --chunk-size 5 --delay-ms 250 --require-event-tap-samples 0 --require-ax-samples 0" \
-  "Post-run energy gate: enabled; samples live SteadyType process for 15s after typing" \
+  "Post-run energy gate: enabled; samples live Tilde process for 15s after typing" \
   "Energy thresholds: average CPU <=10%, p95 CPU <=25%, RSS <=6144MB, RSS growth <=512MB" \
   "Synthetic text: 9090 generated chars from a built-in neutral fixture" \
   "Typed text proof: exact TextEdit target capture match required" \

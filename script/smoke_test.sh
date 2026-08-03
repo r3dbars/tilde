@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
 LOG_START_LINE=0
 if [[ -f "$LOG_PATH" ]]; then
   LOG_START_LINE="$(wc -l <"$LOG_PATH" | tr -d ' ')"
@@ -24,7 +24,7 @@ swift test
 ./script/check_onboarding_walkthrough_proof_self_test.sh
 ./script/check_score_targets_self_test.sh
 ./script/scorecard_goal_loop_self_test.sh
-./script/check_steadytype_scorecard_self_test.sh
+./script/check_tilde_scorecard_self_test.sh
 ./script/check_graduation_score_self_test.sh
 ./script/check_prompt_app_proof_self_test.sh
 ./script/check_prompt_app_manifest_proof_self_test.sh
@@ -66,4 +66,4 @@ echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
 echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude>"
 echo "Claude Code remains diagnostics-only until terminal-host proof exists."
 echo "Manual app smoke status: script/manual_smoke_status.sh"
-echo "Diagnostics log: $HOME/Library/Logs/SteadyType/diagnostics.log"
+echo "Diagnostics log: $HOME/Library/Logs/Tilde/diagnostics.log"

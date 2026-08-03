@@ -1,4 +1,4 @@
-# SteadyType Known Limitations
+# Tilde Known Limitations
 
 This is a lab app, not a broad system-wide promise.
 

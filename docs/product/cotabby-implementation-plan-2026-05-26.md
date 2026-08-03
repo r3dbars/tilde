@@ -4,7 +4,7 @@ Date: 2026-05-26
 
 ## Product Rule
 
-Use the public Cotabby signal to make SteadyType calmer and safer, not broader.
+Use the public Cotabby signal to make Tilde calmer and safer, not broader.
 Do not clone Cotabby. Do not copy code or UI. Keep the app tiny until real
 proof says it helps.
 

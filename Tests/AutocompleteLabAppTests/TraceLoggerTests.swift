@@ -17,7 +17,7 @@ struct TraceLoggerTests {
         "displayed ghost text",
         "accepted private completion",
         "remaining visible private text",
-        "/Users/someone/Library/Logs/SteadyType/screenshots/secret.png"
+        "/Users/someone/Library/Logs/Tilde/screenshots/secret.png"
     ]
 
     private func secretBearingEvent() -> AutocompleteTraceEvent {

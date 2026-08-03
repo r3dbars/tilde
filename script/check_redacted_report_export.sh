@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PROOF_OUTPUT="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-redacted-export-proof.XXXXXX")"
+PROOF_OUTPUT="$(mktemp -d "${TMPDIR:-/tmp}/tilde-redacted-export-proof.XXXXXX")"
 trap 'rm -rf "$PROOF_OUTPUT"' EXIT
 
 SWIFT_TEST_ARGS=()

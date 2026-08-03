@@ -58,8 +58,8 @@ require_contains "$TMP_DIR/help.txt" "terminal or nohup"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent by default"
 require_contains "$TMP_DIR/help.txt" "--force-stop"
 require_contains script/claude_code_ghostty_detached_proof.sh "reset_stale_only_ghostty_host_before_start"
-require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType AppleScript Probe"
-require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType Submit Probe"
+require_contains script/claude_code_ghostty_detached_proof.sh "Tilde AppleScript Probe"
+require_contains script/claude_code_ghostty_detached_proof.sh "Tilde Submit Probe"
 require_contains script/claude_code_ghostty_detached_proof.sh "unsafeWindowCount"
 require_contains script/claude_code_ghostty_detached_proof.sh "Detached Ghostty proof resetting stale-only Ghostty host before launch"
 require_contains script/claude_code_ghostty_detached_proof.sh 'reset_stale_only_ghostty_host_before_start "$log_file"'
@@ -404,7 +404,7 @@ started_at=2026-05-27T00:00:08Z
 run_dir=$STOP_CONTEXT_RUN
 proof_artifact_dir=$STOP_CONTEXT_RUN/proof-artifacts
 launcher=launchd
-launch_label=bar.r3d.steadytype.ghostty-detached-proof.test
+launch_label=bar.r3d.tilde.ghostty-detached-proof.test
 command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
 note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
 EOF

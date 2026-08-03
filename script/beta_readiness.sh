@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 MODE="full"
-PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"
-SECONDARY_ARCHIVE="$ROOT_DIR/dist/SteadyType.zip"
+PRIMARY_ARTIFACT="$ROOT_DIR/dist/Tilde.dmg"
+SECONDARY_ARCHIVE="$ROOT_DIR/dist/Tilde.zip"
 READINESS_SCRATCH_PATH_CREATED=""
 
 cleanup_readiness_scratch_path() {
@@ -186,8 +186,8 @@ PY
 
 check_runtime_no_egress_proof() {
   local proof_path="${AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json}"
-  local diagnostics_log="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
-  local app_binary="${AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType}"
+  local diagnostics_log="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
+  local app_binary="${AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/Tilde.app/Contents/MacOS/Tilde}"
   local max_age_seconds="${AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400}"
   local min_samples="${AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10}"
   local args=(
@@ -220,15 +220,15 @@ check_current_artifact_checksum() {
   fi
 
   expected_sha="$(shasum -a 256 "$PRIMARY_ARTIFACT" | awk '{print $1}')"
-  actual_sha="$(awk '/SteadyType\.dmg/ {print $2; exit}' "$checksums_path")"
+  actual_sha="$(awk '/Tilde\.dmg/ {print $2; exit}' "$checksums_path")"
 
   if [[ -z "$actual_sha" ]]; then
-    echo "missing SteadyType.dmg checksum in $checksums_path"
+    echo "missing Tilde.dmg checksum in $checksums_path"
     return 1
   fi
 
   if [[ "$expected_sha" != "$actual_sha" ]]; then
-    echo "release proof checksum is stale for SteadyType.dmg"
+    echo "release proof checksum is stale for Tilde.dmg"
     echo "expected: $expected_sha"
     echo "actual:   $actual_sha"
     return 1
@@ -279,7 +279,7 @@ check_release_dmg_signature() {
 
   verify_dir="$(mktemp -d)"
   mount_path="$verify_dir/mount"
-  app_path="$verify_dir/SteadyType.app"
+  app_path="$verify_dir/Tilde.app"
   mkdir -p "$mount_path"
 
   if ! attach_dmg_for_inspection "$PRIMARY_ARTIFACT" "$mount_path"; then
@@ -288,12 +288,12 @@ check_release_dmg_signature() {
     return 1
   fi
 
-  cp -R "$mount_path/SteadyType.app" "$app_path" 2>/dev/null || true
+  cp -R "$mount_path/Tilde.app" "$app_path" 2>/dev/null || true
   hdiutil detach "$mount_path" -quiet || true
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "Developer ID DMG signature blocked: DMG does not contain SteadyType.app"
+    echo "Developer ID DMG signature blocked: DMG does not contain Tilde.app"
     return 1
   fi
 
@@ -334,7 +334,7 @@ check_notarized_install_proof() {
   done
 
   if [[ -s "$checksum_path" ]]; then
-    for artifact_name in SteadyType.dmg SteadyType.zip; do
+    for artifact_name in Tilde.dmg Tilde.zip; do
       local artifact_path="$ROOT_DIR/dist/$artifact_name"
       if [[ ! -f "$artifact_path" ]]; then
         continue
@@ -356,13 +356,13 @@ check_notarized_install_proof() {
     done
   fi
 
-  local archive_path="$ROOT_DIR/dist/SteadyType.zip"
+  local archive_path="$ROOT_DIR/dist/Tilde.zip"
   if [[ -s "$archive_path" ]]; then
     local verify_dir
     verify_dir="$(mktemp -d)"
     if ditto -x -k "$archive_path" "$verify_dir" &&
-      [[ -d "$verify_dir/SteadyType.app" ]]; then
-      if ! ./script/check_app_bundle.sh --release "$verify_dir/SteadyType.app"; then
+      [[ -d "$verify_dir/Tilde.app" ]]; then
+      if ! ./script/check_app_bundle.sh --release "$verify_dir/Tilde.app"; then
         failed=1
       fi
     else
@@ -392,7 +392,7 @@ check_notarized_install_proof() {
 
   verify_dir="$(mktemp -d)"
   mount_path="$verify_dir/mount"
-  app_path="$verify_dir/SteadyType.app"
+  app_path="$verify_dir/Tilde.app"
   mkdir -p "$mount_path"
 
   if ! attach_dmg_for_inspection "$PRIMARY_ARTIFACT" "$mount_path"; then
@@ -401,12 +401,12 @@ check_notarized_install_proof() {
     return 1
   fi
 
-  cp -R "$mount_path/SteadyType.app" "$app_path" 2>/dev/null || true
+  cp -R "$mount_path/Tilde.app" "$app_path" 2>/dev/null || true
   hdiutil detach "$mount_path" -quiet || true
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "current DMG install proof failed: DMG does not contain SteadyType.app"
+    echo "current DMG install proof failed: DMG does not contain Tilde.app"
     return 1
   fi
 
@@ -422,7 +422,7 @@ check_notarized_install_proof() {
 }
 
 check_release_archive_signature() {
-  local archive_path="$ROOT_DIR/dist/SteadyType.zip"
+  local archive_path="$ROOT_DIR/dist/Tilde.zip"
   local verify_dir app_path
 
   if [[ ! -s "$archive_path" ]]; then
@@ -431,7 +431,7 @@ check_release_archive_signature() {
   fi
 
   verify_dir="$(mktemp -d)"
-  app_path="$verify_dir/SteadyType.app"
+  app_path="$verify_dir/Tilde.app"
 
   if ! ditto -x -k "$archive_path" "$verify_dir"; then
     rm -rf "$verify_dir"
@@ -441,7 +441,7 @@ check_release_archive_signature() {
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "Developer ID archive signature blocked: archive does not contain SteadyType.app"
+    echo "Developer ID archive signature blocked: archive does not contain Tilde.app"
     return 1
   fi
 
@@ -461,8 +461,8 @@ latency_beta_gate() {
   local selector_output
 
   if ! selector_output="$(./script/select_latency_window.py \
-    --diagnostics-log "${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}" \
-    --trace-log "${AUTOCOMPLETE_LAB_TRACE_LOG:-${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}}" \
+    --diagnostics-log "${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}" \
+    --trace-log "${AUTOCOMPLETE_LAB_TRACE_LOG:-${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/Tilde/traces.jsonl}}" \
     --expected-asset "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     --min-first-visible-samples "${AUTOCOMPLETE_LAB_BETA_MIN_FIRST_VISIBLE_SAMPLES:-5}" \
     --min-model-samples "${AUTOCOMPLETE_LAB_BETA_MIN_MODEL_SAMPLES:-5}" \
@@ -470,7 +470,7 @@ latency_beta_gate() {
     --required-proof-scenario "${AUTOCOMPLETE_LAB_BETA_LATENCY_PROOF_SCENARIO:-textedit-model-latency}" \
     --required-trace-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_TRACE_APP:-com.apple.TextEdit}" \
     --required-request-mode "${AUTOCOMPLETE_LAB_BETA_LATENCY_REQUEST_MODE:-wordCompletion}" \
-    --app-binary "${AUTOCOMPLETE_LAB_BETA_LATENCY_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType}" \
+    --app-binary "${AUTOCOMPLETE_LAB_BETA_LATENCY_APP_BINARY:-$ROOT_DIR/dist/Tilde.app/Contents/MacOS/Tilde}" \
     --require-model-backed-visible \
     --forbid-fast-word-visible
   )"; then

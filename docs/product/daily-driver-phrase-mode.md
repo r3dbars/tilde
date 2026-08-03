@@ -7,7 +7,7 @@ to [Daily Driver Phrase Mode Saga](archive/daily-driver-phrase-mode-saga-2026-06
 
 ## Goal
 
-SteadyType should feel like a typing accelerator, not a cautious word
+Tilde should feel like a typing accelerator, not a cautious word
 completer.
 
 Daily-driver phrase mode means:
@@ -47,7 +47,7 @@ evidence, but verified insertion is still red, so it is not supported.
 ## Shipped Behavior
 
 Last verified: 2026-06-12 from this page's prior history plus
-`docs/product/steadytype-product-scorecard.md`.
+`docs/product/tilde-product-scorecard.md`.
 
 - Default phrase posture aims at 3-8 words.
 - User-facing visible phrase cap is 8 words.
@@ -81,7 +81,7 @@ Last verified: 2026-06-12 from this page's prior history plus
 ## Current Proof Scorecard
 
 Last verified: 2026-06-12 from
-`docs/product/steadytype-product-scorecard.md`,
+`docs/product/tilde-product-scorecard.md`,
 `docs/product/proof-manifest.json`, and the archived saga.
 
 | Area | Current read | Next proof |
@@ -93,7 +93,7 @@ Last verified: 2026-06-12 from
 | Daily-driver feel | The report wrapper can enforce real-sized trace samples, 3+ word phrases, <=1ms instant fallback, source mix, no-show reasons, redacted typing-feel score, and manual trust review. | One full human writing session where the user says they reached for it and would keep it on tomorrow. |
 
 Current scorecard link:
-[SteadyType Product Scorecard](steadytype-product-scorecard.md).
+[Tilde Product Scorecard](tilde-product-scorecard.md).
 
 Current proof manifest link:
 [Proof Manifest](proof-manifest.json).
@@ -110,7 +110,7 @@ Last verified: 2026-06-12.
 - Each of those beta-safe writing rows records 2 accepted insertions and strict
   visual trace evidence.
 - The single current product scorecard is
-  `docs/product/steadytype-product-scorecard.md`, not older scorecards.
+  `docs/product/tilde-product-scorecard.md`, not older scorecards.
 - The proof manifest marks TextEdit, Notes, and Obsidian complete, Chrome
   partial/local-fixture-only, prompt apps proof-gated, Mail blocked, and Ghostty
   not supported for normal use.
@@ -159,7 +159,7 @@ automated and manual gates.
 
 Required session shape:
 
-- SteadyType confirmed running at start.
+- Tilde confirmed running at start.
 - At least 5 active minutes.
 - At least 5 shown suggestions.
 - At least 1 phrase suggestion.

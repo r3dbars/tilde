@@ -17,8 +17,8 @@ The gate is manual on purpose. Do not turn a placeholder into `pass` unless a cl
 - Do not paste raw typed text, private document names, prompts, URLs, or clipboard contents into docs.
 - Record line numbers, counters, hashes, or command output instead of raw content.
 - Keep these evidence locations handy:
-  - `~/Library/Logs/SteadyType/diagnostics.log`
-  - `~/Library/Logs/SteadyType/traces.jsonl`
+  - `~/Library/Logs/Tilde/diagnostics.log`
+  - `~/Library/Logs/Tilde/traces.jsonl`
 
 ## Passing Evidence
 

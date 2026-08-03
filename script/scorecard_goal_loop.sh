@@ -10,7 +10,7 @@ usage() {
   cat <<'EOF'
 Usage: script/scorecard_goal_loop.sh [--iterations N]
 
-Runs the SteadyType product scorecard checker, scorecard target gate, strict
+Runs the Tilde product scorecard checker, scorecard target gate, strict
 manual smoke status, strict visual evidence gate, strict proof manifest gate,
 prompt-app manifest proof gate, and private-beta readiness gate repeatedly. This is
 intentionally a proof loop, not a score inflator: it exits 1 until every score
@@ -48,7 +48,7 @@ fi
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-STEADYTYPE_SCORECARD_GATE_SCRIPT="${AUTOCOMPLETE_LAB_STEADYTYPE_SCORECARD_GATE_SCRIPT:-./script/check_steadytype_scorecard.py}"
+TILDE_SCORECARD_GATE_SCRIPT="${AUTOCOMPLETE_LAB_TILDE_SCORECARD_GATE_SCRIPT:-./script/check_tilde_scorecard.py}"
 SCORE_TARGET_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_GATE_SCRIPT:-./script/check_score_targets.sh}"
 MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT:-./script/manual_smoke_status.sh}"
 VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
@@ -61,7 +61,7 @@ run_iteration() {
   local prefix="$TMP_DIR/iteration-$iteration"
   local failed=0
 
-  if ! "$STEADYTYPE_SCORECARD_GATE_SCRIPT" --live >"$prefix-steadytype-scorecard.txt" 2>&1; then
+  if ! "$TILDE_SCORECARD_GATE_SCRIPT" --live >"$prefix-tilde-scorecard.txt" 2>&1; then
     failed=1
   fi
 
@@ -98,8 +98,8 @@ print_final_output() {
   local prefix="$TMP_DIR/iteration-$iteration"
 
   echo
-  echo "Final SteadyType scorecard output:"
-  sed -n '1,220p' "$prefix-steadytype-scorecard.txt"
+  echo "Final Tilde scorecard output:"
+  sed -n '1,220p' "$prefix-tilde-scorecard.txt"
 
   echo
   echo "Final score target output:"

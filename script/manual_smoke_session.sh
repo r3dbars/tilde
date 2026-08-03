@@ -17,8 +17,8 @@ TEXTEDIT_SELECTED_SUPPRESSION_PROOF=0
 TEXTEDIT_FAST_TYPING_PROOF=0
 CODEX_FULL_ACCEPT_PROOF=0
 STRICT_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_SMOKE_REQUIRE_VISUAL_EVIDENCE:-${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}}"
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/Tilde/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-shiftTab}"
@@ -388,7 +388,7 @@ case "$APP" in
         REQUIRES_FULL_ACCEPT=0
         MIN_VERIFIED_ACCEPTS=0
         TEXTEDIT_SELECTED_SUPPRESSION_PROOF=1
-        STEPS=$'- Open a disposable TextEdit document.\n- Type disposable text.\n- Select part of the text.\n- Confirm SteadyType suppresses suggestions and records no insertion while text is selected.'
+        STEPS=$'- Open a disposable TextEdit document.\n- Type disposable text.\n- Select part of the text.\n- Confirm Tilde suppresses suggestions and records no insertion while text is selected.'
         ;;
       undo-one-word)
         PROOF_LABEL="textedit-undo-one-word"
@@ -1028,7 +1028,7 @@ current_build_proof_summary() {
     proofs+=("commit:$commit")
   fi
 
-  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/SteadyType.app/Contents/MacOS/SteadyType}"
+  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/Tilde.app/Contents/MacOS/Tilde}"
   if [[ -s "$app_binary" ]]; then
     local app_sha
     app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
@@ -1037,7 +1037,7 @@ current_build_proof_summary() {
     fi
   fi
 
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/Tilde.zip}"
   if [[ -s "$archive_path" ]]; then
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"

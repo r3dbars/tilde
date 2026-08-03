@@ -36,7 +36,7 @@ struct SettingsTabSnapshotTests {
             suggestionsPaused: false,
             runtimeReport: RuntimeReadinessReport(stage: .ready, summary: "ready", action: .none, isReady: true),
             runtimeTargetSummary: "Qwen on-device • short completions",
-            modelDirectoryPath: "/Users/example/Library/Application Support/SteadyType/Models",
+            modelDirectoryPath: "/Users/example/Library/Application Support/Tilde/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: SettingsCurrentAppState(
@@ -60,8 +60,8 @@ struct SettingsTabSnapshotTests {
                 screenshotTracingExpiresAt: nil,
                 visiblePageContextEnabled: false,
                 screenCaptureAccessGranted: false,
-                diagnosticsPath: "~/Library/Logs/SteadyType/activity.log",
-                tracePath: "~/Library/Logs/SteadyType/events.jsonl"
+                diagnosticsPath: "~/Library/Logs/Tilde/activity.log",
+                tracePath: "~/Library/Logs/Tilde/events.jsonl"
             ),
             keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .shiftTab),
             suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),

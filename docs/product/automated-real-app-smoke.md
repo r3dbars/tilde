@@ -92,7 +92,7 @@ usually expose, but they do not load the real upstream libraries. The
 `monaco-real` and `prosemirror-real` fixtures install pinned npm packages into a
 temporary folder during the run and never commit `node_modules`. They are the
 right proof lane for real editor engines. The script kills only the captured
-isolated Chrome process during cleanup. That proves Autocomplete Lab works when
+isolated Chrome process during cleanup. That proves Tilde works when
 Chrome exposes real editor AX, but it is still weaker than default-Chrome
 production-site proof. The Settings Chrome proof runner only refreshes local
 textarea proof automatically; contenteditable proof is listed separately in the
@@ -112,10 +112,10 @@ rich-editor lanes use an isolated temporary Chrome profile plus localhost
 DevTools for readiness, focus, and disposable setup text when available, so they
 do not touch the user's live Chrome profile. They also fail closed before typing
 unless Chrome is frontmost, the expected official demo URL is active, and the
-current SteadyType build is already allowed in macOS Accessibility. Official
+current Tilde build is already allowed in macOS Accessibility. Official
 demo lanes allow up to 180 seconds for cold current-build MLX warmup before
 touching Chrome. The Chrome setup path still requires a focused editable web
-text target through Accessibility and real Autocomplete Lab suggestion/
+text target through Accessibility and real Tilde suggestion/
 acceptance traces before recording a pass; the Apple Events path is only a
 fallback when the safer setup path cannot be used. Real-app smoke runs take a
 single-run lock and scan for other active smoke scripts so two proof processes
@@ -149,7 +149,7 @@ script/typing_performance_endurance_soak.sh
 
 The default target is 10 minutes in a disposable TextEdit file. Use
 `--dry-run` for a fast command/config check. After the typing pass, the
-endurance gate automatically samples the live SteadyType process with the
+endurance gate automatically samples the live Tilde process with the
 no-sudo runtime reporter and fails if average CPU is above 10%, p95 CPU is
 above 25%, RSS is above 6144MB, RSS growth is above 512MB, or no live process
 sample can be collected.

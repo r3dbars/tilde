@@ -10,12 +10,12 @@
     33518
   ],
   "privacy_note": "No typed text, prompts, model output, screenshots, URLs, document names, or trace lines are captured.",
-  "process_name": "SteadyType",
+  "process_name": "Tilde",
   "processes": [
     {
       "command_redacted": true,
       "command_summary": "String(112 chars)",
-      "executable_name": "SteadyType",
+      "executable_name": "Tilde",
       "executable_sha256": "7008494ba11d77dc7ce889631e98fd4d90e41a3cf8c587c21cdd58df7ea1bfcd",
       "pid": 33518
     }

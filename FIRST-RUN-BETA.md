@@ -1,4 +1,4 @@
-# SteadyType First Run
+# Tilde First Run
 
 Use this in the first 10 minutes of a private beta session.
 
@@ -17,10 +17,10 @@ Use this in the first 10 minutes of a private beta session.
 
 ## Start In TextEdit
 
-1. Open SteadyType Settings.
+1. Open Tilde Settings.
 2. Confirm the first screen explains the map above before any macOS prompt.
 3. Click `Allow Accessibility`, then grant Accessibility in System Settings.
-4. Return to SteadyType and confirm Accessibility shows as allowed without
+4. Return to Tilde and confirm Accessibility shows as allowed without
    restarting.
 5. Confirm the local model is ready. If it is missing or broken, use
    `Install Local Model` or `Repair Local Model` in Settings. Stop if in-app

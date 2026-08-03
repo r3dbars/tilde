@@ -146,7 +146,7 @@ Use
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
 Monaco and ProseMirror in default Chrome AX mode after the forced lane.
 Use chrome-textarea-model-latency or chrome-contenteditable-model-latency to
-relaunch SteadyType with fast completions and phrase continuations disabled,
+relaunch Tilde with fast completions and phrase continuations disabled,
 then prove the local model path in a disposable Chrome fixture.
 Use codex-model-latency with --manual-gate to seed disposable Codex prompt text,
 keep Enter untouched, and prove prompt no-submit local model timing in one
@@ -164,10 +164,10 @@ claude-code-<host> aliases to record host-specific proof labels without enabling
 normal terminal suggestions.
 
 --skip-build reuses the already-running AutocompleteLab app. It fails closed unless
-the only running SteadyType process is this checkout's dist/SteadyType.app binary
+the only running Tilde process is this checkout's dist/Tilde.app binary
 and that process already has any proof-mode environment needed by the smoke pass.
 The model-latency lanes do not allow --skip-build because they must relaunch
-SteadyType with fast word completions disabled before sampling. For packaged
+Tilde with fast word completions disabled before sampling. For packaged
 release artifact proof only, set AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1
 after launching that exact app with the required proof-mode environment; the
 strict latency selector must still prove the tagged runtime launch.
@@ -574,9 +574,9 @@ if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$APP" != "textedit" && "$APP
   exit 2
 fi
 
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
-DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/Tilde/traces.jsonl}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.tilde}"
 declare -a SMOKE_TMP_DIRS=()
 declare -a SMOKE_CHROME_PIDS=()
 declare -a SMOKE_HTTP_PIDS=()
@@ -928,11 +928,11 @@ diagnose_smoke_signal() {
   fi
   echo "Proof-related process snapshot:" >&2
   ps ax -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= 2>/dev/null |
-    awk '$0 ~ /(claude_code_ghostty_detached_proof|real_app_smoke|terminal_prompt_ax_proof_helper|Ghostty|ghostty|osascript|SteadyType)/ { print }' |
+    awk '$0 ~ /(claude_code_ghostty_detached_proof|real_app_smoke|terminal_prompt_ax_proof_helper|Ghostty|ghostty|osascript|Tilde)/ { print }' |
     head -n 60 >&2 || true
-  echo "Running SteadyType processes:" >&2
+  echo "Running Tilde processes:" >&2
   ps ax -o pid=,ppid=,pgid=,etime=,command= 2>/dev/null |
-    awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' >&2
+    awk '$0 ~ /\/Tilde\.app\/Contents\/MacOS\/Tilde([[:space:]]|$)/ { print }' >&2
   echo "Tracked TextEdit smoke windows: ${SMOKE_TEXTEDIT_WINDOW_TITLES[*]:-none}" >&2
   if [[ -f "$LOG_PATH" ]]; then
     echo "Last diagnostics line:" >&2
@@ -1104,7 +1104,7 @@ quarantine_foreign_smoke_processes() {
   return "$stopped"
 }
 
-quarantine_foreign_steadytype_apps() {
+quarantine_foreign_tilde_apps() {
   local pid
   local command
   local line
@@ -1112,7 +1112,7 @@ quarantine_foreign_steadytype_apps() {
 
   quarantine_other_worktrees_enabled || return 0
   rows="$(ps ax -o pid=,command= 2>/dev/null |
-    awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' || true)"
+    awk '$0 ~ /\/Tilde\.app\/Contents\/MacOS\/Tilde([[:space:]]|$)/ { print }' || true)"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     pid="$(awk '{ print $1 }' <<<"$line")"
@@ -1129,7 +1129,7 @@ start_foreign_worktree_quarantine_guard() {
     while true; do
       terminate_foreign_proof_processes_for_exclusive_run quiet >/dev/null 2>&1 || true
       quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)" >/dev/null 2>&1 || true
-      quarantine_foreign_steadytype_apps >/dev/null 2>&1 || true
+      quarantine_foreign_tilde_apps >/dev/null 2>&1 || true
       sleep "${AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS:-1}"
     done
   ) &
@@ -1169,7 +1169,7 @@ foreign_proof_process_lines() {
       esac
 
       case "$command" in
-        *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/SteadyType.app/Contents/MacOS/SteadyType*)
+        *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/Tilde.app/Contents/MacOS/Tilde*)
           ;;
         *)
           continue
@@ -1181,14 +1181,14 @@ foreign_proof_process_lines() {
       if [[ "$cwd" == "$ROOT_DIR"* ]]; then
         continue
       fi
-      if [[ "$command" == "$ROOT_DIR"/dist/SteadyType.app/Contents/MacOS/SteadyType* ]]; then
+      if [[ "$command" == "$ROOT_DIR"/dist/Tilde.app/Contents/MacOS/Tilde* ]]; then
         continue
       fi
 
       if [[ "$cwd" == */transcripted-autocomplete-lab* ||
-            "$cwd" == /private/tmp/steadytype-* ||
+            "$cwd" == /private/tmp/tilde-* ||
             "$command" == */transcripted-autocomplete-lab/* ||
-            "$command" == /private/tmp/steadytype-* ]]; then
+            "$command" == /private/tmp/tilde-* ]]; then
         printf '%s\t%s\t%s\t%s\n' "$pid" "$pgid" "${cwd:-unknown-cwd}" "$command"
       fi
     done
@@ -1353,7 +1353,7 @@ other_autocomplete_proof_pgids() {
 
 terminate_other_autocomplete_proof_runs() {
   local pgid pgids=()
-  terminate_stale_steadytype_app_bundles
+  terminate_stale_tilde_app_bundles
 
   while IFS= read -r pgid; do
     [[ -z "$pgid" ]] && continue
@@ -1445,14 +1445,14 @@ make_claude_code_terminal_proof_dir() {
   if [[ -n "$base_dir" ]]; then
     base_dir="${base_dir%/}"
     mkdir -p "$base_dir"
-    tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
+    tmp_dir="$(mktemp -d "$base_dir/tilde-claude-code-proof.XXXXXX")"
     printf '%s\n' "$tmp_dir"
     return 0
   fi
 
   base_dir="${TMPDIR:-/tmp}"
   base_dir="${base_dir%/}"
-  tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
+  tmp_dir="$(mktemp -d "$base_dir/tilde-claude-code-proof.XXXXXX")"
   SMOKE_TMP_DIRS+=("$tmp_dir")
   printf '%s\n' "$tmp_dir"
 }
@@ -2562,7 +2562,7 @@ run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe() {
     return 0
   fi
 
-  echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe checking whether the prompt is still externally writable before SteadyType insertion." >&2
+  echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe checking whether the prompt is still externally writable before Tilde insertion." >&2
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
     run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
       "$proof_text" \
@@ -2736,8 +2736,8 @@ assert_no_runtime_relaunch_since() {
   fi
 
   echo "TextEdit model latency proof lost its tagged runtime before $label." >&2
-  echo "A newer SteadyType runtime-bootstrap appeared after this proof launch began sampling, probably from another build/run or smoke process." >&2
-  echo "Rerun textedit-model-latency when no other SteadyType build/run/smoke lane is active." >&2
+  echo "A newer Tilde runtime-bootstrap appeared after this proof launch began sampling, probably from another build/run or smoke process." >&2
+  echo "Rerun textedit-model-latency when no other Tilde build/run/smoke lane is active." >&2
   echo "Newer runtime launches:" >&2
   tail -n +"$((guard_line + 1))" "$LOG_PATH" 2>/dev/null |
     grep -F "runtime-bootstrap" |
@@ -2866,7 +2866,7 @@ wait_for_accessibility_ready() {
   echo "Timed out waiting for $label." >&2
   echo "Pattern: launch accessibility=true or status accessibility=AX ok" >&2
   if [[ "$saw_missing" == "1" ]]; then
-    echo "SteadyType Accessibility permission is missing. Enable SteadyType in System Settings > Privacy & Security > Accessibility, then rerun this smoke lane." >&2
+    echo "Tilde Accessibility permission is missing. Enable Tilde in System Settings > Privacy & Security > Accessibility, then rerun this smoke lane." >&2
   fi
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
@@ -3987,13 +3987,13 @@ EOF
 
 obsidian_smoke_marker_text() {
   local manual_app="$1"
-  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Tilde Obsidian writing proof}"
 
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     printf '%s\n' "$marker"
     local line
     for line in $(seq 1 90); do
-      printf 'Autocomplete Lab Obsidian scroll filler line %02d\n' "$line"
+      printf 'Tilde Obsidian scroll filler line %02d\n' "$line"
     done
     printf '%s\n' "$marker"
     printf 'S\n'
@@ -4027,12 +4027,12 @@ obsidian_smoke_marker_text() {
 }
 
 obsidian_long_note_text_before_trigger() {
-  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Tilde Obsidian writing proof}"
   local line
 
   printf '%s\n' "$marker"
   for line in $(seq 1 90); do
-    printf 'Autocomplete Lab Obsidian scroll filler line %02d\n' "$line"
+    printf 'Tilde Obsidian scroll filler line %02d\n' "$line"
   done
   printf '%s\n' "$marker"
   printf 'Smoke proof feel'
@@ -4044,7 +4044,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Tilde Obsidian writing proof"
 let normalizedMarker = normalizedWhitespace(marker)
 let compactMarker = compactWhitespace(marker)
 
@@ -4192,7 +4192,7 @@ prepare_obsidian_variant_state() {
     obsidian-theme)
       # The smoke lane must be run in a vault/theme setup that visibly differs
       # from the default Obsidian editor. The proof vault used by this project
-      # carries the Autocomplete Lab Proof theme.
+      # carries the Tilde Proof theme.
       activate_obsidian_for_smoke
       ;;
     obsidian-long-note)
@@ -4236,7 +4236,7 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v6}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/tilde-cgevent-keypress-v6}"
 }
 
 ensure_cgevent_keypress_helper() {
@@ -4589,7 +4589,7 @@ probe_claude_code_terminal_host_key_capture() {
   if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
     echo "Claude Code $host_name key capture probes produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI. Set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 to opt in." >&2
-    echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
+    echo "Claude Code $host_name key capture probe did not reach the Tilde event tap; refreshing the disposable prompt." >&2
     return 1
   fi
 
@@ -4619,17 +4619,17 @@ APPLESCRIPT
   if wait_for_claude_code_terminal_key_capture_permission_ui_since "$key_capture_start_line" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-2}"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"
-    echo "Claude Code $host_name key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap." >&2
+    echo "Claude Code $host_name key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the Tilde event tap." >&2
     return 1
   fi
 
   CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
-  echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
+  echo "Claude Code $host_name key capture probe did not reach the Tilde event tap; refreshing the disposable prompt." >&2
   return 1
 }
 
 cgevent_text_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-text-v1}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER:-${TMPDIR:-/tmp}/tilde-cgevent-text-v1}"
 }
 
 ensure_cgevent_text_helper() {
@@ -8426,7 +8426,7 @@ on run argv
           if expectedLeaf is not "" then
             set leafMatches to tabURL contains expectedLeaf
           end if
-          set titleMatches to tabTitle contains ("SteadyType Chrome") and tabTitle contains ("[ready=1]")
+          set titleMatches to tabTitle contains ("Tilde Chrome") and tabTitle contains ("[ready=1]")
           if urlMatches or leafMatches or titleMatches then
             set active tab index of chromeWindow to tabIndex
             set index of chromeWindow to 1
@@ -9078,7 +9078,7 @@ wait_for_chrome_setup_text_visible_to_ax() {
 
   echo "Chrome $fixture setup text reached the page model during $label, but the focused macOS Accessibility editor did not expose it." >&2
   echo "Expected AX fragment chars: ${#expected_fragment}; observed AX chars: ${#current_text}." >&2
-  echo "No keyboard, paste, or screenshot fallback was attempted. Failing closed because Monaco official/default proof requires AX-readable setup text before SteadyType can claim an accept." >&2
+  echo "No keyboard, paste, or screenshot fallback was attempted. Failing closed because Monaco official/default proof requires AX-readable setup text before Tilde can claim an accept." >&2
   exit 1
 }
 
@@ -9271,7 +9271,7 @@ EOF
 }
 
 claude_code_proof_marker() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-STEADYTYPECLAUDECODEPROOF}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-TILDECLAUDECODEPROOF}"
 }
 
 claude_code_compact_proof_marker() {
@@ -10532,7 +10532,7 @@ APPLESCRIPT
   if printf '%s' "$screen_text" | grep -Eiq 'shortcuts|esc|enter'; then
     has_hint="true"
   fi
-  if printf '%s' "$screen_text" | grep -Eiq 'steadytype-claude-code-proof\.command| -e .*steadytype-claude-code-proof\.|exec .*steadytype-claude-code-proof\.'; then
+  if printf '%s' "$screen_text" | grep -Eiq 'tilde-claude-code-proof\.command| -e .*tilde-claude-code-proof\.|exec .*tilde-claude-code-proof\.'; then
     has_rejected_shell="true"
   fi
   screen_normalized="$(printf '%s' "$screen_text" | awk '{$1=$1; print}')"
@@ -10667,7 +10667,7 @@ open_claude_code_terminal_proof() {
   fi
 
   title_sequence=$'\033]0;'"$proof_title"$'\007'
-  launch_script="$proof_dir/steadytype-claude-code-proof.command"
+  launch_script="$proof_dir/tilde-claude-code-proof.command"
   CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT="$launch_script"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE="$proof_dir/claude.exit"
@@ -10687,7 +10687,7 @@ open_claude_code_terminal_proof() {
       printf 'claude_status=$?\n'
       printf 'printf '"'"'%%s\\n'"'"' "script-claude-returned:$claude_status" >> %q\n' "$ghostty_launch_stage_file"
       printf 'printf '"'"'status=%%s finished_at=%%s\\n'"'"' "$claude_status" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE"
-      printf 'printf '"'"'\\n[SteadyType proof] Claude exited with status %%s; keeping Ghostty open for diagnostics.\\n'"'"' "$claude_status"\n'
+      printf 'printf '"'"'\\n[Tilde proof] Claude exited with status %%s; keeping Ghostty open for diagnostics.\\n'"'"' "$claude_status"\n'
       printf 'sleep %q\n' "$ghostty_exit_hold_seconds"
       printf 'exit "$claude_status"\n'
     else
@@ -11348,10 +11348,10 @@ reset_stale_only_claude_code_ghostty_proof_host() {
       "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_CHECK_TIMEOUT_SECONDS:-2}" \
       "Claude Code Ghostty stale-only host check" <<'APPLESCRIPT' 2>/dev/null || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
-set proofDirectoryMarker to "steadytype-claude-code-proof"
-set steadyTypeGhosttyProbeMarker to "steadytype-ghostty-"
-set appleScriptProbePrefix to "SteadyType AppleScript Probe"
-set submitProbePrefix to "SteadyType Submit Probe"
+set proofDirectoryMarker to "tilde-claude-code-proof"
+set tildeGhosttyProbeMarker to "tilde-ghostty-"
+set appleScriptProbePrefix to "Tilde AppleScript Probe"
+set submitProbePrefix to "Tilde Submit Probe"
 set windowCount to 0
 set unsafeWindowCount to 0
 tell application "System Events"
@@ -11366,7 +11366,7 @@ tell application "System Events"
       set isProofWindow to false
       if markerText is not "" and windowName contains markerText then set isProofWindow to true
       if windowName contains proofDirectoryMarker then set isProofWindow to true
-      if windowName contains steadyTypeGhosttyProbeMarker then set isProofWindow to true
+      if windowName contains tildeGhosttyProbeMarker then set isProofWindow to true
       if windowName starts with appleScriptProbePrefix then set isProofWindow to true
       if windowName starts with submitProbePrefix then set isProofWindow to true
       if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
@@ -11385,7 +11385,7 @@ APPLESCRIPT
     return 0
   fi
 
-  reset_reason="System Events reported only SteadyType proof/probe Ghostty AX windows (${ax_window_count})"
+  reset_reason="System Events reported only Tilde proof/probe Ghostty AX windows (${ax_window_count})"
   echo "Claude Code Ghostty proof resetting stale-only Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ') ($reset_reason)" >&2
   while IFS= read -r proof_pid; do
     [[ -z "$proof_pid" ]] && continue
@@ -11417,17 +11417,17 @@ cleanup_stale_claude_code_ghostty_proofs() {
       "Claude Code Ghostty stale proof window cleanup" <<'APPLESCRIPT' || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
-set proofDirectoryMarker to "steadytype-claude-code-proof"
-set steadyTypeGhosttyProbeMarker to "steadytype-ghostty-"
-set appleScriptProbePrefix to "SteadyType AppleScript Probe"
-set submitProbePrefix to "SteadyType Submit Probe"
+set proofDirectoryMarker to "tilde-claude-code-proof"
+set tildeGhosttyProbeMarker to "tilde-ghostty-"
+set appleScriptProbePrefix to "Tilde AppleScript Probe"
+set submitProbePrefix to "Tilde Submit Probe"
 set closedCount to 0
 tell application id "com.mitchellh.ghostty"
   repeat with windowIndex from (count windows) to 1 by -1
     try
       set candidateWindow to window windowIndex
       set windowName to name of candidateWindow as text
-      if windowName contains markerText or windowName contains proofDirectoryMarker or windowName contains steadyTypeGhosttyProbeMarker or windowName starts with appleScriptProbePrefix or windowName starts with submitProbePrefix then
+      if windowName contains markerText or windowName contains proofDirectoryMarker or windowName contains tildeGhosttyProbeMarker or windowName starts with appleScriptProbePrefix or windowName starts with submitProbePrefix then
         close candidateWindow
         set closedCount to closedCount + 1
       else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
@@ -11469,7 +11469,7 @@ cleanup_stale_claude_code_terminal_proofs() {
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set targetHostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_HOST_BUNDLE"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
-set proofDirectoryMarker to "steadytype-claude-code-proof"
+set proofDirectoryMarker to "tilde-claude-code-proof"
 set stalePids to ""
 tell application "System Events"
   repeat with terminalProcess in application processes
@@ -12085,7 +12085,7 @@ press_claude_code_terminal_host_tab() {
 
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
-    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "proof-only-driver-enabled" ||
+    try_tilde_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "proof-only-driver-enabled" ||
       return 1
     return 0
   fi
@@ -12106,7 +12106,7 @@ tell application "System Events"
 end tell
 APPLESCRIPT
   if ! probe_claude_code_terminal_host_key_capture "$host_name"; then
-    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "key-capture-probe-miss" ||
+    try_tilde_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "key-capture-probe-miss" ||
       return 1
     return 0
   fi
@@ -12291,7 +12291,7 @@ APPLESCRIPT
   return 1
 }
 
-try_steadytype_proof_only_accept_next_word_driver() {
+try_tilde_proof_only_accept_next_word_driver() {
   local suggestion_line="${1:-0}"
   local host_name="${2:-$(claude_code_host_display_name)}"
   local reason="${3:-manual}"
@@ -12300,7 +12300,7 @@ try_steadytype_proof_only_accept_next_word_driver() {
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
   [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] || return 1
   if [[ "${AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS:-0}" != "1" ]]; then
-    echo "Claude Code $host_name proof-only accept driver requires AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1 on the SteadyType launch." >&2
+    echo "Claude Code $host_name proof-only accept driver requires AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1 on the Tilde launch." >&2
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept driver not enabled in app launch"
     return 1
   fi
@@ -12316,15 +12316,15 @@ try_steadytype_proof_only_accept_next_word_driver() {
     "proof-only accept command" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS:-1}" || return 1
 
-  app_binary="$(steadytype_app_binary)"
+  app_binary="$(tilde_app_binary)"
   if [[ ! -x "$app_binary" ]]; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept driver app binary missing"
-    echo "SteadyType app binary is missing for proof-only accept command: $app_binary" >&2
+    echo "Tilde app binary is missing for proof-only accept command: $app_binary" >&2
     return 1
   fi
 
   command_start_line="$(line_count "$LOG_PATH")"
-  echo "Claude Code $host_name proof using SteadyType proof-only accept command after $reason."
+  echo "Claude Code $host_name proof using Tilde proof-only accept command after $reason."
   if ! "$app_binary" --proof-only-accept-next-word; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept command failed to post"
     return 1
@@ -13215,7 +13215,7 @@ chrome_fixture_html() {
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Textarea Fixture Smoke [ready=1]</title>
+<title>Tilde Chrome Textarea Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <textarea data-smoke-editor autofocus aria-label="Local smoke textarea fixture" style="font: 18px -apple-system; width: 720px; height: 180px; margin: 80px;"></textarea>
 <script>
@@ -13240,7 +13240,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Contenteditable Fixture Smoke [ready=1]</title>
+<title>Tilde Chrome Contenteditable Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <main data-smoke-editor role="textbox" aria-label="Local smoke rich text fixture" contenteditable="true" spellcheck="false" style="font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; padding: 12px; border: 1px solid #bbb; outline: none;"></main>
 <script>
@@ -13262,7 +13262,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]</title>
+<title>Tilde Chrome Local Editor-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <div class="cm-editor" role="application" aria-label="Local editor-like smoke fixture" style="display: grid; grid-template-columns: 48px 1fr; font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; border: 1px solid #bbb;">
   <div aria-hidden="true" style="padding-top: 14px; border-right: 1px solid #ddd; background: #f5f5f2; color: #777; font: 14px Menlo, monospace; text-align: center;">1</div>
@@ -13287,7 +13287,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]</title>
+<title>Tilde Chrome Local Monaco-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -13349,7 +13349,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Local Real Monaco Fixture Smoke [ready=0]</title>
+<title>Tilde Chrome Local Real Monaco Fixture Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file: blob:; worker-src blob: file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -13416,7 +13416,7 @@ require(["vs/editor/editor.main"], function () {
     editor.focus();
   };
   window.autocompleteSmokeReady = true;
-  document.title = "SteadyType Chrome Local Real Monaco Fixture Smoke [ready=1]";
+  document.title = "Tilde Chrome Local Real Monaco Fixture Smoke [ready=1]";
   window.focusSmokeEditor();
 });
 </script>
@@ -13426,7 +13426,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]</title>
+<title>Tilde Chrome Local ProseMirror-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -13479,7 +13479,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=0]</title>
+<title>Tilde Chrome Local Real ProseMirror Fixture Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -13516,7 +13516,7 @@ body { margin: 0; background: #fbfbfb; }
 <script>
 window.autocompleteSmokeReady = false;
 window.AutocompleteLabRealProseMirrorSmoke.mount(document.querySelector("[data-prosemirror-mount]"));
-document.title = "SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=1]";
+document.title = "Tilde Chrome Local Real ProseMirror Fixture Smoke [ready=1]";
 </script>
 HTML
       ;;
@@ -13524,7 +13524,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]</title>
+<title>Tilde Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -13586,7 +13586,7 @@ button {
 <script>
 window.autocompleteSmokeSubmitCount = 0;
 window.updateSmokeSubmitCount = function () {
-  document.title = "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=" + window.autocompleteSmokeSubmitCount + "]";
+  document.title = "Tilde Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=" + window.autocompleteSmokeSubmitCount + "]";
   document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
 };
 window.autocompleteSmokeEditorText = function () {
@@ -13616,7 +13616,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Browser Chat Proof Harness [submits=0 sendKeys=0 promptMutations=0 wrongContext=0]</title>
+<title>Tilde Browser Chat Proof Harness [submits=0 sendKeys=0 promptMutations=0 wrongContext=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -13703,7 +13703,7 @@ window.autocompleteSmokeCounters = {
 };
 window.updateSmokeCounters = function () {
   const counters = window.autocompleteSmokeCounters;
-  document.title = "SteadyType Browser Chat Proof Harness [submits=" + counters.submits
+  document.title = "Tilde Browser Chat Proof Harness [submits=" + counters.submits
     + " sendKeys=" + counters.sendKeys
     + " promptMutations=" + counters.promptMutations
     + " wrongContext=" + counters.wrongContext + "]";
@@ -13831,35 +13831,35 @@ describe_plan() {
           ;;
       esac
       if [[ "$CHROME_FIXTURE" == "all" ]]; then
-        echo "Plan: build the app bundle, seed disposable Chrome fixtures, launch SteadyType only for proof, then run textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
+        echo "Plan: build the app bundle, seed disposable Chrome fixtures, launch Tilde only for proof, then run textarea, contenteditable, editor-like, Monaco-like, ProseMirror-like, real Monaco, real ProseMirror, and chat-like no-submit local fixtures."
         if [[ "$CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF" == "1" ]]; then
           echo "Plan add-on: rerun real Monaco and real ProseMirror in default Chrome AX mode after the forced renderer lane."
         fi
       elif [[ "$CHROME_FIXTURE" == "production-text-fields" ]]; then
-        echo "Plan: build the app bundle, seed disposable Chrome fixtures, launch SteadyType only for proof, then run bounded public Chrome textarea and contenteditable proof on top-level demo pages."
+        echo "Plan: build the app bundle, seed disposable Chrome fixtures, launch Tilde only for proof, then run bounded public Chrome textarea and contenteditable proof on top-level demo pages."
         echo "Proof path: production text-field lanes use public URLs plus guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for these two lanes."
       elif chrome_fixture_is_public_text_field_demo "$CHROME_FIXTURE"; then
-        echo "Plan: build the app bundle, open the public top-level $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
+        echo "Plan: build the app bundle, open the public top-level $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch Tilde only for proof, then validate logs and traces."
         echo "Proof path: public text-field proof uses guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for this lane."
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
-        echo "Plan: build the app bundle, open the public official $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
+        echo "Plan: build the app bundle, open the public official $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch Tilde only for proof, then validate logs and traces."
         echo "Proof path: official rich-editor demo lanes use an isolated temporary Chrome profile plus localhost DevTools focus/setup when available; otherwise they try Accessibility editor focus before the Apple Events fallback."
         if [[ "$CHROME_FIXTURE" == "monaco-official" ]]; then
-          echo "Proof gate: Monaco official must expose setup text through the focused macOS AX editor before SteadyType can accept; otherwise the lane fails closed without keyboard, paste, or screenshot fallback."
+          echo "Proof gate: Monaco official must expose setup text through the focused macOS AX editor before Tilde can accept; otherwise the lane fails closed without keyboard, paste, or screenshot fallback."
           if [[ "$CHROME_ACCESSIBILITY_MODE" == "default" ]]; then
             echo "Proof path: monaco-official default AX uses normal Chrome AX focus only for the proof claim, with no DevTools or Apple Events fallback."
           fi
         fi
-        echo "Requirement: SteadyType must already be allowed in macOS Accessibility; the lane fails closed before typing if AX is missing."
+        echo "Requirement: Tilde must already be allowed in macOS Accessibility; the lane fails closed before typing if AX is missing."
         echo "Runtime: official demo lanes allow up to $(chrome_runtime_ready_timeout_seconds)s for cold current-build MLX warmup before touching Chrome."
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
-        echo "Plan: build the app bundle, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, seed disposable text, launch SteadyType only for proof, then validate trace and harness counters."
+        echo "Plan: build the app bundle, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, seed disposable text, launch Tilde only for proof, then validate trace and harness counters."
         echo "Scope: this proves only the disposable harness surface. It does not enable Slack, Discord, ChatGPT, or broad browser chat support."
       elif chrome_fixture_is_blocked_high_value_surface "$CHROME_FIXTURE"; then
         echo "Plan: blocked preflight only. This fixture records the next high-value surface but refuses to type into the live service."
         echo "Blocked: $(chrome_blocked_high_value_surface_reason "$CHROME_FIXTURE")"
       else
-        echo "Plan: build the app bundle, open a disposable Chrome $CHROME_FIXTURE fixture, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
+        echo "Plan: build the app bundle, open a disposable Chrome $CHROME_FIXTURE fixture, seed disposable text, launch Tilde only for proof, then validate logs and traces."
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
       if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
@@ -13867,8 +13867,8 @@ describe_plan() {
         echo "Safety: Chrome model latency proof tags the runtime launch with scenario chrome-$CHROME_FIXTURE-model-latency so generic Chrome samples cannot satisfy the beta gate."
       fi
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
-      echo "Safety: Chrome setup text is seeded before SteadyType launches whenever the smoke builds the app itself."
-      echo "Safety: later Chrome setup pauses SteadyType while disposable text is seeded, then relaunches the current app bundle before proof resumes."
+      echo "Safety: Chrome setup text is seeded before Tilde launches whenever the smoke builds the app itself."
+      echo "Safety: later Chrome setup pauses Tilde while disposable text is seeded, then relaunches the current app bundle before proof resumes."
       echo "Safety: Chrome setup text first tries DevTools/DOM or AX value replacement, then guarded key/paste fallbacks only after the disposable editor is rechecked as frontmost and editable."
       ;;
     notes)
@@ -14029,7 +14029,7 @@ describe_plan() {
 }
 
 build_if_needed() {
-  SMOKE_PHASE="build/relaunch current SteadyType"
+  SMOKE_PHASE="build/relaunch current Tilde"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
@@ -14039,7 +14039,7 @@ build_if_needed() {
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
     fi
     env "${build_run_env[@]}" ./script/build_and_run.sh bundle-only
-    launch_current_steadytype_with_smoke_env
+    launch_current_tilde_with_smoke_env
   fi
 
   wait_for_current_autocomplete_lab_process
@@ -14064,7 +14064,7 @@ build_bundle_if_needed() {
   SMOKE_PHASE="build proof refreshed"
 }
 
-steadytype_app_process_rows() {
+tilde_app_process_rows() {
   ps ax -o pid=,pgid=,command= 2>/dev/null |
     awk '
       {
@@ -14073,52 +14073,52 @@ steadytype_app_process_rows() {
         command = $0
         sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
       }
-      command ~ /^\/.*\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ {
+      command ~ /^\/.*\/Tilde\.app\/Contents\/MacOS\/Tilde([[:space:]]|$)/ {
         print pid "\t" pgid "\t" command
       }
     '
 }
 
-steadytype_dist_dir() {
+tilde_dist_dir() {
   printf '%s\n' "${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
 }
 
-steadytype_app_bundle() {
-  printf '%s/SteadyType.app\n' "$(steadytype_dist_dir)"
+tilde_app_bundle() {
+  printf '%s/Tilde.app\n' "$(tilde_dist_dir)"
 }
 
-steadytype_app_binary() {
-  printf '%s/Contents/MacOS/SteadyType\n' "$(steadytype_app_bundle)"
+tilde_app_binary() {
+  printf '%s/Contents/MacOS/Tilde\n' "$(tilde_app_bundle)"
 }
 
-command_matches_steadytype_binary() {
+command_matches_tilde_binary() {
   local command="$1"
   local app_binary="$2"
   [[ "$command" == "$app_binary" || "$command" == "$app_binary "* ]]
 }
 
-current_steadytype_app_bundle_pids() {
+current_tilde_app_bundle_pids() {
   local app_binary
-  app_binary="$(steadytype_app_binary)"
+  app_binary="$(tilde_app_binary)"
 
   while IFS=$'\t' read -r pid pgid command; do
     [[ -z "$pid" ]] && continue
     [[ "$pid" == "$$" ]] && continue
-    command_matches_steadytype_binary "$command" "$app_binary" || continue
+    command_matches_tilde_binary "$command" "$app_binary" || continue
     printf '%s\n' "$pid"
-  done < <(steadytype_app_process_rows)
+  done < <(tilde_app_process_rows)
 }
 
-stop_current_steadytype_app_bundle() {
+stop_current_tilde_app_bundle() {
   local pid
 
   while IFS= read -r pid; do
     [[ -z "$pid" ]] && continue
     kill "$pid" >/dev/null 2>&1 || true
-  done < <(current_steadytype_app_bundle_pids)
+  done < <(current_tilde_app_bundle_pids)
 
   for _ in {1..20}; do
-    if [[ -z "$(current_steadytype_app_bundle_pids)" ]]; then
+    if [[ -z "$(current_tilde_app_bundle_pids)" ]]; then
       return 0
     fi
     sleep 0.1
@@ -14127,29 +14127,29 @@ stop_current_steadytype_app_bundle() {
   while IFS= read -r pid; do
     [[ -z "$pid" ]] && continue
     kill -9 "$pid" >/dev/null 2>&1 || true
-  done < <(current_steadytype_app_bundle_pids)
+  done < <(current_tilde_app_bundle_pids)
 
   sleep 0.1
-  if [[ -n "$(current_steadytype_app_bundle_pids)" ]]; then
-    echo "Timed out stopping current SteadyType app bundle before smoke setup." >&2
+  if [[ -n "$(current_tilde_app_bundle_pids)" ]]; then
+    echo "Timed out stopping current Tilde app bundle before smoke setup." >&2
     exit 1
   fi
 }
 
-stale_steadytype_app_bundle_pids() {
+stale_tilde_app_bundle_pids() {
   local expected_binary
-  expected_binary="$(steadytype_app_binary)"
+  expected_binary="$(tilde_app_binary)"
   local pid command
 
   while IFS=$'\t' read -r pid _pgid command; do
     [[ -z "$pid" ]] && continue
     [[ -z "$command" ]] && continue
-    command_matches_steadytype_binary "$command" "$expected_binary" && continue
+    command_matches_tilde_binary "$command" "$expected_binary" && continue
     printf '%s\n' "$pid"
-  done < <(steadytype_app_process_rows)
+  done < <(tilde_app_process_rows)
 }
 
-terminate_stale_steadytype_app_bundles() {
+terminate_stale_tilde_app_bundles() {
   local pid
   local stale_pids=()
 
@@ -14157,7 +14157,7 @@ terminate_stale_steadytype_app_bundles() {
     [[ -z "$pid" ]] && continue
     stale_pids+=("$pid")
     kill "$pid" >/dev/null 2>&1 || true
-  done < <(stale_steadytype_app_bundle_pids)
+  done < <(stale_tilde_app_bundle_pids)
 
   ((${#stale_pids[@]} == 0)) && return 0
   sleep 0.2
@@ -14169,24 +14169,24 @@ terminate_stale_steadytype_app_bundles() {
   done
 }
 
-pause_steadytype_for_chrome_setup() {
+pause_tilde_for_chrome_setup() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
   fi
 
-  stop_current_steadytype_app_bundle
+  stop_current_tilde_app_bundle
 }
 
-launch_current_steadytype_with_smoke_env() {
+launch_current_tilde_with_smoke_env() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
   fi
 
   local app_binary launch_log
-  app_binary="$(steadytype_app_binary)"
-  launch_log="$(steadytype_dist_dir)/SteadyType.launch.log"
+  app_binary="$(tilde_app_binary)"
+  launch_log="$(tilde_dist_dir)/Tilde.launch.log"
   if [[ ! -x "$app_binary" ]]; then
-    echo "SteadyType app binary is missing after build: $app_binary" >&2
+    echo "Tilde app binary is missing after build: $app_binary" >&2
     exit 1
   fi
 
@@ -14240,13 +14240,13 @@ launch_current_steadytype_with_smoke_env() {
   wait_for_current_autocomplete_lab_process
 }
 
-launch_steadytype_after_chrome_setup() {
+launch_tilde_after_chrome_setup() {
   local fixture="$1"
   local start_line="$2"
   local chrome_pid="${3:-}"
   local chrome_url="${4:-}"
 
-  launch_current_steadytype_with_smoke_env
+  launch_current_tilde_with_smoke_env
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
@@ -14264,11 +14264,11 @@ launch_steadytype_after_chrome_setup() {
 
 wait_for_current_autocomplete_lab_process() {
   local expected_binary
-  expected_binary="$(steadytype_app_binary)"
+  expected_binary="$(tilde_app_binary)"
   local deadline=$((SECONDS + 20))
 
   while ((SECONDS <= deadline)); do
-    terminate_stale_steadytype_app_bundles
+    terminate_stale_tilde_app_bundles
 
     local found_current=0
     local current_pids=()
@@ -14277,13 +14277,13 @@ wait_for_current_autocomplete_lab_process() {
     while IFS=$'\t' read -r pid _pgid command; do
       [[ -z "$pid" ]] && continue
       [[ -z "$command" ]] && continue
-      if command_matches_steadytype_binary "$command" "$expected_binary"; then
+      if command_matches_tilde_binary "$command" "$expected_binary"; then
         found_current=1
         current_pids+=("$pid")
       else
         stale_processes+="${pid} ${command}"$'\n'
       fi
-    done < <(steadytype_app_process_rows)
+    done < <(tilde_app_process_rows)
 
     if ((${#current_pids[@]} > 1)); then
       local keep_pid=""
@@ -14306,19 +14306,19 @@ wait_for_current_autocomplete_lab_process() {
     sleep 0.25
   done
 
-  echo "SteadyType smoke launch did not settle on this checkout's app bundle." >&2
+  echo "Tilde smoke launch did not settle on this checkout's app bundle." >&2
   echo "Expected binary: $expected_binary" >&2
-  echo "Running SteadyType processes:" >&2
-  steadytype_app_process_rows |
+  echo "Running Tilde processes:" >&2
+  tilde_app_process_rows |
     awk -F '\t' '{ print $1 " " $3 }' >&2
   exit 1
 }
 
 refresh_build_archive_proof() {
   local dist_dir app_bundle archive_path
-  dist_dir="$(steadytype_dist_dir)"
-  app_bundle="$(steadytype_app_bundle)"
-  archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-$dist_dir/smoke-proof/SteadyType.zip}"
+  dist_dir="$(tilde_dist_dir)"
+  app_bundle="$(tilde_app_bundle)"
+  archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-$dist_dir/smoke-proof/Tilde.zip}"
   local archive_dir archive_name archive_abs
 
   [[ -d "$app_bundle" ]] || return 0
@@ -14330,10 +14330,10 @@ refresh_build_archive_proof() {
   archive_abs="$(cd "$archive_dir" && pwd -P)/$archive_name"
 
   local release_archive_abs
-  release_archive_abs="$(cd "$ROOT_DIR/dist" && pwd -P)/SteadyType.zip"
+  release_archive_abs="$(cd "$ROOT_DIR/dist" && pwd -P)/Tilde.zip"
   if [[ "$archive_abs" == "$release_archive_abs" ]]; then
     echo "Refusing to write smoke proof archive over release artifact: $archive_path" >&2
-    echo "Use ./script/package_release.sh archive or --notarize to refresh dist/SteadyType.zip." >&2
+    echo "Use ./script/package_release.sh archive or --notarize to refresh dist/Tilde.zip." >&2
     exit 1
   fi
 
@@ -14341,7 +14341,7 @@ refresh_build_archive_proof() {
   archive_status=1
   for archive_attempt in 1 2 3; do
     rm -f "$archive_abs"
-    if (cd "$dist_dir" && ditto -c -k --keepParent "SteadyType.app" "$archive_abs"); then
+    if (cd "$dist_dir" && ditto -c -k --keepParent "Tilde.app" "$archive_abs"); then
       archive_status=0
       break
     fi
@@ -15362,7 +15362,7 @@ import ApplicationServices
 import Foundation
 
 let expectedPrefix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_EXPECTED_PREFIX"] ?? ""
-let titleMarker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE"] ?? "SteadyType Checklist Smoke"
+let titleMarker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE"] ?? "Tilde Checklist Smoke"
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -15482,7 +15482,7 @@ wait_for_obsidian_smoke_editor_ready() {
 assert_obsidian_initial_smoke_target() {
   case "$1" in
     obsidian-long-note)
-      AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="Autocomplete Lab Obsidian" assert_obsidian_smoke_target
+      AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="Tilde Obsidian" assert_obsidian_smoke_target
       ;;
     *)
       assert_obsidian_smoke_target
@@ -15498,7 +15498,7 @@ ensure_notes_title_smoke_note() {
 }
 
 ensure_notes_checklist_smoke_note() {
-  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-SteadyType Checklist Smoke}"
+  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-Tilde Checklist Smoke}"
 
   open -a Notes
   wait_for_frontmost_app "Notes" 8
@@ -15518,7 +15518,7 @@ APPLESCRIPT
 }
 
 ensure_notes_body_smoke_note() {
-  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_SMOKE_TITLE:-SteadyType Smoke}"
+  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_SMOKE_TITLE:-Tilde Smoke}"
   local smoke_marker="${AUTOCOMPLETE_LAB_NOTES_SMOKE_MARKER:-Autocomplete smoke}"
 
   open -a Notes
@@ -15737,7 +15737,7 @@ Thread.sleep(forTimeInterval: 0.15)
 
 let appElement = AXUIElementCreateApplication(app.processIdentifier)
 AXUIElementSetMessagingTimeout(appElement, 0.75)
-let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Tilde Obsidian writing proof"
 let normalizedMarker = marker
     .components(separatedBy: .whitespacesAndNewlines)
     .filter { !$0.isEmpty }
@@ -15762,7 +15762,7 @@ guard let target = textAreas
     .filter({
         let value = stringAttribute($0, kAXValueAttribute)
         return normalizedForMarkerMatch(value).contains(normalizedMarker)
-            && (!requireLongNoteLine || value.contains("Autocomplete Lab Obsidian scroll filler line 90"))
+            && (!requireLongNoteLine || value.contains("Tilde Obsidian scroll filler line 90"))
     })
     .sorted(by: {
         (rect(for: $0)?.maxY ?? 0) > (rect(for: $1)?.maxY ?? 0)
@@ -15857,7 +15857,7 @@ APPLESCRIPT
 }
 
 reset_obsidian_smoke_note() {
-  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}}"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Tilde Obsidian writing proof}}"
 
   activate_obsidian_for_smoke
   AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift script/obsidian_ax_editor.swift reset
@@ -15905,7 +15905,7 @@ reset_obsidian_smoke_note_file() {
     "$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault/"*.md)
       ;;
     *)
-      echo "Refusing file reset outside the disposable Autocomplete Lab Obsidian proof vault: $smoke_file" >&2
+      echo "Refusing file reset outside the disposable Tilde Obsidian writing proof vault: $smoke_file" >&2
       exit 3
       ;;
   esac
@@ -15923,7 +15923,7 @@ append_obsidian_smoke_note_file_text() {
     "$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault/"*.md)
       ;;
     *)
-      echo "Refusing file append outside the disposable Autocomplete Lab Obsidian proof vault: $smoke_file" >&2
+      echo "Refusing file append outside the disposable Tilde Obsidian writing proof vault: $smoke_file" >&2
       exit 3
       ;;
   esac
@@ -15976,8 +15976,8 @@ assert_obsidian_long_note_file_preserved() {
   local smoke_file deadline current_tail
   smoke_file="$(obsidian_smoke_file_path)"
 
-  if ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 01" "$smoke_file" ||
-     ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 90" "$smoke_file"; then
+  if ! grep -Fq "Tilde Obsidian scroll filler line 01" "$smoke_file" ||
+     ! grep -Fq "Tilde Obsidian scroll filler line 90" "$smoke_file"; then
     echo "Obsidian long-note proof lost off-screen note content." >&2
     echo "Current head:" >&2
     head -n 8 "$smoke_file" >&2 || true
@@ -16051,7 +16051,7 @@ activate_neutral_smoke_setup_app() {
 
 obsidian_reset_text_for_variant() {
   local variant="$1"
-  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Tilde Obsidian writing proof}"
   local reset_text="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-$marker}"
 
   if [[ "$variant" != "obsidian-long-note" ]]; then
@@ -16215,7 +16215,7 @@ run_obsidian() {
   if [[ "$manual_app" =~ ^obsidian-(long-note|run-on)$ && -z "${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}" ]]; then
     export AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=shiftTab
   fi
-  export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
+  export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Tilde Obsidian writing proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
 
   prepare_temporary_app_enablement
@@ -16225,7 +16225,7 @@ run_obsidian() {
     wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
   else
     build_bundle_if_needed
-    stop_current_steadytype_app_bundle
+    stop_current_tilde_app_bundle
   fi
 
   full_accept_key="$(accept_all_shortcut)"
@@ -16273,7 +16273,7 @@ run_obsidian() {
     type_obsidian_raw_smoke_text "$first_fragment"
   fi
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    launch_steadytype_after_chrome_setup "obsidian" "$start_line"
+    launch_tilde_after_chrome_setup "obsidian" "$start_line"
     wait_for_log_line_number "$start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
     start_line="$MATCHED_LOG_LINE"
     prepare_obsidian_variant_state "$manual_app"
@@ -16541,7 +16541,7 @@ run_notes() {
   fi
 
   if [[ "$notes_surface" == "checklist" ]]; then
-    local checklist_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-SteadyType Checklist Smoke}"
+    local checklist_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-Tilde Checklist Smoke}"
     ensure_notes_checklist_smoke_note
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
@@ -16742,7 +16742,7 @@ run_textedit() {
   SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
   : >"$textedit_file"
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    stop_current_steadytype_app_bundle
+    stop_current_tilde_app_bundle
   fi
   cleanup_stale_textedit_smoke_windows
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
@@ -17249,11 +17249,11 @@ APPLESCRIPT
     )
   fi
 
-  pause_steadytype_for_chrome_setup
+  pause_tilde_for_chrome_setup
   type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "first fragment" "$first_fragment"
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
-  launch_steadytype_after_chrome_setup "$fixture" "$start_line" "$chrome_pid" "$chrome_url"
+  launch_tilde_after_chrome_setup "$fixture" "$start_line" "$chrome_pid" "$chrome_url"
   focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
@@ -17343,10 +17343,10 @@ APPLESCRIPT
     if [[ -z "$chrome_pid" ]]; then
       focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
     fi
-    pause_steadytype_for_chrome_setup
+    pause_tilde_for_chrome_setup
     type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment $second_attempt" "$second_fragment"
     second_start_line="$(line_count "$LOG_PATH")"
-    launch_steadytype_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
+    launch_tilde_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
     focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
     if wait_for_log_fields_optional "$second_start_line" 14 \

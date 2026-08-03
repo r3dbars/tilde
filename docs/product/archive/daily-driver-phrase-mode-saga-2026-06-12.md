@@ -8,7 +8,7 @@ product stance lives in
 
 ---
 
-SteadyType should feel like a typing accelerator, not a cautious word
+Tilde should feel like a typing accelerator, not a cautious word
 completer.
 
 The daily-driver target is short-phrase autocomplete:
@@ -75,7 +75,7 @@ phrase mode less fragile when the first model pass is bad:
   while still allowing typo-fragment recovery from earlier lines,
 - yellow-profile daily-driver phrases can display inside a subsecond repair
   budget instead of being hidden as too slow,
-- Obsidian proof setup now seeds the note before launching SteadyType, preserves
+- Obsidian proof setup now seeds the note before launching Tilde, preserves
   marker spacing, avoids pre-accept AX reads that move the CodeMirror caret, and
   verifies the accepted text after each keypress,
 - split-pane CodeMirror AX reads now repair hidden document-spacer coordinate
@@ -312,7 +312,7 @@ show whether zero-latency suggestions came from writing bridges, markdown note
 labels, reply phrases, sentence-boundary guesses, daily-driver trust language,
 or generic priors without exposing the typed text.
 The same report now summarizes no-show reasons and triggers for
-`suggestionSuppressed` events, so a dogfood pass can explain whether SteadyType
+`suggestionSuppressed` events, so a dogfood pass can explain whether Tilde
 stayed quiet because the model returned nothing useful, instant fallback missed,
 typing was stale, placement blocked, or another blocker fired. This does not
 create the subjective proof by itself, but it prevents a tiny, annoying,
@@ -326,12 +326,12 @@ avoid describing placement as wrong, weird, detached, or unstable. The same
 report now carries a redacted safety snapshot for prompt no-submit and
 sensitive-field suppression, so a daily-driver pass cannot hide stale
 wrong-field safety.
-The dogfood `start` command now records whether SteadyType was running when the
+The dogfood `start` command now records whether Tilde was running when the
 session began, whether the trace already existed, and a readiness verdict. The
 finished report carries the same start-readiness fields, so a session that was
 accidentally started while the app was off fails the dogfood gate instead of
 looking like valid daily-driver proof. The dogfood `status` command is now a
-preflight too: it reports whether the trace exists, whether SteadyType is
+preflight too: it reports whether the trace exists, whether Tilde is
 running, warns to run `./script/build_and_run.sh --verify` when the app is off,
 shows the saved mark, rows since the mark, the redacted app filter, and the
 exact next start/finish/review command.
@@ -385,7 +385,7 @@ inserted characters inside a 1.1 second window.
 The live status text is less mysterious too. The menu tooltip and Settings
 `Why:` row now say whether the shown suggestion is a word, phrase, or sentence,
 and whether it came from the instant fallback, fast word fallback, or model path.
-When nothing appears after a request, the same line now says whether SteadyType
+When nothing appears after a request, the same line now says whether Tilde
 stayed quiet because there was no useful suggestion, no fast word match, no
 cursor position, a repeated miss, stale text, or a model error.
 
@@ -410,7 +410,7 @@ if it", "we need to", "next step is", "the goal is", and "can you" can produce
 patterns still stay behind the same profile gates, so prompt, search, form, and
 code surfaces remain blocked.
 It now has a guarded connector-thought layer for daily-driver writing too:
-when the surrounding words are about SteadyType, suggestions, typing, writing,
+when the surrounding words are about Tilde, suggestions, typing, writing,
 or trust, endings like "because", "so that", "which means", "the reason is",
 "the fix is", and "we should prove" can produce 4-word zero-latency
 continuations. This makes the instant path less like canned autocomplete and
@@ -443,12 +443,12 @@ being treated as word-completion-only list rows.
 
 The instant phrase path now listens to accepted-and-kept learning too. After
 enough local evidence that accepted instant phrases are not being kept for the
-current app, field kind, request mode, and writing profile, SteadyType skips
+current app, field kind, request mode, and writing profile, Tilde skips
 that zero-latency canned phrase and queues the model phrase instead. The trace
 metadata stays redacted and the live status can say `Quiet: recent rejects`, so
 the app is less mysterious when it chooses restraint. The dogfood status and
 report now also print `Instant phrase learned restraint`, so a session can show
-when SteadyType skipped a canned phrase because local learning said it was not
+when Tilde skipped a canned phrase because local learning said it was not
 helping.
 
 The status surface now treats `Quiet:`, `Hidden:`, and paused no-show decisions
@@ -477,7 +477,7 @@ research. The current product path is TextEdit, Notes, Obsidian, and other
 boring writing fields.
 
 Ghostty-hosted Claude Code is still an honest host-specific proof gap as of
-May 27, 2026. The prior live run exposed the wrong trust shape: SteadyType
+May 27, 2026. The prior live run exposed the wrong trust shape: Tilde
 showed a suggestion near Ghostty's top/header AX text while the real prompt was
 lower in the terminal, then no insertion source verified. Title-scoped Ghostty
 proof now rejects stale Claude header text, date/build text, and digit-heavy
@@ -501,7 +501,7 @@ prompt-row suggestion with `anchorRect=x=130,y=862,w=0,h=22`,
 `latencyMilliseconds=456`; a later retry also emitted
 `synthetic-caret ... source=terminal-screen-prompt` and `traceID=128BDDCD`.
 The smoke then reached Tab acceptance and the verified insertion ladder, but
-every Ghostty insertion source stayed unverified, so SteadyType refused the
+every Ghostty insertion source stayed unverified, so Tilde refused the
 unsafe insert with `keyboard-action ... handled=false ... reason=insert-failed`.
 That is not support yet, but the trust shape is better: prompt-row placement is
 real and the next proof target is a verified one-word no-submit Ghostty insertion
@@ -527,7 +527,7 @@ diagnostics show Ghostty prompt-row suggestions at lines `596949` and `596952`
 with `traceID=599076D1`, then later prompt-row suggestions with
 `traceID=B2C3B98D`. The run is still not green because the Codex desktop runner
 can inject a real Command-Tab before the scripted accept, hiding the visible
-suggestion before SteadyType can handle Tab. The next proof needs either a
+suggestion before Tilde can handle Tab. The next proof needs either a
 runner-isolated live pass or an accept driver that cannot be preempted by the
 Codex app regaining focus.
 
@@ -538,7 +538,7 @@ the smoke launches a fresh title-marked Ghostty/Claude Code process before the
 next proof text. Fresh process activation failures now fail with a focused
 runner error instead of continuing against a dead PID. This still does not make
 Ghostty supported, but it narrows the remaining proof gap to runner-isolated
-Tab acceptance or an accept driver that SteadyType can observe without Codex
+Tab acceptance or an accept driver that Tilde can observe without Codex
 preempting the target window.
 
 The runner-isolated path now has a concrete wrapper:
@@ -593,14 +593,14 @@ calling Ghostty supported. `20260528T200606Z-ghostty` and
 `write_screen_file:copy,plain` readiness after the AX helper reported
 `textNodes=0`, proved exact typed prompt readiness with the same title-scoped
 screen-copy fallback, and verified that native Ghostty input can mutate and
-restore the proof prompt before SteadyType insertion. Both runs then found a
+restore the proof prompt before Tilde insertion. Both runs then found a
 prompt-row suggestion, but CGEvent Tab produced no `key=tab` diagnostic, the
 System Events fallback also failed to produce an immediate Tab diagnostic, and
 the visible suggestion disappeared before the app-owned insertion ladder could
 run. The third run received SIGTERM during the second native pre-accept probe,
 so the harness now records the active Claude Code prompt/Tab/insertion phase on
 SIGTERM. The next red bar is no longer configured-window launch or AX prompt
-discovery; it is an accept driver that SteadyType can observe in Ghostty without
+discovery; it is an accept driver that Tilde can observe in Ghostty without
 losing the visible prompt-row suggestion.
 
 Post-commit proof `20260528T202618Z-ghostty` tightened that red bar. With
@@ -612,17 +612,17 @@ CGEvent Tab, HID CGEvent Tab, and System Events Tab all produced no
 `key=tab` diagnostic. The run failed with the precise reason
 `Tab delivery did not reach key capture`, so the next experiment should skip
 more launch/readiness work and focus on a Ghostty-specific accept path that the
-SteadyType event tap can observe.
+Tilde event tap can observe.
 
 The next bounded launchd proof, `20260528T203530Z-ghostty`, added a
 non-mutating key-capture sentinel before Tab. The run reached the same
 prompt-row state, found the current suggestion at diagnostics line `1029172`,
-and SteadyType had started key capture at diagnostics line `1029158`. The
+and Tilde had started key capture at diagnostics line `1029158`. The
 session CGEvent Shift probe and the HID CGEvent Shift retry both produced no
 `keyboard-event-tap-latency key=other` diagnostic, so the harness failed before
 pressing Tab with `key capture probe did not reach event tap`. That moves the
 next red bar below Tab itself: the detached Ghostty runner needs a key source
-that can reach SteadyType's event tap at all before Tab delivery can be judged.
+that can reach Tilde's event tap at all before Tab delivery can be judged.
 
 The follow-up key-source pass keeps that boundary honest. The CGEvent helper now
 accepts an explicit source state, so the non-mutating Shift sentinel can try
@@ -656,7 +656,7 @@ run while it is checking whether the prompt stayed unchanged.
 The next launchd pass, `20260528T210138Z-ghostty`, stayed bounded and sharpened
 the red bar: native Ghostty text could mutate and restore the proof prompt,
 System Events still could not, a prompt-row suggestion appeared, and every
-non-mutating key-capture sentinel missed SteadyType's event tap. Diagnostics
+non-mutating key-capture sentinel missed Tilde's event tap. Diagnostics
 also showed macOS Accessibility/System Settings taking focus during that key
 probe window. The harness now classifies that permission-UI focus steal
 explicitly when it happens, with a short post-probe flush wait added after
@@ -736,7 +736,7 @@ now stops every active detached Ghostty proof under the proof root before
 starting a forced replacement.
 `20260528T224532Z-ghostty` proved that guard by stopping
 `20260528T224425Z-ghostty` first, then starting a clean nohup run. It still
-failed during `build/relaunch current SteadyType`, and the new signal snapshot
+failed during `build/relaunch current Tilde`, and the new signal snapshot
 showed a separate Codex-owned `claude_code_ghostty_detached_proof.sh stop`
 process targeting that same run directory. Treat that run as external stop
 interference rather than a Ghostty support verdict.
@@ -754,7 +754,7 @@ actively reused prompt-row anchors fresh, prevents hidden suggestions from
 satisfying the primary scanner, lets explicit Claude Code terminal-host proof
 candidates bypass final-result latency suppression, and preserves a still-valid
 pending phrase request when focused-text polling slows down during the proof.
-The harness also no longer treats the current SteadyType app bundle as a foreign
+The harness also no longer treats the current Tilde app bundle as a foreign
 proof process during exclusive cleanup. The latest insertion pass adds two
 verified hardware-key sources, switches the guarded System Events rung from bulk
 keystroke text to paced per-character typing, and adds a native Ghostty
@@ -769,7 +769,7 @@ the expanded Ghostty insertion ladder, including the new native paste action at
 line `737840`. That is the right next red bar: native Ghostty
 action/input/paste, terminal-scoped send key, paced System Events, targeted
 hardware keys, global hardware keys, bundled Unicode helpers, direct Unicode
-events, and pasteboard insertion all left the prompt unchanged, so SteadyType
+events, and pasteboard insertion all left the prompt unchanged, so Tilde
 failed closed at lines `737883` and `737885`. The next useful proof slice is
 still a verified one-word no-submit Ghostty insertion transport, not broader
 suggestion or placement work.
@@ -828,7 +828,7 @@ Ghostty text input for the marked setup text before a final CGEvent trigger.
 A direct `claude-code-ghostty` smoke now gets past launch and prompt typing, but
 diagnostics line `789456` still reports no visible suggestion because placement
 requires a terminal-screen prompt anchor. That is the next honest red bar:
-Ghostty can now be launched and marked by the harness, but SteadyType still
+Ghostty can now be launched and marked by the harness, but Tilde still
 refuses to place a suggestion without a proven prompt-row screen anchor.
 
 The prompt-row placement blocker is now past the first live gate. The Ghostty
@@ -854,12 +854,12 @@ The direct `claude-code-ghostty` run still failed closed: diagnostics line
 `797843` recorded `source=ghosttyFrontWindowInputText verified=false`, the
 unchanged-prompt baseline stayed true, and line `797884` failed with
 `ghostty-fast-verified-insertion-failed`. Ghostty is still unsupported, but the
-remaining problem is now sharper: SteadyType can place and accept-route the
+remaining problem is now sharper: Tilde can place and accept-route the
 prompt-row candidate, while app-owned Ghostty insertion still does not mutate
 the disposable Claude prompt.
 
 The latest insertion transport pass tested the shell-shaped native path too.
-SteadyType now tries direct and `/bin/zsh -lc exec /usr/bin/osascript` variants
+Tilde now tries direct and `/bin/zsh -lc exec /usr/bin/osascript` variants
 for both the smoke-equivalent front-window `input text` rung and the safer
 marker-scanned `input text` rung. The direct `claude-code-ghostty` run found the
 prompt-row suggestion at diagnostics line `799244`, then failed closed after
@@ -870,7 +870,7 @@ unchanged-prompt baselines stayed true, and line `799831` recorded
 without widening support: Ghostty still needs a different app-owned insertion
 transport.
 
-The next live pass tested SteadyType's own in-process native Ghostty `input
+The next live pass tested Tilde's own in-process native Ghostty `input
 text` rung before the subprocess input variants. The direct
 `claude-code-ghostty` run found a prompt-row suggestion at diagnostics line
 `800174`, posted `ghosttyInProcessInputText` at line `800768`, proved the
@@ -909,7 +909,7 @@ post-Tab verification, not prompt placement, stale host launch, or harness
 timeout.
 
 The next proof pass tested the most likely cheap event-shape fix without
-turning Ghostty green. SteadyType now paces app-owned Command-V, hardware, and
+turning Ghostty green. Tilde now paces app-owned Command-V, hardware, and
 Unicode-to-pid key events. The session-tap pasteboard Command-V probe is still
 available for isolated repros, but it is opt-in after timeout-shaped evidence
 showed it should not run by default. `20260528T025919Z-ghostty` found a
@@ -988,7 +988,7 @@ That rules out another cheap reorder of the current Ghostty transport ladder.
 
 The latest Ghostty diagnostic fix made the failure less ambiguous. Ghostty's
 native `write_screen_file:copy,plain` action copies a temporary screen dump file
-path, so SteadyType now reads that file before matching proof text and records
+path, so Tilde now reads that file before matching proof text and records
 `screenCopyTransport=screenFile`. The rerun `20260528T160018Z-ghostty` found a
 prompt-row suggestion at diagnostics line `945015`, handled Tab, and the native
 screen dump at `16:02:53Z` confirmed `containsOriginal=true` and
@@ -996,9 +996,9 @@ screen dump at `16:02:53Z` confirmed `containsOriginal=true` and
 closed at insertion, but the verifier now proves the target prompt is correct
 and unchanged instead of mistaking the copied file path for terminal content.
 
-The next transport slice ruled out one more app-owned identity. SteadyType now
+The next transport slice ruled out one more app-owned identity. Tilde now
 bundles a proof-scoped Ghostty `input text` mode in
-`SteadyTypeTextEventHelper`: accepted text is passed over stdin, the helper
+`TildeTextEventHelper`: accepted text is passed over stdin, the helper
 requires the exact Ghostty PID plus proof title markers, and the app verifies
 the unchanged prompt before continuing. The current-head opt-in detached rerun
 `20260528T162233Z-ghostty` reached a prompt-row suggestion at diagnostics line
@@ -1064,7 +1064,7 @@ front-window input plus screen-copy at lines `967941`-`967943`, and fail-closed
 insert at lines `967944`-`967946`. The proof log then typed one native suffix and
 one System Events suffix without Enter; neither verified prompt mutation. That
 means the current failed context is not merely an app-owned transport mismatch;
-after SteadyType fails closed, the harness can no longer prove external Ghostty
+after Tilde fails closed, the harness can no longer prove external Ghostty
 input mutates that same disposable prompt either.
 
 The follow-up comparator removed the last obvious focus excuse from that result
@@ -1100,7 +1100,7 @@ The follow-up pre-focus comparator ruled out the prompt-click theory too.
 `20260528T185553Z-ghostty` enabled
 `AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE=1`
 and reached the deferred Tab-accept path on attempt 2. Before any prompt-row
-click, SteadyType reasserted the Ghostty proof pid, stopped the keyboard tap for
+click, Tilde reasserted the Ghostty proof pid, stopped the keyboard tap for
 `ghostty-pre-prompt-focus-bundle-system-events-raw-insertion`, then posted
 `ghosttyPrePromptFocusBundleSystemEventsRawKeystroke` at diagnostics line
 `999928`. It exited `0` but verified `false`; the original-prompt baseline
@@ -1129,11 +1129,11 @@ on timing, prompt click, and event-tap stop shape.
 
 The next proof hook is now narrower than another insertion-ladder reorder.
 `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE=1`
-lets the Ghostty smoke wait for SteadyType to schedule deferred insertion after
+lets the Ghostty smoke wait for Tilde to schedule deferred insertion after
 Tab, then try one external native/System Events character and restore the
 original prompt before the delayed app-owned insert fires. The matching app-side
 delay clamp now allows an explicitly configured 3s proof window. That should
-separate "Tab poisoned the prompt before insertion" from "only SteadyType-owned
+separate "Tab poisoned the prompt before insertion" from "only Tilde-owned
 insertion transports are no-ops" on the next detached run.
 
 The first launchd comparator attempt, `20260528T193340Z-ghostty`, stayed clean
@@ -1160,7 +1160,7 @@ prompt AX readiness.
 
 The follow-up key-capture guard keeps that red lane less disruptive. After
 session, HID, combined-session, and PID-targeted CGEvent Shift probes miss
-SteadyType's event tap, the harness now skips the System Events Shift probe by
+Tilde's event tap, the harness now skips the System Events Shift probe by
 default because it can trigger macOS permission UI and steal focus from the
 disposable prompt. The System Events key-capture probe is still available behind
 `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1`, but
@@ -1173,7 +1173,7 @@ runner. It also defaults detached Ghostty to one disposable context, keeping
 current key-source proof runs from spending minutes repeating the same miss.
 The latest typed-prompt hardening keeps that lane from regressing into a false
 prompt-readiness miss. If Ghostty AX cannot certify the typed prompt, the
-harness can now accept SteadyType's privacy-safe terminal prompt-anchor
+harness can now accept Tilde's privacy-safe terminal prompt-anchor
 diagnostic when it appears after the typing trigger and reports the exact proof
 text length. A later rerun showed a stale nohup `start --force` can interrupt a
 launchd proof, so cross-launcher force-starts now refuse by default unless the
@@ -1183,14 +1183,14 @@ The clean launchd rerun after that guard, `20260528T225106Z-ghostty`, got to the
 next honest red bar. It survived past the old external-stop point, accepted
 screen-copy and exact typed-prompt readiness, restored a native Ghostty prompt
 mutation, and found a prompt-row suggestion at diagnostics line `1068495`.
-Then every default-safe key-capture probe missed SteadyType's event tap:
+Then every default-safe key-capture probe missed Tilde's event tap:
 session/HID/combined CGEvent Shift, PID-targeted Shift for Ghostty pid `56810`,
 and private-source session/HID Shift. System Events Shift stayed opt-in because
 it can trigger the macOS permission UI. Ghostty is still unsupported, but the
 next blocker is now clear: find a key source or accept driver the event tap can
 actually observe in Ghostty.
 The follow-up HID-tap experiment made that red bar sharper without changing the
-support claim. SteadyType now records the tap location at startup and can be
+support claim. Tilde now records the tap location at startup and can be
 launched with `AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION=hid` for proof
 runs, while normal launches still default to the session tap. Live proof
 `20260528T230217Z-ghostty` reached prompt-row suggestion line `1071450` with
@@ -1202,9 +1202,9 @@ proof-only accept-command path.
 The proof-only accept-command path now separates accept routing from Ghostty
 insertion. `20260528T230747Z-ghostty` reached the prompt-row suggestion but
 posted the command only after the full key-probe ladder; by then the visible
-suggestion was gone, so SteadyType refused it. The patched rerun,
+suggestion was gone, so Tilde refused it. The patched rerun,
 `20260528T231520Z-ghostty`, bypassed the probe ladder when the proof-only driver
-is enabled and posted `--proof-only-accept-next-word` immediately. SteadyType
+is enabled and posted `--proof-only-accept-next-word` immediately. Tilde
 logged `proof-only-accept-command-received` with `hasVisibleSuggestion=true`,
 accepted the next-word prefix, scheduled deferred insertion, and logged
 `proof-only-accept-command-result ... handled=true` at diagnostics line
@@ -1214,7 +1214,7 @@ out. Ghostty remains unsupported, but the next red bar is now verified app-owned
 insertion after a handled accept, not Tab routing.
 The wrapper rerun `20260528T232204Z-ghostty` added one harness guardrail: when
 the proof-only driver also ran the slow pre-accept System Events comparator, the
-suggestion hid before the command arrived and SteadyType refused it. Detached
+suggestion hid before the command arrived and Tilde refused it. Detached
 proof-only runs now default that comparator off unless explicitly opted in.
 The latest bounded proof-only run, `20260528T234152Z-ghostty`, proves the
 accept side is no longer the blocker: the app showed a prompt-row 5-word
@@ -1235,7 +1235,7 @@ visible suggestion had already cleared, and the app refused it with
 `hasVisibleSuggestion=false` at diagnostics line `1088565`. That makes the next
 Ghostty red bar the proof-only accept timing race, not another insertion result.
 The source follow-up keeps that race bounded to the proof-only lane instead of
-loosening normal app behavior. SteadyType now caches the latest visible
+loosening normal app behavior. Tilde now caches the latest visible
 proof-only Claude Code/Ghostty suggestion and can restore it for an accept
 command only when proof-only mode is enabled, the current profile and cached
 suggestion both match the virtual Claude Code bundle, the proof field
@@ -1274,7 +1274,7 @@ diagnostics lines `932538`-`932695`, and trace lines `30739`-`30761`. The first
 attempt exposed only Obsidian window chrome through macOS Accessibility; the
 proof harness now starts fresh disposable Obsidian proof launches with
 `--force-renderer-accessibility` so CodeMirror editor content is visible to the
-same AX path SteadyType relies on. This keeps the proof lane moving, but normal
+same AX path Tilde relies on. This keeps the proof lane moving, but normal
 Obsidian daily-driver support should stay caveated until default-launch
 renderer accessibility is proven or guided.
 The helper now also prints a redacted AX snapshot when it cannot resolve the
@@ -1322,7 +1322,7 @@ current strict visual proof with two verified accepts.
 | Placement reliability | Current strict proof passes after the latest source changes: TextEdit, Notes title/body/checklist, Obsidian default/theme/pane/long-note, Chrome textarea, and Chrome contenteditable all have strict visual trace evidence and two verified accepts. Ghostty detached proof now refuses untrusted top/header synthetic carets, preserves refreshed terminal-screen prompt anchors across proof input repair, bypasses terminal-proof-only final latency suppression, preserves valid in-flight proof requests through focused-text polling throttle, reaches prompt-row suggestion detection through a title-scoped direct prompt anchor when screen-marker text is stale, models the visible Ghostty prompt marker before caret estimation, survives volatile Ghostty window-title focus by trusting a title-focused root PID before host-app refocus, cleans stale proof windows with Ghostty-native APIs, retries fresh context launch failures, keeps failed launch wrappers diagnosable, tries pasteboard before slower insertion rungs, paces synthetic key events, activates Ghostty after title-scoped terminal focus before posting input, keeps the session-tap paste probe opt-in after timeout-shaped evidence, forwards opt-in Ghostty probe env into detached app launches, separately verifies the native-prefix/final-key probe prefix before posting the final key, and now stops the default failing insertion ladder at an explicit budget while keeping the long probes opt-in; `20260528T023102Z-ghostty`, `20260528T023640Z-ghostty`, `20260528T024044Z-ghostty`, `20260528T025919Z-ghostty`, `20260528T030442Z-ghostty`, and `20260528T031735Z-ghostty` reached prompt-row suggestion and Tab acceptance proof, `20260528T033921Z-ghostty` reached the opt-in native prefix/final-key rung and proved the prompt stayed unchanged, `20260528T034406Z-ghostty` failed earlier with no visible suggestion, `20260528T041228Z-ghostty` reached prompt-row suggestion again but proved the activated ladder still left the prompt unchanged and failed closed on budget, and `20260528T194828Z-ghostty` proved configured-window command launch no longer double-types the launcher before failing earlier at prompt AX discovery, so Ghostty remains unsupported | Correct or honest fallback in normal writing apps | Run a real writing dogfood session, then keep prompt/chat/terminal/production-browser support blocked until exact current proof exists |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; TextEdit, Codex, Claude desktop, and terminal-hosted Claude Code now have current model-backed no-submit latency proof; cold TextEdit phrase continuation now has current default-model proof with 13 shown phrase samples and p95 shown latency 619ms; the fresh Claude Code Terminal run showed 10 model-backed visible samples with prompt-submit safety counters at 0; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and status preflight now require at least one instant phrase fallback with <=1ms recorded latency, expose instant phrase vs model-backed source mix, and include a live redacted typing-feel score | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green on the current build and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, at least one <=1ms instant phrase fallback, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with app/filter match, active-minute match, suggestion quality 4-5, and no placement-trust negatives, plus start/status preflights that expose whether SteadyType was running before and during the dogfood session; reports now fail if SteadyType was not confirmed running at the start; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green on the current build and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, at least one <=1ms instant phrase fallback, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with app/filter match, active-minute match, suggestion quality 4-5, and no placement-trust negatives, plus start/status preflights that expose whether Tilde was running before and during the dogfood session; reports now fail if Tilde was not confirmed running at the start; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with Tilde enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 

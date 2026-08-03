@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-This maps public TypeAhead lessons onto the current SteadyType codebase.
+This maps public TypeAhead lessons onto the current Tilde codebase.
 
 ## Core Loop
 
@@ -16,7 +16,7 @@ TypeAhead public loop:
 - dismiss with `Esc`,
 - keep typing to ignore.
 
-SteadyType map:
+Tilde map:
 
 - `Sources/AutocompleteLabApp/App/AppDelegate.swift`: polling, focused field
   processing, scheduling, key handling, and app-level orchestration.
@@ -35,7 +35,7 @@ full accept is a separate action.
 
 TypeAhead claims inline ghost text at the cursor.
 
-SteadyType map:
+Tilde map:
 
 - `Sources/AutocompleteLabApp/UI/SuggestionPanelController.swift`: AppKit
   overlay panel.
@@ -54,7 +54,7 @@ mirror fallback until exact app proof exists.
 TypeAhead claims broad app support and lists exceptions for remote desktop,
 VMs, and non-standard fields.
 
-SteadyType map:
+Tilde map:
 
 - `Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift`
 - `Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift`
@@ -63,7 +63,7 @@ SteadyType map:
 - `docs/product/manual-smoke-checklist.md`
 - `docs/product/proof-manifest.json`
 
-Gap: SteadyType intentionally has narrower public support. This is a feature,
+Gap: Tilde intentionally has narrower public support. This is a feature,
 not a defect, until proof exists.
 
 ## Sensitive Fields
@@ -71,7 +71,7 @@ not a defect, until proof exists.
 TypeAhead has strong local-only privacy claims. I did not find an explicit
 public password/search/payment/private-prompt suppression story.
 
-SteadyType map:
+Tilde map:
 
 - `Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift`
 - `Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift`
@@ -90,7 +90,7 @@ Gap closed this pass:
 
 TypeAhead's public proof is mostly docs plus Activity Monitor/firewall guidance.
 
-SteadyType map:
+Tilde map:
 
 - `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`
 - `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`
@@ -110,7 +110,7 @@ to be less internal. This pass improves that path.
 TypeAhead uses app-owned local models with `llama.cpp` and GGUF according to
 public docs.
 
-SteadyType map:
+Tilde map:
 
 - `Sources/AutocompleteLabApp/Runtime/AppModelRuntimeFactory.swift`
 - `Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift`
@@ -123,9 +123,9 @@ stance better than an Ollama-style server.
 
 ## Proof
 
-TypeAhead public docs do not expose a proof manifest. SteadyType already does.
+TypeAhead public docs do not expose a proof manifest. Tilde already does.
 
-SteadyType map:
+Tilde map:
 
 - `swift test --jobs 1`
 - `./script/check_sensitive_field_proof.sh`

@@ -46,11 +46,11 @@ struct AppModelRuntimeFactoryTests {
         #expect(bundle.lengthConfiguration.maxGeneratedTokens == 44)
     }
 
-    @Test("Uses SteadyType model root override and unavailable runtime for missing model")
+    @Test("Uses Tilde model root override and unavailable runtime for missing model")
     func usesModelRootOverrideAndUnavailableRuntimeForMissingModel() async {
         let defaults = temporaryDefaults()
         let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("steadytype-model-root-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-model-root-\(UUID().uuidString)", isDirectory: true)
         defer {
             try? FileManager.default.removeItem(at: rootURL)
         }
@@ -70,7 +70,7 @@ struct AppModelRuntimeFactoryTests {
     func usesUnavailableRuntimeAndRepairStateForInvalidModelFolder() async throws {
         let defaults = temporaryDefaults()
         let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("steadytype-invalid-model-root-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-invalid-model-root-\(UUID().uuidString)", isDirectory: true)
         defer {
             try? FileManager.default.removeItem(at: rootURL)
         }
@@ -103,7 +103,7 @@ struct AppModelRuntimeFactoryTests {
     func productionRuntimeIgnoresMutableModelEnvironmentOverrides() {
         let defaults = temporaryDefaults()
         let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("steadytype-production-model-root-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-production-model-root-\(UUID().uuidString)", isDirectory: true)
         defer {
             try? FileManager.default.removeItem(at: rootURL)
         }
@@ -126,7 +126,7 @@ struct AppModelRuntimeFactoryTests {
     func rejectsSourceBackedModelFoldersWithoutValidIntegrityReceipt() throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
-            .appendingPathComponent("steadytype-runtime-integrity-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-runtime-integrity-\(UUID().uuidString)", isDirectory: true)
         let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
         defer {
             try? fileManager.removeItem(at: rootURL)
@@ -152,7 +152,7 @@ struct AppModelRuntimeFactoryTests {
         )
         #expect(missingReceiptState == .invalid(
             path: modelURL.path,
-            reason: "missing integrity receipt .steadytype-model-integrity.json"
+            reason: "missing integrity receipt .tilde-model-integrity.json"
         ))
 
         _ = try ModelAssetIntegrityReceiptWriter.write(
@@ -189,7 +189,7 @@ struct AppModelRuntimeFactoryTests {
     func rejectsMutableSourceRevisionsBeforeModelLookup() {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
-            .appendingPathComponent("steadytype-runtime-mutable-revision-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-runtime-mutable-revision-\(UUID().uuidString)", isDirectory: true)
         let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
         defer {
             try? fileManager.removeItem(at: rootURL)
@@ -225,7 +225,7 @@ struct AppModelRuntimeFactoryTests {
     func mlxWarmRevalidatesSourceBackedIntegrityBeforeLoading() async throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
-            .appendingPathComponent("steadytype-runtime-warm-integrity-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-runtime-warm-integrity-\(UUID().uuidString)", isDirectory: true)
         let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
         defer {
             try? fileManager.removeItem(at: rootURL)
@@ -292,7 +292,7 @@ struct AppModelRuntimeFactoryTests {
     func integrityValidationCacheSkipsUnchangedDuplicateChecksAndInvalidatesEdits() throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
-            .appendingPathComponent("steadytype-runtime-integrity-cache-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-runtime-integrity-cache-\(UUID().uuidString)", isDirectory: true)
         let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
         let weightsURL = modelURL.appendingPathComponent("model.safetensors")
         defer {
@@ -362,7 +362,7 @@ struct AppModelRuntimeFactoryTests {
     func factoryReadinessValidationSeedsSharedIntegrityCache() throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
-            .appendingPathComponent("steadytype-runtime-factory-integrity-cache-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-runtime-factory-integrity-cache-\(UUID().uuidString)", isDirectory: true)
         let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
         let weightsURL = modelURL.appendingPathComponent("model.safetensors")
         defer {

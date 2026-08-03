@@ -10,7 +10,7 @@ ready for broad release.
 | Suggestion quality | 7 | 7 | No model or ranking change in this pass. |
 | Timing | 7 | 7 | No cadence change in this pass. |
 | Non-annoyance | 7 | 7 | Existing burst, Esc, cooldown, and typed-over logic remain. |
-| Tab safety | 9 | 9 | SteadyType keeps `Tab` one-word only. |
+| Tab safety | 9 | 9 | Tilde keeps `Tab` one-word only. |
 | Esc/snooze behavior | 8 | 8 | Existing field quieting remains. |
 | Sensitive-field suppression | 8 | 9 | Suppression already existed; the reason is now clearer. |
 | Browser/form suppression | 8 | 9 | Existing browser/form blocks now get clearer explanation text. |
@@ -28,7 +28,7 @@ The app was already stronger than TypeAhead on proof-gated support,
 sensitive-field suppression, local redacted diagnostics, and `Tab` safety.
 
 The biggest scorecard movement is trust. When a suggestion does not appear,
-SteadyType can now say "search fields stay quiet" or "forms stay quiet"
+Tilde can now say "search fields stay quiet" or "forms stay quiet"
 instead of exposing internal policy names.
 
 ## Remaining Risks

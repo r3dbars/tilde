@@ -1,6 +1,6 @@
 # Caret-Locked Autocomplete Research Queue
 
-This queue turns `/Users/redbars/Downloads/deep-research-report.md` into repo-specific work for Autocomplete Lab.
+This queue turns `/Users/redbars/Downloads/deep-research-report.md` into repo-specific work for Tilde.
 
 The core lesson is simple: AX should be the first path, not the only path. The app needs to trust caret geometry only after validation, then fall back through line, field, window, and off modes without surprising the user.
 

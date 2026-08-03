@@ -1,4 +1,4 @@
-# Tilda autoresearch lessons — 2026-08-02
+# Tilde autoresearch lessons — 2026-08-02
 
 ## Decision
 
@@ -44,6 +44,6 @@ experiment is approved with a paired baseline-versus-candidate design.
 
 ## External aggregate artifacts
 
-- Screen ledger: `~/.cache/steadytype-eval/gym/autoresearch-missed-opportunities-20260802/expanded/results.jsonl`
-- Confirmation ledger: `~/.cache/steadytype-eval/gym/autoresearch-missed-opportunities-20260802/confirm-token-budget-8-20260802/results.jsonl`
-- Updated resume: `~/.cache/steadytype-eval/gym/autoresearch-missed-opportunities-20260802/resume.md`
+- Screen ledger: `~/.cache/tilde-eval/gym/autoresearch-missed-opportunities-20260802/expanded/results.jsonl`
+- Confirmation ledger: `~/.cache/tilde-eval/gym/autoresearch-missed-opportunities-20260802/confirm-token-budget-8-20260802/results.jsonl`
+- Updated resume: `~/.cache/tilde-eval/gym/autoresearch-missed-opportunities-20260802/resume.md`

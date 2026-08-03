@@ -4,8 +4,8 @@ set -euo pipefail
 MODE="${1:-create}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
-DMG_PATH="$DIST_DIR/SteadyType.dmg"
-ZIP_PATH="$DIST_DIR/SteadyType.zip"
+DMG_PATH="$DIST_DIR/Tilde.dmg"
+ZIP_PATH="$DIST_DIR/Tilde.zip"
 PACKET_DIR="$DIST_DIR/private-beta"
 README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
@@ -31,7 +31,7 @@ usage() {
   cat <<'EOF'
 Usage: script/private_beta_packet.sh [create|--check]
 
-create   Create a local private-beta packet beside dist/SteadyType.dmg.
+create   Create a local private-beta packet beside dist/Tilde.dmg.
 --check  Validate that the packet exists and points at the current DMG.
 --print-feedback-template
          Print the no-raw-text feedback template used in the packet.
@@ -116,7 +116,7 @@ Use this once per beta day. It should take about 2 minutes.
 
 ## Before Writing
 
-- Open SteadyType from the menu bar.
+- Open Tilde from the menu bar.
 - Confirm the local model is ready in Settings.
 - Confirm raw text tracing and screenshot tracing are off unless Justin asked
   for a debug session.
@@ -154,7 +154,7 @@ The default beta report is local and redacted.
 
 ## Tester Path
 
-1. Open the SteadyType menu bar item.
+1. Open the Tilde menu bar item.
 2. Open `Debug` -> `Diagnostics`.
 3. Choose `Export Privacy Bundle`.
 4. Share only the exported privacy bundle when filing feedback.
@@ -236,7 +236,7 @@ EOF
 }
 
 print_model_asset_template() {
-  local expected_model_path="${1:-<model folder shown in SteadyType Settings>}"
+  local expected_model_path="${1:-<model folder shown in Tilde Settings>}"
 
   cat <<EOF
 # Model Asset Check
@@ -251,7 +251,7 @@ $expected_model_path
 
 Verify it in the app:
 
-1. Open SteadyType Settings.
+1. Open Tilde Settings.
 2. Check \`Local model\`.
 3. Confirm Settings says the model is ready.
 
@@ -305,8 +305,8 @@ write_readiness_summary() {
 
 Generated: $generated_at
 Commit: $commit
-Primary artifact: ../SteadyType.dmg
-Secondary archive: ../SteadyType.zip
+Primary artifact: ../Tilde.dmg
+Secondary archive: ../Tilde.zip
 SHA-256: $sha
 
 ## Current Readiness
@@ -410,25 +410,25 @@ packet_regeneration_reason() {
   done < <(packet_required_paths)
 
   expected_sha="$(primary_artifact_sha)"
-  actual_sha="$(packet_checksum_for "SteadyType.dmg")"
+  actual_sha="$(packet_checksum_for "Tilde.dmg")"
   if [[ -z "$actual_sha" || "$expected_sha" != "$actual_sha" ]]; then
-    echo "beta packet checksum is stale for SteadyType.dmg"
+    echo "beta packet checksum is stale for Tilde.dmg"
     echo "expected: $expected_sha"
     echo "actual:   ${actual_sha:-missing}"
     return 0
   fi
 
   expected_zip_sha="$(secondary_archive_sha)"
-  actual_zip_sha="$(packet_checksum_for "SteadyType.zip")"
+  actual_zip_sha="$(packet_checksum_for "Tilde.zip")"
   if [[ -n "$expected_zip_sha" ]]; then
     if [[ -z "$actual_zip_sha" || "$expected_zip_sha" != "$actual_zip_sha" ]]; then
-      echo "beta packet checksum is stale for SteadyType.zip"
+      echo "beta packet checksum is stale for Tilde.zip"
       echo "expected: $expected_zip_sha"
       echo "actual:   ${actual_zip_sha:-missing}"
       return 0
     fi
   elif [[ -n "$actual_zip_sha" ]]; then
-    echo "beta packet checksum references missing SteadyType.zip"
+    echo "beta packet checksum references missing Tilde.zip"
     return 0
   fi
 
@@ -443,7 +443,7 @@ check_secondary_archive_app() {
   fi
 
   verify_dir="$(mktemp -d)"
-  app_path="$verify_dir/SteadyType.app"
+  app_path="$verify_dir/Tilde.app"
 
   if ! ditto -x -k "$ZIP_PATH" "$verify_dir"; then
     rm -rf "$verify_dir"
@@ -453,7 +453,7 @@ check_secondary_archive_app() {
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "Developer ID archive signature blocked: secondary archive does not contain SteadyType.app" >&2
+    echo "Developer ID archive signature blocked: secondary archive does not contain Tilde.app" >&2
     exit 1
   fi
 
@@ -538,7 +538,7 @@ check_primary_artifact_app() {
   local proof_dir="$DIST_DIR/release-proof"
   verify_dir="$(mktemp -d)"
   mount_path="$verify_dir/mount"
-  app_path="$verify_dir/SteadyType.app"
+  app_path="$verify_dir/Tilde.app"
   mkdir -p "$mount_path"
 
   if ! attach_dmg_for_inspection "$DMG_PATH" "$mount_path"; then
@@ -547,19 +547,19 @@ check_primary_artifact_app() {
     exit 1
   fi
 
-  cp -R "$mount_path/SteadyType.app" "$app_path" 2>/dev/null || true
+  cp -R "$mount_path/Tilde.app" "$app_path" 2>/dev/null || true
   hdiutil detach "$mount_path" -quiet || true
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "primary beta artifact does not contain SteadyType.app" >&2
+    echo "primary beta artifact does not contain Tilde.app" >&2
     exit 1
   fi
 
   if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE:-1}" == "1" ]]; then
     if ! ./script/check_app_bundle.sh --release "$app_path"; then
       rm -rf "$verify_dir"
-      echo "Developer ID DMG signature blocked: $DMG_PATH does not contain a Developer ID signed SteadyType.app" >&2
+      echo "Developer ID DMG signature blocked: $DMG_PATH does not contain a Developer ID signed Tilde.app" >&2
       echo "This is separate from Apple notarization credentials. Rebuild the archive with ./script/package_release.sh archive before checking the beta packet." >&2
       exit 1
     fi
@@ -599,11 +599,11 @@ check_archive_privacy_export() {
   proof_dir="$(mktemp -d)"
 
   ditto -x -k "$ZIP_PATH" "$verify_dir"
-  app_path="$verify_dir/SteadyType.app"
+  app_path="$verify_dir/Tilde.app"
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir" "$proof_dir"
-    echo "archive does not contain SteadyType.app" >&2
+    echo "archive does not contain Tilde.app" >&2
     exit 1
   fi
 
@@ -657,10 +657,10 @@ create_packet() {
   zip_sha="$(secondary_archive_sha)"
 
   cat >"$README_PATH" <<EOF
-# SteadyType Private Beta Packet
+# Tilde Private Beta Packet
 
-Primary artifact: ../SteadyType.dmg
-Secondary archive: ../SteadyType.zip
+Primary artifact: ../Tilde.dmg
+Secondary archive: ../Tilde.zip
 SHA-256: $sha
 
 This is a local-only packet for a tiny private beta. Nothing here uploads
@@ -702,7 +702,7 @@ Useful commands:
 ./script/model_latency_report.py --latest
 ./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
-open "\$HOME/Library/Logs/SteadyType"
+open "\$HOME/Library/Logs/Tilde"
 \`\`\`
 
 Default beta feedback uses only the redacted privacy bundle. Do not ask testers
@@ -716,11 +716,11 @@ EOF
   cat >"$INSTALL_PATH" <<'EOF'
 # Install Checklist
 
-1. Open `SteadyType.dmg`.
-2. Drag `SteadyType.app` to `Applications`.
-3. Open `SteadyType.app`.
+1. Open `Tilde.dmg`.
+2. Drag `Tilde.app` to `Applications`.
+3. Open `Tilde.app`.
 4. Open Settings from the menu bar item.
-5. Click `Allow Accessibility` in SteadyType, then grant Accessibility in System Settings.
+5. Click `Allow Accessibility` in Tilde, then grant Accessibility in System Settings.
 6. Return to Settings and confirm Accessibility updates without restarting.
 7. Read `tester-docs/FIRST-RUN-BETA.md`.
 8. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
@@ -791,9 +791,9 @@ Use raw text or screenshots only for an explicit debug session, and write that
 consent in the session notes before collecting them.
 EOF
 
-  printf 'SteadyType.dmg  %s\n' "$sha" >"$CHECKSUM_PATH"
+  printf 'Tilde.dmg  %s\n' "$sha" >"$CHECKSUM_PATH"
   if [[ -n "$zip_sha" ]]; then
-    printf 'SteadyType.zip  %s\n' "$zip_sha" >>"$CHECKSUM_PATH"
+    printf 'Tilde.zip  %s\n' "$zip_sha" >>"$CHECKSUM_PATH"
   fi
   write_readiness_summary "$sha"
   echo "Private beta packet created: $PACKET_DIR"

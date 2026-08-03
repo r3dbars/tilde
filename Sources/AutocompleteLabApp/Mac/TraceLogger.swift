@@ -14,13 +14,13 @@ actor TraceLogger {
     init(
         logURL: URL = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SteadyType/traces.jsonl"),
+            .appendingPathComponent("Library/Logs/Tilde/traces.jsonl"),
         rawLogURL: URL = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SteadyType/raw-traces.jsonl"),
+            .appendingPathComponent("Library/Logs/Tilde/raw-traces.jsonl"),
         screenshotsURL: URL = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SteadyType/screenshots"),
+            .appendingPathComponent("Library/Logs/Tilde/screenshots"),
         redactionLayer: RedactionLayer = .shared
     ) {
         self.logURL = logURL

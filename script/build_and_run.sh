@@ -2,9 +2,9 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="SteadyType"
-HELPER_NAME="SteadyTypeTextEventHelper"
-BUNDLE_ID="bar.r3d.steadytype"
+APP_NAME="Tilde"
+HELPER_NAME="TildeTextEventHelper"
+BUNDLE_ID="bar.r3d.tilde"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
@@ -20,7 +20,7 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 HELPER_BINARY="$APP_MACOS/$HELPER_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
-ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"
+ENTITLEMENTS_PLIST="$ROOT_DIR/script/Tilde.entitlements"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
 GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
@@ -600,9 +600,9 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSSupportsAutomaticTermination</key>
   <false/>
   <key>NSAccessibilityUsageDescription</key>
-  <string>SteadyType needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
+  <string>Tilde needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>SteadyType uses Automation only for opted-in terminal hosts, so accepted suggestions can be inserted into supported prompts without submitting them.</string>
+  <string>Tilde uses Automation only for opted-in terminal hosts, so accepted suggestions can be inserted into supported prompts without submitting them.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

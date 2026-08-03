@@ -9,7 +9,7 @@
 
 **Executive Summary**
 
-The research says this app must earn trust before asking for power. Accessibility is core, Screen Recording is diagnostic-only, and model setup is product setup. Autocomplete Lab is already conservative in the typing loop, privacy defaults, app allowlist, and proof gates. The biggest onboarding gap was that launch could trigger the macOS Accessibility prompt before the app-owned explanation. This pass changes launch sequencing, tightens local-first copy, adds a clean manual onboarding QA checklist, and updates the public README trust story.
+The research says this app must earn trust before asking for power. Accessibility is core, Screen Recording is diagnostic-only, and model setup is product setup. Tilde is already conservative in the typing loop, privacy defaults, app allowlist, and proof gates. The biggest onboarding gap was that launch could trigger the macOS Accessibility prompt before the app-owned explanation. This pass changes launch sequencing, tightens local-first copy, adds a clean manual onboarding QA checklist, and updates the public README trust story.
 
 **Product Standard**
 

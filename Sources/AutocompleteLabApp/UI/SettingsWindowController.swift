@@ -113,7 +113,7 @@ struct SettingsCurrentAppState: Equatable {
 
     var detailText: String {
         guard bundleIdentifier != nil else {
-            return "Open a writing app to see whether SteadyType can help there."
+            return "Open a writing app to see whether Tilde can help there."
         }
 
         guard canToggle else {
@@ -186,10 +186,10 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "SteadyType can read the text field you’re typing in and only inserts text after you accept a suggestion. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
+            return "Tilde can read the text field you’re typing in and only inserts text after you accept a suggestion. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
         }
 
-        return "SteadyType needs Accessibility so it can see the text field you’re typing in and insert a suggestion only after you accept it. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
+        return "Tilde needs Accessibility so it can see the text field you’re typing in and insert a suggestion only after you accept it. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
     }
 }
 
@@ -278,7 +278,7 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var personalCaptureDetailText: String {
-        "Optional. Saves a daily Markdown file on this Mac so SteadyType can learn from your real writing. It stays out of any diagnostic report."
+        "Optional. Saves a daily Markdown file on this Mac so Tilde can learn from your real writing. It stays out of any diagnostic report."
     }
 
     var sharingStatusText: String {
@@ -290,7 +290,7 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var learningStatusText: String {
-        "SteadyType remembers which suggestions you keep — only on this Mac."
+        "Tilde remembers which suggestions you keep — only on this Mac."
     }
 
     var screenRecordingPermissionText: String? {
@@ -411,7 +411,7 @@ struct SettingsTrustState: Equatable {
             return "Suggestions are paused"
         }
 
-        return "SteadyType is on"
+        return "Tilde is on"
     }
 
     var localModeText: String {
@@ -577,7 +577,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var boringGuardrailText: String {
-        "These fine-tune the basics above. The defaults favor short, unsurprising suggestions; nudge them only if SteadyType feels too quiet or too busy."
+        "These fine-tune the basics above. The defaults favor short, unsurprising suggestions; nudge them only if Tilde feels too quiet or too busy."
     }
 
     var maxWordsText: String {
@@ -752,7 +752,7 @@ struct SettingsSuggestionDecisionState: Equatable {
         case "shown", "kept current suggestion":
             return "A suggestion is next to your cursor. Tab accepts one word; Esc dismisses."
         case "accepted":
-            return "Accepted. SteadyType will look for the next suggestion once the field settles."
+            return "Accepted. Tilde will look for the next suggestion once the field settles."
         case "hidden":
             return "Hidden. Keep typing to bring suggestions back."
         case "paused":
@@ -1118,7 +1118,7 @@ final class SettingsWindowController: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "SteadyType Settings"
+        window.title = "Tilde Settings"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
         window.contentMinSize = SettingsLayoutStyle.nativeUtility.minimumContentSize
@@ -1401,7 +1401,7 @@ final class SettingsWindowController: NSObject {
     private func buildContent(in contentView: NSView) {
         configureControls()
 
-        let title = NSTextField(labelWithString: "SteadyType")
+        let title = NSTextField(labelWithString: "Tilde")
         title.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
         title.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1562,7 +1562,7 @@ final class SettingsWindowController: NSObject {
                 ]
             ),
             makeSection(
-                title: "Help Improve SteadyType",
+                title: "Help Improve Tilde",
                 views: [
                     feedbackLabel,
                     feedbackDetailLabel,
@@ -1739,7 +1739,7 @@ final class SettingsWindowController: NSObject {
         configureButton(silenceFieldButton, #selector(silenceFieldControl))
         silenceFieldButton.toolTip = "Stops suggestions only in this field until you move on."
         configureButton(enableAllAppsButton, #selector(enableAllAppsControl))
-        enableAllAppsButton.toolTip = "Resumes every app you paused in SteadyType."
+        enableAllAppsButton.toolTip = "Resumes every app you paused in Tilde."
 
         acceptAllShortcutPopup.target = self
         acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
@@ -1780,7 +1780,7 @@ final class SettingsWindowController: NSObject {
             maximumValue: CompletionModelPolicy.maximumVisibleWords,
             action: #selector(changeMaxWordsSlider)
         )
-        maxWordsSlider.toolTip = "The longest suggestion SteadyType will show."
+        maxWordsSlider.toolTip = "The longest suggestion Tilde will show."
         configureSlider(
             wordStartSlider,
             minimumValue: SuggestionTuning.minimumWordStartCharacters,
@@ -1801,7 +1801,7 @@ final class SettingsWindowController: NSObject {
             maximumValue: SuggestionTuning.maximumResponseSpeedLevel,
             action: #selector(changeResponseSpeedSlider)
         )
-        responseSpeedSlider.toolTip = "How long SteadyType waits after you stop typing."
+        responseSpeedSlider.toolTip = "How long Tilde waits after you stop typing."
         configureSlider(
             confidenceSlider,
             minimumValue: SuggestionTuning.minimumConfidenceLevel,

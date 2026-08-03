@@ -158,7 +158,7 @@ struct CommandContextPanelStateTests {
             runtimeReport: RuntimeReadinessReport(
                 stage: .repairNeeded,
                 summary: "model folder needs repair",
-                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/SteadyType/model",
+                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/Tilde/model",
                 action: .repairModel
             ),
             context: editableContext,

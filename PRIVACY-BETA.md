@@ -1,6 +1,6 @@
-# SteadyType Beta Privacy
+# Tilde Beta Privacy
 
-SteadyType is local-first by default.
+Tilde is local-first by default.
 
 ## What Accessibility Is Used For
 

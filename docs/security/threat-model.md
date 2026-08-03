@@ -1,19 +1,19 @@
-# SteadyType Threat Model & Security Findings
+# Tilde Threat Model & Security Findings
 
 Status: first adversarial security pass (2026-06-13). Scope: the standalone macOS
 autocomplete app (`Sources/AutocompleteLabApp`) and the pure policy core
 (`Sources/AutocompleteLabCore`). This complements — it does not replace — the privacy
 no-leak sentinel tests and `docs/product/proof-manifest.json`.
 
-This document is the source of truth for SteadyType's *security* posture (distinct from the
+This document is the source of truth for Tilde's *security* posture (distinct from the
 *privacy/no-leak* proofs). Keep it short and decision-oriented. When you change insertion,
 identity, tracing, capture, event-tap, or model-asset behavior, update the matching finding.
 
 ---
 
-## 1. What SteadyType can do (trust surface)
+## 1. What Tilde can do (trust surface)
 
-SteadyType runs as a menu-bar process the user grants Accessibility (and optionally Screen
+Tilde runs as a menu-bar process the user grants Accessibility (and optionally Screen
 Recording) permission to. That permission set is powerful:
 
 - **Read** the focused text field of *every* app — text before/after the caret, role,
@@ -49,7 +49,7 @@ arbitrary apps, which is what motivated this review.
   files the artifact directories expose, or who can tamper with on-disk model weights.
 - **A3 — Network attacker**: can MITM the model download (rogue CA, DNS, captive portal).
 
-Out of scope: an attacker with root or with SteadyType's own code-signing identity; physical
+Out of scope: an attacker with root or with Tilde's own code-signing identity; physical
 attacks; the security of MLX / swift-transformers internals beyond how we invoke them.
 
 ### Design strengths confirmed by this pass (no change needed)
@@ -145,10 +145,10 @@ world-readable files in `0755` directories**:
 
 **Confirmed on disk:**
 ```
-~/Library/Logs/SteadyType/                 drwxr-xr-x   (0755)
-~/Library/Logs/SteadyType/traces.jsonl     -rw-r--r--   (0644)   90 MB
-~/Library/Logs/SteadyType/diagnostics.log  -rw-r--r--   (0644)  475 MB
-~/Library/Application Support/SteadyType/Personal Capture/  drwxr-xr-x (0755)
+~/Library/Logs/Tilde/                 drwxr-xr-x   (0755)
+~/Library/Logs/Tilde/traces.jsonl     -rw-r--r--   (0644)   90 MB
+~/Library/Logs/Tilde/diagnostics.log  -rw-r--r--   (0644)  475 MB
+~/Library/Application Support/Tilde/Personal Capture/  drwxr-xr-x (0755)
 ```
 
 **What:** Locations and sensitivity:
@@ -193,7 +193,7 @@ repo-wide search for `SecCode` / `SecStaticCode` / `teamIdentifier` / `SecRequir
 
 **What:** macOS does not enforce `CFBundleIdentifier` uniqueness; a malicious app (A1) can set
 its Info.plist `CFBundleIdentifier` to `com.google.Chrome`, `com.apple.TextEdit`, etc. By
-spoofing a "green"/trusted id it can induce SteadyType to (a) show inline suggestions and offer
+spoofing a "green"/trusted id it can induce Tilde to (a) show inline suggestions and offer
 full-sentence acceptance in its own surfaces, and (b) evade bundle-ID-based *sensitivity*
 heuristics. The demonstrable harm is bounded: the injected text is the user's own continuation
 of text typed **into the attacker's own field** (which the attacker already sees), so spoofing
@@ -232,7 +232,7 @@ model manifests in `Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swi
    computed *from whatever was downloaded* — trust-on-first-use: a tampered asset present at first
    install would be blessed and would match its own receipt thereafter.
 3. **On-disk tamper (A2):** model weights live under
-   `~/Library/Application Support/SteadyType/Models/...`; a same-user process could replace the
+   `~/Library/Application Support/Tilde/Models/...`; a same-user process could replace the
    files. The post-receipt validator (recompute-and-compare) catches changes made *after* the
    receipt, but not the no-known-good-hash gap above.
 

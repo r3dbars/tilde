@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print the lowest-score proof lanes from the SteadyType scorecard."""
+"""Print the lowest-score proof lanes from the Tilde scorecard."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_SCORECARD = Path("docs/product/steadytype-product-scorecard.md")
+DEFAULT_SCORECARD = Path("docs/product/tilde-product-scorecard.md")
 
 
 @dataclass(frozen=True)

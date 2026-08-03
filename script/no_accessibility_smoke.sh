@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
 MODE="print"
 
 usage() {
@@ -9,7 +9,7 @@ usage() {
 Usage: script/no_accessibility_smoke.sh [--print|--check|--open-settings]
 
 Prints or verifies the manual no-Accessibility-permission smoke path.
-This script does not reset TCC or revoke permissions. Disable SteadyType
+This script does not reset TCC or revoke permissions. Disable Tilde
 in System Settings manually, relaunch the app, then run --check.
 EOF
 }
@@ -44,7 +44,7 @@ No-Accessibility smoke path
 1. Record a diagnostics mark:
    START_LINE=\$(wc -l < "$LOG_PATH" | tr -d ' ')
 2. Open System Settings > Privacy & Security > Accessibility.
-3. Turn off SteadyType.
+3. Turn off Tilde.
 4. Relaunch the app:
    ./script/build_and_run.sh --verify
 5. Verify the blocked slice:

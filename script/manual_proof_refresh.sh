@@ -143,7 +143,7 @@ collect_current_proofs() {
     CURRENT_PROOFS+=("$CURRENT_COMMIT_PROOF")
   fi
 
-  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/SteadyType.app/Contents/MacOS/SteadyType}"
+  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/Tilde.app/Contents/MacOS/Tilde}"
   if [[ -s "$app_binary" ]]; then
     local app_sha
     app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
@@ -153,7 +153,7 @@ collect_current_proofs() {
     fi
   fi
 
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/Tilde.zip}"
   if [[ -s "$archive_path" ]]; then
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"

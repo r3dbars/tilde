@@ -80,8 +80,8 @@ struct AcceptanceSurvivalClassifierTests {
     func countsOneLetterSuffixAcceptsAtExactInsertionOffset() {
         let measurement = classifier.classifyAroundExpectedInsertion(
             acceptedText: "d",
-            currentFullText: "Autocomplete Lab Obsidian proof\nSmoke proof feed",
-            expectedInsertionUTF16Offset: "Autocomplete Lab Obsidian proof\nSmoke proof fee".utf16.count,
+            currentFullText: "Tilde Obsidian writing proof\nSmoke proof feed",
+            expectedInsertionUTF16Offset: "Tilde Obsidian writing proof\nSmoke proof fee".utf16.count,
             checkpoint: .twoSeconds
         )
 

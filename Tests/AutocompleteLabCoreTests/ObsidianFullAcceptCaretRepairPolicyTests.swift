@@ -13,7 +13,7 @@ struct ObsidianFullAcceptCaretRepairPolicyTests {
         )
         let snapshot = FocusedTextSnapshot(
             fieldIdentity: identity,
-            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels instant and stays",
+            textBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof feels instant and stays",
             textAfterCursor: ""
         )
 

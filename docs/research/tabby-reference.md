@@ -14,15 +14,15 @@ Use status: public reference only. No Tabby code is copied into this repo.
 - Its suggestion loop is roughly: resolve focused field, watch input, gate suggestion requests, run local inference, render ghost text, reconcile live typing, and insert accepted text.
 - Its runtime path currently documents Apple Foundation Models and local GGUF models through llama.cpp / llama.swift.
 
-## SteadyType Fit
+## Tilde Fit
 
-- Keep the app-owned local runtime path. SteadyType already uses app-owned local model plumbing, so Tabby's GGUF path is a reference, not a migration target.
-- Keep pure policy files for deterministic behavior. SteadyType already does this heavily in `AutocompleteLabCore`; new behavior should keep landing there first.
+- Keep the app-owned local runtime path. Tilde already uses app-owned local model plumbing, so Tabby's GGUF path is a reference, not a migration target.
+- Keep pure policy files for deterministic behavior. Tilde already does this heavily in `AutocompleteLabCore`; new behavior should keep landing there first.
 - Treat OCR and visible-screen context as useful but noisy. Sanitize prompt-shaped, terminal-shaped, and UI-chrome text before it reaches the completion prompt.
 - Keep acceptance boring and safe: Tab accepts the next word, full accept stays separate, and target-change guards stay strict.
 
 ## Non-Fit
 
-- Broad terminal suppression does not directly fit SteadyType because Claude Code and Codex prompt surfaces are explicit proof targets here.
-- Tabby's longer ghost-text chunking is a product reference only. SteadyType should stay shorter and calmer until accepted-and-kept data proves otherwise.
+- Broad terminal suppression does not directly fit Tilde because Claude Code and Codex prompt surfaces are explicit proof targets here.
+- Tabby's longer ghost-text chunking is a product reference only. Tilde should stay shorter and calmer until accepted-and-kept data proves otherwise.
 - Tabby's AGPL-3.0 code should not be copied into this repo unless the license implications are intentionally accepted.

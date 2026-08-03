@@ -260,7 +260,7 @@ struct MLXModelRuntimeWarmGateTests {
     @Test("Daily driver retry prompt repairs weak phrase candidates")
     func dailyDriverRetryPromptRepairsWeakPhraseCandidates() throws {
         let request = CompletionRequest(
-            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels ",
+            textBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof feels ",
             maxVisibleWords: 8,
             mode: .phraseContinuation
         )
@@ -294,7 +294,7 @@ struct MLXModelRuntimeWarmGateTests {
     @Test("Daily driver retry prompt repairs missing phrase candidates")
     func dailyDriverRetryPromptRepairsMissingPhraseCandidates() throws {
         let request = CompletionRequest(
-            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels ",
+            textBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof feels ",
             maxVisibleWords: 8,
             mode: .phraseContinuation
         )

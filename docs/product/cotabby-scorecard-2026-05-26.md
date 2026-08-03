@@ -3,7 +3,7 @@
 Date: 2026-05-26
 
 Scores are local judgment for this pass, not a replacement for
-`steadytype-product-scorecard.md`.
+`tilde-product-scorecard.md`.
 
 | Area | Before | After | Evidence |
 | --- | ---: | ---: | --- |

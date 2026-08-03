@@ -345,16 +345,16 @@ func containsExactPromptText(in searchable: [String], options: Options) -> Bool 
     }
 }
 
-func looksLikeSteadyTypeProofShellCommand(_ line: String) -> Bool {
+func looksLikeTildeProofShellCommand(_ line: String) -> Bool {
     let lowered = normalizedWhitespace(line).lowercased()
-    return lowered.contains("steadytype-claude-code-proof.command")
+    return lowered.contains("tilde-claude-code-proof.command")
         || (
             lowered.contains(" -e ")
-                && lowered.contains("steadytype-claude-code-proof.")
+                && lowered.contains("tilde-claude-code-proof.")
         )
         || (
             lowered.contains("exec ")
-                && lowered.contains("steadytype-claude-code-proof.")
+                && lowered.contains("tilde-claude-code-proof.")
         )
 }
 
@@ -372,7 +372,7 @@ func containsRejectedShellCommandText(in searchable: [String], options: Options)
     }
     return searchable.contains { value in
         value.components(separatedBy: .newlines).contains { line in
-            looksLikeSteadyTypeProofShellCommand(line)
+            looksLikeTildeProofShellCommand(line)
         }
     }
 }

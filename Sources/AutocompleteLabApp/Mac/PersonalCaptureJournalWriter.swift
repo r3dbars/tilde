@@ -14,11 +14,11 @@ final class PersonalCaptureJournalWriter: @unchecked Sendable {
     static let shared = PersonalCaptureJournalWriter(
         folderURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SteadyType/Personal Capture")
+            .appendingPathComponent("Library/Application Support/Tilde/Personal Capture")
     )
 
     private let folderURL: URL
-    private let queue = DispatchQueue(label: "app.steadytype.personal-capture-journal")
+    private let queue = DispatchQueue(label: "app.tilde.personal-capture-journal")
     private let calendar: Calendar
     private let now: () -> Date
 
@@ -100,7 +100,7 @@ final class PersonalCaptureJournalWriter: @unchecked Sendable {
         let date = now()
         append(
             """
-            ## \(Self.timeString(from: date, calendar: calendar)) - SteadyType accepted
+            ## \(Self.timeString(from: date, calendar: calendar)) - Tilde accepted
 
             Accepted suggestion:
 
@@ -131,7 +131,7 @@ final class PersonalCaptureJournalWriter: @unchecked Sendable {
         let date = now()
         append(
             """
-            ## \(Self.timeString(from: date, calendar: calendar)) - SteadyType \(isStrongPositive ? "five-star" : "survival") signal
+            ## \(Self.timeString(from: date, calendar: calendar)) - Tilde \(isStrongPositive ? "five-star" : "survival") signal
 
             Accepted text:
 
@@ -204,7 +204,7 @@ final class PersonalCaptureJournalWriter: @unchecked Sendable {
             components.day ?? 0
         )
         return """
-        # SteadyType Personal Capture - \(dateString)
+        # Tilde Personal Capture - \(dateString)
 
         Local Justin dogfood journal. This is not telemetry, not a beta default, and not included in privacy bundles.
 

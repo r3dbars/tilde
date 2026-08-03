@@ -230,12 +230,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proo",
+            textBeforeCursor: "Tilde Obsidian writing proof\nSmoke proo",
             textAfterCursor: "f feels inst\n",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels inst")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\nSmoke proof feels inst")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
@@ -244,9 +244,9 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianLineDriftWithLeadingWhitespaceTailGrowth() {
         let policy = TextContextRepairPolicy()
         let prefix = [
-            "Autocomplete Lab Obsidian proof",
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof"
+            "Tilde Obsidian writing proof",
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian writing proof"
         ].joined(separator: "\n")
         let previous = prefix + "\nS"
 
@@ -289,12 +289,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "AL scroll 45\nAutocomplete Lab Obsidian proof",
+            textBeforeCursor: "AL scroll 45\nTilde Obsidian writing proof",
             textAfterCursor: "Smoke proof feels",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "AL scroll 45\nAutocomplete Lab Obsidian proof\nSmoke proof feels")
+        #expect(result.textBeforeCursor == "AL scroll 45\nTilde Obsidian writing proof\nSmoke proof feels")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorTextAfterActiveLine)
     }
@@ -306,7 +306,7 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "AL scroll 45\nAutocomplete Lab Obsidian proof",
+            textBeforeCursor: "AL scroll 45\nTilde Obsidian writing proof",
             textAfterCursor: "Smoke proof feels\nExisting note content",
             selectedTextLength: 0
         ))
@@ -322,12 +322,12 @@ struct TextContextRepairPolicyTests {
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
             textBeforeCursor: "AL scroll 44\nSmoke proof",
-            textAfterCursor: " stays\nAutocomplete Lab Obsidian proof",
+            textAfterCursor: " stays\nTilde Obsidian writing proof",
             selectedTextLength: 0
         ))
 
         #expect(result.textBeforeCursor == "AL scroll 44\nSmoke proof stays")
-        #expect(result.textAfterCursor == "\nAutocomplete Lab Obsidian proof")
+        #expect(result.textAfterCursor == "\nTilde Obsidian writing proof")
         #expect(result.reason == .obsidianCodeMirrorLeadingWordDrift)
     }
 
@@ -350,9 +350,9 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianViewportTailLineWithoutNumberedAnchor() {
         let policy = TextContextRepairPolicy()
         let beforeCursor = (80...90)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n")
-            + "\nAutocomplete Lab Obs"
+            + "\nTilde Obs"
         let afterCursor = "idian proof\nSmoke proof feels inst\n"
 
         let result = policy.repair(TextContextRepairInput(
@@ -375,12 +375,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "\n\nBold context line\n\u{200B}\n-\n\u{200B} \nSmoke proof feels",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\u{200B}\n-\n\u{200B} \nSmoke proof feels")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\n\nBold context line\n\u{200B}\n-\n\u{200B} \nSmoke proof feels")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorShortDocumentTailLine)
     }
@@ -392,12 +392,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "\n\nBold context line\n\n- ",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\n-")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\n\nBold context line\n\n-")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorShortDocumentStructureTail)
     }
@@ -410,14 +410,14 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: previousAfter + "Smoke proof feels",
             selectedTextLength: 0,
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof",
             previousTextAfterCursor: previousAfter
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nEarlier markdown line\n- Smoke proof feels")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\n\nEarlier markdown line\n- Smoke proof feels")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorShortDocumentTailLine)
     }
@@ -430,12 +430,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "\n\n" + activeLine,
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\n" + activeLine)
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\n\n" + activeLine)
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorShortDocumentTailLine)
     }
@@ -447,12 +447,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof\n\nBold context line\n\n- Smoke proof fe",
+            textBeforeCursor: "Tilde Obsidian writing proof\n\nBold context line\n\n- Smoke proof fe",
             textAfterCursor: "els",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\n- Smoke proof feels")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\n\nBold context line\n\n- Smoke proof feels")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
@@ -464,12 +464,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof\n\nBold context line\n\nSmoke proof fe",
+            textBeforeCursor: "Tilde Obsidian writing proof\n\nBold context line\n\nSmoke proof fe",
             textAfterCursor: "els",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\nSmoke proof feels")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\n\nBold context line\n\nSmoke proof feels")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
@@ -506,7 +506,7 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "\n\nExisting later paragraph\nSmoke proof feels",
             selectedTextLength: 0
         ))
@@ -521,7 +521,7 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "\n\nExisting later paragraph with a few words",
             selectedTextLength: 0
         ))
@@ -533,9 +533,9 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianLineStartTailText() {
         let policy = TextContextRepairPolicy()
         let previous = (1...10)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n")
-        let before = previous + "\nAutocomplete Lab Obsidian proof\n"
+        let before = previous + "\nTilde Obsidian writing proof\n"
 
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
@@ -556,9 +556,9 @@ struct TextContextRepairPolicyTests {
     func keepsObsidianLineStartTailRepairStableAfterSuggestion() {
         let policy = TextContextRepairPolicy()
         let before = (80...90)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n")
-            + "\nAutocomplete Lab Obsidian proof\n"
+            + "\nTilde Obsidian writing proof\n"
         let activeLine = "Smoke proof feels"
 
         let result = policy.repair(TextContextRepairInput(
@@ -615,19 +615,19 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorDocumentCoordinateDrift() {
         let policy = TextContextRepairPolicy()
         let hiddenPrefix = "\u{200B}\n\u{200B}\n\n"
-        let previousBefore = hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm "
+        let previousBefore = hiddenPrefix + "Tilde Obsidian writing proof.\nSmoke proof feels calm "
 
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and ",
+            textBeforeCursor: hiddenPrefix + "Tilde Obsidian writing proof.\nSmoke proof feels calm and ",
             textAfterCursor: "stays",
             selectedTextLength: 0,
             previousTextBeforeCursor: previousBefore,
             previousTextAfterCursor: ""
         ))
 
-        #expect(result.textBeforeCursor == hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and stays")
+        #expect(result.textBeforeCursor == hiddenPrefix + "Tilde Obsidian writing proof.\nSmoke proof feels calm and stays")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorDocumentCoordinateDrift)
     }
@@ -640,12 +640,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and ",
+            textBeforeCursor: hiddenPrefix + "Tilde Obsidian writing proof.\nSmoke proof feels calm and ",
             textAfterCursor: "stays",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and stays")
+        #expect(result.textBeforeCursor == hiddenPrefix + "Tilde Obsidian writing proof.\nSmoke proof feels calm and stays")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorDocumentCoordinateDrift)
     }
@@ -657,12 +657,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian p",
+            textBeforeCursor: "Tilde Obsidian writing p",
             textAfterCursor: "roof\nSmoke proof feels",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\nSmoke proof feels")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorStalePreviousLine)
     }
@@ -671,9 +671,9 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorTextAfterGrowth() {
         let policy = TextContextRepairPolicy()
         let before = [
-            "Autocomplete Lab Obsidian scroll filler line 89",
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian scroll ta"
+            "Tilde Obsidian scroll filler line 89",
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian scroll ta"
         ].joined(separator: "\n")
 
         let result = policy.repair(TextContextRepairInput(
@@ -695,9 +695,9 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorTextAfterGrowthFromPreviousLineEnd() {
         let policy = TextContextRepairPolicy()
         let before = [
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof",
-            "Autocomplete Lab Obsidian scroll target"
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian writing proof",
+            "Tilde Obsidian scroll target"
         ].joined(separator: "\n")
 
         let result = policy.repair(TextContextRepairInput(
@@ -739,7 +739,7 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorLongNoteActiveLineAfterStableCursor() {
         let policy = TextContextRepairPolicy()
         let before = [
-            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Tilde Obsidian scroll filler line 90",
             "AL scroll 45"
         ].joined(separator: "\n")
 
@@ -765,12 +765,12 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "Smoke proof feels instant",
             selectedTextLength: 0
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels instant")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\nSmoke proof feels instant")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorTextAfterActiveLine)
     }
@@ -782,14 +782,14 @@ struct TextContextRepairPolicyTests {
         let result = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textBeforeCursor: "Tilde Obsidian writing proof",
             textAfterCursor: "Smoke proof feels instant",
             selectedTextLength: 0,
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof",
             previousTextAfterCursor: ""
         ))
 
-        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels instant")
+        #expect(result.textBeforeCursor == "Tilde Obsidian writing proof\nSmoke proof feels instant")
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorTextAfterTypingGrowth)
     }
@@ -816,15 +816,15 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorEndOfDocumentGrowth() {
         let policy = TextContextRepairPolicy()
         let previous = [
-            "Autocomplete Lab Obsidian scroll filler line 89",
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof",
+            "Tilde Obsidian scroll filler line 89",
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian writing proof",
             "Smoke proof feels instant"
         ].joined(separator: "\n")
         let current = previous + " and stays inst"
         let staleBefore = [
-            "Autocomplete Lab Obsidian scroll filler line 89",
-            "Autocomplete Lab Obsidian scroll filler line 90"
+            "Tilde Obsidian scroll filler line 89",
+            "Tilde Obsidian scroll filler line 90"
         ].joined(separator: "\n")
         let staleAfter = String(current.dropFirst(staleBefore.count))
 
@@ -847,9 +847,9 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianEndOfDocumentTypingDriftInsideNewSuffix() {
         let policy = TextContextRepairPolicy()
         let previous = [
-            "Autocomplete Lab Obsidian scroll filler line 89",
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof",
+            "Tilde Obsidian scroll filler line 89",
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian writing proof",
             ""
         ].joined(separator: "\n")
         let current = previous + "Smoke proof feels inst"
@@ -875,12 +875,12 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorCappedEndOfDocumentGrowth() {
         let policy = TextContextRepairPolicy()
         let previousHead = (1...18)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n")
         let overlappingTail = [
-            "Autocomplete Lab Obsidian scroll filler line 89",
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof",
+            "Tilde Obsidian scroll filler line 89",
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian writing proof",
             "Smoke proof feels instant"
         ].joined(separator: "\n")
         let previous = previousHead + "\n" + overlappingTail
@@ -907,8 +907,8 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianBoundedViewportGrowthAfterEndOfDocumentAccept() {
         let policy = TextContextRepairPolicy()
         let previous = (1...90)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
-            .joined(separator: "\n") + "\nAutocomplete Lab Obsidian proof\nSmoke proof feels instant"
+            .map { "Tilde Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n") + "\nTilde Obsidian writing proof\nSmoke proof feels instant"
         let currentViewport = String(previous.suffix(997)) + " and stays"
         let staleAfter = String(currentViewport.suffix(30))
         let staleBefore = String(currentViewport.dropLast(staleAfter.count))
@@ -932,12 +932,12 @@ struct TextContextRepairPolicyTests {
     func repairsObsidianCodeMirrorViewportEndOfDocumentDrift() {
         let policy = TextContextRepairPolicy()
         let previousLines = (1...89)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n")
         let textBefore = previousLines + "\nAutoc"
         let textAfter = [
             "omplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof",
+            "Tilde Obsidian writing proof",
             "Smoke proof feels"
         ].joined(separator: "\n")
         let currentText = textBefore + textAfter
@@ -982,7 +982,7 @@ struct TextContextRepairPolicyTests {
     @Test("Repairs Obsidian bounded viewport when a stable split follows an end-of-document accept")
     func repairsObsidianBoundedViewportStableSplitAfterEndOfDocumentAccept() {
         let policy = TextContextRepairPolicy()
-        let previous = String(repeating: "Autocomplete Lab Obsidian scroll filler ", count: 36)
+        let previous = String(repeating: "Tilde Obsidian scroll filler ", count: 36)
             + "Smoke proof feels instant"
         let currentViewport = String(previous.suffix(997))
         let staleAfter = String(currentViewport.suffix(30))
@@ -1006,7 +1006,7 @@ struct TextContextRepairPolicyTests {
     @Test("Does not repair Obsidian bounded viewport when prior snapshot was not at document end")
     func doesNotRepairObsidianBoundedViewportWhenPriorSnapshotWasNotAtDocumentEnd() {
         let policy = TextContextRepairPolicy()
-        let previous = String(repeating: "Autocomplete Lab Obsidian scroll filler ", count: 36)
+        let previous = String(repeating: "Tilde Obsidian scroll filler ", count: 36)
             + "Smoke proof feels instant"
         let currentViewport = String(previous.suffix(997))
         let staleAfter = String(currentViewport.suffix(30))
@@ -1029,7 +1029,7 @@ struct TextContextRepairPolicyTests {
     func doesNotRepairObsidianCappedEndOfDocumentGrowthWithoutOverlap() {
         let policy = TextContextRepairPolicy()
         let previous = (1...18)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n") + "\nSmoke proof feels instant"
         let cappedWindow = [
             "Different Obsidian scroll filler line 89",
@@ -1057,12 +1057,12 @@ struct TextContextRepairPolicyTests {
     func doesNotRepairObsidianCappedEndOfDocumentGrowthWithoutGrowth() {
         let policy = TextContextRepairPolicy()
         let previousHead = (1...18)
-            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .map { "Tilde Obsidian scroll filler line \($0)" }
             .joined(separator: "\n")
         let overlappingTail = [
-            "Autocomplete Lab Obsidian scroll filler line 89",
-            "Autocomplete Lab Obsidian scroll filler line 90",
-            "Autocomplete Lab Obsidian proof",
+            "Tilde Obsidian scroll filler line 89",
+            "Tilde Obsidian scroll filler line 90",
+            "Tilde Obsidian writing proof",
             "Smoke proof feels instant"
         ].joined(separator: "\n")
         let previous = previousHead + "\n" + overlappingTail
@@ -1241,7 +1241,7 @@ struct TextContextRepairPolicyTests {
         let stalePreviousLineWithoutActiveTyping = policy.repair(TextContextRepairInput(
             bundleIdentifier: "md.obsidian",
             role: "AXTextArea",
-            textBeforeCursor: "Autocomplete Lab Obsidian p",
+            textBeforeCursor: "Tilde Obsidian p",
             textAfterCursor: "roof\nshort",
             selectedTextLength: 0
         ))

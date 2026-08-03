@@ -7,7 +7,7 @@ struct ObsidianInsertionVerificationFastPathPolicyTests {
 
     @Test("Verifies long Obsidian suffix insertion when repaired AX lengths match")
     func verifiesLengthMatchedSuffixInsertion() {
-        let before = String(repeating: "Autocomplete Lab Obsidian proof line\n", count: 8) + "Smoke proof feels instant and stays inst"
+        let before = String(repeating: "Tilde Obsidian writing proof line\n", count: 8) + "Smoke proof feels instant and stays inst"
 
         #expect(policy.canVerifyLengthMatchedSuffix(
             previousTextBeforeCursor: before,

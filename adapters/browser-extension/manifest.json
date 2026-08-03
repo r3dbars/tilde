@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Autocomplete Lab Browser Adapter",
+  "name": "Tilde Browser Adapter",
   "version": "0.1.0",
   "description": "Prototype DOM adapter for local inline autocomplete.",
   "permissions": ["nativeMessaging"],

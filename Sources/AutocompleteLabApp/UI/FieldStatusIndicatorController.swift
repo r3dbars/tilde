@@ -15,23 +15,23 @@ struct FieldStatusIndicatorState: Equatable {
 
     static let ready = FieldStatusIndicatorState(
         kind: .ready,
-        accessibilityLabel: "SteadyType is on in this field"
+        accessibilityLabel: "Tilde is on in this field"
     )
     static let thinking = FieldStatusIndicatorState(
         kind: .thinking,
-        accessibilityLabel: "SteadyType is thinking in this field"
+        accessibilityLabel: "Tilde is thinking in this field"
     )
     static let shown = FieldStatusIndicatorState(
         kind: .shown,
-        accessibilityLabel: "SteadyType is showing a suggestion in this field"
+        accessibilityLabel: "Tilde is showing a suggestion in this field"
     )
     static let waiting = FieldStatusIndicatorState(
         kind: .waiting,
-        accessibilityLabel: "SteadyType is waiting in this field"
+        accessibilityLabel: "Tilde is waiting in this field"
     )
     static let blocked = FieldStatusIndicatorState(
         kind: .blocked,
-        accessibilityLabel: "SteadyType is off in this field"
+        accessibilityLabel: "Tilde is off in this field"
     )
 
     func withReason(_ reason: String) -> FieldStatusIndicatorState {

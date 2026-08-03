@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_SCORECARD = ROOT_DIR / "docs/product/steadytype-product-scorecard.md"
+DEFAULT_SCORECARD = ROOT_DIR / "docs/product/tilde-product-scorecard.md"
 
 REQUIRED_AREAS = [
     "suggestion quality",
@@ -485,7 +485,7 @@ def latency_executable_sha256() -> str:
     if override:
         return override
 
-    app_binary = ROOT_DIR / "dist/SteadyType.app/Contents/MacOS/SteadyType"
+    app_binary = ROOT_DIR / "dist/Tilde.app/Contents/MacOS/Tilde"
     if app_binary.is_file():
         return sha256_file(app_binary)
     return ""
@@ -499,9 +499,9 @@ def strict_latency_selector_command(
     command = [
         "./script/select_latency_window.py",
         "--diagnostics-log",
-        str(Path.home() / "Library/Logs/SteadyType/diagnostics.log"),
+        str(Path.home() / "Library/Logs/Tilde/diagnostics.log"),
         "--trace-log",
-        str(Path.home() / "Library/Logs/SteadyType/traces.jsonl"),
+        str(Path.home() / "Library/Logs/Tilde/traces.jsonl"),
         "--expected-asset",
         "Qwen3.5-4B-4bit",
         "--min-first-visible-samples",
@@ -739,7 +739,7 @@ def validate_scorecard(
     overall = parse_overall(source, failures)
     rows = parse_rows(source, failures)
     seen: dict[str, tuple[int, str]] = {}
-    product_scorecard = "# SteadyType Product Scorecard" in source
+    product_scorecard = "# Tilde Product Scorecard" in source
 
     for row in rows:
         raw_area = row["area"]
@@ -841,7 +841,7 @@ def display_path(path: Path) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate the SteadyType product scorecard.")
+    parser = argparse.ArgumentParser(description="Validate the Tilde product scorecard.")
     parser.add_argument(
         "--scorecard",
         default=str(DEFAULT_SCORECARD),
@@ -894,12 +894,12 @@ def main() -> int:
         require_latency_selector=args.live,
     )
     if failures:
-        print("SteadyType scorecard check failed:", file=sys.stderr)
+        print("Tilde scorecard check failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
-    print(f"SteadyType scorecard verified: {display_path(path)}")
+    print(f"Tilde scorecard verified: {display_path(path)}")
     return 0
 
 

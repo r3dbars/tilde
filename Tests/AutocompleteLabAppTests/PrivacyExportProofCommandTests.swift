@@ -55,7 +55,7 @@ struct PrivacyExportProofCommandTests {
         #expect(!exportedText.contains("proof-private-innocent-note-redbars"))
         #expect(!exportedText.contains("https://private.example/redbars"))
         #expect(!exportedText.contains("/tmp/proof-private-screenshot-redbars.png"))
-        #expect(!exportedText.contains("/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars"))
+        #expect(!exportedText.contains("/Users/redbars/Library/Application Support/Tilde/private-cache-redbars"))
         #expect(!exportedText.contains("loaded from /Users/redbars/private/freeform-reason-redbars.md"))
         #expect(!exportedText.contains("proof private document title redbars"))
         #expect(!exportedText.contains("proof-private-recipient@example.com"))

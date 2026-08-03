@@ -32,7 +32,7 @@ struct ClaudeCodeTerminalScreenPromptAnchorCacheTests {
     @Test("Reuses matching sanitized prompt-line anchor briefly after proof input repair")
     func reusesMatchingSanitizedPromptLineAnchorBrieflyAfterProofInputRepair() {
         let anchor = ClaudeCodeTerminalScreenPromptAnchor(
-            inputText: "[[steadytype-proof:run-123]] Make this setting the feature configurable",
+            inputText: "[[tilde-proof:run-123]] Make this setting the feature configurable",
             promptLineInputText: "Make this setting the feature configurable",
             lineIndex: 18,
             lineCount: 20

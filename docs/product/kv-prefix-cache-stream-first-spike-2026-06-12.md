@@ -4,7 +4,7 @@ Date: 2026-06-12
 
 ## Verdict
 
-`mlx-swift-lm` 3.31.3 exposes real KV cache surfaces, but SteadyType should not
+`mlx-swift-lm` 3.31.3 exposes real KV cache surfaces, but Tilde should not
 reuse prefix state in the autocomplete runtime until the cache owner can prove an
 exact token-prefix match for the current edit.
 
@@ -37,7 +37,7 @@ Important behavior:
 - Its cache is mutable and continues from prior generations.
 - A cache restored from a session that already encoded system instructions must
   not receive those same instructions again.
-- The current SteadyType runtime builds a fresh `ChatSession` per request and
+- The current Tilde runtime builds a fresh `ChatSession` per request and
   only caches the static system prompt string, not KV state.
 
 ## Why KV Reuse Is Nontrivial

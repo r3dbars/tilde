@@ -2,7 +2,7 @@
 
 ## Plain Promise
 
-SteadyType is local-first.
+Tilde is local-first.
 
 By default, it does not upload typed text, prompts, model output, accepted text,
 screenshots, document names, URLs, recipients, or subject lines.
@@ -45,7 +45,7 @@ matched text.
 To stop suggestions in the current app:
 
 1. Focus the app.
-2. Open the SteadyType menu bar item.
+2. Open the Tilde menu bar item.
 3. Choose `Pause in <App Name>`.
 
 Use `Resume in <App Name>` later to enable that app again.

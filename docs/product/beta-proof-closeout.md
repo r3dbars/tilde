@@ -37,7 +37,7 @@ proof, not a copied template.
 After a notarized app exists and Accessibility is granted for that app:
 
 ```bash
-./script/beta_proof_closeout.sh --run-packaged-latency --target textedit-model-latency --app-bundle dist/SteadyType.app
+./script/beta_proof_closeout.sh --run-packaged-latency --target textedit-model-latency --app-bundle dist/Tilde.app
 ```
 
 Use the installed notarized app path if the app was installed from the DMG.

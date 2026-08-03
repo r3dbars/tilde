@@ -8,8 +8,8 @@ struct ObsidianTabPassthroughRepairPolicyTests {
     @Test("Repairs when Tab indents the current line while a suggestion is visible")
     func repairsLeadingTabIndent() {
         let decision = policy.decision(
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof fee",
-            currentTextBeforeCursor: "Autocomplete Lab Obsidian proof\n\tSmoke proof fee",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof fee",
+            currentTextBeforeCursor: "Tilde Obsidian writing proof\n\tSmoke proof fee",
             previousTextAfterCursor: "",
             currentTextAfterCursor: "",
             hasVisibleSuggestion: true,
@@ -22,8 +22,8 @@ struct ObsidianTabPassthroughRepairPolicyTests {
     @Test("Repairs Obsidian CodeMirror tab spacer drift")
     func repairsCodeMirrorTabSpacerDrift() {
         let decision = policy.decision(
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof fee",
-            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nAutocomplete Lab Obsidian proof\n\u{200B}\t\nSmoke proof fee",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof fee",
+            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nTilde Obsidian writing proof\n\u{200B}\t\nSmoke proof fee",
             previousTextAfterCursor: "",
             currentTextAfterCursor: "",
             hasVisibleSuggestion: true,
@@ -36,8 +36,8 @@ struct ObsidianTabPassthroughRepairPolicyTests {
     @Test("Repairs when Obsidian moves the AX cursor into the indented line")
     func repairsLeadingTabIndentWhenTextAfterCursorChanges() {
         let decision = policy.decision(
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels inst",
-            currentTextBeforeCursor: "Autocomplete Lab Obsidian proof\n\tSmoke proof fee",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof feels inst",
+            currentTextBeforeCursor: "Tilde Obsidian writing proof\n\tSmoke proof fee",
             previousTextAfterCursor: "",
             currentTextAfterCursor: "ls inst",
             hasVisibleSuggestion: true,
@@ -50,8 +50,8 @@ struct ObsidianTabPassthroughRepairPolicyTests {
     @Test("Repairs CodeMirror tab spacer when Obsidian moves the AX cursor into the line")
     func repairsCodeMirrorTabSpacerWhenTextAfterCursorChanges() {
         let decision = policy.decision(
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels inst",
-            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nAutocomplete Lab Obsidian proof\n\u{200B}\t\nSmoke proof fee",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof feels inst",
+            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nTilde Obsidian writing proof\n\u{200B}\t\nSmoke proof fee",
             previousTextAfterCursor: "",
             currentTextAfterCursor: "ls inst",
             hasVisibleSuggestion: true,
@@ -64,8 +64,8 @@ struct ObsidianTabPassthroughRepairPolicyTests {
     @Test("Repairs when Obsidian selects the indented current line after Tab")
     func repairsSelectedLineIndent() {
         let decision = policy.decision(
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof fee",
-            currentTextBeforeCursor: "Autocomplete Lab Obsidian proof\n\t",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof fee",
+            currentTextBeforeCursor: "Tilde Obsidian writing proof\n\t",
             previousTextAfterCursor: "",
             currentTextAfterCursor: "Smoke proof fee",
             currentSelectedText: "Smoke proof fee",
@@ -79,8 +79,8 @@ struct ObsidianTabPassthroughRepairPolicyTests {
     @Test("Repairs selected-line Obsidian CodeMirror spacer drift")
     func repairsSelectedLineCodeMirrorSpacerDrift() {
         let decision = policy.decision(
-            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof fee",
-            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nAutocomplete Lab Obsidian proof\n\u{200B}\t\n",
+            previousTextBeforeCursor: "Tilde Obsidian writing proof\nSmoke proof fee",
+            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nTilde Obsidian writing proof\n\u{200B}\t\n",
             previousTextAfterCursor: "",
             currentTextAfterCursor: "Smoke proof fee",
             currentSelectedText: "Smoke proof fee",

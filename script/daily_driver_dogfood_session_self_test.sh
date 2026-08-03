@@ -35,7 +35,7 @@ PREVIEW_MARK_PATH="$TMP_DIR/preview-session.env"
 TRUST_PREVIEW_TRACE_PATH="$TMP_DIR/trust-preview-traces.jsonl"
 TRUST_PREVIEW_MARK_PATH="$TMP_DIR/trust-preview-session.env"
 
-export AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=running
+export AUTOCOMPLETE_LAB_TILDE_STATUS_OVERRIDE=running
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
@@ -68,7 +68,7 @@ JSONL
 
 for expected in \
   "Trace exists: yes" \
-  "SteadyType app: running" \
+  "Tilde app: running" \
   "Dogfood readiness: pass"
 do
   if ! grep -q "$expected" "$TMP_DIR/start.out"; then
@@ -88,7 +88,7 @@ fi
 
 for expected in \
   "Trace exists: yes" \
-  "SteadyType app: running" \
+  "Tilde app: running" \
   "Dogfood readiness: pass" \
   "Saved mark: none" \
   "Session state: start-needed" \
@@ -104,7 +104,7 @@ do
   fi
 done
 
-if ! AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=not-running "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
+if ! AUTOCOMPLETE_LAB_TILDE_STATUS_OVERRIDE=not-running "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
   --trace "$TRACE_PATH" \
   --mark-file "$TMP_DIR/missing-session.env" \
   --app com.apple.TextEdit \
@@ -114,7 +114,7 @@ if ! AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=not-running "$ROOT_DIR/script/d
 fi
 
 for expected in \
-  "SteadyType app: not-running" \
+  "Tilde app: not-running" \
   "Dogfood readiness: attention" \
   "Dogfood readiness next: ./script/build_and_run.sh --verify" \
   "Next command: ./script/daily_driver_dogfood_session.sh start --app com.apple.TextEdit"
@@ -137,7 +137,7 @@ fi
 
 for expected in \
   "Trace exists: yes" \
-  "SteadyType app: running" \
+  "Tilde app: running" \
   "Dogfood readiness: pass" \
   "Saved mark: 19" \
   "Label: self-test" \
@@ -175,7 +175,7 @@ done
   >"$TMP_DIR/status-preview.out"
 
 for expected in \
-  "SteadyType app: running" \
+  "Tilde app: running" \
   "Dogfood readiness: pass" \
   "Saved mark: 1" \
   "App status at start: running" \
@@ -286,7 +286,7 @@ for expected in \
   "Daily Driver Dogfood Session" \
   "Gate: \`pass\`" \
   "Start readiness status: \`0\`" \
-  "SteadyType app at start: \`running\`" \
+  "Tilde app at start: \`running\`" \
   "Trace existed at start: \`yes\`" \
   "Start readiness: \`pass\`" \
   "Safety snapshot status: \`0\`" \
@@ -394,10 +394,10 @@ fi
 for expected in \
   "Gate: \`fail\`" \
   "Start readiness status: \`1\`" \
-  "SteadyType app at start: \`not-running\`" \
+  "Tilde app at start: \`not-running\`" \
   "Start readiness: \`attention\`" \
   "Start Readiness Gate" \
-  "SteadyType was not confirmed running when the dogfood session started"
+  "Tilde was not confirmed running when the dogfood session started"
 do
   if ! grep -q "$expected" "$NOT_READY_REPORT_PATH"; then
     echo "dogfood self-test not-ready report missing: $expected" >&2

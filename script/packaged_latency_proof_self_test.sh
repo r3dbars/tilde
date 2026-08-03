@@ -27,7 +27,7 @@ reject_contains() {
 
 script/packaged_latency_proof.sh --help >"$TMP_DIR/help.txt"
 require_contains "$TMP_DIR/help.txt" "accessibility-permission-lost"
-require_contains "$TMP_DIR/help.txt" "bar.r3d.steadytype"
+require_contains "$TMP_DIR/help.txt" "bar.r3d.tilde"
 require_contains "$TMP_DIR/help.txt" "This script cannot grant macOS Accessibility"
 
 script/packaged_latency_proof.sh --dry-run >"$TMP_DIR/dry-run.txt"

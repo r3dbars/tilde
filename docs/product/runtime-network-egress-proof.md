@@ -1,11 +1,11 @@
 # Runtime Network Egress Proof
 
 Use this to prove the local-only typing path does not talk to the network while
-Autocomplete Lab is running.
+Tilde is running.
 
 ## Autocomplete-Time Check
 
-Run this while Autocomplete Lab is open and a disposable local typing session is
+Run this while Tilde is open and a disposable local typing session is
 active:
 
 ```bash
@@ -30,7 +30,7 @@ Beta readiness validates the latest JSON proof instead of trusting old notes:
 ```bash
 ./script/check_runtime_network_egress.py \
   --validate-proof docs/product/runtime-network-egress-latest.json \
-  --diagnostics-log "$HOME/Library/Logs/SteadyType/diagnostics.log" \
+  --diagnostics-log "$HOME/Library/Logs/Tilde/diagnostics.log" \
   --require-newer-than-latest-launch \
   --max-proof-age-seconds 86400 \
   --min-samples 10

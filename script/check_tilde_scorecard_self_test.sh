@@ -7,27 +7,27 @@ cd "$ROOT_DIR"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-SCORECARD="docs/product/steadytype-product-scorecard.md"
+SCORECARD="docs/product/tilde-product-scorecard.md"
 
-python3 script/check_steadytype_scorecard.py --scorecard "$SCORECARD" >"$TMP_DIR/pass.txt"
+python3 script/check_tilde_scorecard.py --scorecard "$SCORECARD" >"$TMP_DIR/pass.txt"
 
-if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; then
+if ! grep -F "Tilde scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; then
   echo "scorecard self-test expected the real scorecard to verify" >&2
   cat "$TMP_DIR/pass.txt" >&2
   exit 1
 fi
 
-if ! grep -F -- "--expected-executable-sha256" script/check_steadytype_scorecard.py >/dev/null; then
+if ! grep -F -- "--expected-executable-sha256" script/check_tilde_scorecard.py >/dev/null; then
   echo "scorecard self-test expected live latency selector to pin the app executable hash" >&2
   exit 1
 fi
 
-if ! grep -F -- "claude-code-model-latency" script/check_steadytype_scorecard.py >/dev/null; then
+if ! grep -F -- "claude-code-model-latency" script/check_tilde_scorecard.py >/dev/null; then
   echo "scorecard self-test expected live latency selector to understand Claude Code latency claims" >&2
   exit 1
 fi
 
-if ! grep -F -- "textedit-model-latency" script/check_steadytype_scorecard.py >/dev/null; then
+if ! grep -F -- "textedit-model-latency" script/check_tilde_scorecard.py >/dev/null; then
   echo "scorecard self-test expected live latency selector to understand TextEdit latency claims" >&2
   exit 1
 fi
@@ -51,7 +51,7 @@ source = source.replace(
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_SUGGESTION_QUALITY" >"$TMP_DIR/stale-suggestion-quality.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$STALE_SUGGESTION_QUALITY" >"$TMP_DIR/stale-suggestion-quality.txt" 2>&1; then
   echo "scorecard self-test expected stale suggestion-quality proof to fail" >&2
   exit 1
 fi
@@ -89,7 +89,7 @@ source = "\n".join(lines) + "\n"
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_DOGFOOD_MATCH_FAMILY" >"$TMP_DIR/stale-dogfood-match-family.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$STALE_DOGFOOD_MATCH_FAMILY" >"$TMP_DIR/stale-dogfood-match-family.txt" 2>&1; then
   echo "scorecard self-test expected missing dogfood match-family evidence to fail" >&2
   exit 1
 fi
@@ -123,7 +123,7 @@ source = "\n".join(lines) + "\n"
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_DOGFOOD_GATE" >"$TMP_DIR/stale-dogfood-gate.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$STALE_DOGFOOD_GATE" >"$TMP_DIR/stale-dogfood-gate.txt" 2>&1; then
   echo "scorecard self-test expected missing dogfood gate evidence to fail" >&2
   exit 1
 fi
@@ -231,7 +231,7 @@ if [[ "$(cat "$TMP_DIR/latency-selector-live-count.txt")" -lt 1 ]]; then
   exit 1
 fi
 
-python3 script/check_steadytype_scorecard.py \
+python3 script/check_tilde_scorecard.py \
   --scorecard "$SCORECARD" \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
@@ -239,13 +239,13 @@ python3 script/check_steadytype_scorecard.py \
   --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
   >"$TMP_DIR/live-pass.txt"
 
-if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/live-pass.txt" >/dev/null; then
+if ! grep -F "Tilde scorecard verified" "$TMP_DIR/live-pass.txt" >/dev/null; then
   echo "scorecard self-test expected live fixture counts to verify" >&2
   cat "$TMP_DIR/live-pass.txt" >&2
   exit 1
 fi
 
-python3 script/check_steadytype_scorecard.py \
+python3 script/check_tilde_scorecard.py \
   --scorecard "$SCORECARD" \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
@@ -253,7 +253,7 @@ python3 script/check_steadytype_scorecard.py \
   --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
   >"$TMP_DIR/live-latency-pass.txt"
 
-if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/live-latency-pass.txt" >/dev/null; then
+if ! grep -F "Tilde scorecard verified" "$TMP_DIR/live-latency-pass.txt" >/dev/null; then
   echo "scorecard self-test expected strict latency selector fixture to verify" >&2
   cat "$TMP_DIR/live-latency-pass.txt" >&2
   exit 1
@@ -264,7 +264,7 @@ cat >"$LATENCY_SELECTOR_RED" <<'EOF'
 Latency window: latest default runtime launch has too few samples; diagnosticsLine=25000; traceStartLine=6300; diagnosticsEndLine=none; traceEndLine=none; firstVisibleSamples=1; modelSamples=1; fastWordVisibleSamples=0
 EOF
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$SCORECARD" \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
@@ -293,7 +293,7 @@ source = re.sub(r"modelSamples=[0-9]+", "modelSamples=1", source, count=1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$SCORECARD" \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
@@ -325,7 +325,7 @@ source = source.replace(
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$MANUAL_DRIFT" \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
@@ -355,7 +355,7 @@ source = source.replace(
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$PROOF_DRIFT" \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
@@ -374,7 +374,7 @@ fi
 BAD_SCORE="$TMP_DIR/bad-score.md"
 sed -E 's#(\| Latency \| )[0-9]+/100#\1101/100#' "$SCORECARD" >"$BAD_SCORE"
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$BAD_SCORE" >"$TMP_DIR/bad-score.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$BAD_SCORE" >"$TMP_DIR/bad-score.txt" 2>&1; then
   echo "scorecard self-test expected invalid score to fail" >&2
   exit 1
 fi
@@ -396,7 +396,7 @@ source = source.replace("The 10 beta-safe writing lanes plus", "The stale 10 bet
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_ROUND_UP" >"$TMP_DIR/stale.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$STALE_ROUND_UP" >"$TMP_DIR/stale.txt" 2>&1; then
   echo "scorecard self-test expected stale rounded-up proof to fail" >&2
   exit 1
 fi
@@ -418,7 +418,7 @@ source = source.replace("Prompt/chat apps are not normal beta writing surfaces."
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" >"$TMP_DIR/pending.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$PENDING_ROUND_UP" >"$TMP_DIR/pending.txt" 2>&1; then
   echo "scorecard self-test expected pending rounded-up proof to fail" >&2
   exit 1
 fi
@@ -473,7 +473,7 @@ for area in areas:
 Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
-python3 script/check_steadytype_scorecard.py --scorecard "$ZERO_LATENCY_METRIC" >"$TMP_DIR/zero-latency-metric.txt"
+python3 script/check_tilde_scorecard.py --scorecard "$ZERO_LATENCY_METRIC" >"$TMP_DIR/zero-latency-metric.txt"
 
 for term in stale pending blocked; do
   BAD_ZERO_LATENCY_METRIC="$TMP_DIR/zero-latency-metric-$term.md"
@@ -490,7 +490,7 @@ source = source.replace(
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
-  if python3 script/check_steadytype_scorecard.py --scorecard "$BAD_ZERO_LATENCY_METRIC" >"$TMP_DIR/zero-latency-metric-$term.txt" 2>&1; then
+  if python3 script/check_tilde_scorecard.py --scorecard "$BAD_ZERO_LATENCY_METRIC" >"$TMP_DIR/zero-latency-metric-$term.txt" 2>&1; then
     echo "scorecard self-test expected unresolved $term language beside zero-count latency metric to fail" >&2
     exit 1
   fi
@@ -507,7 +507,7 @@ sed -e 's#Overall score: 87/100\.#Overall score: 88/100.#' \
   -e 's#| Diagnostics | 92/100 |#| Diagnostics | 100/100 |#' \
   "$SCORECARD" >"$PERFECT_UNRESOLVED"
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$PERFECT_UNRESOLVED" >"$TMP_DIR/perfect.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$PERFECT_UNRESOLVED" >"$TMP_DIR/perfect.txt" 2>&1; then
   echo "scorecard self-test expected unresolved 100/100 row to fail" >&2
   exit 1
 fi
@@ -557,7 +557,7 @@ for area in areas:
 Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$PERFECT_RUN_AGAIN" >"$TMP_DIR/perfect-run-again.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$PERFECT_RUN_AGAIN" >"$TMP_DIR/perfect-run-again.txt" 2>&1; then
   echo "scorecard self-test expected 100/100 row with future run proof to fail" >&2
   exit 1
 fi
@@ -572,7 +572,7 @@ fi
 MISSING_AREA="$TMP_DIR/missing-area.md"
 grep -v '^| Model readiness |' "$SCORECARD" >"$MISSING_AREA"
 
-if python3 script/check_steadytype_scorecard.py --scorecard "$MISSING_AREA" >"$TMP_DIR/missing.txt" 2>&1; then
+if python3 script/check_tilde_scorecard.py --scorecard "$MISSING_AREA" >"$TMP_DIR/missing.txt" 2>&1; then
   echo "scorecard self-test expected missing area to fail" >&2
   exit 1
 fi
@@ -645,7 +645,7 @@ cat >"$TMP_DIR/proof-manifest-live.txt" <<'EOF'
 Proof manifest check failed with 3 issue(s).
 EOF
 
-python3 script/check_steadytype_scorecard.py \
+python3 script/check_tilde_scorecard.py \
   --scorecard "$LIVE_SCORECARD" \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
@@ -657,7 +657,7 @@ cat >"$TMP_DIR/manual-smoke-live-bad.txt" <<'EOF'
 8 target app passes still need real manual smoke proof.
 EOF
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$LIVE_SCORECARD" \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live-bad.txt" \
@@ -674,7 +674,7 @@ if ! grep -F "manual smoke stale/pending count claim is 7, live output reports 8
   exit 1
 fi
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$LIVE_SCORECARD" \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
   >"$TMP_DIR/live-args.txt" 2>&1; then
@@ -682,7 +682,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if python3 script/check_steadytype_scorecard.py \
+if python3 script/check_tilde_scorecard.py \
   --scorecard "$SCORECARD" \
   --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
   >"$TMP_DIR/latency-live-args.txt" 2>&1; then
@@ -690,4 +690,4 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-echo "SteadyType scorecard self-test passed."
+echo "Tilde scorecard self-test passed."

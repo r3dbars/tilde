@@ -2,14 +2,14 @@
 
 Personal Capture is a local, opt-in Justin dogfood loop.
 
-It writes daily Markdown on this Mac so SteadyType can learn from real writing,
+It writes daily Markdown on this Mac so Tilde can learn from real writing,
 accepted suggestions, and accepted-kept signals. It is not telemetry, not a
 private beta requirement, and not enabled for customers or testers by default.
 
 ## Local Path
 
 ```text
-~/Library/Application Support/SteadyType/Personal Capture
+~/Library/Application Support/Tilde/Personal Capture
 ```
 
 Files are named by day:
@@ -33,7 +33,7 @@ Episodes/YYYY-MM-DD-dashboard.md
   enabled and safe.
 
 The first observed field snapshot is only a boundary marker. The journal starts
-recording raw writing after SteadyType has a previous safe snapshot to compare.
+recording raw writing after Tilde has a previous safe snapshot to compare.
 
 The episode dashboard is a local Markdown scorecard. It shows episode counts,
 accept/kept/delete signals, eval-case count, latency, and model/prompt rows

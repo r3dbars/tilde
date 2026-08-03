@@ -20,7 +20,7 @@ public struct ObsidianProofDocumentInsertionPlanner: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String,
         acceptedText: String,
-        marker: String = "Autocomplete Lab Obsidian proof"
+        marker: String = "Tilde Obsidian writing proof"
     ) -> ObsidianProofDocumentInsertionPlan? {
         guard !proofDocumentText.isEmpty,
               !textBeforeCursor.isEmpty,
