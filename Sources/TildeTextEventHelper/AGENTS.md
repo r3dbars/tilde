@@ -1,4 +1,4 @@
-# SteadyTypeTextEventHelper Guide
+# TildeTextEventHelper Guide
 
 This target owns tiny helper executables bundled with the macOS app.
 

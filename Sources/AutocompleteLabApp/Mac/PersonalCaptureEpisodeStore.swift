@@ -5,11 +5,11 @@ final class PersonalCaptureEpisodeStore: @unchecked Sendable {
     static let shared = PersonalCaptureEpisodeStore(
         folderURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SteadyType/Personal Capture/Episodes")
+            .appendingPathComponent("Library/Application Support/Tilde/Personal Capture/Episodes")
     )
 
     private let folderURL: URL
-    private let queue = DispatchQueue(label: "app.steadytype.personal-capture-episodes")
+    private let queue = DispatchQueue(label: "app.tilde.personal-capture-episodes")
     private let calendar: Calendar
     private let now: () -> Date
     private let encoder: JSONEncoder

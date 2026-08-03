@@ -227,7 +227,7 @@ enum AppModelRuntimeFactory {
                 for: .applicationSupportDirectory,
                 in: .userDomainMask
             ).first ?? URL(fileURLWithPath: NSTemporaryDirectory()))
-                .appendingPathComponent("SteadyType", isDirectory: true)
+                .appendingPathComponent("Tilde", isDirectory: true)
         }
 
         return baseDirectory

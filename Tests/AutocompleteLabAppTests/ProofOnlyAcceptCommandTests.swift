@@ -7,8 +7,8 @@ struct ProofOnlyAcceptCommandTests {
     @Test("Accept command is opt-in and argument scoped")
     func acceptCommandIsOptInAndArgumentScoped() {
         #expect(ProofOnlyAcceptCommand.argument == "--proof-only-accept-next-word")
-        #expect(ProofOnlyAcceptCommand.isRequested(arguments: ["SteadyType", "--proof-only-accept-next-word"]))
-        #expect(!ProofOnlyAcceptCommand.isRequested(arguments: ["SteadyType"]))
+        #expect(ProofOnlyAcceptCommand.isRequested(arguments: ["Tilde", "--proof-only-accept-next-word"]))
+        #expect(!ProofOnlyAcceptCommand.isRequested(arguments: ["Tilde"]))
 
         let key = ProofOnlyAcceptCommand.enabledEnvironmentKey
         #expect(!ProofOnlyAcceptCommand.isEnabled(environment: [:]))

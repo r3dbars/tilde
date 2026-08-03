@@ -10,7 +10,7 @@ DAILY_TEMPLATE="$(./script/private_beta_packet.sh --print-daily-checklist-templa
 EXPORT_TEMPLATE="$(./script/private_beta_packet.sh --print-redacted-export-template)"
 TRIAGE_TEMPLATE="$(./script/private_beta_packet.sh --print-feedback-triage-template)"
 STOP_TEMPLATE="$(./script/private_beta_packet.sh --print-stop-dashboard-template)"
-MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
+MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/Tilde/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
 FIRST_RUN_DOC="$(cat FIRST-RUN-BETA.md)"
 PRIVACY_DOC="$(cat PRIVACY-BETA.md)"
 
@@ -76,7 +76,7 @@ require_contains "$MODEL_TEMPLATE" '`Repair Local Model`'
 require_contains "$MODEL_TEMPLATE" "in-app setup fails"
 require_contains "$MODEL_TEMPLATE" "stop the beta session"
 require_contains "$MODEL_TEMPLATE" "Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any"
-require_contains "$MODEL_TEMPLATE" "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
+require_contains "$MODEL_TEMPLATE" "/tmp/Tilde/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
 
 reject_contains "$MODEL_TEMPLATE" "python3 -m pip install"
 reject_contains "$MODEL_TEMPLATE" "./script/download_mlx_model.py"
@@ -104,7 +104,7 @@ require_contains "$PRIVACY_DOC" "Normal first-run setup does not need Screen Rec
 require_contains "$PRIVACY_DOC" "Pause the current app from the menu bar"
 
 SCRIPT_TEXT="$(cat script/private_beta_packet.sh)"
-require_contains "$SCRIPT_TEXT" "Primary artifact: ../SteadyType.dmg"
+require_contains "$SCRIPT_TEXT" "Primary artifact: ../Tilde.dmg"
 require_contains "$SCRIPT_TEXT" "Send testers the DMG, not the ZIP."
 require_contains "$SCRIPT_TEXT" "Chrome local"
 require_contains "$SCRIPT_TEXT" "textarea/contenteditable fixtures are sanity checks"
@@ -130,24 +130,24 @@ require_contains "$SCRIPT_TEXT" "DMG inspection blocked: could not mount primary
 require_contains "$SCRIPT_TEXT" "xcrun stapler validate"
 require_contains "$SCRIPT_TEXT" "spctl -a -t open --context context:primary-signature"
 require_contains "$SCRIPT_TEXT" "spctl --assess --type execute --verbose=4"
-require_contains "$SCRIPT_TEXT" "SteadyType.dmg"
+require_contains "$SCRIPT_TEXT" "Tilde.dmg"
 require_contains "$SCRIPT_TEXT" "packet_checksum_for"
 require_contains "$SCRIPT_TEXT" "packet_required_paths"
 require_contains "$SCRIPT_TEXT" "packet_regeneration_reason"
 require_contains "$SCRIPT_TEXT" "Regenerating private beta packet from current artifacts"
 require_contains "$SCRIPT_TEXT" "check_secondary_archive_app"
 require_contains "$SCRIPT_TEXT" "  check_secondary_archive_app"
-require_contains "$SCRIPT_TEXT" "SteadyType.zip"
-require_contains "$SCRIPT_TEXT" "beta packet checksum is stale for SteadyType.zip"
-require_contains "$SCRIPT_TEXT" "beta packet checksum references missing SteadyType.zip"
+require_contains "$SCRIPT_TEXT" "Tilde.zip"
+require_contains "$SCRIPT_TEXT" "beta packet checksum is stale for Tilde.zip"
+require_contains "$SCRIPT_TEXT" "beta packet checksum references missing Tilde.zip"
 require_contains "$SCRIPT_TEXT" "Developer ID DMG signature blocked"
 require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
 require_contains "$SCRIPT_TEXT" "refresh or remove the secondary ZIP"
 require_contains "$SCRIPT_TEXT" 'ditto -x -k "$ZIP_PATH" "$verify_dir"'
 require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
-require_contains "$SCRIPT_TEXT" 'Click `Allow Accessibility` in SteadyType'
+require_contains "$SCRIPT_TEXT" 'Click `Allow Accessibility` in Tilde'
 require_contains "$SCRIPT_TEXT" "confirm Accessibility updates without restarting"
-reject_contains "$SCRIPT_TEXT" '1. Unzip `SteadyType.zip`.'
+reject_contains "$SCRIPT_TEXT" '1. Unzip `Tilde.zip`.'
 reject_contains "$SCRIPT_TEXT" "Grant Accessibility when macOS asks"
 reject_contains "$SCRIPT_TEXT" "ARCHIVE_PATH"
 

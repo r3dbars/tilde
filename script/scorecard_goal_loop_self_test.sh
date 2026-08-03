@@ -45,7 +45,7 @@ touch "$STUB_LOG"
 
 OUTPUT="$(
   AUTOCOMPLETE_LAB_SCORE_LOOP_STUB_LOG="$STUB_LOG" \
-  AUTOCOMPLETE_LAB_STEADYTYPE_SCORECARD_GATE_SCRIPT="$(make_gate steadytype-scorecard)" \
+  AUTOCOMPLETE_LAB_TILDE_SCORECARD_GATE_SCRIPT="$(make_gate tilde-scorecard)" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_GATE_SCRIPT="$(make_gate score-targets)" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT="$(make_gate manual-smoke)" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT="$(make_gate visual-evidence)" \
@@ -62,7 +62,7 @@ if ! grep -F "All scorecard goals complete on iteration 1." <<<"$OUTPUT" >/dev/n
 fi
 
 for expected in \
-  "steadytype-scorecard|--live|strict=unset" \
+  "tilde-scorecard|--live|strict=unset" \
   "score-targets||strict=never" \
   "manual-smoke|--strict|strict=unset" \
   "visual-evidence|--require-all|strict=unset" \

@@ -1,6 +1,6 @@
 # Private Beta Plan
 
-Goal: learn whether SteadyType makes real writing easier without hurting
+Goal: learn whether Tilde makes real writing easier without hurting
 trust.
 
 This is still an experiment. Do not treat it as part of another product or a
@@ -31,8 +31,8 @@ you intend to submit the current DMG for notarization.
 
 That must create and verify:
 
-- `dist/SteadyType.dmg`
-- `dist/SteadyType.zip` as a secondary operator archive only
+- `dist/Tilde.dmg`
+- `dist/Tilde.zip` as a secondary operator archive only
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/daily-tester-checklist.md`
@@ -64,7 +64,7 @@ If the build needs a user-started model server, tester-side Python setup,
 Ollama, llama.cpp, or mock fallback, do not invite testers.
 
 Send testers the DMG, not the ZIP. Apple notarization, stapling, and
-Gatekeeper proof all target `dist/SteadyType.dmg`, so the beta packet and
+Gatekeeper proof all target `dist/Tilde.dmg`, so the beta packet and
 readiness checks must re-check the current DMG instead of trusting old proof
 files.
 
@@ -222,7 +222,7 @@ must point to a proof command, the redacted report, or an app removal decision
 before it can be closed.
 
 Packaging is also a stop condition: stale checksums, stale notarization files,
-failed `xcrun stapler validate dist/SteadyType.dmg`, failed `spctl` assessment,
+failed `xcrun stapler validate dist/Tilde.dmg`, failed `spctl` assessment,
 or a packet that points at an older artifact stops the beta.
 
 ## After Each Session

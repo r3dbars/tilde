@@ -4,7 +4,7 @@ import Foundation
 
 let action = CommandLine.arguments.dropFirst().first ?? "assert"
 let environment = ProcessInfo.processInfo.environment
-let marker = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyType Obsidian proof"
+let marker = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Tilde Obsidian writing proof"
 let expectedSuffix = environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
 let resetText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? marker
 let insertionText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""

@@ -34,9 +34,9 @@ require_contains "AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES"
 require_contains "AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
 require_contains "AUTOCOMPLETE_LAB_DIST_DIR"
-require_contains 'HELPER_NAME="SteadyTypeTextEventHelper"'
+require_contains 'HELPER_NAME="TildeTextEventHelper"'
 require_contains 'HELPER_BINARY="$APP_MACOS/$HELPER_NAME"'
-require_contains 'ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"'
+require_contains 'ENTITLEMENTS_PLIST="$ROOT_DIR/script/Tilde.entitlements"'
 require_contains 'run_swift_build_product "$HELPER_NAME"'
 require_contains 'BUILD_HELPER_BINARY="$(swift_build_bin_path)/$HELPER_NAME"'
 require_contains 'cp "$BUILD_HELPER_BINARY" "$HELPER_BINARY"'
@@ -99,7 +99,7 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$SMOKE_LOCK_DIR" \
 fi
 
 for expected in \
-  "Proof lock status for SteadyType build/run:" \
+  "Proof lock status for Tilde build/run:" \
   "real app smoke: active" \
   "pid: $$" \
   "elapsed:" \
@@ -125,7 +125,7 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$SMOKE_LOCK_DIR" \
 fi
 
 for expected in \
-  "Timed out after 0s waiting for active proof run; refusing to relaunch SteadyType." \
+  "Timed out after 0s waiting for active proof run; refusing to relaunch Tilde." \
   "real app smoke: active" \
   "pid: $$" \
   "elapsed:" \

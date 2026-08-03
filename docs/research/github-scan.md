@@ -50,7 +50,7 @@ https://github.com/fujacob/tabby
 
 AGPL-3.0 licensed local-first Mac autocomplete app. Use as a public architecture
 and product reference only; do not copy code. See
-[`tabby-reference.md`](tabby-reference.md) for SteadyType-specific notes.
+[`tabby-reference.md`](tabby-reference.md) for Tilde-specific notes.
 
 ### theJayTea/WritingTools
 

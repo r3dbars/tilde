@@ -9,7 +9,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
 if ! grep -F "fails closed unless" "$TMP_DIR/help.txt" >/dev/null ||
-   ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null ||
+   ! grep -F "this checkout's dist/Tilde.app binary" "$TMP_DIR/help.txt" >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1" "$TMP_DIR/help.txt" >/dev/null; then
   echo "real app smoke help must explain --skip-build checkout verification" >&2
   exit 1
@@ -320,8 +320,8 @@ if "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED" not in stale_
     raise SystemExit("Ghostty stale-only reset must be opt-in")
 if 'tell application "System Events"' not in stale_only_reset_block or 'application process "Ghostty"' not in stale_only_reset_block:
     raise SystemExit("Ghostty stale-only reset must inspect AX windows without touching Ghostty window objects")
-if "SteadyType AppleScript Probe" not in stale_only_reset_block or "SteadyType Submit Probe" not in stale_only_reset_block or "steadytype-claude-code-proof" not in stale_only_reset_block:
-    raise SystemExit("Ghostty stale-only reset must recognize only SteadyType proof/probe windows")
+if "Tilde AppleScript Probe" not in stale_only_reset_block or "Tilde Submit Probe" not in stale_only_reset_block or "tilde-claude-code-proof" not in stale_only_reset_block:
+    raise SystemExit("Ghostty stale-only reset must recognize only Tilde proof/probe windows")
 if "unsafeWindowCount" not in stale_only_reset_block or '"$unsafe_window_count" != "0"' not in stale_only_reset_block:
     raise SystemExit("Ghostty stale-only reset must refuse to kill when any non-proof window is present")
 if 'kill -KILL "$proof_pid"' not in stale_only_reset_block:
@@ -537,8 +537,8 @@ if "frontmostPid=" not in terminal_prompt_helper or "targetPid=" not in terminal
     raise SystemExit("Terminal prompt AX helper failures must include focus ownership pids")
 if "--reject-shell-command-text" not in terminal_prompt_helper or "rejectsShellCommandText" not in terminal_prompt_helper or "options.text.isEmpty" not in terminal_prompt_helper or "options.hints.contains" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must reject shell-command-shaped launch text during Ghostty readiness until the prompt hint is visible")
-if "looksLikeSteadyTypeProofShellCommand" not in terminal_prompt_helper or "rejectedShellCommand=" not in terminal_prompt_helper:
-    raise SystemExit("Terminal prompt AX helper must diagnose rejected SteadyType proof shell command text")
+if "looksLikeTildeProofShellCommand" not in terminal_prompt_helper or "rejectedShellCommand=" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must diagnose rejected Tilde proof shell command text")
 if "let hintSatisfied = options.text.isEmpty || snapshot.hasHint" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must not require brittle placeholder hints for empty Claude Code prompt readiness")
 if "func focusedWindow(in appElement" not in terminal_prompt_helper or "kAXFocusedWindowAttribute" not in terminal_prompt_helper:
@@ -554,7 +554,7 @@ if "containsExactPromptText" not in terminal_prompt_helper or "exactPromptTextCa
 if "withoutProofMarker" not in terminal_prompt_helper or "withoutTerminalPromptPrefix" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper exact matching must strip proof markers and terminal prompt prefixes")
 
-text_event_helper = Path("Sources/SteadyTypeTextEventHelper/main.swift").read_text()
+text_event_helper = Path("Sources/TildeTextEventHelper/main.swift").read_text()
 if "waitForExpectedFrontmostApplication" not in text_event_helper or ".activate(options: [.activateAllWindows])" not in text_event_helper:
     raise SystemExit("Bundled text-event helper must activate and poll the expected pid before failing frontmost checks")
 if "systemEventsReportsExpectedProcessFrontmost" not in text_event_helper or "first application process whose unix id is targetProcessId" not in text_event_helper:
@@ -1039,7 +1039,7 @@ for env_key in [
     "AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE",
 ]:
     if env_key not in source:
-        raise SystemExit(f"real app smoke launch must forward {env_key} into the SteadyType app process")
+        raise SystemExit(f"real app smoke launch must forward {env_key} into the Tilde app process")
 if '"ghosttySystemEventsLoginShellBulkKeystroke"' not in terminal_insert_block or 'exec /usr/bin/osascript' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a shell-launched System Events bulk fallback")
 if "ghosttySystemEventsBulkKeystrokeShellBaseline" not in terminal_insert_block:
@@ -1219,7 +1219,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \' script/real_a
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof env overrides to reach relaunched SteadyType" >&2
+  echo "real app smoke self-test expected Ghostty proof env overrides to reach relaunched Tilde" >&2
   exit 1
 fi
 
@@ -1329,7 +1329,7 @@ if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in model_latency:
 model_build = model_latency.index("build_if_needed")
 model_open = model_latency.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
 if model_build > model_open:
-    raise SystemExit("TextEdit model-latency proof must relaunch SteadyType before opening the disposable TextEdit window")
+    raise SystemExit("TextEdit model-latency proof must relaunch Tilde before opening the disposable TextEdit window")
 default_model_latency = function_body("run_textedit_default_model_latency")
 if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in default_model_latency:
     raise SystemExit("TextEdit default-model latency proof must keep bounded System Events focus recovery available")
@@ -1401,10 +1401,10 @@ if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh
   exit 1
 fi
 
-if ! grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-$dist_dir/smoke-proof/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
-   grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-$dist_dir/smoke-proof/Tilde.zip' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/Tilde.zip' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Refusing to write smoke proof archive over release artifact' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected proof archives to stay separate from release dist/SteadyType.zip" >&2
+  echo "real app smoke self-test expected proof archives to stay separate from release dist/Tilde.zip" >&2
   exit 1
 fi
 
@@ -1486,8 +1486,8 @@ if ! grep -F "requires Chrome to expose a focused editable web text target" "$TM
   echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
   exit 1
 fi
-if ! grep -F "Chrome setup text is seeded before SteadyType launches whenever the smoke builds the app itself" "$TMP_DIR/chrome.txt" >/dev/null ||
-   ! grep -F "later Chrome setup pauses SteadyType while disposable text is seeded" "$TMP_DIR/chrome.txt" >/dev/null; then
+if ! grep -F "Chrome setup text is seeded before Tilde launches whenever the smoke builds the app itself" "$TMP_DIR/chrome.txt" >/dev/null ||
+   ! grep -F "later Chrome setup pauses Tilde while disposable text is seeded" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Chrome setup/relaunch guards" >&2
   exit 1
 fi
@@ -1508,7 +1508,7 @@ if grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; 
   echo "real app smoke self-test expected direct launch to be unconditional for proof runs" >&2
   exit 1
 fi
-if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev/null; then
+if ! grep -F 'stop_current_tilde_app_bundle' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit proof to stop the old app before opening its disposable target" >&2
   exit 1
 fi
@@ -1523,9 +1523,9 @@ if ! grep -F 'Smoke signal self pid=' script/real_app_smoke.sh >/dev/null ||
   echo "real app smoke self-test expected TERM diagnostics to include smoke, guard, proof, lock, process-group, and proof-related process snapshots" >&2
   exit 1
 fi
-if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype_app_process_rows' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'current_tilde_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'tilde_app_process_rows' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'command_matches_tilde_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'selfPgid' script/real_app_smoke.sh >/dev/null ||
@@ -1556,35 +1556,35 @@ if 'kill "$SMOKE_INTERFERENCE_GUARD_PID"' not in cleanup_block:
 foreign_start = source.index("foreign_proof_process_lines()")
 foreign_end = source.index("\nterminate_foreign_proof_processes_for_exclusive_run()", foreign_start)
 foreign_block = source[foreign_start:foreign_end]
-if '"$command" == "$ROOT_DIR"/dist/SteadyType.app/Contents/MacOS/SteadyType*' not in foreign_block:
+if '"$command" == "$ROOT_DIR"/dist/Tilde.app/Contents/MacOS/Tilde*' not in foreign_block:
     raise SystemExit(
-        "real app smoke self-test expected exclusive proof cleanup not to terminate the current SteadyType app bundle"
+        "real app smoke self-test expected exclusive proof cleanup not to terminate the current Tilde app bundle"
     )
 if "protected_pgids=" not in foreign_block or 'case " $protected_pgids " in' not in foreign_block:
     raise SystemExit(
         "real app smoke self-test expected foreign proof cleanup to respect protected proof process groups"
     )
 
-current_start = source.index("current_steadytype_app_bundle_pids()")
-current_end = source.index("\nstop_current_steadytype_app_bundle()", current_start)
+current_start = source.index("current_tilde_app_bundle_pids()")
+current_end = source.index("\nstop_current_tilde_app_bundle()", current_start)
 current_block = source[current_start:current_end]
 if "current_pgid" in current_block:
     raise SystemExit(
         "real app smoke self-test expected current app stop to include smoke-launched apps in the same process group"
     )
 
-stop_start = source.index("stop_current_steadytype_app_bundle()")
-stop_end = source.index("\nstale_steadytype_app_bundle_pids()", stop_start)
+stop_start = source.index("stop_current_tilde_app_bundle()")
+stop_end = source.index("\nstale_tilde_app_bundle_pids()", stop_start)
 stop_block = source[stop_start:stop_end]
-if 'kill -9 "$pid"' not in stop_block or "Timed out stopping current SteadyType app bundle before smoke setup." not in stop_block:
+if 'kill -9 "$pid"' not in stop_block or "Timed out stopping current Tilde app bundle before smoke setup." not in stop_block:
     raise SystemExit(
         "real app smoke self-test expected current app stop to fail closed if the old app survives TERM"
     )
 PY
-if ! grep -F 'steadytype_dist_dir()' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'tilde_dist_dir()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype_app_binary' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'cd "$dist_dir" && ditto -c -k --keepParent "SteadyType.app"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'tilde_app_binary' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cd "$dist_dir" && ditto -c -k --keepParent "Tilde.app"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected smoke proof checks to honor AUTOCOMPLETE_LAB_DIST_DIR" >&2
   exit 1
 fi
@@ -1592,7 +1592,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES' script/real_app_smoke
    ! grep -F 'start_foreign_worktree_quarantine_guard' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run quiet' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'quarantine_foreign_steadytype_apps' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_tilde_apps' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'terminate_pid_tree "$pid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'descendant_pids "$pid"' script/real_app_smoke.sh >/dev/null ||
@@ -1607,7 +1607,7 @@ if grep -F 'kill -TERM -"$pgid"' script/real_app_smoke.sh >/dev/null ||
   exit 1
 fi
 if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
-   grep -F 'pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType"' script/real_app_smoke.sh >/dev/null; then
+   grep -F 'pgrep -f "/[S]teadyType.app/Contents/MacOS/Tilde"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app process matching, not substring process matching" >&2
   exit 1
 fi
@@ -1620,7 +1620,7 @@ else
   echo "real app smoke self-test expected zsh -lc smoke wrappers to block another smoke" >&2
   exit 1
 fi
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 424242 zsh -lc echo /Users/redbars/.codex/worktrees/25ed/transcripted-autocomplete-lab/dist/SteadyType.app/Contents/MacOS/SteadyType\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/path-wrapper-fail.txt"; then
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 424242 zsh -lc echo /Users/redbars/.codex/worktrees/25ed/transcripted-autocomplete-lab/dist/Tilde.app/Contents/MacOS/Tilde\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/path-wrapper-fail.txt"; then
   :
 else
   if grep -F "Another real app smoke process is already active." "$TMP_DIR/path-wrapper-fail.txt" >/dev/null; then
@@ -1660,8 +1660,8 @@ if ! grep -F 'wait_for_background_process "$osascript_pid" 4 "stale TextEdit smo
   echo "real app smoke self-test expected TextEdit cleanup AppleScript to be bounded so proof setup cannot hang" >&2
   exit 1
 fi
-if ! grep -F 'launch_steadytype_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'pause_steadytype_for_chrome_setup' script/real_app_smoke.sh >/dev/null; then
+if ! grep -F 'launch_tilde_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'pause_tilde_for_chrome_setup' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Chrome proof to pause during setup and relaunch before proof" >&2
   exit 1
 fi
@@ -1689,7 +1689,7 @@ if 'else\n    wait_for_current_autocomplete_lab_process' not in build_bundle_if_
     raise SystemExit("build_bundle_if_needed must verify the current checkout process when --skip-build is used")
 if "Archive proof failed after 3 attempts." not in source:
     raise SystemExit("archive proof must retry transient ditto failures before failing the smoke")
-if "SteadyType smoke launch did not settle on this checkout" not in source:
+if "Tilde smoke launch did not settle on this checkout" not in source:
     raise SystemExit("stale process failure message is missing")
 
 chrome_window_start = source.index("focus_chrome_process_window()")
@@ -1790,7 +1790,7 @@ if ! grep -F "disposable Chrome editor-like fixture" "$TMP_DIR/chrome-editor-lik
   echo "real app smoke self-test did not print the Chrome editor-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "Tilde Chrome Local Editor-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome editor-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -1800,7 +1800,7 @@ if ! grep -F "disposable Chrome monaco-like fixture" "$TMP_DIR/chrome-monaco-lik
   echo "real app smoke self-test did not print the Chrome Monaco-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "Tilde Chrome Local Monaco-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome Monaco-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -1810,7 +1810,7 @@ if ! grep -F "disposable Chrome prosemirror-like fixture" "$TMP_DIR/chrome-prose
   echo "real app smoke self-test did not print the Chrome ProseMirror-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "Tilde Chrome Local ProseMirror-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome ProseMirror-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -1848,7 +1848,7 @@ if ! grep -F "disposable Chrome chat-like fixture" "$TMP_DIR/chrome-chat-like.tx
   echo "real app smoke self-test did not print the Chrome chat-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "Tilde Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome chat-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -2207,9 +2207,9 @@ if grep -F 'AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$lock_dir"' script/obsidia
   exit 1
 fi
 
-if ! grep -F "terminate_stale_steadytype_app_bundles" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "stale_steadytype_app_bundle_pids" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected exclusive proof runs to terminate stale SteadyType apps from other worktrees" >&2
+if ! grep -F "terminate_stale_tilde_app_bundles" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "stale_tilde_app_bundle_pids" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected exclusive proof runs to terminate stale Tilde apps from other worktrees" >&2
   exit 1
 fi
 
@@ -3007,7 +3007,7 @@ if ! grep -F 'claude_code_terminal_suggestion_cancelled_by_screen_geometry()' sc
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype-cgevent-keypress-v6' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'tilde-cgevent-keypress-v6' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CommandLine.arguments.count <= 4' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pid:<pid>' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'tapArgument.hasPrefix("pid:")' script/real_app_smoke.sh >/dev/null ||
@@ -3040,7 +3040,7 @@ if ! grep -F 'warm_claude_code_terminal_hot_accept_helpers()' script/real_app_sm
   exit 1
 fi
 if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype-cgevent-text-v1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'tilde-cgevent-text-v1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyboardSetUnicodeString' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER_BUILD_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
@@ -3049,12 +3049,12 @@ if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
   exit 1
 fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'try_steadytype_proof_only_accept_next_word_driver()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'try_tilde_proof_only_accept_next_word_driver()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'proof-only-accept-command-result' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Claude Code $host_name proof using SteadyType proof-only accept command after $reason.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof using Tilde proof-only accept command after $reason.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'proof-only-driver-enabled' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'probe_claude_code_terminal_host_key_capture()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'probing CGEvent session key capture with non-mutating Shift.' script/real_app_smoke.sh >/dev/null ||
@@ -3071,8 +3071,8 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'com.apple.accessibility.universalAccessAuthWarn' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'frontmostApp=com.apple.systempreferences' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap.' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the Tilde event tap.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key capture probe did not reach the Tilde event tap; refreshing the disposable prompt.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for HID key capture probe.' script/real_app_smoke.sh >/dev/null ||
@@ -3134,9 +3134,9 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F '"${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS:-1}" || return 1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid after CGEvent HID Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
-   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /settle_claude_code_terminal_proof_focus "host Tab hot accept"/ { if (!saw_driver_call) exit 1; found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
-   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_driver_guard = 1 } in_fn && saw_driver_guard && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1; if (saw_driver_call) found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
-   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1 } in_fn && saw_probe_guard && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "key-capture-probe-miss"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /try_tilde_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /settle_claude_code_terminal_proof_focus "host Tab hot accept"/ { if (!saw_driver_call) exit 1; found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_driver_guard = 1 } in_fn && saw_driver_guard && /try_tilde_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1; if (saw_driver_call) found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1 } in_fn && saw_probe_guard && /try_tilde_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "key-capture-probe-miss"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent_with_timeout/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /"session"/ { saw_session = 1 } in_fn && saw_session && /"hid"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /wait_for_log_fields_optional/ { saw_probe = 1 } in_fn && saw_probe && /key code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
@@ -3265,7 +3265,7 @@ if ! grep -F "cleanup_stale_claude_code_terminal_proofs" script/real_app_smoke.s
    ! grep -F 'run_osascript_with_timeout \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"Claude Code terminal stale proof cleanup"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "make_claude_code_terminal_proof_dir" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "steadytype-claude-code-proof" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "tilde-claude-code-proof" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "kill -KILL" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code model latency to clean up stale proof Terminal windows without hanging on AppleScript" >&2
@@ -3528,7 +3528,7 @@ if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/nu
 fi
 if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'mkdir -p "$base_dir"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'mktemp -d "$base_dir/tilde-claude-code-proof.XXXXXX"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code terminal proof artifacts to support a durable caller-owned directory" >&2
   exit 1
 fi
@@ -3546,7 +3546,7 @@ if "SMOKE_TMP_DIRS" in artifact_block:
     raise SystemExit("durable Claude Code terminal proof artifact dirs must not be removed by smoke temp cleanup")
 for expected in (
     'mkdir -p "$base_dir"',
-    'tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"',
+    'tmp_dir="$(mktemp -d "$base_dir/tilde-claude-code-proof.XXXXXX")"',
     "return 0",
 ):
     if expected not in artifact_block:
@@ -3601,7 +3601,7 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'configured window never became shell-ready enough to exec the disposable proof command' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'new window with configuration proofConfig' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command:launchScriptPath' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadyTypeGhosttyProbeMarker' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'tildeGhosttyProbeMarker' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_ghostty_process_tree_child_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'no-restore-host-no-child-process' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_process_tree' script/real_app_smoke.sh >/dev/null ||
@@ -3674,7 +3674,7 @@ for expected in (
 if block.index('my recordStage(launchStageFile, "configured-window-command-owned-launch")') > block.index('my recordStage(launchStageFile, "launch-action-start")'):
     raise SystemExit("configured-window command-owned launch must bypass launch-action typing before the launch-action branch")
 PY
-if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
+if ! grep -F "tilde-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" "$launch_script"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "ghostty_launch_command" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code terminal-host launch to use disposable command files" >&2
@@ -3684,8 +3684,8 @@ if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_s
    ! grep -F 'close window candidateWindow' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "reset_stale_only_claude_code_ghostty_proof_host" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "SteadyType AppleScript Probe" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "SteadyType Submit Probe" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Tilde AppleScript Probe" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Tilde Submit Probe" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "unsafeWindowCount" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "reset_zero_window_claude_code_ghostty_proof_host" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED" script/real_app_smoke.sh >/dev/null ||

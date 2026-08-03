@@ -20,7 +20,7 @@ write_proof() {
 
 | Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-05-13T12:00:00Z | \`$build_proof\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | $runtime | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | $delete_traces | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
+| 2026-05-13T12:00:00Z | \`$build_proof\` | tilde-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | $runtime | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | $delete_traces | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
 MARKDOWN
 }
 
@@ -59,13 +59,13 @@ if ! grep -F "./script/onboarding_walkthrough_evidence_helper.py --print-command
   exit 1
 fi
 
-if ! grep -F "~/Library/Logs/SteadyType/diagnostics.log" "$TMP_DIR/template.txt" >/dev/null; then
+if ! grep -F "~/Library/Logs/Tilde/diagnostics.log" "$TMP_DIR/template.txt" >/dev/null; then
   echo "onboarding proof self-test missing diagnostics path in template output" >&2
   cat "$TMP_DIR/template.txt" >&2
   exit 1
 fi
 
-if ! grep -F "~/Library/Logs/SteadyType/traces.jsonl" "$TMP_DIR/template.txt" >/dev/null; then
+if ! grep -F "~/Library/Logs/Tilde/traces.jsonl" "$TMP_DIR/template.txt" >/dev/null; then
   echo "onboarding proof self-test missing trace path in template output" >&2
   cat "$TMP_DIR/template.txt" >&2
   exit 1
@@ -135,7 +135,7 @@ cat >"$PENDING_THEN_PASS" <<MARKDOWN
 | Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
-| 2026-05-13T12:00:00Z | \`commit:$CURRENT_COMMIT\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | ready; app-owned MLX; no external server | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | Delete traces removed local trace/log files | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
+| 2026-05-13T12:00:00Z | \`commit:$CURRENT_COMMIT\` | tilde-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | ready; app-owned MLX; no external server | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | Delete traces removed local trace/log files | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
 MARKDOWN
 
 script/check_onboarding_walkthrough_proof.py --proof "$PENDING_THEN_PASS" >"$TMP_DIR/pending-then-pass.txt"

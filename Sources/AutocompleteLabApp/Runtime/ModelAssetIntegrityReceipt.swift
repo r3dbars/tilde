@@ -46,7 +46,7 @@ struct ModelAssetIntegrityReceipt: Codable, Equatable {
 }
 
 enum ModelAssetIntegrityReceiptWriter {
-    static let fileName = ".steadytype-model-integrity.json"
+    static let fileName = ".tilde-model-integrity.json"
 
     static func write(
         manifest: LocalModelAssetManifest,

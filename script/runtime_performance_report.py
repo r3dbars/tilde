@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
-DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Models"
+DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/Tilde/diagnostics.log"
+DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/Tilde/Models"
 DEFAULT_LINE_LIMIT = 5000
 
 SUPPORTED_MODELS = [
@@ -364,7 +364,7 @@ def find_live_process(explicit_pid=None):
     pid = explicit_pid
     if pid is None:
         completed = subprocess.run(
-            ["pgrep", "-f", "/SteadyType.app/Contents/MacOS/SteadyType"],
+            ["pgrep", "-f", "/Tilde.app/Contents/MacOS/Tilde"],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -543,12 +543,12 @@ def print_report(args, data, live_process, models, energy_gate=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Summarize SteadyType runtime, latency, live memory, CPU, and local model assets."
+        description="Summarize Tilde runtime, latency, live memory, CPU, and local model assets."
     )
     parser.add_argument("--diagnostics-log", default=str(DEFAULT_DIAGNOSTICS_LOG))
     parser.add_argument("--model-root", default=str(DEFAULT_MODEL_ROOT))
     parser.add_argument("--line-limit", type=int, default=DEFAULT_LINE_LIMIT)
-    parser.add_argument("--pid", type=int, help="SteadyType process id")
+    parser.add_argument("--pid", type=int, help="Tilde process id")
     parser.add_argument("--no-live-process", action="store_true")
     parser.add_argument("--energy-gate", action="store_true", help="Fail if non-sudo CPU/RSS sampling exceeds energy-risk thresholds")
     parser.add_argument("--sample-duration-seconds", type=float, default=0.0)

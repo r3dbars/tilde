@@ -6,11 +6,11 @@ struct ObsidianProofDocumentInsertionPlannerTests {
     @Test("Proof document planner appends accepted text after visible scrolled tail")
     func appendsAcceptedTextAfterVisibleTail() {
         let hiddenPrefix = (1...75)
-            .map { String(format: "Autocomplete Lab Obsidian scroll filler line %02d", $0) }
+            .map { String(format: "Tilde Obsidian scroll filler line %02d", $0) }
             .joined(separator: "\n") + "\n"
         let visibleTail = (76...90)
-            .map { String(format: "Autocomplete Lab Obsidian scroll filler line %02d", $0) }
-            .joined(separator: "\n") + "\nAutocomplete Lab Obsidian proof\nSmoke proof feels instant and stays"
+            .map { String(format: "Tilde Obsidian scroll filler line %02d", $0) }
+            .joined(separator: "\n") + "\nTilde Obsidian writing proof\nSmoke proof feels instant and stays"
         let proofDocument = hiddenPrefix + visibleTail
 
         let plan = ObsidianProofDocumentInsertionPlanner().plan(
@@ -27,7 +27,7 @@ struct ObsidianProofDocumentInsertionPlannerTests {
 
     @Test("Proof document planner can recover when only the visible tail suffix matches")
     func recoversFromVisibleTailSuffix() {
-        let visibleTail = "Autocomplete Lab Obsidian proof\nSmoke proof feels instant and stays"
+        let visibleTail = "Tilde Obsidian writing proof\nSmoke proof feels instant and stays"
         let proofDocument = "Hidden line\n" + visibleTail
 
         let plan = ObsidianProofDocumentInsertionPlanner().plan(

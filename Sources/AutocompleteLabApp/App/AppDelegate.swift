@@ -9,8 +9,8 @@ struct MenuBarStatusItemConfiguration: Equatable {
 
     static let autocompleteLab = MenuBarStatusItemConfiguration(
         symbolName: "text.cursor",
-        fallbackTitle: "SteadyType",
-        accessibilityLabel: "SteadyType"
+        fallbackTitle: "Tilde",
+        accessibilityLabel: "Tilde"
     )
 }
 
@@ -1107,7 +1107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         // A single, calm status line. The full decision + model detail lives in its tooltip.
-        let statusMenu = NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: "")
+        let statusMenu = NSMenuItem(title: "Tilde", action: nil, keyEquivalent: "")
         menu.addItem(statusMenu)
         menu.addItem(NSMenuItem.separator())
 
@@ -1169,7 +1169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit SteadyType", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Tilde", action: #selector(quit), keyEquivalent: "q"))
 
         item.menu = menu
         statusItem = item
@@ -2042,7 +2042,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "canReadRange": String(diagnostics.capabilities.canReadSelectedTextRange),
                 "canReadBounds": String(diagnostics.capabilities.canReadBoundsForRange),
                 "canSetSelectedText": String(diagnostics.capabilities.canSetSelectedText),
-                "chromeSmokeHint": String(searchable.contains("autocomplete lab chrome")
+                "chromeSmokeHint": String(searchable.contains("tilde chrome")
                     && searchable.contains("smoke")),
                 "monacoHint": String(searchable.contains("monaco")),
                 "prosemirrorHint": String(searchable.contains("prosemirror")),
@@ -9534,7 +9534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     nonisolated private static func obsidianProofDocumentMarker() -> String {
         ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"]
-            ?? "Autocomplete Lab Obsidian proof"
+            ?? "Tilde Obsidian writing proof"
     }
 
     nonisolated private static func obsidianProofDocumentConfirmsInsertion(expectedText: String) -> Bool {
@@ -15937,7 +15937,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     nonisolated private static func bundledTextEventHelperURL() -> URL? {
-        let helperName = "SteadyTypeTextEventHelper"
+        let helperName = "TildeTextEventHelper"
         let fileManager = FileManager.default
         if let auxiliaryURL = Bundle.main.url(forAuxiliaryExecutable: helperName),
            fileManager.isExecutableFile(atPath: auxiliaryURL.path) {
@@ -19358,7 +19358,7 @@ private extension AppDelegate {
 
     static var textEditPracticeDocumentText: String {
         """
-        SteadyType practice
+        Tilde practice
 
         This is a disposable local TextEdit file.
         Suggestions appear as a small floating suggestion next to the cursor.
@@ -19374,7 +19374,7 @@ private extension AppDelegate {
         Write-test only in TextEdit, Notes, Obsidian, and the included Chrome local practice pages.
         Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL, secure, and private fields stay off until proof says otherwise.
 
-        Return to SteadyType Settings to delete traces or export only the redacted Privacy Bundle.
+        Return to Tilde Settings to delete traces or export only the redacted Privacy Bundle.
 
         Practice here:
 

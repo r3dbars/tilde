@@ -162,7 +162,7 @@ struct LocalReportExporter {
 
     private func privacyChecklist(eventCount: Int) -> String {
         """
-        # SteadyType Privacy Export
+        # Tilde Privacy Export
 
         - [x] Generated locally on this Mac.
         - [x] Uses the redacted beta telemetry lane.

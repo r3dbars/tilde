@@ -11,8 +11,8 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
-DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Models"
+DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/Tilde/diagnostics.log"
+DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/Tilde/Models"
 DEFAULT_LINE_LIMIT = 5000
 
 
@@ -728,7 +728,7 @@ def print_report(args: argparse.Namespace) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare SteadyType app-owned supported local model configs using only local "
+            "Compare Tilde app-owned supported local model configs using only local "
             "diagnostics and proof artifacts."
         )
     )

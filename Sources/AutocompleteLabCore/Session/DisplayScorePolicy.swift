@@ -121,7 +121,7 @@ public enum DisplayScoreSuppressionBrain: String, Equatable, Sendable {
     case current
     case oneBrainPreview = "one-brain-preview"
 
-    public static let environmentFlag = "STEADYTYPE_ONE_BRAIN_SUPPRESSION"
+    public static let environmentFlag = "TILDE_ONE_BRAIN_SUPPRESSION"
 
     public static func fromEnvironment(_ environment: [String: String]) -> DisplayScoreSuppressionBrain {
         guard let value = environment[environmentFlag] else {

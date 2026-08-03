@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_TRACE = Path.home() / "Library/Logs/SteadyType/traces.jsonl"
+DEFAULT_TRACE = Path.home() / "Library/Logs/Tilde/traces.jsonl"
 
 SAFE_METADATA_KEYS = {
     "acceptMode",
@@ -34,7 +34,7 @@ SAFE_METADATA_KEYS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Summarize SteadyType typing feel from a redacted trace JSONL."
+        description="Summarize Tilde typing feel from a redacted trace JSONL."
     )
     parser.add_argument(
         "trace",

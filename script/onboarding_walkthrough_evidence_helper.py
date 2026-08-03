@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_LOG_DIR = Path.home() / "Library/Logs/SteadyType"
+DEFAULT_LOG_DIR = Path.home() / "Library/Logs/Tilde"
 DEFAULT_DIAGNOSTICS_LOG = DEFAULT_LOG_DIR / "diagnostics.log"
 DEFAULT_TRACE_LOG = DEFAULT_LOG_DIR / "traces.jsonl"
 DEFAULT_RAW_TRACE_LOG = DEFAULT_LOG_DIR / "raw-traces.jsonl"
@@ -58,10 +58,10 @@ def current_build_proof() -> str:
         proofs.append(f"commit:{commit}")
 
     for token in (
-        sha256_token("app-sha256", ROOT_DIR / "dist/SteadyType.app/Contents/MacOS/SteadyType"),
-        sha256_token("archive-sha256", ROOT_DIR / "dist/smoke-proof/SteadyType.zip"),
-        sha256_token("archive-sha256", ROOT_DIR / "dist/SteadyType.zip"),
-        sha256_token("archive-sha256", ROOT_DIR / "dist/SteadyType.dmg"),
+        sha256_token("app-sha256", ROOT_DIR / "dist/Tilde.app/Contents/MacOS/Tilde"),
+        sha256_token("archive-sha256", ROOT_DIR / "dist/smoke-proof/Tilde.zip"),
+        sha256_token("archive-sha256", ROOT_DIR / "dist/Tilde.zip"),
+        sha256_token("archive-sha256", ROOT_DIR / "dist/Tilde.dmg"),
     ):
         if token:
             proofs.append(token)
@@ -201,9 +201,9 @@ def print_commands() -> None:
     print("```bash")
     print("./script/build_and_run.sh --verify")
     print("# Complete Settings Practice in TextEdit through Tab, Esc, and Pause Suggestions.")
-    print("./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready > /tmp/steadytype-onboarding-before-delete.txt")
-    print("# Click Delete Local Logs in SteadyType Settings Practice.")
-    print("./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready > /tmp/steadytype-onboarding-after-delete.txt")
+    print("./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready > /tmp/tilde-onboarding-before-delete.txt")
+    print("# Click Delete Local Logs in Tilde Settings Practice.")
+    print("./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready > /tmp/tilde-onboarding-after-delete.txt")
     print("./script/check_onboarding_walkthrough_proof.py --print-template")
     print("# After recording the real row:")
     print("./script/check_onboarding_walkthrough_proof.py")

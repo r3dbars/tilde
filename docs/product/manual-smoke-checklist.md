@@ -41,13 +41,13 @@ manual proof pass.
 
 ## Setup
 
-- Launch `dist/SteadyType.app`.
+- Launch `dist/Tilde.app`.
 - Prefer `./script/build_and_run.sh --verify` before using `--skip-build`; the
   recorder rejects stale app processes from other checkouts.
 - Confirm the menu says `AX ok`.
 - Keep test text local and disposable.
-- Watch `~/Library/Logs/SteadyType/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
-- Watch `~/Library/Logs/SteadyType/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
+- Watch `~/Library/Logs/Tilde/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
+- Watch `~/Library/Logs/Tilde/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
 - Prefer a real hardware key press for Tab and the configured full-accept shortcut (`Shift-Tab` by default). Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - Use `Control-Backtick` for the on-demand "Suggest Now" lane. It may request
   one suggestion, but it must not insert text and it must not change Tab's
@@ -171,7 +171,7 @@ developer machine. Use the helper as a manual-gated proof path:
 script/no_accessibility_smoke.sh --print
 ```
 
-After disabling SteadyType in System Settings and relaunching it, run:
+After disabling Tilde in System Settings and relaunching it, run:
 
 ```bash
 AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> script/no_accessibility_smoke.sh --check

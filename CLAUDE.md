@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Read this with `AGENTS.md`. This repo is **SteadyType**, a standalone macOS autocomplete lab — a menu bar app that shows quiet inline writing suggestions near the caret. It is intentionally separate from the main Transcripted app and treated as a throwaway-friendly experiment, not a committed product feature.
+Read this with `AGENTS.md`. This repo is **Tilde**, a standalone macOS tilde — a menu bar app that shows quiet inline writing suggestions near the caret. It is intentionally separate from the main Transcripted app and treated as a throwaway-friendly experiment, not a committed product feature.
 
 Per-folder `AGENTS.md` + `CLAUDE.md` pairs exist throughout the tree and carry local rules; read the one for the folder you are editing.
 

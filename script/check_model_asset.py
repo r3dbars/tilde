@@ -114,8 +114,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-root",
         type=Path,
-        default=Path.home() / "Library/Application Support/SteadyType",
-        help="SteadyType Application Support root.",
+        default=Path.home() / "Library/Application Support/Tilde",
+        help="Tilde Application Support root.",
     )
     parser.add_argument(
         "--print-path",
@@ -166,7 +166,7 @@ def validation_failure(model: str, path: Path, reason: str, include_developer_fi
         f"Expected: {path}",
         "",
         "Fix:",
-        "  Open SteadyType Settings and use Install Local Model or Repair Local Model.",
+        "  Open Tilde Settings and use Install Local Model or Repair Local Model.",
         "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
         f"  The verifier requires the pinned revision and {RECEIPT_NAME} checksum receipt.",
     ]

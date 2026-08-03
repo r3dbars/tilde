@@ -110,7 +110,7 @@ ALLOW_PATTERNS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download a SteadyType MLX model.")
+    parser = argparse.ArgumentParser(description="Download a Tilde MLX model.")
     parser.add_argument(
         "--model",
         choices=sorted(MODELS),
@@ -148,7 +148,7 @@ def main() -> int:
     revision = model.get("revision")
     target = (
         Path.home()
-        / "Library/Application Support/SteadyType"
+        / "Library/Application Support/Tilde"
         / model["target"]
     )
 

@@ -68,7 +68,7 @@ This is a good authorship pattern:
 - dismiss is cheap,
 - typing over a suggestion is normal behavior.
 
-SteadyType already uses the safer variant: `Tab` accepts one word, while whole
+Tilde already uses the safer variant: `Tab` accepts one word, while whole
 suggestion accept is separate.
 
 ## Delight Moment
@@ -78,7 +78,7 @@ and a useful next word or short phrase appears exactly where the cursor is. The
 word-by-word blog doubles down on this. TypeAhead frames one-word accept as a
 way to keep authorship instead of outsourcing the sentence.
 
-SteadyType should keep chasing that same feeling, but in its own style: quiet
+Tilde should keep chasing that same feeling, but in its own style: quiet
 Mac writing help near the cursor, with proof-gated app support.
 
 ## Annoyance Moment
@@ -108,7 +108,7 @@ exposes through Accessibility. Standard AppKit text views are the easy case.
 Browser editors, custom canvas editors, terminals, and prompt boxes are the
 fragile case.
 
-SteadyType should not match the broad claim. Keep the current proof-gated scope:
+Tilde should not match the broad claim. Keep the current proof-gated scope:
 TextEdit, Notes, Obsidian, and Chrome local fixtures only until screenshot and
 insertion proof says otherwise.
 
@@ -130,7 +130,7 @@ firewall tools.
 
 Important gap: I did not find an explicit public sensitive-field suppression
 story for password, login, payment, search, URL, or private prompt fields.
-TypeAhead relies heavily on "local-only" trust. SteadyType can do better by
+TypeAhead relies heavily on "local-only" trust. Tilde can do better by
 making silence visible and testable.
 
 ## Runtime And Model Notes
@@ -143,7 +143,7 @@ Observed docs say generation can take 1-2 seconds on Apple Silicon. Some
 marketing pages imply under-100ms or zero-lag behavior. Treat the help docs as
 more reliable than marketing copy.
 
-SteadyType should avoid exact speed claims unless backed by
+Tilde should avoid exact speed claims unless backed by
 `script/model_latency_report.py --default-model-proof`.
 
 ## Diagnostics And Failure States
@@ -160,7 +160,7 @@ TypeAhead public troubleshooting is mostly help-center based:
 I did not find a public in-app diagnostics export, proof manifest, redacted
 trace story, or "why no suggestion?" state.
 
-SteadyType already has diagnostics, redacted traces, privacy export, support
+Tilde already has diagnostics, redacted traces, privacy export, support
 states, and proof scripts. The product gap is making the quiet state more
 legible to a tester in the moment.
 

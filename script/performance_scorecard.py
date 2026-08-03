@@ -13,7 +13,7 @@ from typing import Any
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
+DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/Tilde/diagnostics.log"
 DEFAULT_LINE_LIMIT = 5000
 
 SENSITIVE_KEY_FRAGMENTS = (
@@ -1063,7 +1063,7 @@ def existing_paths(values: list[str]) -> list[Path]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Score SteadyType runtime performance readiness from privacy-safe "
+            "Score Tilde runtime performance readiness from privacy-safe "
             "diagnostic metadata and optional no-egress/runtime report evidence."
         )
     )

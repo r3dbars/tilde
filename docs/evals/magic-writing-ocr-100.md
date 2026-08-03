@@ -2,7 +2,7 @@
 
 Date: 2026-05-08
 
-Goal: make Autocomplete Lab feel like a tiny local writing companion that sees the active app, reads visible on-screen context with OCR, predicts the next word quickly, and keeps longer suggestions alive while the user types.
+Goal: make Tilde feel like a tiny local writing companion that sees the active app, reads visible on-screen context with OCR, predicts the next word quickly, and keeps longer suggestions alive while the user types.
 
 Model rule: keep the current fast model. Do not switch models for this loop.
 
@@ -208,7 +208,7 @@ Time: 2026-05-09T00:17:00Z
 Time: 2026-05-09T00:36:00Z
 
 - Tried to refresh the Notes body lane on the current fast model without changing models.
-- Result: no Notes proof was recorded. Computer Use edited the note in the background, which does not exercise Autocomplete Lab's foreground event-tap path. A foreground CGEvent probe produced real Notes screenshot/insertion evidence, but focus moved before a clean Tab accept could be captured, so it is not a valid manual smoke pass.
+- Result: no Notes proof was recorded. Computer Use edited the note in the background, which does not exercise Tilde's foreground event-tap path. A foreground CGEvent probe produced real Notes screenshot/insertion evidence, but focus moved before a clean Tab accept could be captured, so it is not a valid manual smoke pass.
 - Decision: keep Notes title/body/checklist pending until a human foreground pass or a purpose-built Notes smoke driver can prove Tab accept plus full accept in one stable slice.
 - Because the Notes probe rebuilt the app, refreshed the fully automated baseline on the same current binary afterward: TextEdit plus Chrome `textarea`, `contenteditable`, `editor-like`, `monaco-like`, `prosemirror-like`, `monaco-real`, `prosemirror-real`, and `chat-like` all passed with strict screenshot-backed visual evidence.
 - Current refreshed build proof: `commit:6a887c649db7` and app binary SHA `891c92d2aeb6d3428a66fc6359b04aa9fa6cfde2444c5b8520ca9eda84e95a6b`.
@@ -481,7 +481,7 @@ Time: 2026-05-09T00:36:00Z
 
 2026-05-09T04:10Z heartbeat follow-up: made Notes title proof scriptable and refreshed it on PR #35.
 
-- Finding: the first guarded title attempt used the older partial-word `inst` setup, which triggered Notes' own inline completion and made AX expose text after the caret. Autocomplete Lab correctly failed closed with `reason=middleOfLine`.
+- Finding: the first guarded title attempt used the older partial-word `inst` setup, which triggered Notes' own inline completion and made AX expose text after the caret. Tilde correctly failed closed with `reason=middleOfLine`.
 - Fix: `notes-title` now has a guarded disposable-note driver like `notes-body`: it creates a fresh blank note, verifies Notes is frontmost, verifies the focused title line is blank and single-line before typing, moves the selected range to the end, and uses proactive next-word text (`Smoke proof feels`) instead of fighting Apple's native `inst` completion.
 - Harness validation: `bash -n script/real_app_smoke.sh script/manual_smoke_session.sh script/real_app_smoke_self_test.sh script/manual_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, and `script/manual_smoke_self_test.sh` passed.
 - Live run: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate`.
@@ -509,7 +509,7 @@ Time: 2026-05-09T00:36:00Z
 
 2026-05-09T04:36Z heartbeat follow-up: repaired Obsidian CodeMirror AX cursor drift with the current fast model only.
 
-- Finding: Obsidian/CodeMirror can show the visual caret at the end of the live line while macOS AX reports either one trailing typed character after the cursor (`inst|a`) or a larger line split (`Smok|e proof feels inst`). That made Autocomplete Lab classify real end-of-line typing as `middleOfLine` and hide suggestions.
+- Finding: Obsidian/CodeMirror can show the visual caret at the end of the live line while macOS AX reports either one trailing typed character after the cursor (`inst|a`) or a larger line split (`Smok|e proof feels inst`). That made Tilde classify real end-of-line typing as `middleOfLine` and hide suggestions.
 - Fix: `TextContextRepairPolicy` now has Obsidian-only repairs for the one-character trailing drift and the broader same-line drift. Both are scoped to `md.obsidian`, `AXTextArea`, no selection, and plausible active prose lines.
 - Unit proof: `swift test --filter TextContextRepairPolicyTests` passed 8 tests, including both Obsidian drift repairs and non-repair middle-of-line guards.
 - Live suggestion proof: launched patched app with `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b`, `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`, and Obsidian proof-mode allowlisting. Diagnostics showed `text-context-repaired reason=obsidian-codemirror-trailing-character` at line 243053 and `suggestion-presented app=md.obsidian` at line 243069. The broader line-drift repair then showed `text-context-repaired reason=obsidian-codemirror-line-drift` at lines 243193 and 243220, with `suggestion-presented app=md.obsidian` at lines 243210 and 243226.
@@ -554,11 +554,11 @@ Time: 2026-05-09T00:36:00Z
 - Live attempt: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public`.
 - Result: still no pass claimed. The old false blocker is gone: the run focused the real W3Schools `AXTextArea` titled `Review of W3Schools:` at `x=510,y=298,w=424,h=69`. The remaining blocker is deeper: Chrome did not apply setup text through process-targeted Unicode events, AX selected-text replacement, foreground Unicode events, or the guarded paste fallback inside that public iframe.
 - Cleanup: killed only isolated temporary Chrome proof processes launched by the failed attempts; the user's normal Chrome profile was left alone.
-- Next fix target: either drive the public iframe through an isolated Chrome DevTools setup channel before proving Autocomplete Lab acceptance, or switch the production text-field lane to a top-level public page whose editable field accepts normal AX/keyboard setup. Until then, public Chrome textarea/contenteditable stay honest proof gaps.
+- Next fix target: either drive the public iframe through an isolated Chrome DevTools setup channel before proving Tilde acceptance, or switch the production text-field lane to a top-level public page whose editable field accepts normal AX/keyboard setup. Until then, public Chrome textarea/contenteditable stay honest proof gaps.
 
 2026-05-09T05:20Z heartbeat follow-up: closed the public Chrome text-field proof gap with the current fast model only.
 
-- Fix: moved `textarea-public` from the W3Schools iframe to the top-level public EditPad textarea page, and moved `contenteditable-public` to the top-level public MediumEditor demo. The public lanes now launch isolated Chrome with a temporary DevTools port only for disposable setup text and DOM caret placement; Autocomplete Lab still has to present, accept, and verify insertion through the app path.
+- Fix: moved `textarea-public` from the W3Schools iframe to the top-level public EditPad textarea page, and moved `contenteditable-public` to the top-level public MediumEditor demo. The public lanes now launch isolated Chrome with a temporary DevTools port only for disposable setup text and DOM caret placement; Tilde still has to present, accept, and verify insertion through the app path.
 - Chrome insertion hardening: Chrome now keeps `axThenKeyEvents` as the primary path and can fall back to verified AX value replacement after failed key-event verification. This covers public browser editors that report selected-text success without changing value.
 - Verification hardening: Chromium rich-editor contenteditable fields may change height after insertion. The verifier now allows same-role/same-window/same-fingerprint/same-x/y/width height reflow after insertion, while still rejecting target movement.
 - Validation: `bash -n script/real_app_smoke.sh script/real_app_smoke_self_test.sh`, `script/real_app_smoke_self_test.sh`, `swift test --filter CompatibilityProfileTests`, and `swift test --filter FocusedFieldIdentityPolicyTests` passed.
@@ -616,7 +616,7 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Fix: `TextContextRepairPolicy` now has an Obsidian-only `obsidian-codemirror-hidden-spacer-line` repair. It is scoped to `md.obsidian`, `AXTextArea`, no selected text, and only moves the first plausible active prose line after hidden spacer rows into `textBeforeCursor`.
 - Regression coverage: added a positive hidden-spacer repair test and a negative case that refuses to repair true middle-of-line text.
 - Validation: `swift test --filter TextContextRepairPolicyTests` passed on the current fast-model branch.
-- Live presentation evidence: after relaunching Autocomplete Lab with `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b`, `AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS=md.obsidian`, and screenshot tracing, diagnostics showed `text-context-repaired reason=obsidian-codemirror-hidden-spacer-line` at line 250881 and `suggestion-presented app=md.obsidian` at lines 250890, 250923, 250947, and 250977.
+- Live presentation evidence: after relaunching Tilde with `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b`, `AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS=md.obsidian`, and screenshot tracing, diagnostics showed `text-context-repaired reason=obsidian-codemirror-hidden-spacer-line` at line 250881 and `suggestion-presented app=md.obsidian` at lines 250890, 250923, 250947, and 250977.
 - Live accept evidence: an activated System Events Tab produced `keyboard-action app=md.obsidian key=tab action=acceptNextWord handled=true` at line 251013, so the actual accept handler can fire. The same slice still failed verification with `insert-verification result=fieldChanged` because Obsidian/CodeMirror moved focus to an `AXWebArea`/new-tab surface after the synthetic accept path. That is not clean proof, so no manual smoke row was recorded.
 - Honest gate status: Obsidian default and variants remain proof gaps until a real manual keypress or a tighter Obsidian driver produces two verified accepts in one bounded visual slice. The current fix only closes the false `middleOfLine` presentation blocker.
 
@@ -634,7 +634,7 @@ Target real dogfood score: 92/100 or higher with no wrong-field insertions and n
 - Finding: the `afterChars=4` Obsidian blocker was real text (`eels`), not hidden CodeMirror scaffolding. The old hand driver left the AX cursor before visible letters even when the screen looked like the caret was at line end.
 - Harness fix: the default Obsidian smoke now requires a disposable marker note, confirms frontmost `md.obsidian`, resets the focused CodeMirror body through AX value replacement, moves the insertion point to the line end, and then runs the normal two-accept visual proof.
 - App fix: Obsidian now uses profile-scoped direct AX value replacement for verified accepts, then repairs CodeMirror's stale visual/AX cursor with a line-end key event and a descendant-text verification fast path. This stays scoped to `md.obsidian`, exact expected text, same pid, and the current suggestion baseline.
-- Live result: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER='Autocomplete Lab Obsidian Proof Codex' script/real_app_smoke.sh obsidian --manual-gate` passed with 2 accepted insertions and strict screenshot-backed visual trace evidence.
+- Live result: `AUTOCOMPLETE_LAB_MODEL=qwen3-0.6b AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER='Tilde Obsidian Proof Codex' script/real_app_smoke.sh obsidian --manual-gate` passed with 2 accepted insertions and strict screenshot-backed visual trace evidence.
 - Evidence: diagnostics lines 251908-251977 and trace lines 63153-63171; manual smoke row `2026-05-09T06:52:49Z`, app binary SHA `071780c039448c51a8866ed5d3e49b55ed4911c704e163ffc8e2e48713505cd3`.
 - Validation: `script/real_app_smoke_self_test.sh` passed, and `swift test --filter 'CompatibilityProfileTests|TextContextRepairPolicyTests|InsertionVerificationContextRecoveryPolicyTests'` passed 33 focused tests. The model stayed `qwen3-0.6b`.
 - Honest gate status: default Obsidian is no longer the acceptance blocker. `script/manual_smoke_status.sh --require-all` still fails because the new source change makes older broad proof rows stale and the `obsidian-theme`, `obsidian-pane`, `obsidian-long-note`, Claude Code, Claude desktop, and default-Chrome real-editor AX lanes still need proof.

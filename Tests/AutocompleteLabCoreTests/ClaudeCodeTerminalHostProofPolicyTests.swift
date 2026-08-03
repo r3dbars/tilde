@@ -80,13 +80,13 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
             windowTitle: "Claude Code",
-            focusedText: "❯ STEADYTYPECLAUDECODEPROOF Can we make this",
+            focusedText: "❯ TILDECLAUDECODEPROOF Can we make this",
             proofModeEnabled: true
         )
 
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
         #expect(ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine(
-            "❯ STEADYTYPECLAUDECODEPROOF Can we make this"
+            "❯ TILDECLAUDECODEPROOF Can we make this"
         ) == "Can we make this")
     }
 
@@ -362,7 +362,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofReconstructsWrappedPromptRowsWithLateCompactMarker() {
         let textBeforeCursor = """
         Claude Code
-        ❯ Can we make this STEADYTYPECLAUDECODEPROOF
+        ❯ Can we make this TILDECLAUDECODEPROOF
         dicta
         """
         let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
@@ -370,7 +370,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             textAfterCursor: " \n  shortcuts"
         )
 
-        #expect(focusedLine == "❯ Can we make this STEADYTYPECLAUDECODEPROOF dicta ")
+        #expect(focusedLine == "❯ Can we make this TILDECLAUDECODEPROOF dicta ")
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: " \n  shortcuts"
@@ -390,7 +390,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Terminal-host proof rejects shell launcher markers as stale scrollback")
     func terminalHostProofRejectsShellLauncherMarkersAsStaleScrollback() {
         let textBeforeCursor = """
-        redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+        redbars@Mac % printf 'TILDECLAUDECODEPROOF'; claude
         Claude Code
         pred
         """
@@ -415,7 +415,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Terminal-host proof accepts scoped title marker with safe current prompt")
     func terminalHostProofAcceptsScopedTitleMarkerWithSafeCurrentPrompt() {
         let textBeforeCursor = """
-        redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+        redbars@Mac % printf 'TILDECLAUDECODEPROOF'; claude
         Claude Code
         Can we make this dicta
         """
@@ -428,7 +428,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(
             ClaudeCodeTerminalHostProofContext(
                 hostBundleIdentifier: "com.apple.Terminal",
-                windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+                windowTitle: "Claude Code TILDECLAUDECODEPROOF",
                 focusedText: focusedLine,
                 rawTextBeforeCursor: textBeforeCursor,
                 rawTextAfterCursor: " \n  shortcuts",
@@ -441,7 +441,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputCanRelyOnScopedTitleMarkerOnly() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Can we make this red",
             rawTextBeforeCursor: "Can we make this red",
             proofModeEnabled: true
@@ -455,7 +455,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputStripsClaudeNumberedPromptDecoration() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "1. Can we make this red",
             rawTextBeforeCursor: "1. Can we make this red",
             proofModeEnabled: true
@@ -469,7 +469,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputPreservesTrailingSpaceAfterNumberedPromptDecoration() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "1. Can we make this red ",
             rawTextBeforeCursor: "1. Can we make this red ",
             proofModeEnabled: true
@@ -483,7 +483,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofKeepsNumberedCommandShapedPromptLinesBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "1. git status",
             rawTextBeforeCursor: "1. git status",
             proofModeEnabled: true
@@ -497,10 +497,10 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputUsesVettedPromptLineWhenClaudeChromeTrailsCursor() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Can we make this dicta",
             rawTextBeforeCursor: """
-            redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+            redbars@Mac % printf 'TILDECLAUDECODEPROOF'; claude
             Claude Code
             Can we make this dicta
             """,
@@ -524,12 +524,12 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputPrefersBeforeCursorTextOverFullAXLine() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Can we make this dicta",
             rawTextBeforeCursor: """
-            redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+            redbars@Mac % printf 'TILDECLAUDECODEPROOF'; claude
             Claude Code
-            Can we make this STEADYTYPECLAUDECODEPROOF d
+            Can we make this TILDECLAUDECODEPROOF d
             """,
             rawTextAfterCursor: """
             icta
@@ -546,7 +546,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofIgnoresClaudeChromeAfterMarkedCurrentLine() {
         let textBeforeCursor = """
         Claude Code
-        ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        ❯ TILDECLAUDECODEPROOF Make this setting con
         """
         let textAfterCursor = """
         ╭────────────────────────────────────╮
@@ -559,14 +559,14 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: focusedLine,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
             proofModeEnabled: true
         )
 
-        #expect(focusedLine == "❯ STEADYTYPECLAUDECODEPROOF Make this setting con")
+        #expect(focusedLine == "❯ TILDECLAUDECODEPROOF Make this setting con")
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
     }
@@ -574,7 +574,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Terminal-host proof recovers current marker when Terminal flattens launcher scrollback")
     func terminalHostProofRecoversCurrentMarkerFromFlattenedLauncherScrollback() {
         let textBeforeCursor = """
-        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ TILDECLAUDECODEPROOF Make this setting con
         """
         let textAfterCursor = """
         ╭────────────────────────────────────╮
@@ -587,14 +587,14 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: focusedLine,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
             proofModeEnabled: true
         )
 
-        #expect(focusedLine == "STEADYTYPECLAUDECODEPROOF Make this setting con")
+        #expect(focusedLine == "TILDECLAUDECODEPROOF Make this setting con")
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
     }
@@ -602,7 +602,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Terminal-host proof recovers current marker when Terminal screen trails cursor")
     func terminalHostProofRecoversCurrentMarkerWhenTerminalScreenTrailsCursor() {
         let textBeforeCursor = """
-        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ TILDECLAUDECODEPROOF Make this setting con
         """
         let textAfterCursor = """
         ╭────────────────────────────────────╮
@@ -612,7 +612,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         """
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -634,11 +634,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
     @Test("Terminal-host proof recovers make-this sample when marker starts the prompt row")
     func terminalHostProofRecoversMakeThisSampleWhenMarkerStartsPromptRow() {
-        let textBeforeCursor = "STEADYTYPECLAUDECODEPROOF Make this setting con"
+        let textBeforeCursor = "TILDECLAUDECODEPROOF Make this setting con"
         let textAfterCursor = " \n╭────────────────────────────────────╮\n"
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -656,11 +656,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
     @Test("Terminal-host proof recovers make-this sample after prompt residue")
     func terminalHostProofRecoversMakeThisSampleAfterPromptResidue() {
-        let textBeforeCursor = "›STEADYTYPECLAUDECODEPROOF Make this setting con"
+        let textBeforeCursor = "›TILDECLAUDECODEPROOF Make this setting con"
         let textAfterCursor = " \n╭────────────────────────────────────╮\n"
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -678,11 +678,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
     @Test("Terminal-host proof recovers make-this sample when Terminal drops a typed space")
     func terminalHostProofRecoversMakeThisSampleWhenTerminalDropsTypedSpace() {
-        let textBeforeCursor = "❯\u{00a0}STEADYTYPECLAUDECODEPROOF Make thissetting con"
+        let textBeforeCursor = "❯\u{00a0}TILDECLAUDECODEPROOF Make thissetting con"
         let textAfterCursor = " \n╭────────────────────────────────────╮\n"
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -700,11 +700,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
     @Test("Terminal-host proof keeps marked shell command sample blocked")
     func terminalHostProofKeepsMarkedShellCommandSampleBlocked() {
-        let textBeforeCursor = "STEADYTYPECLAUDECODEPROOF make test"
+        let textBeforeCursor = "TILDECLAUDECODEPROOF make test"
         let textAfterCursor = " \n╭────────────────────────────────────╮\n"
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -721,11 +721,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
     @Test("Terminal-host proof keeps make all command sample blocked")
     func terminalHostProofKeepsMakeAllCommandSampleBlocked() {
-        let textBeforeCursor = "STEADYTYPECLAUDECODEPROOF make all"
+        let textBeforeCursor = "TILDECLAUDECODEPROOF make all"
         let textAfterCursor = " \n╭────────────────────────────────────╮\n"
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -739,7 +739,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Terminal-host proof does not recover current marker when same-line suffix remains")
     func terminalHostProofDoesNotRecoverCurrentMarkerWithSameLineSuffix() {
         let textBeforeCursor = """
-        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ TILDECLAUDECODEPROOF Make this setting con
         """
         let textAfterCursor = """
         figu
@@ -749,7 +749,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         """
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -769,7 +769,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Terminal-host proof does not recover command text from marked terminal screen")
     func terminalHostProofDoesNotRecoverCommandTextFromMarkedTerminalScreen() {
         let textBeforeCursor = """
-        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF git status
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ TILDECLAUDECODEPROOF git status
         """
         let textAfterCursor = """
         ╭────────────────────────────────────╮
@@ -778,7 +778,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         """
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: textBeforeCursor + textAfterCursor,
             rawTextBeforeCursor: textBeforeCursor,
             rawTextAfterCursor: textAfterCursor,
@@ -793,7 +793,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofInputDoesNotBypassCommandShapedPromptLines() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "git status",
             rawTextBeforeCursor: "git status",
             proofModeEnabled: true
@@ -807,7 +807,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofKeepsMakeCommandLinesBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "make test",
             rawTextBeforeCursor: "make test",
             proofModeEnabled: true
@@ -821,7 +821,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func terminalHostProofKeepsTitleMarkerShellCommandsBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "git status",
             rawTextBeforeCursor: "git status",
             proofModeEnabled: true
@@ -978,7 +978,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             rawTextBeforeCursor: "con",
             terminalScreenText: """
             Claude Code
-            ❯ Make this setting STEADYTYPECLAUDECODEPROOF con
+            ❯ Make this setting TILDECLAUDECODEPROOF con
             """,
             proofModeEnabled: true
         )
@@ -1006,7 +1006,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             terminalScreenText: """
             Claude Code
             ❯ Make this setting
-            STEADYTYPECLAUDECODEPROOF con
+            TILDECLAUDECODEPROOF con
             ? for shortcuts
             """,
             proofModeEnabled: true
@@ -1029,7 +1029,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             rawTextBeforeCursor: "con",
             terminalScreenText: """
             Claude Code
-            STEADYTYPECLAUDECODEPROOF con
+            TILDECLAUDECODEPROOF con
             """,
             proofModeEnabled: true
         )
@@ -1056,7 +1056,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             rawTextBeforeCursor: "abc",
             terminalScreenText: """
             Claude Code
-            ❯ Make this setting STEADYTYPECLAUDECODEPROOF con
+            ❯ Make this setting TILDECLAUDECODEPROOF con
             """,
             proofModeEnabled: true
         )
@@ -1078,7 +1078,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.googlecode.iterm2",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "con",
             rawTextBeforeCursor: "con",
             terminalScreenText: "",
@@ -1103,9 +1103,9 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.googlecode.iterm2",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
-            focusedText: "Make this setting STEADYTYPECLAUDECODE",
-            rawTextBeforeCursor: "Make this setting STEADYTYPECLAUDECODE",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
+            focusedText: "Make this setting TILDECLAUDECODE",
+            rawTextBeforeCursor: "Make this setting TILDECLAUDECODE",
             terminalScreenText: "",
             proofModeEnabled: true
         )
@@ -1124,7 +1124,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofCanAllowTrustedSensitiveActivationBypass() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Make this setting the feature con",
             rawTextBeforeCursor: "Make this setting the feature con",
             terminalScreenText: "",
@@ -1144,7 +1144,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         let promptText = "Make this command line setting configurable"
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: promptText,
             rawTextBeforeCursor: promptText,
             terminalScreenText: "",
@@ -1167,7 +1167,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofAcceptsTitleScopedNaturalPromptText() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Please make this",
             rawTextBeforeCursor: "Please make this",
             terminalScreenText: "",
@@ -1190,7 +1190,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Claude Code v2.1.150",
             rawTextBeforeCursor: "Claude Code v2.1.150",
             terminalScreenText: "",
@@ -1213,7 +1213,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "build 2026-05-25 proof",
             rawTextBeforeCursor: "build 2026-05-25 proof",
             terminalScreenText: "",
@@ -1232,11 +1232,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofPrefersTitleScopedScreenPromptOverStaleAXText() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "build 2026-05-25 proof",
             rawTextBeforeCursor: "build 2026-05-25 proof",
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
+            Claude Code TILDECLAUDECODEPROOF
             Some older output
             ❯ Make this setting the feature
             ╭────────────────────────────────────╮
@@ -1272,7 +1272,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             rawTextAfterCursor: "❯ Make this setting the feature con\n? for shortcuts",
             terminalScreenText: """
             Claude Code
-            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            ❯ Make this setting the feature TILDECLAUDECODEPROOF con
             ╭────────────────────────────────────╮
             │ ? for shortcuts                    │
             ╰────────────────────────────────────╯
@@ -1306,7 +1306,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             reason: "unprovenSurface:terminal"
         )
         let screenText = """
-        Claude Code STEADYTYPECLAUDECODEPROOF
+        Claude Code TILDECLAUDECODEPROOF
         Some older output
         ❯ Make this setting the feature con
         ╭────────────────────────────────────╮
@@ -1350,7 +1350,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Ghostty proof recovers title-scoped screen prompt anchor when direct input matches")
     func ghosttyProofRecoversTitleScopedScreenPromptAnchorWhenDirectInputMatches() throws {
         let screenText = """
-        Claude Code STEADYTYPECLAUDECODEPROOF
+        Claude Code TILDECLAUDECODEPROOF
         Some older output
         ❯ Make this setting the feature con
         ╭────────────────────────────────────╮
@@ -1359,7 +1359,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         """
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Make this setting the feature con",
             rawTextBeforeCursor: "Make this setting the feature con",
             rawTextAfterCursor: "",
@@ -1379,18 +1379,18 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     @Test("Ghostty proof prefers screen prompt when direct marked AX input lags")
     func ghosttyProofPrefersScreenPromptWhenDirectMarkedAXInputLags() throws {
         let screenText = """
-        Claude Code STEADYTYPECLAUDECODEPROOF
+        Claude Code TILDECLAUDECODEPROOF
         Some older output
-        ❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature
+        ❯ TILDECLAUDECODEPROOF Make this setting the feature
         ╭────────────────────────────────────╮
         │ ? for shortcuts                    │
         ╰────────────────────────────────────╯
         """
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
-            focusedText: "STEADYTYPECLAUDECODEPROOF Make this setting the featur",
-            rawTextBeforeCursor: "STEADYTYPECLAUDECODEPROOF Make this setting the featur",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
+            focusedText: "TILDECLAUDECODEPROOF Make this setting the featur",
+            rawTextBeforeCursor: "TILDECLAUDECODEPROOF Make this setting the featur",
             rawTextAfterCursor: "",
             terminalScreenText: screenText,
             proofModeEnabled: true
@@ -1402,23 +1402,23 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature")
         #expect(anchor.inputText == "Make this setting the feature")
-        #expect(anchor.promptLineInputText == "❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature")
+        #expect(anchor.promptLineInputText == "❯ TILDECLAUDECODEPROOF Make this setting the feature")
         #expect(metadata["terminalProofScreenPromptAnchorInputChars"] == "29")
-        #expect(metadata["terminalProofScreenPromptAnchorLineInputChars"] == "57")
+        #expect(metadata["terminalProofScreenPromptAnchorLineInputChars"] == "52")
     }
 
     @Test("Ghostty proof keeps mismatched direct marked AX text from taking screen prompt")
     func ghosttyProofKeepsMismatchedDirectMarkedAXTextFromTakingScreenPrompt() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
-            focusedText: "STEADYTYPECLAUDECODEPROOF Make this setting the featurx",
-            rawTextBeforeCursor: "STEADYTYPECLAUDECODEPROOF Make this setting the featurx",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
+            focusedText: "TILDECLAUDECODEPROOF Make this setting the featurx",
+            rawTextBeforeCursor: "TILDECLAUDECODEPROOF Make this setting the featurx",
             rawTextAfterCursor: "",
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
+            Claude Code TILDECLAUDECODEPROOF
             Some older output
-            ❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature
+            ❯ TILDECLAUDECODEPROOF Make this setting the feature
             ╭────────────────────────────────────╮
             │ ? for shortcuts                    │
             ╰────────────────────────────────────╯
@@ -1434,7 +1434,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofRejectsTitleScopedScreenPromptAnchorWithoutDirectInputMatch() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Claude Code",
             rawTextBeforeCursor: "",
             rawTextAfterCursor: """
@@ -1442,7 +1442,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             Some older output
             """,
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
+            Claude Code TILDECLAUDECODEPROOF
             Some older output
             ❯ Make this setting the feature con
             ╭────────────────────────────────────╮
@@ -1459,7 +1459,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofTrustsTitleScopedVisiblePromptRowWhenAXCurrentTextIsStale() throws {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Claude Code",
             rawTextBeforeCursor: "",
             rawTextAfterCursor: """
@@ -1467,7 +1467,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             ? for shortcuts
             """,
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
+            Claude Code TILDECLAUDECODEPROOF
             Some older output
             ❯ Please make this
             ╭────────────────────────────────────╮
@@ -1490,7 +1490,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofCreatesTitleScopedDirectPromptAnchorBeforeScreenTextArrives() throws {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Make this setting the feature con",
             rawTextBeforeCursor: "Make this setting the feature con",
             rawTextAfterCursor: "",
@@ -1502,7 +1502,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "❯ TILDECLAUDECODEPROOF Make this setting the feature con")
         #expect(anchor.lineIndex == 0)
         #expect(anchor.lineCount == 4)
     }
@@ -1511,13 +1511,13 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofFallsBackToTitleScopedDirectAnchorWhenMarkedScreenPromptIsStale() throws {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Make this setting the feature con",
             rawTextBeforeCursor: "Make this setting the feature con",
             rawTextAfterCursor: "",
             terminalScreenText: """
             Claude Code
-            ❯ STEADYTYPECLAUDECODEPROOF
+            ❯ TILDECLAUDECODEPROOF
             ╭────────────────────────────────────╮
             │ ? for shortcuts                    │
             ╰────────────────────────────────────╯
@@ -1528,7 +1528,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
 
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "❯ TILDECLAUDECODEPROOF Make this setting the feature con")
         #expect(anchor.lineIndex == 0)
         #expect(anchor.lineCount == 4)
     }
@@ -1537,7 +1537,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofRejectsTitleScopedDirectPromptAnchorForShellCommands() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "git status",
             rawTextBeforeCursor: "git status",
             rawTextAfterCursor: "",
@@ -1556,9 +1556,9 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             reason: "unprovenSurface:terminal"
         )
         let screenText = """
-        Claude Code STEADYTYPECLAUDECODEPROOF
+        Claude Code TILDECLAUDECODEPROOF
         Some older output
-        ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+        ❯ Make this setting the feature TILDECLAUDECODEPROOF con
         ╭────────────────────────────────────╮
         │ ? for shortcuts                    │
         ╰────────────────────────────────────╯
@@ -1587,7 +1587,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
         #expect(effective == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con")
+        #expect(anchor.promptLineInputText == "❯ Make this setting the feature TILDECLAUDECODEPROOF con")
         #expect(anchor.lineIndex == 2)
         #expect(anchor.lineCount == 6)
         #expect(metadata["terminalProofScreenPromptAnchorRecoverable"] == "true")
@@ -1611,7 +1611,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             Some older output
             """,
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
+            Claude Code TILDECLAUDECODEPROOF
             ❯ Make this setting the feature con
             ╭────────────────────────────────────╮
             │ ? for shortcuts                    │
@@ -1646,8 +1646,8 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             Some older output
             """,
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
-            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            Claude Code TILDECLAUDECODEPROOF
+            ❯ Make this setting the feature TILDECLAUDECODEPROOF con
             ⏺ Running tests
             """,
             proofModeEnabled: true
@@ -1680,7 +1680,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             rawTextAfterCursor: "Please ignore this\n? for shortcuts",
             terminalScreenText: """
             Claude Code
-            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            ❯ Make this setting the feature TILDECLAUDECODEPROOF con
             ? for shortcuts
             """,
             proofModeEnabled: true
@@ -1715,7 +1715,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             rawTextAfterCursor: "Claude Code v2.1.150\n? for shortcuts",
             terminalScreenText: """
             Claude Code
-            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            ❯ Make this setting the feature TILDECLAUDECODEPROOF con
             ? for shortcuts
             """,
             proofModeEnabled: true
@@ -1741,11 +1741,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyTitleScopedScreenRecoveryKeepsShellCommandsBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "git status",
             rawTextBeforeCursor: "git status",
             terminalScreenText: """
-            Claude Code STEADYTYPECLAUDECODEPROOF
+            Claude Code TILDECLAUDECODEPROOF
             ❯ git status
             ╭────────────────────────────────────╮
             │ ? for shortcuts                    │
@@ -1762,7 +1762,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
     func ghosttyProofSensitiveActivationBypassRejectsMismatchedOrCommandInput() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "Make this setting the feature con",
             rawTextBeforeCursor: "Make this setting the feature con",
             terminalScreenText: "",
@@ -1770,7 +1770,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
         let commandContext = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
-            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            windowTitle: "Claude Code TILDECLAUDECODEPROOF",
             focusedText: "rm -rf local-fixture con",
             rawTextBeforeCursor: "rm -rf local-fixture con",
             terminalScreenText: "",
@@ -1809,7 +1809,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             proofInputText: "sudo make this command line setting configurable"
         ))
         #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
-            proofInputText: "Make this setting STEADYTYPECLAUDECODE"
+            proofInputText: "Make this setting TILDECLAUDECODE"
         ))
         #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
             proofInputText: "Make this"

@@ -29,17 +29,17 @@ reject_contains() {
   fi
 }
 
-require_contains "$HELP_OUTPUT" "primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip"
+require_contains "$HELP_OUTPUT" "primary dist/Tilde.dmg plus secondary dist/Tilde.zip"
 require_contains "$HELP_OUTPUT" "--package-existing"
-require_contains "$HELP_OUTPUT" "Sign and validate an existing dist/SteadyType.app with Developer ID"
+require_contains "$HELP_OUTPUT" "Sign and validate an existing dist/Tilde.app with Developer ID"
 require_contains "$HELP_OUTPUT" "without rebuilding the Swift package"
 require_contains "$HELP_OUTPUT" "--print-proof-template"
 require_contains "$HELP_OUTPUT" "--require-developer-id"
 require_contains "$HELP_OUTPUT" "Submit the DMG to Apple notarytool"
 require_contains "$HELP_OUTPUT" "AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES"
 
-require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/SteadyType.dmg"
-require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/SteadyType.zip"
+require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/Tilde.dmg"
+require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/Tilde.zip"
 require_contains "$PROOF_TEMPLATE" "Developer ID app signature: required before private-beta packet"
 require_contains "$PROOF_TEMPLATE" "Notarization status:"
 require_contains "$PROOF_TEMPLATE" "Stapler status:"
@@ -50,11 +50,11 @@ require_contains "$SCRIPT_TEXT" 'record_command "$PROOF_DIR/stapler-staple.txt"'
 require_contains "$SCRIPT_TEXT" "gatekeeper_failed=0"
 require_contains "$SCRIPT_TEXT" 'Gatekeeper assessment failed; saved spctl output in $PROOF_DIR'
 require_contains "$SCRIPT_TEXT" 'local source_app="${1:-$APP_BUNDLE}"'
-require_contains "$SCRIPT_TEXT" 'create_zip "$verify_dir/SteadyType.app"'
+require_contains "$SCRIPT_TEXT" 'create_zip "$verify_dir/Tilde.app"'
 require_contains "$SCRIPT_TEXT" '--output-format json >/dev/null 2>&1'
 require_contains "$SCRIPT_TEXT" 'package_existing_app "archive"'
 require_contains "$SCRIPT_TEXT" 'package_existing_app "package-existing"'
-require_contains "$SCRIPT_TEXT" 'ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"'
+require_contains "$SCRIPT_TEXT" 'ENTITLEMENTS_PLIST="$ROOT_DIR/script/Tilde.entitlements"'
 require_contains "$SCRIPT_TEXT" 'codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "$developer_id" "$APP_BUNDLE"'
 require_contains "$SCRIPT_TEXT" './script/check_app_bundle.sh --release "$APP_BUNDLE"'
 reject_contains "$SCRIPT_TEXT" "/tmp/autocomplete-notary-profile-check.txt"
@@ -64,7 +64,7 @@ require_contains "$PATCH_SCRIPT" 'SWIFT_SCRATCH_PATH="${AUTOCOMPLETE_LAB_SWIFT_S
 require_contains "$PATCH_SCRIPT" 'patch -d "$SWIFT_SCRATCH_PATH" -p0'
 require_contains "$MLX_PATCH" '--- checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift'
 require_contains "$BETA_READINESS_SCRIPT" "release proof checksum is stale"
-require_contains "$BETA_READINESS_SCRIPT" "SteadyType.dmg SteadyType.zip"
+require_contains "$BETA_READINESS_SCRIPT" "Tilde.dmg Tilde.zip"
 
 MISSING_MODEL_HOME="$(mktemp -d)"
 trap 'rm -rf "$MISSING_MODEL_HOME"' EXIT

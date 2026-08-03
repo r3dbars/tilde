@@ -10,7 +10,7 @@ import AutocompleteLabCore
 struct LocalArtifactPermissionsTests {
     private func makeTempDirectoryURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("steadytype-artifact-perms-tests", isDirectory: true)
+            .appendingPathComponent("tilde-artifact-perms-tests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 
@@ -27,7 +27,7 @@ struct LocalArtifactPermissionsTests {
         let screenshotsURL = root.appendingPathComponent("screenshots", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let defaults = try #require(UserDefaults(suiteName: "steadytype-trace-\(UUID().uuidString)"))
+        let defaults = try #require(UserDefaults(suiteName: "tilde-trace-\(UUID().uuidString)"))
         let log = RawAutocompleteTraceLog(
             logURL: logURL,
             screenshotsURL: screenshotsURL,

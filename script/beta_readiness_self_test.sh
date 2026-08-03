@@ -51,7 +51,7 @@ require_order() {
 }
 
 require_contains './script/package_release.sh --check --require-developer-id --require-notary-profile'
-require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"'
+require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/Tilde.dmg"'
 require_contains 'READINESS_SCRATCH_PATH_CREATED=""'
 require_contains 'cleanup_readiness_scratch_path'
 require_contains 'configure_readiness_scratch_path || exit 1'
@@ -69,7 +69,7 @@ require_contains 'AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS="$allowed_
 require_contains 'run_check "Prompt app manifest proof gate" ./script/check_prompt_app_manifest_proof.sh'
 reject_contains 'run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh'
 require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json'
-require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/Tilde.app/Contents/MacOS/Tilde'
 require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400'
 require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10'
 require_contains '--validate-proof "$proof_path"'

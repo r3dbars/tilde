@@ -4,7 +4,7 @@ Date: 2026-05-26
 
 ## Product Rule
 
-SteadyType should feel calmer than an input-method candidate list. It should help only when the field is safe, the suggestion is useful, and the user has a clear escape hatch.
+Tilde should feel calmer than an input-method candidate list. It should help only when the field is safe, the suggestion is useful, and the user has a clear escape hatch.
 
 ## Shipped In This Pass
 

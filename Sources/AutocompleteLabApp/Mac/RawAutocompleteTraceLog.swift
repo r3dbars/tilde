@@ -5,10 +5,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     static let shared = RawAutocompleteTraceLog(
         logURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SteadyType/traces.jsonl"),
+            .appendingPathComponent("Library/Logs/Tilde/traces.jsonl"),
         screenshotsURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SteadyType/screenshots")
+            .appendingPathComponent("Library/Logs/Tilde/screenshots")
     )
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.raw-trace-log")
@@ -564,7 +564,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         <html>
         <head>
           <meta charset="utf-8">
-          <title>SteadyType Trace Report</title>
+          <title>Tilde Trace Report</title>
           <style>
             body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 28px; color: #1d1d1f; }
             h1 { font-size: 24px; }
@@ -578,7 +578,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           </style>
         </head>
         <body>
-          <h1>SteadyType Trace Report</h1>
+          <h1>Tilde Trace Report</h1>
           <p>Generated locally. Nothing was uploaded.</p>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>

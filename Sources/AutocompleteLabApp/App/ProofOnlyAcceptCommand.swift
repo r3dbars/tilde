@@ -3,7 +3,7 @@ import Foundation
 enum ProofOnlyAcceptCommand {
     static let argument = "--proof-only-accept-next-word"
     static let enabledEnvironmentKey = "AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS"
-    static let notificationName = Notification.Name("com.steadytype.proof-only.accept-next-word")
+    static let notificationName = Notification.Name("com.tilde.proof-only.accept-next-word")
 
     static func isRequested(arguments: [String]) -> Bool {
         arguments.contains(argument)

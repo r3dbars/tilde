@@ -53,11 +53,11 @@ Personal Capture is not default tracing. It is a local, opt-in Justin dogfood
 mode that writes daily Markdown to:
 
 ```text
-~/Library/Application Support/SteadyType/Personal Capture
+~/Library/Application Support/Tilde/Personal Capture
 ```
 
 The journal records new writing fragments, verified accepted suggestions, and
-accepted-kept survival signals. It exists to tune whether SteadyType starts to
+accepted-kept survival signals. It exists to tune whether Tilde starts to
 sound like the person using it.
 
 Suggestion Episodes are the structured version of this loop. Each safe,
@@ -100,7 +100,7 @@ For quick visual calibration, use the menu bar nudge actions while the target ap
 - `Nudge Suggestion Up/Down/Left/Right`
 - `Reset Current App Learning`
 
-Nudges are explicit local opt-in actions. Autocomplete Lab must not infer,
+Nudges are explicit local opt-in actions. Tilde must not infer,
 store, or apply visual calibration automatically for a beta/customer user.
 Only local dogfood/lab runs may use screenshot-backed visual calibration, and
 only after screenshot tracing is explicitly enabled for that app or run.
@@ -375,7 +375,7 @@ stricter reach bar. Use `--allow-low-sample` only for harness/debug slices, not
 daily-driver proof. Do not paste raw writing, prompts, screenshots, document
 names, URLs, recipients, or subjects into that manual row.
 Run `status` before `start` if possible. The dogfood gate records whether
-SteadyType was running when the session began, and a session that starts while
+Tilde was running when the session began, and a session that starts while
 the app is off does not count as daily-driver proof.
 The same report has a trust-killer gate that fails closed on failed or duplicate
 insertions, wrong-context accept suppression, caret geometry failures,

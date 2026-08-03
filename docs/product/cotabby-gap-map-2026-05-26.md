@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-## Current SteadyType Strengths
+## Current Tilde Strengths
 
 | Lesson | Current repo surface |
 | --- | --- |

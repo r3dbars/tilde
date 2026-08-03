@@ -7,8 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 
 
-DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
-DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Models"
+DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/Tilde/diagnostics.log"
+DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/Tilde/Models"
 DEFAULT_ALIASES = [
     "qwen3-0.6b",
     "qwen3-1.7b",

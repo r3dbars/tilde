@@ -1607,7 +1607,7 @@ struct SuggestionOrchestratorTests {
         let context = makeContext(
             textBeforeCursor: "const value = mon",
             textAfterCursor: "",
-            windowTitle: "SteadyType Chrome Real Monaco Smoke",
+            windowTitle: "Tilde Chrome Real Monaco Smoke",
             caretIsSynthetic: true
         )
 

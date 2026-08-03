@@ -8,8 +8,8 @@ struct MenuBarStatusItemTests {
         let configuration = MenuBarStatusItemConfiguration.autocompleteLab
 
         #expect(configuration.symbolName == "text.cursor")
-        #expect(configuration.fallbackTitle == "SteadyType")
-        #expect(configuration.accessibilityLabel == "SteadyType")
+        #expect(configuration.fallbackTitle == "Tilde")
+        #expect(configuration.accessibilityLabel == "Tilde")
     }
 
     @Test("Suggestion summon shortcut is separate from Tab")

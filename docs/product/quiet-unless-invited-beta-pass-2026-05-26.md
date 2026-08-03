@@ -1,6 +1,6 @@
 # Quiet Unless Invited Beta Pass
 
-This pass turns the IBus Typing Booster lesson into a SteadyType rule: stay
+This pass turns the IBus Typing Booster lesson into a Tilde rule: stay
 quiet by default, but let the user ask once when they actually want help.
 
 ## Shipped
@@ -14,7 +14,7 @@ quiet by default, but let the user ask once when they actually want help.
   enablement, runtime readiness, secure-field suppression, browser/form blocks,
   prompt-app gates, sensitive-field gates, and insertion proof.
 - Settings now has a Trust section that shows local mode, typed-text storage
-  state, current app status, and the current reason SteadyType is quiet or
+  state, current app status, and the current reason Tilde is quiet or
   active.
 
 ## Product Rule

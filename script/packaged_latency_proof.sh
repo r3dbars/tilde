@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TARGET="textedit-model-latency"
-APP_BUNDLE="${AUTOCOMPLETE_LAB_PACKAGED_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
+APP_BUNDLE="${AUTOCOMPLETE_LAB_PACKAGED_APP_BUNDLE:-$ROOT_DIR/dist/Tilde.app}"
 DRY_RUN=0
 RUN_SMOKE=1
 OPEN_ACCESSIBILITY_SETTINGS=0
@@ -15,13 +15,13 @@ usage() {
   cat <<'EOF'
 Usage: script/packaged_latency_proof.sh [textedit-model-latency|claude-model-latency] [--dry-run] [--skip-smoke] [--app-bundle <path>] [--open-accessibility-settings]
 
-Launch the notarized packaged SteadyType app with the proof-mode environment
+Launch the notarized packaged Tilde app with the proof-mode environment
 needed for a strict model-latency run, then run the guarded skip-build smoke
 and latency selector against that exact app binary.
 
 This script cannot grant macOS Accessibility. If the packaged app reports
 accessibility-permission-lost, open System Settings > Privacy & Security >
-Accessibility, enable SteadyType for bundle ID bar.r3d.steadytype, and rerun.
+Accessibility, enable Tilde for bundle ID bar.r3d.tilde, and rerun.
 EOF
 }
 
@@ -90,9 +90,9 @@ canonical_bundle_path() {
 }
 
 APP_BUNDLE="$(canonical_bundle_path "$APP_BUNDLE")"
-APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}}"
+APP_BINARY="$APP_BUNDLE/Contents/MacOS/Tilde"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/Tilde/traces.jsonl}}"
 case "$TARGET" in
   textedit-model-latency)
     PROOF_BUNDLE="com.apple.TextEdit"
@@ -104,7 +104,7 @@ esac
 SETTINGS_URL="x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
 if [[ "$DRY_RUN" != "1" && ! -x "$APP_BINARY" ]]; then
-  echo "missing packaged SteadyType binary: $APP_BINARY" >&2
+  echo "missing packaged Tilde binary: $APP_BINARY" >&2
   echo "Run ./script/package_release.sh archive first." >&2
   exit 1
 fi
@@ -155,13 +155,13 @@ wait_for_packaged_app() {
   for _ in $(seq 1 "$attempts"); do
     pids="$(packaged_pids | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
     if [[ -n "$pids" ]]; then
-      echo "Packaged SteadyType running: pid(s) $pids"
+      echo "Packaged Tilde running: pid(s) $pids"
       return 0
     fi
     sleep 0.5
   done
 
-  echo "packaged SteadyType did not launch from: $APP_BINARY" >&2
+  echo "packaged Tilde did not launch from: $APP_BINARY" >&2
   exit 1
 }
 
@@ -169,10 +169,10 @@ print_accessibility_recovery() {
   cat >&2 <<EOF
 
 Packaged latency proof blocked by macOS Accessibility.
-Bundle ID: bar.r3d.steadytype
+Bundle ID: bar.r3d.tilde
 App: $APP_BUNDLE
 
-Open System Settings > Privacy & Security > Accessibility and enable SteadyType.
+Open System Settings > Privacy & Security > Accessibility and enable Tilde.
 Then rerun:
 
 AUTOCOMPLETE_LAB_PACKAGED_LATENCY_RELAUNCH=1 ./script/packaged_latency_proof.sh $TARGET

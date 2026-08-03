@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TARGET="textedit-model-latency"
-APP_BUNDLE="${AUTOCOMPLETE_LAB_PACKAGED_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
+APP_BUNDLE="${AUTOCOMPLETE_LAB_PACKAGED_APP_BUNDLE:-$ROOT_DIR/dist/Tilde.app}"
 DRY_RUN=0
 PRINT_PLAN=0
 RUN_PACKAGED_LATENCY=0

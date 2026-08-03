@@ -25,7 +25,7 @@ struct DiagnosticsNativeAppearanceSnapshotTests {
                 isReady: true
             ),
             runtimeTargetSummary: "Qwen local • short completions • normal",
-            modelDirectoryPath: "/Users/example/Library/Application Support/SteadyType/Models",
+            modelDirectoryPath: "/Users/example/Library/Application Support/Tilde/Models",
             recentEvents: [
                 "launch accessibility=true",
                 "suggestion-panel-frame renderMode=inlineAdjacent",
@@ -48,10 +48,10 @@ struct DiagnosticsNativeAppearanceSnapshotTests {
             ),
             personalCaptureScorecard: nil,
             recentTraceEvents: [],
-            tracePath: "/Users/example/Library/Logs/SteadyType/events.jsonl",
+            tracePath: "/Users/example/Library/Logs/Tilde/events.jsonl",
             tracingPaused: false,
             screenshotTracingEnabled: false,
-            compatibilityLearningPath: "/Users/example/Library/Application Support/SteadyType/learning.json",
+            compatibilityLearningPath: "/Users/example/Library/Application Support/Tilde/learning.json",
             compatibilityLearningProfile: nil,
             refreshAction: {},
             toggleTracingAction: {},

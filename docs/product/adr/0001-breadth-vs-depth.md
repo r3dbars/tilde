@@ -7,7 +7,7 @@
 
 ## Context
 
-SteadyType has one recurring product question: should suggestions try to work
+Tilde has one recurring product question: should suggestions try to work
 *everywhere* (broad, generic support for any app), or only in a small set of
 *proven* apps (narrow, proof-gated depth)?
 

@@ -209,8 +209,8 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
     }
 
     private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
-        let matchesProofFixtureName = (searchableText.contains("autocomplete lab chrome")
-            || searchableText.contains("steadytype chrome"))
+        let matchesProofFixtureName = (searchableText.contains("tilde chrome")
+            || searchableText.contains("tilde chrome"))
         let hasLocalOriginToken = searchableText.contains("localhost")
             || searchableText.contains("127.0.0.1")
             || searchableText.contains("[::1]")

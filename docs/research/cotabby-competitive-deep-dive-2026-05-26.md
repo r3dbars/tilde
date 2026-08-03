@@ -7,13 +7,13 @@ Seed: [FuJacob/cotabby](https://github.com/FuJacob/cotabby) and
 
 ## Summary
 
-Cotabby is the closest public peer to SteadyType: a macOS menu bar app that
+Cotabby is the closest public peer to Tilde: a macOS menu bar app that
 watches the focused text field, runs local autocomplete, renders ghost text near
 the caret, and accepts with Tab. The strongest lesson is not to chase
 "everywhere" support. The strongest lesson is that trust breaks when the app is
 silent, slow, misplaced, or too broad about permissions.
 
-SteadyType should keep its narrower product stance: local-first, proof-gated,
+Tilde should keep its narrower product stance: local-first, proof-gated,
 default quiet in risky fields, and honest about why suggestions do not appear.
 
 ## Public Product Facts
@@ -55,7 +55,7 @@ default quiet in risky fields, and honest about why suggestions do not appear.
 6. `Tab` accepts part of the suggestion.
 7. `Esc`, navigation, or continued typing dismisses or diverges.
 
-Transfer to SteadyType: keep the loop, but keep our safer acceptance contract:
+Transfer to Tilde: keep the loop, but keep our safer acceptance contract:
 `Tab` accepts the next word only, full accept remains a separate action, and
 risky fields stay blocked until proof exists.
 
@@ -101,7 +101,7 @@ Known public demand and risk areas:
 - Multi-display placement needs explicit proof. Source:
   [external monitor overlay issue](https://github.com/FuJacob/cotabby/issues/193).
 
-SteadyType should keep Chrome support limited to local textarea/contenteditable
+Tilde should keep Chrome support limited to local textarea/contenteditable
 fixtures and keep webmail blocked until disposable reply proof exists. The
 webmail class should include Gmail, Outlook, Yahoo Mail, Fastmail, Proton Mail,
 and iCloud Mail because the risk is browser-hosted mail composition, not one
@@ -124,7 +124,7 @@ Inference:
 
 - Local-only is necessary but not enough. Accessibility, Input Monitoring,
   clipboard access, and Screen Recording together create a large local trust
-  surface. SteadyType should keep screenshot/raw context opt-in, avoid clipboard
+  surface. Tilde should keep screenshot/raw context opt-in, avoid clipboard
   context by default, and make redacted proof export the default support path.
 
 ## Runtime And Model Analysis
@@ -141,7 +141,7 @@ Facts:
   Source:
   [Cotabby 0.1.1-beta](https://github.com/FuJacob/cotabby/releases/tag/v0.1.1-beta).
 
-Transfer to SteadyType:
+Transfer to Tilde:
 
 - Keep one app-owned runtime.
 - Keep model install/repair visible in Settings.
@@ -152,7 +152,7 @@ Transfer to SteadyType:
 
 - Do not copy Cotabby code, assets, UI, branding, app names, icons, copy, or
   trade dress.
-- Do not use Cotabby's AGPL implementation as a source for SteadyType code.
+- Do not use Cotabby's AGPL implementation as a source for Tilde code.
 - Do not copy the "works anywhere" posture.
 - Do not require Screen Recording for the MVP path.
 - Do not read clipboard by default.

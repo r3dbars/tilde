@@ -7,7 +7,7 @@ Use this before inviting private beta testers.
 - [ ] `./script/beta_readiness.sh --check-only` reports only expected external
   blockers before the full gate.
 - [ ] `./script/beta_readiness.sh` passes.
-- [ ] `dist/SteadyType.dmg` exists as the primary tester artifact.
+- [ ] `dist/Tilde.dmg` exists as the primary tester artifact.
 - [ ] `dist/private-beta/checksums.txt` matches the current DMG.
 - [ ] The app is signed and the package check passes.
 - [x] Notarization status is known before sending the build.
@@ -105,12 +105,12 @@ Invite testers only when every applicable box is checked.
   the guided TextEdit walkthrough table has a current clean-user pass row.
 - `./script/private_beta_packet.sh --check` must be rerun after any app-code or
   artifact change and now validates the current DMG with stapler and spctl.
-- Current local SteadyType artifacts are not beta-current until a Developer ID
+- Current local Tilde artifacts are not beta-current until a Developer ID
   signed DMG, Apple notarization, stapling, and fresh-install Gatekeeper proof
   are all regenerated. A stored notarytool profile may exist under a legacy
   shared alias, but older legacy ZIP notarization does not count for the
-  current SteadyType DMG.
-- Recreate `dist/SteadyType.dmg`, the secondary `dist/SteadyType.zip`, and
+  current Tilde DMG.
+- Recreate `dist/Tilde.dmg`, the secondary `dist/Tilde.zip`, and
   `dist/private-beta/checksums.txt` if app code changes after the remaining
   proof blockers close.
 - All-history trace eval is diagnostic only; beta proof must use fresh marked

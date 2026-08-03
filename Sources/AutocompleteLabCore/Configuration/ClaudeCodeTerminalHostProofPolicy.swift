@@ -212,7 +212,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     )
 
     public static let proofMarker = "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF"
-    public static let compactProofMarker = "STEADYTYPECLAUDECODEPROOF"
+    public static let compactProofMarker = "TILDECLAUDECODEPROOF"
     private static let proofMarkers = [proofMarker, compactProofMarker]
     private static let naturalLanguageCommandPhrases = [
         "make a",

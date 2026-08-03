@@ -6,7 +6,7 @@ import Testing
 struct SecureLocalStorageTests {
     private func makeTempDirectoryURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("steadytype-secure-storage-tests", isDirectory: true)
+            .appendingPathComponent("tilde-secure-storage-tests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 

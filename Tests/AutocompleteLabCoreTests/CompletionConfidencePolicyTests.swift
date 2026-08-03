@@ -108,7 +108,7 @@ struct CompletionConfidencePolicyTests {
         let decision = policy.decision(
             suggestion: CompletionSuggestion(text: " instant without getting in the way today now", maxVisibleWords: 8),
             mode: .phraseContinuation,
-            textBeforeCursor: "Autocomplete Lab Obsidian proof Smoke proof feels",
+            textBeforeCursor: "Tilde Obsidian writing proof Smoke proof feels",
             latencyMilliseconds: 900,
             supportLevel: .yellow
         )

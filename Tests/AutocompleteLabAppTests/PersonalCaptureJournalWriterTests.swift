@@ -30,7 +30,7 @@ struct PersonalCaptureJournalWriterTests {
         writer.waitForPendingWrites()
 
         let markdown = try fixture.markdown()
-        #expect(markdown.contains("# SteadyType Personal Capture - 2026-05-23"))
+        #expect(markdown.contains("# Tilde Personal Capture - 2026-05-23"))
         #expect(markdown.contains("Local Justin dogfood journal"))
         #expect(markdown.contains("Field observed for personal capture"))
         #expect(markdown.contains("with my actual next sentence"))
@@ -62,8 +62,8 @@ struct PersonalCaptureJournalWriterTests {
         writer.waitForPendingWrites()
 
         let markdown = try fixture.markdown()
-        #expect(markdown.contains("SteadyType accepted"))
-        #expect(markdown.contains("SteadyType five-star signal"))
+        #expect(markdown.contains("Tilde accepted"))
+        #expect(markdown.contains("Tilde five-star signal"))
         #expect(markdown.contains("trust the tiny loop"))
         #expect(markdown.contains("Acceptance ID: `acceptance-1`"))
     }

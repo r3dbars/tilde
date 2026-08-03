@@ -20,7 +20,7 @@ IBus Typing Booster is a Linux input-method autocomplete system. It is powerful 
 
 That same position creates the main risk. Users get annoyed when the candidate list appears everywhere, when normal keys are captured, when typing slows down, or when secret/terminal input is exposed.
 
-For SteadyType, the lesson is not "show more suggestions." The lesson is "make activation predictable, make private/off states obvious, and fail closed anywhere the field is even a little risky."
+For Tilde, the lesson is not "show more suggestions." The lesson is "make activation predictable, make private/off states obvious, and fail closed anywhere the field is even a little risky."
 
 ## Core Writing Loop
 
@@ -70,13 +70,13 @@ The most relevant privacy pattern is explicit "Off the record" mode. The setting
 
 The engine also checks privacy-like states before recording. In source, recording is skipped for off-the-record mode, record mode "nothing", hidden input, and private input hints. It can also disable itself in terminal input when configured, and it blocks password/PIN input purposes.
 
-Architecture inference: IBus has stronger field-purpose signals than a Mac Accessibility overlay in some contexts because input methods receive input purpose and hints. SteadyType should compensate with conservative app/field heuristics and proof gates.
+Architecture inference: IBus has stronger field-purpose signals than a Mac Accessibility overlay in some contexts because input methods receive input purpose and hints. Tilde should compensate with conservative app/field heuristics and proof gates.
 
 ## Local Vs Cloud
 
 The default prediction path is local: dictionaries, m17n input methods, emoji data, and a local learned user database. Public docs also describe optional speech recognition through Google Cloud Speech-to-Text and optional AI chat / server-style integrations, which are outside the core typing booster loop.
 
-SteadyType should keep the opposite default: app-owned local model, no user-managed server, no raw typed text unless explicitly opted in.
+Tilde should keep the opposite default: app-owned local model, no user-managed server, no raw typed text unless explicitly opted in.
 
 ## Supported Surfaces And Breakage
 
@@ -91,7 +91,7 @@ IBus Typing Booster is designed for Linux apps through the input-method stack, n
 - Brave duplicate characters,
 - language/input-method edge cases.
 
-SteadyType should keep the proof-matrix approach instead of promising broad compatibility.
+Tilde should keep the proof-matrix approach instead of promising broad compatibility.
 
 ## Do Not Copy
 
@@ -115,7 +115,7 @@ Safe transferable ideas:
 - debug info that explains why suggestions are off,
 - candidate removal / "do not suggest this again" concept.
 
-## SteadyType Takeaways
+## Tilde Takeaways
 
 1. Make new-install defaults calmer. Users should not feel like a popup suddenly owns typing.
 2. Keep Tab narrow: one word only, only while a visible suggestion is valid.

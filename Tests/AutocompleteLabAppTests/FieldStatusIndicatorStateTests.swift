@@ -8,7 +8,7 @@ struct FieldStatusIndicatorStateTests {
         let state = FieldStatusIndicatorState.blocked.withReason("surface needs proof first")
 
         #expect(state.kind == .blocked)
-        #expect(state.accessibilityLabel == "SteadyType is off in this field: surface needs proof first")
+        #expect(state.accessibilityLabel == "Tilde is off in this field: surface needs proof first")
     }
 
     @Test("Waiting state can explain temporary quiet mode")
@@ -16,7 +16,7 @@ struct FieldStatusIndicatorStateTests {
         let state = FieldStatusIndicatorState.waiting.withReason("recent rejects")
 
         #expect(state.kind == .waiting)
-        #expect(state.accessibilityLabel == "SteadyType is waiting in this field: recent rejects")
+        #expect(state.accessibilityLabel == "Tilde is waiting in this field: recent rejects")
     }
 
     @Test("Reason copy is one line and bounded")

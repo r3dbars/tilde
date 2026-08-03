@@ -169,7 +169,7 @@ struct CompletionCandidateRankerTests {
     @Test("Phrase mode suppresses recent context restarts")
     func phraseModeSuppressesRecentContextRestarts() {
         let ranker = CompletionCandidateRanker()
-        let context = "Autocomplete Lab Obsidian proof\nSmoke proof feels"
+        let context = "Tilde Obsidian writing proof\nSmoke proof feels"
         let repeated = CompletionSuggestion(text: " smoke proof feels noisy", maxVisibleWords: 8)
         let useful = CompletionSuggestion(text: " instant and useful today", maxVisibleWords: 8)
 

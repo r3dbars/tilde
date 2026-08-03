@@ -15,7 +15,7 @@ fit, repo fit, and proofability. Lower is better for effort and technical risk.
 | Browser production-page allowlist | 4 | 3 | 2 | 4 | 5 | 2 | 3 | Avoid until proof exists |
 | Google Docs support | 4 | 3 | 2 | 5 | 5 | 2 | 3 | Keep blocked |
 | Terminal/prompt support beyond proof mode | 3 | 4 | 2 | 5 | 5 | 2 | 3 | Keep proof-only |
-| Whole-suggestion `Tab` accept parity | 3 | 1 | 3 | 2 | 4 | 1 | 4 | Avoid; conflicts with SteadyType safety |
+| Whole-suggestion `Tab` accept parity | 3 | 1 | 3 | 2 | 4 | 1 | 4 | Avoid; conflicts with Tilde safety |
 | True inline ghost text everywhere | 4 | 2 | 3 | 5 | 5 | 2 | 2 | Avoid for MVP |
 | Persistent voice learning by default | 4 | 2 | 1 | 5 | 5 | 2 | 2 | Avoid; opt-in dogfood only |
 | Website-style broad category claims | 2 | 1 | 1 | 2 | 4 | 1 | 1 | Avoid |
@@ -38,7 +38,7 @@ Shipped now:
 Why this won:
 
 - It copies no TypeAhead UI or copy.
-- It turns a TypeAhead public gap into a SteadyType advantage.
+- It turns a TypeAhead public gap into a Tilde advantage.
 - It is easy to prove with unit tests.
 - It does not widen app support or increase privacy risk.
 - It makes beta feedback clearer without storing typed text.

@@ -34,7 +34,7 @@ struct CommonPhraseContinuationPredictorTests {
     @Test("Rejects removed demo proof and product complaint phrases")
     func rejectsRemovedDemoAndComplaintPhrases() {
         for context in [
-            "Autocomplete Lab Obsidian proof\nSmoke proof feels",
+            "Tilde Obsidian writing proof\nSmoke proof feels",
             "The best daily driver shape is",
             "What kills trust most is",
             "This breaks trust when",

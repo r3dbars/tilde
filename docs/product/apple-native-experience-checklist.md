@@ -2,12 +2,12 @@
 
 Created: 2026-05-07
 
-This is the working checklist for making SteadyType feel natural,
+This is the working checklist for making Tilde feel natural,
 intuitive, fast, quiet, and almost native to macOS.
 
 This file is historical and aspirational. It preserves the Apple-native polish
 loop, but it is not the current beta-readiness scorecard. Use
-`docs/product/steadytype-product-scorecard.md` for current product truth. As of
+`docs/product/tilde-product-scorecard.md` for current product truth. As of
 2026-05-22, strict manual smoke tracks only the 10 boring beta-safe target
 rows. Prompt apps, terminal hosts, chat surfaces, Mail, and production browser
 apps remain proof-only or blocked.

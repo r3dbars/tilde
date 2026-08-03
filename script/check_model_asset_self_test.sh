@@ -28,7 +28,7 @@ if ! grep -F "model asset check failed: missing Qwen3.5 4B MLX model" "$MISSING_
   exit 1
 fi
 
-if ! grep -F "Open SteadyType Settings and use Install Local Model or Repair Local Model." "$MISSING_OUTPUT" >/dev/null; then
+if ! grep -F "Open Tilde Settings and use Install Local Model or Repair Local Model." "$MISSING_OUTPUT" >/dev/null; then
   echo "model asset self-test did not point testers to the in-app model action" >&2
   cat "$MISSING_OUTPUT" >&2
   exit 1
@@ -94,7 +94,7 @@ if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$R
   exit 1
 fi
 
-if ! grep -F "missing integrity receipt .steadytype-model-integrity.json" "$RECEIPT_OUTPUT" >/dev/null; then
+if ! grep -F "missing integrity receipt .tilde-model-integrity.json" "$RECEIPT_OUTPUT" >/dev/null; then
   echo "model asset self-test did not report the missing integrity receipt" >&2
   cat "$RECEIPT_OUTPUT" >&2
   exit 1
@@ -108,12 +108,12 @@ if "${CHECK_ENV[@]}" script/check_model_asset.py \
   exit 1
 fi
 
-if [[ ! -s "$MODEL_PATH/.steadytype-model-integrity.json" ]]; then
+if [[ ! -s "$MODEL_PATH/.tilde-model-integrity.json" ]]; then
   echo "model asset self-test did not write an integrity receipt before known-good validation" >&2
   exit 1
 fi
 
-if ! grep -F ".steadytype-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_OUTPUT" >/dev/null; then
+if ! grep -F ".tilde-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_OUTPUT" >/dev/null; then
   echo "model asset self-test did not enforce known-good model checksums" >&2
   cat "$KNOWN_OUTPUT" >&2
   exit 1
@@ -127,7 +127,7 @@ if env \
   exit 1
 fi
 
-if ! grep -F ".steadytype-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_GOOD_OUTPUT" >/dev/null; then
+if ! grep -F ".tilde-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_GOOD_OUTPUT" >/dev/null; then
   echo "model asset self-test did not keep known-good checks enabled with checksum-skip env set" >&2
   cat "$KNOWN_GOOD_OUTPUT" >&2
   exit 1

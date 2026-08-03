@@ -10,9 +10,9 @@ to scan without changing any score or rerunning a heavy beta gate.
 ```
 
 The output lists the lowest-scoring rows in
-`docs/product/steadytype-product-scorecard.md` and prints each row's `Next Proof`
+`docs/product/tilde-product-scorecard.md` and prints each row's `Next Proof`
 cell. It is read-only. It does not replace `./script/beta_readiness.sh
---check-only`, `./script/check_steadytype_scorecard.py`, or strict manual proof.
+--check-only`, `./script/check_tilde_scorecard.py`, or strict manual proof.
 
 For long-running agent work, use the automation-ready view to skip lanes that
 require a clean-user walkthrough, a manual permission grant, or another human

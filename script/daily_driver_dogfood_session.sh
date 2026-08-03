@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
-MARK_PATH="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MARK_PATH:-$HOME/Library/Logs/SteadyType/daily-driver-dogfood-session.env}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/Tilde/traces.jsonl}"
+MARK_PATH="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MARK_PATH:-$HOME/Library/Logs/Tilde/daily-driver-dogfood-session.env}"
 REPORT_DIR="${AUTOCOMPLETE_LAB_DAILY_DRIVER_REPORT_DIR:-$ROOT_DIR/dist/daily-driver-dogfood}"
 MODE="${1:-}"
 if [[ $# -gt 0 ]]; then
@@ -43,7 +43,7 @@ or screenshots into it.
 Options:
   --app BUNDLE       Restrict finish checks to one app bundle, such as md.obsidian.
   --label LABEL     Human label stored in the local mark/report.
-  --trace PATH      Trace JSONL path. Defaults to ~/Library/Logs/SteadyType/traces.jsonl.
+  --trace PATH      Trace JSONL path. Defaults to ~/Library/Logs/Tilde/traces.jsonl.
   --mark-file PATH  Local mark state path.
   --report PATH     Finish/review report path. Finish defaults under dist/daily-driver-dogfood/.
   --start-line N    Finish from an explicit saved line instead of mark file.
@@ -244,12 +244,12 @@ current_trace_line() {
   fi
 }
 
-steadytype_process_status() {
-  if [[ -n "${AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE:-}" ]]; then
-    echo "$AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE"
+tilde_process_status() {
+  if [[ -n "${AUTOCOMPLETE_LAB_TILDE_STATUS_OVERRIDE:-}" ]]; then
+    echo "$AUTOCOMPLETE_LAB_TILDE_STATUS_OVERRIDE"
     return
   fi
-  if pgrep -x SteadyType >/dev/null 2>&1; then
+  if pgrep -x Tilde >/dev/null 2>&1; then
     echo "running"
   else
     echo "not-running"
@@ -295,7 +295,7 @@ load_mark() {
     STARTED_AT="explicit"
     MARK_LABEL="$LABEL"
     MARK_APP_FILTER="$APP_FILTER"
-    APP_STATUS_AT_START="$(steadytype_process_status)"
+    APP_STATUS_AT_START="$(tilde_process_status)"
     TRACE_EXISTS_AT_START="$(trace_exists_status)"
     DOGFOOD_READINESS_AT_START="$(dogfood_readiness_state "$APP_STATUS_AT_START")"
     return
@@ -329,7 +329,7 @@ write_start_mark() {
   local line started_at app_status trace_exists readiness
   line="$(current_trace_line)"
   started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  app_status="$(steadytype_process_status)"
+  app_status="$(tilde_process_status)"
   trace_exists="$(trace_exists_status)"
   readiness="$(dogfood_readiness_state "$app_status")"
   mkdir -p "$(dirname "$MARK_PATH")"
@@ -352,7 +352,7 @@ Start line: $line
 Mark: $MARK_PATH
 Label: $LABEL
 App filter: ${APP_FILTER:-all supported apps}
-SteadyType app: $app_status
+Tilde app: $app_status
 Dogfood readiness: $readiness
 $(print_readiness_next_step "$readiness")
 
@@ -367,14 +367,14 @@ EOF
 print_status() {
   local line app_status trace_exists readiness finish_app_arg
   line="$(current_trace_line)"
-  app_status="$(steadytype_process_status)"
+  app_status="$(tilde_process_status)"
   trace_exists="$(trace_exists_status)"
   readiness="$(dogfood_readiness_state "$app_status")"
   finish_app_arg=""
   echo "Trace: $TRACE_PATH"
   echo "Trace exists: $trace_exists"
   echo "Current line: $line"
-  echo "SteadyType app: $app_status"
+  echo "Tilde app: $app_status"
   echo "Dogfood readiness: $readiness"
   print_readiness_next_step "$readiness"
   if [[ -f "$MARK_PATH" ]]; then
@@ -1614,7 +1614,7 @@ finish_session() {
     echo
     echo "- Finished at: \`$timestamp\`."
     echo "- Started at: \`${STARTED_AT:-unknown}\`."
-    echo "- SteadyType app at start: \`${APP_STATUS_AT_START:-unknown}\`."
+    echo "- Tilde app at start: \`${APP_STATUS_AT_START:-unknown}\`."
     echo "- Trace existed at start: \`${TRACE_EXISTS_AT_START:-unknown}\`."
     echo "- Start readiness: \`${DOGFOOD_READINESS_AT_START:-unknown}\`."
     echo "- Label: \`$LABEL\`."
@@ -1657,7 +1657,7 @@ finish_session() {
     else
       echo "Result: fail"
       echo "Failures:"
-      echo "- SteadyType was not confirmed running when the dogfood session started"
+      echo "- Tilde was not confirmed running when the dogfood session started"
     fi
     echo '```'
     echo

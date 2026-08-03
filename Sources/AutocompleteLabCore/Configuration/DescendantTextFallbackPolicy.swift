@@ -26,7 +26,7 @@ public struct DescendantTextFallbackPolicy: Equatable, Sendable {
                 return false
             }
 
-            return searchableTitle.contains("steadytype chrome")
+            return searchableTitle.contains("tilde chrome")
                 && searchableTitle.contains("smoke")
 
         default:

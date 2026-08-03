@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "SteadyType",
+    name: "Tilde",
     platforms: [
         .macOS(.v26)
     ],
@@ -13,7 +13,7 @@ let package = Package(
             targets: ["AutocompleteLabCore"]
         ),
         .executable(
-            name: "SteadyType",
+            name: "Tilde",
             targets: ["AutocompleteLabApp"]
         ),
         .executable(
@@ -21,8 +21,8 @@ let package = Package(
             targets: ["AutocompleteTraceReplay"]
         ),
         .executable(
-            name: "SteadyTypeTextEventHelper",
-            targets: ["SteadyTypeTextEventHelper"]
+            name: "TildeTextEventHelper",
+            targets: ["TildeTextEventHelper"]
         )
     ],
     dependencies: [
@@ -93,7 +93,7 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "SteadyTypeTextEventHelper",
+            name: "TildeTextEventHelper",
             exclude: [
                 "AGENTS.md",
                 "CLAUDE.md"

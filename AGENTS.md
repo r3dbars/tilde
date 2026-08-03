@@ -1,4 +1,4 @@
-# Autocomplete Lab Agent Guide
+# Tilde Agent Guide
 
 This repo is separate from Transcripted on purpose.
 

@@ -9,8 +9,8 @@ if [[ -n "${AUTOCOMPLETE_LAB_APP_BUNDLE+x}" ]]; then
   APP_BUNDLE_WAS_EXPLICIT=1
 fi
 
-APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
-APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
+APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/Tilde.app}"
+APP_BINARY="$APP_BUNDLE/Contents/MacOS/Tilde"
 OUTPUT_DIR="${AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT:-$ROOT_DIR/docs/diagnostics/runs/current-build-privacy-export-proof}"
 LOCK_DIR="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-current-build-privacy-export.lock}"
 LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_WAIT_SECONDS:-300}"
@@ -36,9 +36,9 @@ use_temp_build_bundle_if_default() {
     return 0
   fi
 
-  BUILD_DIST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-privacy-build.XXXXXX")"
-  APP_BUNDLE="$BUILD_DIST_DIR/SteadyType.app"
-  APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
+  BUILD_DIST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tilde-privacy-build.XXXXXX")"
+  APP_BUNDLE="$BUILD_DIST_DIR/Tilde.app"
+  APP_BINARY="$APP_BUNDLE/Contents/MacOS/Tilde"
 }
 
 acquire_lock() {
@@ -234,7 +234,7 @@ if find "$OUTPUT_DIR" \( -name 'traces.jsonl' -o -name 'raw-traces.jsonl' \) -pr
   exit 1
 fi
 
-if grep -R -I -E 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject|private-cache-redbars|freeform-reason-redbars|/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars|/Users/redbars/private/freeform-reason-redbars\.md' "$OUTPUT_DIR" >/tmp/autocomplete-current-build-privacy-leaks.txt 2>/dev/null; then
+if grep -R -I -E 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject|private-cache-redbars|freeform-reason-redbars|/Users/redbars/Library/Application Support/Tilde/private-cache-redbars|/Users/redbars/private/freeform-reason-redbars\.md' "$OUTPUT_DIR" >/tmp/autocomplete-current-build-privacy-leaks.txt 2>/dev/null; then
   echo "privacy proof output leaked private sentinel text" >&2
   cat /tmp/autocomplete-current-build-privacy-leaks.txt >&2
   exit 1

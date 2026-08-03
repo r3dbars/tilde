@@ -72,12 +72,12 @@ if ! grep -F "refusing to delete log traces from broad folder:" "$OUTPUT_FILE.un
   exit 1
 fi
 
-mkdir -p "$FAKE_HOME/Documents/SteadyType-looking" "$FAKE_HOME/Library/Logs/OtherApp"
-printf 'do-not-delete\n' >"$FAKE_HOME/Documents/SteadyType-looking/traces.jsonl"
+mkdir -p "$FAKE_HOME/Documents/Tilde-looking" "$FAKE_HOME/Library/Logs/OtherApp"
+printf 'do-not-delete\n' >"$FAKE_HOME/Documents/Tilde-looking/traces.jsonl"
 printf 'do-not-delete\n' >"$FAKE_HOME/Library/Logs/OtherApp/traces.jsonl"
 
 if HOME="$FAKE_HOME" \
-  AUTOCOMPLETE_LAB_TRACE_FOLDER="$FAKE_HOME/Documents/SteadyType-looking" \
+  AUTOCOMPLETE_LAB_TRACE_FOLDER="$FAKE_HOME/Documents/Tilde-looking" \
   AUTOCOMPLETE_LAB_STATE_FOLDER="$STATE_FOLDER" \
   script/delete_local_traces.sh >>"$OUTPUT_FILE" 2>"$OUTPUT_FILE.unsafe-docs"; then
   echo "delete local traces self-test allowed a non-app Documents folder" >&2
@@ -92,13 +92,13 @@ if HOME="$FAKE_HOME" \
   exit 1
 fi
 
-if [[ ! -f "$FAKE_HOME/Documents/SteadyType-looking/traces.jsonl" ||
+if [[ ! -f "$FAKE_HOME/Documents/Tilde-looking/traces.jsonl" ||
       ! -f "$FAKE_HOME/Library/Logs/OtherApp/traces.jsonl" ]]; then
   echo "delete local traces self-test deleted from a non-app-owned folder" >&2
   exit 1
 fi
 
-if ! grep -F "Deleted SteadyType local traces:" "$OUTPUT_FILE" >/dev/null; then
+if ! grep -F "Deleted Tilde local traces:" "$OUTPUT_FILE" >/dev/null; then
   echo "delete local traces self-test did not print confirmation" >&2
   cat "$OUTPUT_FILE" >&2
   exit 1

@@ -138,15 +138,15 @@ struct BrowserHostedSurfacePolicyTests {
         let cases = [
             FocusedElementFingerprint(
                 title: "Local smoke textarea fixture",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Textarea Fixture Smoke [ready=1]"
             ),
             FocusedElementFingerprint(
                 title: "Local smoke contenteditable fixture",
-                windowTitle: "SteadyType Chrome Contenteditable Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Contenteditable Fixture Smoke [ready=1]"
             ),
             FocusedElementFingerprint(
                 title: "Local smoke contenteditable fixture",
-                windowTitle: "Autocomplete Lab Chrome Contenteditable Fixture Smoke file:///tmp/fixture.html"
+                windowTitle: "Tilde Chrome Contenteditable Fixture Smoke file:///tmp/fixture.html"
             )
         ]
 
@@ -165,19 +165,19 @@ struct BrowserHostedSurfacePolicyTests {
         let cases = [
             FocusedElementFingerprint(
                 title: "Local CodeMirror-style smoke fixture editor",
-                windowTitle: "SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Local Editor-Like Fixture Smoke [ready=1]"
             ),
             FocusedElementFingerprint(
                 title: "Local Monaco-like smoke fixture editor input",
-                windowTitle: "SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Local Monaco-Like Fixture Smoke [ready=1]"
             ),
             FocusedElementFingerprint(
                 title: "Local ProseMirror-like smoke fixture editor",
-                windowTitle: "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Local ProseMirror-Like Fixture Smoke [ready=1]"
             ),
             FocusedElementFingerprint(
                 title: "Local chat-like smoke fixture message composer contenteditable",
-                windowTitle: "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]"
+                windowTitle: "Tilde Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]"
             )
         ]
 
@@ -219,11 +219,11 @@ struct BrowserHostedSurfacePolicyTests {
         let cases = [
             FocusedElementFingerprint(
                 title: "Remote smoke textarea fixture",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke"
+                windowTitle: "Tilde Chrome Textarea Fixture Smoke"
             ),
             FocusedElementFingerprint(
                 title: "Remote smoke textarea fixture",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Textarea Fixture Smoke [ready=1]"
             )
         ]
 
@@ -242,14 +242,14 @@ struct BrowserHostedSurfacePolicyTests {
         let payment = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
-                title: "SteadyType Chrome Smoke payment fixture",
+                title: "Tilde Chrome Smoke payment fixture",
                 windowTitle: "Local checkout smoke [ready=1]"
             )
         )
         let login = policy.decision(
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
-                title: "Autocomplete Lab Chrome smoke login fixture",
+                title: "Tilde Chrome smoke login fixture",
                 windowTitle: "Local sign in smoke [ready=1]"
             )
         )
@@ -258,7 +258,7 @@ struct BrowserHostedSurfacePolicyTests {
             fingerprint: FocusedElementFingerprint(
                 title: "Local smoke textarea fixture",
                 placeholder: "Search Google or type a URL",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Textarea Fixture Smoke [ready=1]"
             )
         )
         let terminal = policy.decision(
@@ -266,7 +266,7 @@ struct BrowserHostedSurfacePolicyTests {
             fingerprint: FocusedElementFingerprint(
                 title: "Local smoke textarea fixture",
                 placeholder: "sudo command",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+                windowTitle: "Tilde Chrome Textarea Fixture Smoke [ready=1]"
             )
         )
 
@@ -282,42 +282,42 @@ struct BrowserHostedSurfacePolicyTests {
             (
                 .googleDocs,
                 FocusedElementFingerprint(
-                    title: "Autocomplete Lab Chrome smoke local fixture",
+                    title: "Tilde Chrome smoke local fixture",
                     windowTitle: "https://docs.google.com/document/d/disposable/edit [ready=1]"
                 )
             ),
             (
                 .notion,
                 FocusedElementFingerprint(
-                    title: "SteadyType Chrome smoke local fixture",
+                    title: "Tilde Chrome smoke local fixture",
                     windowTitle: "Disposable proof - Notion [ready=1]"
                 )
             ),
             (
                 .chatGPT,
                 FocusedElementFingerprint(
-                    title: "Autocomplete Lab Chrome browser-chat smoke local fixture",
+                    title: "Tilde Chrome browser-chat smoke local fixture",
                     windowTitle: "ChatGPT [ready=1]"
                 )
             ),
             (
                 .slack,
                 FocusedElementFingerprint(
-                    title: "SteadyType Chrome browser-chat smoke local fixture",
+                    title: "Tilde Chrome browser-chat smoke local fixture",
                     windowTitle: "Transcripted | Slack [ready=1]"
                 )
             ),
             (
                 .discord,
                 FocusedElementFingerprint(
-                    title: "SteadyType Chrome browser-chat smoke local fixture",
+                    title: "Tilde Chrome browser-chat smoke local fixture",
                     windowTitle: "Discord [ready=1]"
                 )
             ),
             (
                 .webmail,
                 FocusedElementFingerprint(
-                    title: "SteadyType Chrome smoke local fixture",
+                    title: "Tilde Chrome smoke local fixture",
                     windowTitle: "Gmail - Inbox [ready=1]"
                 )
             )

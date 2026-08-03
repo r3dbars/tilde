@@ -44,7 +44,7 @@ _spec.loader.exec_module(_runtime)
 
 
 # Local asset layout, kept in sync with download_mlx_model.py targets. Maps an
-# audit/model alias to the installed directory relative to the SteadyType
+# audit/model alias to the installed directory relative to the Tilde
 # Application Support folder.
 LOCAL_TARGET_BY_ALIAS = {
     "qwen35-4b": "Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit",
@@ -61,7 +61,7 @@ LOCAL_TARGET_BY_ALIAS = {
     "gemma-4-26b": "Models/Gemma4A4B/MLX/gemma-4-26b-a4b-it-4bit",
 }
 
-DEFAULT_SUPPORT_ROOT = Path.home() / "Library/Application Support/SteadyType"
+DEFAULT_SUPPORT_ROOT = Path.home() / "Library/Application Support/Tilde"
 
 
 def support_root() -> Path:

@@ -407,7 +407,7 @@ if ! grep -F "com.apple.TextEdit: support state experimental below caveated" /tm
 fi
 
 DIAGNOSTIC_HOME="$TMP_DIR/default-home"
-DIAGNOSTIC_TRACE="$DIAGNOSTIC_HOME/Library/Logs/SteadyType/traces.jsonl"
+DIAGNOSTIC_TRACE="$DIAGNOSTIC_HOME/Library/Logs/Tilde/traces.jsonl"
 mkdir -p "$(dirname "$DIAGNOSTIC_TRACE")"
 cat >"$DIAGNOSTIC_TRACE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"diag-failed","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":10,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}

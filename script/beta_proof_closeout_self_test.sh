@@ -36,11 +36,11 @@ require_contains "$TMP_DIR/plan.txt" "./script/check_onboarding_permission_qa.sh
 require_contains "$TMP_DIR/plan.txt" "5 consecutive green dogfood days"
 require_contains "$TMP_DIR/plan.txt" "3-5 testers"
 
-script/beta_proof_closeout.sh --dry-run --app-bundle /tmp/SteadyType.app >"$TMP_DIR/dry-run.txt"
+script/beta_proof_closeout.sh --dry-run --app-bundle /tmp/Tilde.app >"$TMP_DIR/dry-run.txt"
 require_contains "$TMP_DIR/dry-run.txt" "Beta proof close-out front door"
 require_contains "$TMP_DIR/dry-run.txt" "+ ./script/check_onboarding_walkthrough_proof.py"
 require_contains "$TMP_DIR/dry-run.txt" "+ ./script/check_onboarding_permission_qa.sh --check"
-require_contains "$TMP_DIR/dry-run.txt" "+ ./script/packaged_latency_proof.sh textedit-model-latency --app-bundle /tmp/SteadyType.app --dry-run"
+require_contains "$TMP_DIR/dry-run.txt" "+ ./script/packaged_latency_proof.sh textedit-model-latency --app-bundle /tmp/Tilde.app --dry-run"
 require_contains "$TMP_DIR/dry-run.txt" "Packaged latency proof not observed in this pass."
 require_contains "$TMP_DIR/dry-run.txt" "invite 3-5 testers only after those 5 rows stay green"
 

@@ -12,8 +12,8 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_PROOF = ROOT_DIR / "docs/product/onboarding-permission-qa-checklist.md"
-DIAGNOSTICS_LOG = "~/Library/Logs/SteadyType/diagnostics.log"
-TRACE_LOG = "~/Library/Logs/SteadyType/traces.jsonl"
+DIAGNOSTICS_LOG = "~/Library/Logs/Tilde/diagnostics.log"
+TRACE_LOG = "~/Library/Logs/Tilde/traces.jsonl"
 
 REQUIRED_COLUMNS = [
     "time utc",
@@ -87,10 +87,10 @@ def current_build_tokens() -> set[str]:
         tokens.add(f"commit:{commit[:7]}")
 
     for token in (
-        sha256_token("app-sha256", ROOT_DIR / "dist/SteadyType.app/Contents/MacOS/SteadyType"),
-        sha256_token("archive-sha256", ROOT_DIR / "dist/smoke-proof/SteadyType.zip"),
-        sha256_token("archive-sha256", ROOT_DIR / "dist/SteadyType.zip"),
-        sha256_token("archive-sha256", ROOT_DIR / "dist/SteadyType.dmg"),
+        sha256_token("app-sha256", ROOT_DIR / "dist/Tilde.app/Contents/MacOS/Tilde"),
+        sha256_token("archive-sha256", ROOT_DIR / "dist/smoke-proof/Tilde.zip"),
+        sha256_token("archive-sha256", ROOT_DIR / "dist/Tilde.zip"),
+        sha256_token("archive-sha256", ROOT_DIR / "dist/Tilde.dmg"),
     ):
         if token:
             tokens.add(token)
@@ -302,7 +302,7 @@ def current_time_utc() -> str:
 def proof_row_template() -> str:
     return (
         f"| {current_time_utc()} | `{current_commit_token()}` | "
-        "steadytype-clean-2026-05-13 | "
+        "tilde-clean-2026-05-13 | "
         "Accessibility granted after app-owned Settings user-triggered Allow Accessibility | "
         "Runtime ready; app-owned MLX; no external server | "
         "TextEdit opened disposable local practice file | "

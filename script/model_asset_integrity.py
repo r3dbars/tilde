@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-RECEIPT_NAME = ".steadytype-model-integrity.json"
+RECEIPT_NAME = ".tilde-model-integrity.json"
 IMMUTABLE_REVISION_ERROR = "model revision is not pinned to an immutable 40-character commit SHA"
 
 

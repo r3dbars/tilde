@@ -138,7 +138,7 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(missing.statusText == "No writing app in front")
-        #expect(missing.detailText == "Open a writing app to see whether SteadyType can help there.")
+        #expect(missing.detailText == "Open a writing app to see whether Tilde can help there.")
         #expect(missing.fallbackText == "Choose a writing app first.")
         #expect(missing.menuToggleTitle == "Pause Current App")
         #expect(missing.blockedAppsText == "No apps are paused.")
@@ -231,7 +231,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility: needed")
         #expect(
             needed.detailText
-                == "SteadyType needs Accessibility so it can see the text field you’re typing in and insert a suggestion only after you accept it. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
+                == "Tilde needs Accessibility so it can see the text field you’re typing in and insert a suggestion only after you accept it. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -239,7 +239,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility: allowed")
         #expect(
             allowed.detailText
-                == "SteadyType can read the text field you’re typing in and only inserts text after you accept a suggestion. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
+                == "Tilde can read the text field you’re typing in and only inserts text after you accept a suggestion. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
         )
     }
 
@@ -289,7 +289,7 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(
             screenshotsOn.learningStatusText
-                == "SteadyType remembers which suggestions you keep — only on this Mac."
+                == "Tilde remembers which suggestions you keep — only on this Mac."
         )
         #expect(
             screenshotsOn.localOnlyProofText
@@ -406,7 +406,7 @@ struct SettingsWindowControllerStateTests {
                 isReady: false
             ),
             runtimeTargetSummary: "Qwen local - short completions - normal",
-            modelDirectoryPath: "/tmp/SteadyType/Models",
+            modelDirectoryPath: "/tmp/Tilde/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: textEditState,
@@ -480,13 +480,13 @@ struct SettingsWindowControllerStateTests {
             RuntimeReadinessReport(
                 stage: .downloadNeeded,
                 summary: "download needed",
-                detail: "The local model is not installed yet. Expected folder: /tmp/SteadyType/model",
+                detail: "The local model is not installed yet. Expected folder: /tmp/Tilde/model",
                 action: .installModel
             ),
             RuntimeReadinessReport(
                 stage: .repairNeeded,
                 summary: "model folder needs repair",
-                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/SteadyType/model",
+                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/Tilde/model",
                 action: .repairModel
             ),
             RuntimeReadinessReport(
@@ -601,7 +601,7 @@ struct SettingsWindowControllerStateTests {
             lastSuggestionDecision: "Waiting: cadence policy"
         )
 
-        #expect(trust.statusText == "SteadyType is on")
+        #expect(trust.statusText == "Tilde is on")
         #expect(trust.localModeText == "On-device model: ready.")
         #expect(trust.typedTextText == "Your text: never stored unless you turn it on.")
         #expect(trust.currentSurfaceText == "TextEdit: suggestions on")
@@ -740,7 +740,7 @@ struct SettingsWindowControllerStateTests {
         #expect(acceptedUndo.statusText == "Right now: accepted")
         #expect(
             acceptedUndo.detailText
-                == "Accepted. SteadyType will look for the next suggestion once the field settles."
+                == "Accepted. Tilde will look for the next suggestion once the field settles."
         )
     }
 
@@ -896,7 +896,7 @@ struct SettingsWindowControllerStateTests {
             suggestionsPaused: false,
             runtimeReport: readyRuntimeReport,
             runtimeTargetSummary: "Qwen local - short completions - normal",
-            modelDirectoryPath: "/tmp/SteadyType/Models",
+            modelDirectoryPath: "/tmp/Tilde/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: textEditState,

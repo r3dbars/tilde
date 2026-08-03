@@ -1,6 +1,6 @@
 # Uninstall And Delete Data
 
-Use this when a tester is done with SteadyType or wants a clean reset.
+Use this when a tester is done with Tilde or wants a clean reset.
 
 ## Quit The App
 
@@ -8,7 +8,7 @@ Open the menu bar item and choose `Quit`.
 
 ## Remove The App
 
-Delete `SteadyType.app` from `/Applications` or wherever it was installed.
+Delete `Tilde.app` from `/Applications` or wherever it was installed.
 
 ## Remove Local Logs And Traces
 
@@ -18,11 +18,11 @@ Run:
 ./script/delete_local_traces.sh
 ```
 
-This removes local SteadyType trace/log exports that the script knows
+This removes local Tilde trace/log exports that the script knows
 about. You can also inspect:
 
 ```text
-~/Library/Logs/SteadyType
+~/Library/Logs/Tilde
 ```
 
 ## Remove Personal Capture
@@ -31,7 +31,7 @@ Personal Capture is off by default and only for local dogfood. If you enabled
 it, delete it from Settings or remove:
 
 ```text
-~/Library/Application Support/SteadyType/Personal Capture
+~/Library/Application Support/Tilde/Personal Capture
 ```
 
 ## Remove Model Files
@@ -39,21 +39,21 @@ it, delete it from Settings or remove:
 Delete the app-owned model cache if you want to reclaim disk space:
 
 ```text
-~/Library/Application Support/SteadyType/Models
+~/Library/Application Support/Tilde/Models
 ```
 
 ## Remove Local Settings
 
-SteadyType uses local user defaults for settings such as pause state,
+Tilde uses local user defaults for settings such as pause state,
 disabled apps, shortcuts, and debug toggles.
 
 For a full reset, remove the app preferences for the bundle ID
-`bar.r3d.steadytype` from the test account.
+`bar.r3d.tilde` from the test account.
 
 ## Remove Accessibility Trust
 
 Open macOS System Settings, go to Privacy & Security, then Accessibility, and
-remove SteadyType if it is still listed.
+remove Tilde if it is still listed.
 
 ## Verify Removal
 

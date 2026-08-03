@@ -14,8 +14,8 @@ DELAY_MS="${AUTOCOMPLETE_LAB_SOAK_DELAY_MS:-120}"
 KEY_DELAY_US="${AUTOCOMPLETE_LAB_SOAK_KEY_DELAY_US:-3000}"
 MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_EVENT_TAP_SAMPLES:-0}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/Tilde/traces.jsonl}"
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
 LOG_SCAN_SELF_TEST=0
 LOG_SCAN_SELF_TEST_START_LINE=0
@@ -27,7 +27,7 @@ NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
 NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
 OSASCRIPT_TIMEOUT_SELF_TEST=0
 SOAK_LOCK_SELF_TEST=0
-DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.tilde}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
 TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
@@ -726,7 +726,7 @@ generate_soak_text() {
   local text=""
   local index=0
   local sentences=(
-    "this is a local typing soak for autocomplete lab"
+    "this is a local typing soak for tilde"
     "the words are synthetic and safe to throw away"
     "the goal is to keep normal typing smooth for a long stretch"
     "event tap timing should stay fast while suggestions think in the background"

@@ -7,10 +7,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/SteadyType/traces.jsonl"
+DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/Tilde/traces.jsonl"
 DEFAULT_LEARNING_PATH = (
     Path.home()
-    / "Library/Application Support/SteadyType/compatibility-learning.json"
+    / "Library/Application Support/Tilde/compatibility-learning.json"
 )
 NUDGE_STEP_PIXELS = 2.0
 CODE_PROMOTION_REASONS = {"manual-visual-nudge", "screenshot-visual-correction"}
@@ -682,7 +682,7 @@ def suggested_smoke_commands(report):
     for item in report["fieldsNeedingQuietMode"]:
         add(
             "python3 script/non_annoyance_report.py "
-            "\"${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}\" "
+            "\"${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/Tilde/traces.jsonl}\" "
             "--start-line \"${AUTOCOMPLETE_LAB_TRACE_START_LINE:-1}\" --no-gate"
         )
         target = smoke_target(item["bundleIdentifier"])

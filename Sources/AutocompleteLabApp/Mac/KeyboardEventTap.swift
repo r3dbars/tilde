@@ -118,7 +118,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             CFRunLoopRun()
         }
 
-        thread.name = "SteadyTypeKeyboardEventTap"
+        thread.name = "TildeKeyboardEventTap"
         lifecycleLock.lock()
         eventThread = thread
         lifecycleLock.unlock()
