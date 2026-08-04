@@ -1,14 +1,7 @@
 import AppKit
 
-/// The menu bar IS the app (owner decision 2026-07-29). No settings window,
-/// no panes, no nesting: one click shows what Tilde did for you, whether it's
-/// healthy, and every switch there is. Ten rows, all of them real — a toggle
-/// only earns a row if something actually reads its key.
-///
-/// Two defaults domains, deliberately: settings the KEYBOARD obeys are written
-/// into its suite (it reads them as its own `.standard`); settings the APP
-/// obeys live in the app's domain. Writing to the wrong one is a silent no-op,
-/// which is how three decorative toggles survived in the old window.
+/// Tilde's complete user-facing surface: useful stats, honest engine status,
+/// working controls, pause, local data, and quit. No settings window or panes.
 @MainActor
 final class StatusMenuHost: NSObject {
 
@@ -24,8 +17,8 @@ final class StatusMenuHost: NSObject {
     private var learningItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
 
-    /// Every setting, its domain and its default live in TildeSettings, which
-    /// is unit-tested against the keyboard's actual sources.
+    /// Every setting, its defaults domain, and its fallback live in one tested
+    /// type so menu switches cannot silently target keys nothing reads.
     private let settings = TildeSettings()
 
     init(appDelegate: AppDelegate) {
@@ -38,7 +31,6 @@ final class StatusMenuHost: NSObject {
         item.button?.image = Self.menuBarMark()
 
         let menu = NSMenu()
-
         lifetimeItem = addInfoRow(to: menu, "Tilde")
         todayItem = addInfoRow(to: menu, "Today: no typing yet")
         engineItem = addInfoRow(to: menu, "Engine: starting…")
@@ -59,25 +51,23 @@ final class StatusMenuHost: NSObject {
         statusItem = item
     }
 
-    /// The status-bar mark, drawn rather than borrowed: there is no "tilde" SF
-    /// Symbol (verified — NSImage(systemSymbolName:) returns nil), so asking
-    /// for one silently yielded the old keyboard glyph and the brand mark never
-    /// appeared. Template image = macOS recolors it for light/dark and for the
-    /// highlighted menu, which is why the blue underline stays out of the menu
-    /// bar (docs/brand/BRAND.md).
+    /// Draw the brand mark directly: there is no tilde SF Symbol. Keeping it a
+    /// template image lets macOS recolor it correctly in every menu-bar state.
     private static func menuBarMark() -> NSImage {
         let size = NSSize(width: 18, height: 18)
         let image = NSImage(size: size, flipped: false) { _ in
             let path = NSBezierPath()
-            // One crest, one midline crossing, one trough; endpoints in 180°
-            // rotational balance about the centre — the mark's construction.
             path.move(to: NSPoint(x: 2.5, y: 7.0))
-            path.curve(to: NSPoint(x: 9.0, y: 9.0),
-                       controlPoint1: NSPoint(x: 4.5, y: 12.0),
-                       controlPoint2: NSPoint(x: 7.0, y: 12.0))
-            path.curve(to: NSPoint(x: 15.5, y: 11.0),
-                       controlPoint1: NSPoint(x: 11.0, y: 6.0),
-                       controlPoint2: NSPoint(x: 13.5, y: 6.0))
+            path.curve(
+                to: NSPoint(x: 9.0, y: 9.0),
+                controlPoint1: NSPoint(x: 4.5, y: 12.0),
+                controlPoint2: NSPoint(x: 7.0, y: 12.0)
+            )
+            path.curve(
+                to: NSPoint(x: 15.5, y: 11.0),
+                controlPoint1: NSPoint(x: 11.0, y: 6.0),
+                controlPoint2: NSPoint(x: 13.5, y: 6.0)
+            )
             path.lineWidth = 2.0
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
@@ -88,8 +78,6 @@ final class StatusMenuHost: NSObject {
         image.isTemplate = true
         return image
     }
-
-    // MARK: - Row builders
 
     @discardableResult
     private func addInfoRow(to menu: NSMenu, _ title: String) -> NSMenuItem {
@@ -108,15 +96,17 @@ final class StatusMenuHost: NSObject {
     }
 
     @discardableResult
-    private func addAction(to menu: NSMenu, _ title: String, _ action: Selector,
-                           key: String = "") -> NSMenuItem {
+    private func addAction(
+        to menu: NSMenu,
+        _ title: String,
+        _ action: Selector,
+        key: String = ""
+    ) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
         return item
     }
-
-    // MARK: - Settings the keyboard obeys (its own domain)
 
     @objc private func toggleSuggestions(_ sender: Any?) {
         settings.suggestionsEnabled.toggle()
@@ -126,33 +116,35 @@ final class StatusMenuHost: NSObject {
         settings.learningEnabled.toggle()
     }
 
-    /// Flips the gate only — GhostSoundVolume stays whatever the writer tuned
-    /// it to, so unmuting restores their level rather than a default.
     @objc private func toggleSounds(_ sender: Any?) {
         settings.soundsEnabled.toggle()
     }
 
     @objc private func togglePause(_ sender: Any?) {
-        if settings.pausedUntil != nil { settings.resume() }
-        else { settings.pause(for: 3600) }
+        if settings.pausedUntil != nil {
+            settings.resume()
+        } else {
+            settings.pause(for: 3600)
+        }
     }
-
-    // MARK: - Settings the app obeys (app domain)
 
     @objc private func toggleScreenContext(_ sender: Any?) {
         settings.screenAware.toggle()
     }
 
-    // MARK: - Actions
-
     @objc private func showData(_ sender: Any?) {
         let folder = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SteadyType")
+            .appendingPathComponent("Tilde", isDirectory: true)
         NSWorkspace.shared.activateFileViewerSelecting([folder])
     }
 
     @objc private func quit(_ sender: Any?) {
+        // Deliberate quit means STAY quit: tell the keyboard's watchdog not to
+        // summon the brain back. The flag lives in the IME's defaults domain
+        // and is cleared by the next on-purpose app launch.
+        UserDefaults(suiteName: AppDelegate.keyboardDefaultsSuite)?
+            .set(true, forKey: "GhostBrainQuietQuit")
         NSApp.terminate(nil)
     }
 }
@@ -167,14 +159,15 @@ extension StatusMenuHost: NSMenuDelegate {
         let today = TildeStats.today()
         if today.wordsAccepted > 0 {
             var line = "Today: \(today.wordsAccepted) words (\(today.shareOfTyping)%)"
-            if today.wordsPerMinute > 0 { line += " · \(today.wordsPerMinute) wpm" }
+            if today.wordsPerMinute > 0 {
+                line += " · \(today.wordsPerMinute) wpm"
+            }
             todayItem?.title = line
         } else {
             todayItem?.title = "Today: no typing yet"
         }
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
-
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
         screenItem?.state = settings.screenAware ? .on : .off
         soundsItem?.state = settings.soundsEnabled ? .on : .off

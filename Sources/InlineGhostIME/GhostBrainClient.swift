@@ -1,7 +1,7 @@
 import Foundation
 
-/// Thin blocking client for the SteadyType "ghost brain" — the menu-bar app hosts
-/// the MLX engine and serves completions over a local unix socket. One connection
+/// Thin blocking client for the Tilde "ghost brain" — the menu-bar app hosts
+/// the llama/Gemma engine and serves completions over a local unix socket. One connection
 /// per request (connect cost is microseconds locally; keeps the IME crash-proof
 /// and stateless). Newline-delimited JSON: {"v":1,"context":...} → {"suggestion":...}.
 ///
@@ -11,7 +11,7 @@ import Foundation
 enum GhostBrainClient {
 
     static let socketPath = NSString(
-        string: "~/Library/Application Support/SteadyType/ghost.sock"
+        string: "~/Library/Application Support/Tilde/ghost.sock"
     ).expandingTildeInPath
 
     /// Total time we are willing to wait for the brain, per request.

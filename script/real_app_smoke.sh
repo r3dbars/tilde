@@ -7,8 +7,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_BINARY="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+APP_BINARY="$ROOT_DIR/dist/Tilde.app/Contents/MacOS/Tilde"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
 SMOKE_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_TIMEOUT_SECONDS:-30}"
 LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 
@@ -176,11 +176,11 @@ current_app_is_running() {
     if [[ "$command" == "$APP_BINARY" || "$command" == "$APP_BINARY "* ]]; then
       return 0
     fi
-  done < <(pgrep -x SteadyType 2>/dev/null || true)
+  done < <(pgrep -x Tilde 2>/dev/null || true)
   return 1
 }
 
-current_app_is_running || fail "current checkout's SteadyType app is not running"
+current_app_is_running || fail "current checkout's Tilde app is not running"
 
 # build_and_run.sh waits for this same lock, so acquire it only after any
 # delegated build has finished.
@@ -198,6 +198,9 @@ line_count() {
   fi
 }
 
+# Waits for the brain's privacy-safe suggestion-served event: proof that a
+# real keystroke travelled keyboard → socket → engine → back. Display inside
+# the host app is IMKit's side of the contract and not observable here.
 wait_for_suggestion() {
   local start_line="$1"
   local bundle_identifier="$2"
@@ -206,13 +209,13 @@ wait_for_suggestion() {
   while ((SECONDS < deadline)); do
     if [[ -f "$LOG_PATH" ]] &&
       tail -n "+$((start_line + 1))" "$LOG_PATH" |
-        grep -Eq "suggestion-presented .*app=${bundle_identifier}([[:space:]]|$)"; then
+        grep -Eq "suggestion-served .*app=${bundle_identifier}([[:space:]]|$)"; then
       return 0
     fi
     sleep 0.25
   done
 
-  fail "timed out waiting for a privacy-safe suggestion-presented event for $bundle_identifier"
+  fail "timed out waiting for a privacy-safe suggestion-served event for $bundle_identifier"
 }
 
 type_disposable_text() {
@@ -247,7 +250,7 @@ APPLESCRIPT
 
 run_textedit() {
   local fixture_file start_line
-  TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-textedit-smoke.XXXXXX")"
+  TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tilde-textedit-smoke.XXXXXX")"
   fixture_file="$TEMP_DIR/textedit-smoke-$$.txt"
   TEXTEDIT_WINDOW_TITLE="$(basename "$fixture_file")"
   : >"$fixture_file"
@@ -265,7 +268,7 @@ run_chrome() {
   chrome_binary="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   [[ -x "$chrome_binary" ]] || fail "Google Chrome is unavailable"
 
-  TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-chrome-smoke.XXXXXX")"
+  TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tilde-chrome-smoke.XXXXXX")"
   fixture_file="$TEMP_DIR/fixture.html"
   case "$CHROME_FIXTURE" in
     textarea) fixture_markup='<textarea id="editor" autofocus></textarea>' ;;
@@ -274,7 +277,7 @@ run_chrome() {
   cat >"$fixture_file" <<EOF
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Smoke</title>
+<title>Tilde Chrome Smoke</title>
 <style>#editor { width: 720px; min-height: 180px; font: 18px system-ui; }</style>
 $fixture_markup
 <script>addEventListener('load', () => document.querySelector('#editor').focus())</script>

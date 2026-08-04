@@ -11,7 +11,7 @@ final class DiagnosticsLog: @unchecked Sendable {
     private init() {
         logURL = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SteadyType/diagnostics.log")
+            .appendingPathComponent("Library/Logs/Tilde/diagnostics.log")
     }
 
     var path: String {
@@ -34,6 +34,13 @@ final class DiagnosticsLog: @unchecked Sendable {
                 // Logging must never affect typing.
             }
         }
+    }
+
+    /// Blocks until every already-recorded event has reached disk. For
+    /// shutdown paths only: an exit racing the async queue would drop the
+    /// final events — exactly the crash-vs-quit ambiguity they exist to solve.
+    func flush() {
+        queue.sync {}
     }
 
     func recentLines(limit: Int) -> [String] {

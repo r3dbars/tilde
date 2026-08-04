@@ -1,4 +1,4 @@
-# SteadyType Replay Eval
+# Tilde Replay Eval
 
 - Engine: batch
 - Requested model: gemma-4-e4b-it-optiq

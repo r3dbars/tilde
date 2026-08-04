@@ -1,5 +1,10 @@
+import AutocompleteLabCore
 import Cocoa
 import InputMethodKit
+import OSLog
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 /// Spike phase 2: real (lightweight) predictions instead of a hardcoded table.
 ///
@@ -14,6 +19,16 @@ import InputMethodKit
 /// not the model. Tab accepts, Esc dismisses.
 @objc(GhostInputController)
 final class GhostInputController: IMKInputController {
+
+    private static let slowKeyLogger = Logger(
+        subsystem: "bar.r3d.inputmethod.InlineGhost",
+        category: "typing-performance"
+    )
+    private static let slowKeyThreshold = 0.050
+    private static let acceptSoundQueue = DispatchQueue(
+        label: "com.tilde.acceptSound",
+        qos: .userInitiated
+    )
 
     /// Fallback context accumulated from keystrokes, for clients that refuse
     /// `attributedSubstring(from:)`. Bounded.
@@ -58,92 +73,25 @@ final class GhostInputController: IMKInputController {
     }
     private var pendingRejection: PendingRejection?
 
-    /// Change 2 (2026-07-27): social awareness. Ghost phrases the writer
-    /// rejected (typed over, dismissed, flagged) are benched for a cooldown
-    /// instead of re-offering themselves all afternoon ("I'm going to the
-    /// gym" showed 276 times in one day). Keyed by first 3 words, lowercased.
-    private var benchedGhosts: [String: Date] = [:]
-    private static let benchSeconds: TimeInterval = 30 * 60
-
-    private func benchKey(_ text: String) -> String {
-        text.lowercased().split(separator: " ").prefix(3).joined(separator: " ")
-    }
-
-    private func bench(_ text: String) {
-        guard !text.isEmpty else { return }
-        if benchedGhosts.count > 60 {
-            let cutoff = Date()
-            benchedGhosts = benchedGhosts.filter { $0.value > cutoff }
-        }
-        benchedGhosts[benchKey(text)] = Date().addingTimeInterval(Self.benchSeconds)
-    }
-
-    private func isBenched(_ text: String) -> Bool {
-        guard let until = benchedGhosts[benchKey(text)] else { return false }
-        return until > Date()
-    }
-
     /// Longest override we accumulate before flushing mid-phrase; a rich label
     /// doesn't need a whole paragraph, and this bounds memory if the writer
     /// never pauses long enough for a fresh ghost to close the episode.
     private static let maxReplacementChars = 160
-
-    /// The Tab-walk in progress: what was offered when it began, and how many
-    /// words have been taken since. Tab-Tab-Tab walks a stable sentence, so
-    /// every press after the first is consuming the SAME original offer — and
-    /// where the writer stops is the label worth having. Cleared whenever a
-    /// fresh ghost arrives or the chain is abandoned.
-    private struct WalkInProgress {
-        let offered: String
-        let offeredWords: Int
-        let id: String
-        var takenWords: Int
-    }
-    private var walkInProgress: WalkInProgress?
-
-    private static func wordCount(_ text: String) -> Int {
-        text.split(whereSeparator: { $0.isWhitespace }).count
-    }
-
-    /// Close an open walk and log where it stopped.
-    ///
-    /// The per-press `accept_word` rows say what was taken; this final row says
-    /// what was LEFT — the model was right through `taken_words` and wrong at
-    /// the next one. Without it a walk that simply stops is indistinguishable
-    /// from a walk still in progress, which is the whole reason the stopping
-    /// point was previously unrecoverable.
-    private func closeWalk(appBundle: String?) {
-        guard let walk = walkInProgress else { return }
-        walkInProgress = nil
-        // A walk that consumed the entire offer didn't stop early — there was
-        // nothing left to reject, so there is no abandonment to record.
-        guard walk.takenWords < walk.offeredWords else { return }
-        GhostUsageLog.record(
-            event: .walkStopped,
-            ghostText: walk.offered,
-            source: usageSource,
-            appBundle: appBundle,
-            context: typedFallback,
-            walk: GhostUsageLog.Walk(offered: walk.offered,
-                                     offeredWords: walk.offeredWords,
-                                     takenWords: walk.takenWords,
-                                     id: walk.id)
-        )
-    }
-
-    /// In-the-moment eval flag (double-Esc): the last ghost the writer saw,
-    /// held briefly so a second Esc can mark it BAD with live intent — the
-    /// highest-quality judgment signal there is, at the cost of one keystroke.
-    private var lastDismissed: (ghost: String, context: String, source: GhostUsageLog.Source, at: Date)?
-    private static let flagWindowSeconds: TimeInterval = 30
+    #if canImport(FoundationModels)
+    private var modelSession: LanguageModelSession?
+    #endif
 
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
 
     // MARK: - Stats (privacy-clean: COUNTS ONLY, never text)
 
     /// Daily counters, buffered in memory and flushed to the IME's own defaults.
-    /// Read back by the input menu ("Today: SteadyType wrote N% of your words").
+    /// Read back by the input menu ("Today: Tilde wrote N% of your words").
     private enum Stats {
+        private static let persistenceQueue = DispatchQueue(
+            label: "com.tilde.ghostStats",
+            qos: .utility
+        )
         static var wordsAccepted = 0
         static var charactersAccepted = 0
         static var wordsTyped = 0
@@ -152,48 +100,63 @@ final class GhostInputController: IMKInputController {
         static var fastAccepts = 0
         static var modelAccepts = 0
         static var lastFlush = Date.distantPast
-        /// Active typing time: keystroke gaps under 5s count as engaged time —
-        /// the denominator for the window's words-per-minute stat.
         static var activeSeconds = 0.0
         static var lastKeystroke: Date?
 
         static func touchActive() {
             let now = Date()
-            if let last = lastKeystroke {
-                let gap = now.timeIntervalSince(last)
-                if gap < 5 { activeSeconds += gap }
+            if let lastKeystroke {
+                let gap = now.timeIntervalSince(lastKeystroke)
+                if gap < 5 {
+                    activeSeconds += gap
+                }
             }
             lastKeystroke = now
         }
 
-        static var dayKey: String {
+        static func dayKey(for date: Date = Date()) -> String {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
-            return "stats." + formatter.string(from: Date())
+            return "stats." + formatter.string(from: date)
         }
 
-        static func flushIfDue(force: Bool = false) {
-            guard force || Date().timeIntervalSince(lastFlush) > 20 else { return }
-            lastFlush = Date()
-            let defaults = UserDefaults.standard
-            var day = defaults.dictionary(forKey: dayKey) as? [String: Int] ?? [:]
-            day["wordsAccepted", default: 0] += wordsAccepted
-            day["charactersAccepted", default: 0] += charactersAccepted
-            day["wordsTyped", default: 0] += wordsTyped
-            day["ghostsShown", default: 0] += ghostsShown
-            day["ghostsAccepted", default: 0] += ghostsAccepted
-            day["fastAccepts", default: 0] += fastAccepts
-            day["modelAccepts", default: 0] += modelAccepts
-            day["activeSeconds", default: 0] += Int(activeSeconds)
-            defaults.set(day, forKey: dayKey)
+        static func flushIfDue(force: Bool = false, waitForPersistence: Bool = false) {
+            let now = Date()
+            guard force || now.timeIntervalSince(lastFlush) > 20 else { return }
+            lastFlush = now
+            let snapshot = [
+                "wordsAccepted": wordsAccepted,
+                "charactersAccepted": charactersAccepted,
+                "wordsTyped": wordsTyped,
+                "ghostsShown": ghostsShown,
+                "ghostsAccepted": ghostsAccepted,
+                "fastAccepts": fastAccepts,
+                "modelAccepts": modelAccepts,
+                "activeSeconds": Int(activeSeconds),
+            ]
             wordsAccepted = 0; charactersAccepted = 0; wordsTyped = 0
             ghostsShown = 0; ghostsAccepted = 0; fastAccepts = 0; modelAccepts = 0
             activeSeconds = 0
+
+            let persist = {
+                let key = dayKey(for: now)
+                let defaults = UserDefaults.standard
+                var day = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
+                for (metric, value) in snapshot {
+                    day[metric, default: 0] += value
+                }
+                defaults.set(day, forKey: key)
+            }
+            if waitForPersistence {
+                persistenceQueue.sync(execute: persist)
+            } else {
+                persistenceQueue.async(execute: persist)
+            }
         }
 
         static func todaySummary() -> String {
-            flushIfDue(force: true)
-            let day = UserDefaults.standard.dictionary(forKey: dayKey) as? [String: Int] ?? [:]
+            flushIfDue(force: true, waitForPersistence: true)
+            let day = UserDefaults.standard.dictionary(forKey: dayKey()) as? [String: Int] ?? [:]
             let accepted = day["wordsAccepted"] ?? 0
             let typed = day["wordsTyped"] ?? 0
             let total = accepted + typed
@@ -211,7 +174,6 @@ final class GhostInputController: IMKInputController {
         pendingRejection = nil
         let replacement = pending.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !replacement.isEmpty else { return }
-        bench(pending.ghost)
         GhostUsageLog.record(
             event: .typedInstead,
             ghostText: pending.ghost,
@@ -228,41 +190,24 @@ final class GhostInputController: IMKInputController {
     /// the gesture that saves the most keystrokes). Menu-toggleable.
     private func playAcceptSound(whole: Bool) {
         guard UserDefaults.standard.bool(forKey: "GhostSoundsEnabled") else { return }
-        // Custom pack first: ~/Library/Application Support/SteadyType/sounds/
-        // (generated by script/make_sounds.py; any .wav dropped there wins).
-        // Tab rotates 3 pitch variants so repeats feel organic, not robotic.
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("SteadyType/sounds", isDirectory: true)
         let name = whole ? "tilde.wav" : "tab_\(Int.random(in: 1...3)).wav"
-        if let url = dir?.appendingPathComponent(name),
-           FileManager.default.fileExists(atPath: url.path),
-           let custom = NSSound(contentsOf: url, byReference: true) {
-            // Volume is live-tunable: defaults write bar.r3d.inputmethod.InlineGhost GhostSoundVolume 0.4
-            custom.volume = Float(UserDefaults.standard.object(forKey: "GhostSoundVolume") as? Double ?? 0.4)
-            custom.play()
-            return
+        let volume = Float(UserDefaults.standard.object(forKey: "GhostSoundVolume") as? Double ?? 0.4)
+        Self.acceptSoundQueue.async {
+            // Custom pack first: ~/Library/Application Support/Tilde/sounds/
+            // (generated by script/make_sounds.py; any .wav dropped there wins).
+            let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("Tilde/sounds", isDirectory: true)
+            if let url = dir?.appendingPathComponent(name),
+               FileManager.default.fileExists(atPath: url.path),
+               let custom = NSSound(contentsOf: url, byReference: true) {
+                custom.volume = volume
+                custom.play()
+                return
+            }
+            let fallback = NSSound(named: whole ? "Glass" : "Tink")
+            fallback?.volume = 0.35
+            fallback?.play()
         }
-        let fallback = NSSound(named: whole ? "Glass" : "Tink")
-        fallback?.volume = 0.35
-        fallback?.play()
-    }
-
-    /// Confirmation the flag landed ("noted — this will get better"). Uses
-    /// flag.wav from the sound pack when present, else a system sound.
-    private func playFlagSound() {
-        guard UserDefaults.standard.bool(forKey: "GhostSoundsEnabled") else { return }
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("SteadyType/sounds", isDirectory: true)
-        if let url = dir?.appendingPathComponent("flag.wav"),
-           FileManager.default.fileExists(atPath: url.path),
-           let custom = NSSound(contentsOf: url, byReference: true) {
-            custom.volume = Float(UserDefaults.standard.object(forKey: "GhostSoundVolume") as? Double ?? 0.4)
-            custom.play()
-            return
-        }
-        let fallback = NSSound(named: "Bottle")
-        fallback?.volume = 0.3
-        fallback?.play()
     }
 
     private func recordAccept(_ text: String) {
@@ -283,13 +228,25 @@ final class GhostInputController: IMKInputController {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
             return false
         }
+        let keyStartedAt = ProcessInfo.processInfo.systemUptime
+        defer {
+            let keyFinishedAt = ProcessInfo.processInfo.systemUptime
+            let totalDuration = max(0, keyFinishedAt - event.timestamp)
+            if totalDuration >= Self.slowKeyThreshold {
+                let totalMilliseconds = Int((totalDuration * 1_000).rounded())
+                let queuedMilliseconds = Int((max(0, keyStartedAt - event.timestamp) * 1_000).rounded())
+                let handlerMilliseconds = Int(((keyFinishedAt - keyStartedAt) * 1_000).rounded())
+                Self.slowKeyLogger.notice(
+                    "slow-key totalMilliseconds=\(totalMilliseconds, privacy: .public) queuedMilliseconds=\(queuedMilliseconds, privacy: .public) handlerMilliseconds=\(handlerMilliseconds, privacy: .public)"
+                )
+            }
+        }
         Stats.touchActive()
-        // Master switch and pause (both set from the menu bar): ghosts stay
-        // off; typing itself is never touched. Absent key = on, so an
-        // untouched install suggests.
-        let suggestionsOn = UserDefaults.standard.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
-        let pausedUntil = UserDefaults.standard.double(forKey: "GhostPausedUntil")
-        if !suggestionsOn || pausedUntil > Date().timeIntervalSince1970 {
+
+        let defaults = UserDefaults.standard
+        let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
+        let pausedUntil = defaults.double(forKey: "GhostPausedUntil")
+        if !suggestionsEnabled || pausedUntil > Date().timeIntervalSince1970 {
             clearGhost(client)
             return false
         }
@@ -320,54 +277,8 @@ final class GhostInputController: IMKInputController {
                 acceptWholeGhost(client)
                 return true
             }
-        case 53: // Escape — dismiss. SHIFT-Esc = the in-the-moment eval flag
-            // (double-Esc collided with host apps' own Esc-Esc shortcuts,
-            // e.g. Claude's rewind). Shift-Esc on a visible ghost dismisses
-            // AND flags it; within 30s of a dismiss/override it flags the
-            // last ghost.
-            let shifted = event.modifierFlags.contains(.shift)
-            if shifted, !ghost.isEmpty {
-                flushPendingRejection()
-                lastDismissed = (ghost, typedFallback, usageSource, Date())
-                clearGhost(client)
-            }
-            if ghost.isEmpty {
-                if shifted, let last = lastDismissed,
-                   Date().timeIntervalSince(last.at) < Self.flagWindowSeconds {
-                    GhostUsageLog.record(
-                        event: .flagged,
-                        ghostText: last.ghost,
-                        source: last.source,
-                        appBundle: client.bundleIdentifier(),
-                        context: last.context
-                    )
-                    lastDismissed = nil
-                    playFlagSound()
-                    // Open-coding box: say WHY in the moment. Non-blocking —
-                    // Esc or ignoring it costs nothing; Enter attaches the
-                    // comment to the flag for the pattern-mining pipeline.
-                    var lineRect = NSRect.zero
-                    _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineRect)
-                    let ghostText = last.ghost
-                    let ctx = last.context
-                    let src = last.source
-                    let app = client.bundleIdentifier()
-                    MainActor.assumeIsolated {
-                        GhostFlagPanel.shared.show(near: lineRect) { comment in
-                            GhostUsageLog.record(
-                                event: .flagComment,
-                                ghostText: ghostText,
-                                source: src,
-                                appBundle: app,
-                                context: ctx,
-                                typedChar: comment
-                            )
-                        }
-                    }
-                    return true
-                }
-                return false
-            }
+        case 53: // Escape — dismiss the ghost if present.
+            guard !ghost.isEmpty else { return false }
             flushPendingRejection()
             GhostUsageLog.record(
                 event: .dismiss,
@@ -376,16 +287,12 @@ final class GhostInputController: IMKInputController {
                 appBundle: client.bundleIdentifier(),
                 context: typedFallback
             )
-            lastDismissed = (ghost, typedFallback, usageSource, Date())
-            bench(ghost)
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.
             pendingAutoSpace = false
             clearGhost(client)
             if !typedFallback.isEmpty { typedFallback.removeLast() }
-            GhostTypingJournal.backspace(app: client.bundleIdentifier(),
-                                         field: client.uniqueClientIdentifierString())
             // Keep an in-progress override phrase in sync so the training label
             // reflects what the writer actually kept.
             if pendingRejection?.replacement.isEmpty == false {
@@ -438,8 +345,6 @@ final class GhostInputController: IMKInputController {
                 client.insertText(chars, replacementRange: Self.unset)
             }
             typedFallback.append(chars)
-            GhostTypingJournal.typed(chars, app: client.bundleIdentifier(),
-                                     field: client.uniqueClientIdentifierString())
             if typedFallback.count > 2000 { typedFallback.removeFirst(500) }
             if chars == " ", typedFallback.dropLast().last?.isLetter == true {
                 Stats.wordsTyped += 1
@@ -454,8 +359,6 @@ final class GhostInputController: IMKInputController {
         clearGhost(client)
         if let chars = event.characters, chars.contains("\r") || chars.contains("\n") {
             typedFallback.append("\n")
-            GhostTypingJournal.typed("\n", app: client.bundleIdentifier(),
-                                     field: client.uniqueClientIdentifierString())
             flushPendingRejection() // newline ends the thought — close the episode
         }
         return false
@@ -466,9 +369,6 @@ final class GhostInputController: IMKInputController {
     /// would turn an unaccepted ghost into real inserted text. Never allow that:
     /// the ghost is only ever inserted by an explicit Tab/Shift-Tab/tilde.
     override func commitComposition(_ sender: Any!) {
-        // macOS delivers commitComposition (not deactivateServer) reliably on
-        // app/focus switches — flush the journal here too, or entries strand.
-        GhostTypingJournal.focusChanged()
         flushPendingRejection()
         if let client = sender as? IMKTextInput {
             clearGhost(client)
@@ -476,30 +376,8 @@ final class GhostInputController: IMKInputController {
         ghost = ""
     }
 
-    /// Called when focus lands in a field: if it's empty, ask the brain for a
-    /// proactive opener grounded in the visible screen (the message being
-    /// replied to). The delay gives the screen bridge time to capture, and the
-    /// guards make this a no-op the moment real typing or a ghost exists.
-    override func activateServer(_ sender: Any!) {
-        super.activateServer(sender)
-        guard let client = sender as? IMKTextInput else { return }
-        // Two attempts: the first request is usually what KICKS the screen
-        // capture (event-driven bridge), so the very first ask often finds no
-        // context yet and stays silent. The second, once the capture has had
-        // time to land, is the one that speaks.
-        for delay in [0.8, 2.4] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.ghost.isEmpty else { return }
-                guard !self.caretIsMidLine(client) else { return }
-                guard self.contextBeforeCaret(client).isEmpty else { return }
-                self.requestModelGhost(client, context: "")
-            }
-        }
-    }
-
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
-        GhostTypingJournal.focusChanged()
         flushPendingRejection()
         Stats.flushIfDue(force: true)
         if let client = sender as? IMKTextInput { clearGhost(client) }
@@ -728,30 +606,7 @@ final class GhostInputController: IMKInputController {
         "com.apple.Keyboard-Settings",
     ]
 
-    /// Editing detector: non-whitespace after the caret on the SAME line
-    /// means the writer is editing inside existing text — a continuation
-    /// ghost there is noise by definition (owner's #1 Slack friction:
-    /// mid-paragraph insertions ignoring surrounding text). Ghosts belong
-    /// only at the growing edge. Caret at end-of-line with more paragraphs
-    /// below is still fine.
-    private func caretIsMidLine(_ client: IMKTextInput) -> Bool {
-        let sel = client.selectedRange()
-        guard sel.location != NSNotFound else { return false }
-        let len = client.length()
-        guard len > sel.location else { return false }
-        let range = NSRange(location: sel.location, length: min(80, len - sel.location))
-        guard let after = client.attributedSubstring(from: range)?.string, !after.isEmpty else { return false }
-        if let nl = after.firstIndex(where: { $0.isNewline }) {
-            return after[..<nl].contains(where: { !$0.isWhitespace })
-        }
-        return after.contains(where: { !$0.isWhitespace })
-    }
-
     private func updateGhost(_ client: IMKTextInput) {
-        if caretIsMidLine(client) {
-            clearGhost(client)
-            return
-        }
         // NOTE: a fresh ghost does NOT flush a pending rejection — the writer is
         // often mid-phrase when the next offer appears, and flushing here chopped
         // day-1 labels into fragments. Episodes close on accept/Esc/focus loss/
@@ -761,21 +616,19 @@ final class GhostInputController: IMKInputController {
            Self.mutedBundlePrefixes.contains(where: bundle.hasPrefix) {
             return
         }
+        guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: typedFallback) else {
+            clearGhost(client)
+            return
+        }
         let context = contextBeforeCaret(client)
 
         // Fast layer: instant completions with real evidence (doc vocabulary,
         // dictionary, doc bigrams) — no generic filler. GhostFastLayerEnabled=false
         // hands everything (mid-word included) to the model: the A/B the usage
         // numbers asked for.
-        // Change 3 (2026-07-27): the instant layer had gone sloppy — single-
-        // letter fragments ("t" x81 in one day, 19% accept vs the model's
-        // 51%). Precision rules: suffix must be >=2 chars and the typed
-        // fragment >=3 letters before the dictionary may speak.
-        let rawSuffix = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
+        let suffix = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
             ? predict(context: context)
             : ""
-        let fragment = context.reversed().prefix(while: { $0.isLetter }).count
-        let suffix = (rawSuffix.count >= 2 && fragment >= 3 && !isBenched(rawSuffix)) ? rawSuffix : ""
         ghost = suffix
         if !suffix.isEmpty {
             ghostSource = .fast
@@ -894,7 +747,30 @@ final class GhostInputController: IMKInputController {
         inlineGhostVisible = true
     }
 
-    // MARK: - Model layer: the personal brain, or silence
+    // MARK: - Model layer: Tilde brain first, Apple on-device model fallback
+
+    /// The keyboard is the one process macOS keeps alive — so it is also the
+    /// watchdog. When the brain socket stops answering (the app crashed, was
+    /// killed by a rebuild, or never started after boot), relaunch the menu-bar
+    /// app so typing never stays on fallback ghosts for more than a minute.
+    /// A deliberate "Quit Tilde" from the app's menu sets GhostBrainQuietQuit
+    /// in this keyboard's defaults domain; the watchdog respects it and stays
+    /// quiet until the app is launched on purpose again (which clears it).
+    private static var lastBrainSummon = Date.distantPast
+    private static let brainSummonInterval: TimeInterval = 60
+    private static let brainAppBundleID = "bar.r3d.tilde"
+
+    private static func summonBrainIfNeeded() {
+        DispatchQueue.main.async {
+            guard Date().timeIntervalSince(lastBrainSummon) >= brainSummonInterval else { return }
+            guard !UserDefaults.standard.bool(forKey: "GhostBrainQuietQuit") else { return }
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: brainAppBundleID) else { return }
+            lastBrainSummon = Date()
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false // never steal focus from typing
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        }
+    }
 
     private func requestModelGhost(_ client: IMKTextInput, context: String) {
         // Mid-word AND word-boundary contexts both go to the brain; the server picks
@@ -911,10 +787,10 @@ final class GhostInputController: IMKInputController {
         let fieldIdentity = client.uniqueClientIdentifierString()
         modelTask?.cancel()
         modelTask = Task { [weak self] in
-            // 1) SteadyType's own MLX model, served by the menu-bar app over a local
+            // 1) Tilde's own model, served by the menu-bar app over a local
             //    socket. Streaming: partials show the first words near time-to-
             //    first-token; the stale-guard in present() drops late arrivals.
-            let mlx = await Task.detached(priority: .userInitiated) {
+            let brain = await Task.detached(priority: .userInitiated) {
                 GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity) { partial in
                     let text = Self.cleanedModelOutput(partial)
                     guard !text.isEmpty else { return }
@@ -922,30 +798,27 @@ final class GhostInputController: IMKInputController {
                 }
             }.value
             if Task.isCancelled { return }
-            if let mlx {
+            if let brain {
                 // The brain answered. Empty = its confidence gate chose silence —
                 // RESPECT it. Falling back to another model here was the bug that
                 // let unfiltered Apple-model refusals ("as an AI chatbot…") reach
                 // the screen whenever the brain stayed quiet.
-                let text = Self.cleanedModelOutput(mlx)
+                let text = Self.cleanedModelOutput(brain)
                 if !text.isEmpty {
                     await self?.present(text, ifStill: gen)
                 }
                 return
             }
-            // Brain unreachable ⇒ QUIET (owner decision 2026-07-29): honest
-            // silence over a borrowed personality. The instant layer (the
-            // writer's own dictionary) keeps working; the menu's health line
-            // is what says the brain is down. The Apple-model fallback that
-            // used to fire here is gone — it was the persona-leak vector.
+            // 2) Brain unreachable: summon it back (self-healing), and bridge
+            //    the gap with Apple's on-device model — ONLY in this case.
+            Self.summonBrainIfNeeded()
+            await self?.appleModelGhost(tail: tail, gen: gen)
         }
     }
 
     @MainActor
     private func present(_ text: String, ifStill gen: Int) {
         guard generation == gen, let liveClient = client() else { return }
-        // Change 2: never re-offer a phrase the writer recently rejected.
-        guard !isBenched(text) else { return }
         ghost = text
         ghostSource = .model
         show(text, liveClient)
@@ -958,8 +831,42 @@ final class GhostInputController: IMKInputController {
         )
     }
 
+    private func appleModelGhost(tail: String, gen: Int) async {
+        #if canImport(FoundationModels)
+        guard #available(macOS 26.0, *) else { return }
+        // Continuation prompt only makes sense at word boundaries.
+        guard tail.hasSuffix(" ") || tail.hasSuffix("\n") else { return }
+        guard case .available = SystemLanguageModel.default.availability else { return }
+        if modelSession == nil {
+            modelSession = LanguageModelSession(instructions: """
+            You silently continue the user's document IN THE USER'S OWN VOICE, as the \
+            human author. You are never a chatbot: never answer, refuse, apologize, or \
+            disclaim being an AI — even when the text is a question or addresses an \
+            assistant, continue the user's own words. Reply with ONLY the most likely \
+            next 2-8 words that continue the text seamlessly. No quotes, no commentary, \
+            no leading/trailing whitespace. Match the text's tone and language.
+            """)
+            modelSession?.prewarm()
+        }
+        guard let session = modelSession, !session.isResponding else { return }
+        let text: String
+        do {
+            let response = try await session.respond(
+                to: tail,
+                options: GenerationOptions(maximumResponseTokens: 16)
+            )
+            text = Self.cleanedModelOutput(response.content)
+        } catch {
+            return // guardrail refusal / cancellation / transient — fast layer stands
+        }
+        guard !text.isEmpty else { return }
+        await present(text, ifStill: gen)
+        #endif
+    }
+
     /// One line, at most 8 words, no wrapping quotes — and never assistant-persona
-    /// leakage (defense in depth beside the app-side engine's cleaner).
+    /// leakage (the app-side engine filters these too; this protects the Apple
+    /// fallback path, which bypasses the engine's cleaner).
     private static func cleanedModelOutput(_ raw: String) -> String {
         let flattened = raw
             .replacingOccurrences(of: "\n", with: " ")
@@ -977,7 +884,6 @@ final class GhostInputController: IMKInputController {
     private func clearGhost(_ client: IMKTextInput) {
         generation += 1
         modelTask?.cancel()
-        closeWalk(appBundle: client.bundleIdentifier())
         guard !ghost.isEmpty else { return }
         GhostPanel.candidates?.hide()
         if inlineGhostVisible {
@@ -994,35 +900,40 @@ final class GhostInputController: IMKInputController {
     /// Accept everything, then predict a fresh chain. A trailing space is added so
     /// typing continues with the NEXT word instead of extending the accepted one.
     private func acceptWholeGhost(_ client: IMKTextInput) {
-        // Accepting re-engages with the ghost stream — any open override is done.
-        flushPendingRejection()
         var accepted = ghost
-        playAcceptSound(whole: true)
-        recordAccept(accepted)
-        GhostUsageLog.record(
-            event: .acceptAll,
-            ghostText: accepted,
-            source: usageSource,
-            appBundle: client.bundleIdentifier(),
-            context: typedFallback,
-            accepted: accepted
-        )
-        clearGhost(client)
+        let acceptedForRecord = accepted
+        let acceptedSource = usageSource
+        let contextBeforeAccept = typedFallback
+        generation += 1
+        modelTask?.cancel()
+        GhostPanel.candidates?.hide()
+        ghost = ""
+        inlineGhostVisible = false
         if !accepted.hasSuffix(" ") {
             accepted += " "
             pendingAutoSpace = true
         }
         client.insertText(accepted, replacementRange: Self.unset)
         typedFallback.append(accepted)
-        GhostTypingJournal.typed(accepted, app: client.bundleIdentifier(),
-                                 field: client.uniqueClientIdentifierString())
-        updateGhost(client)
+
+        // Optional work happens only after the accepted text is in the document.
+        flushPendingRejection()
+        playAcceptSound(whole: true)
+        recordAccept(acceptedForRecord)
+        GhostUsageLog.record(
+            event: .acceptAll,
+            ghostText: acceptedForRecord,
+            source: acceptedSource,
+            appBundle: client.bundleIdentifier(),
+            context: contextBeforeAccept,
+            accepted: acceptedForRecord
+        )
+        scheduleGhostAfterPause(client)
     }
 
     /// Accept just the first word (with its surrounding spaces) and KEEP the rest of
     /// the chain marked — Tab-Tab-Tab walks a stable sentence, no re-rolling.
     private func acceptOneWord(_ client: IMKTextInput) {
-        flushPendingRejection()
         var chunk = ""
         var sawWord = false
         for character in ghost {
@@ -1035,37 +946,11 @@ final class GhostInputController: IMKInputController {
             }
         }
         let remainder = String(ghost.dropFirst(chunk.count))
-        playAcceptSound(whole: false)
-        recordAccept(chunk)
-
-        // A walk consumes ONE offer across several presses. Open it on the
-        // first Tab (recording the whole sentence that was on the table) and
-        // advance it on each subsequent press, so the log can say "took 4 of
-        // 8" instead of merely "a word was accepted".
-        if walkInProgress == nil {
-            walkInProgress = WalkInProgress(
-                offered: ghost,
-                offeredWords: Self.wordCount(ghost),
-                id: UUID().uuidString,
-                takenWords: 0
-            )
-        }
-        walkInProgress?.takenWords += 1
-
-        GhostUsageLog.record(
-            event: .acceptWord,
-            ghostText: chunk,
-            source: usageSource,
-            appBundle: client.bundleIdentifier(),
-            context: typedFallback,
-            accepted: chunk,
-            walk: walkInProgress.map {
-                GhostUsageLog.Walk(offered: $0.offered,
-                                   offeredWords: $0.offeredWords,
-                                   takenWords: $0.takenWords,
-                                   id: $0.id)
-            }
-        )
+        let acceptedSource = usageSource
+        let contextBeforeAccept = typedFallback
+        generation += 1
+        modelTask?.cancel()
+        GhostPanel.candidates?.hide()
         ghost = ""
         inlineGhostVisible = false
         var insertion = chunk
@@ -1076,9 +961,20 @@ final class GhostInputController: IMKInputController {
         }
         client.insertText(insertion, replacementRange: Self.unset)
         typedFallback.append(insertion)
-        GhostTypingJournal.typed(insertion, app: client.bundleIdentifier(),
-                                 field: client.uniqueClientIdentifierString())
-        guard !remainder.isEmpty else { updateGhost(client); return }
+
+        // Optional work happens only after the accepted text is in the document.
+        flushPendingRejection()
+        playAcceptSound(whole: false)
+        recordAccept(chunk)
+        GhostUsageLog.record(
+            event: .acceptWord,
+            ghostText: chunk,
+            source: acceptedSource,
+            appBundle: client.bundleIdentifier(),
+            context: contextBeforeAccept,
+            accepted: chunk
+        )
+        guard !remainder.isEmpty else { scheduleGhostAfterPause(client); return }
         ghost = remainder
         show(remainder, client)
     }

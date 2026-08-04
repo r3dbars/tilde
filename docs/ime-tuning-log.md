@@ -122,7 +122,7 @@ more dogfood data).
 ### Model layer
 - **Apple FoundationModels as the brain** — worked, decent continuations,
   ~word-boundary only. **KEEP as fallback** when the app/socket is down.
-- **SteadyType MLX over unix socket** (`GhostBrainServerHost` ⇄
+- **Tilde MLX over unix socket** (`GhostBrainServerHost` ⇄
   `GhostBrainClient`, newline-JSON) — **KEEP**. Qwen3.5-4B measured
   300–360ms warm (no cache identity), mid-word wordCompletion mode 110–240ms.
 - **Server infers engine mode** — mid-word → `.wordCompletion`, boundary →
@@ -390,7 +390,7 @@ more dogfood data).
   next entry). **KEEP** — harmless now, multiplies once prefill is fixed
   (first chunk would land ~30–80ms).
 - **ROOT CAUSE of the ~250ms floor (diagnosed from `mlx-completion-timing` in
-  `~/Library/Logs/SteadyType/diagnostics.log`):** warm boundary request at
+  `~/Library/Logs/Tilde/diagnostics.log`):** warm boundary request at
   ~1,040 prompt tokens = prepare 19ms + session 20ms + **firstChunk ~250ms**
   (prefill) + short tail. KV cache verdict: **miss, reason
   `untrimmable-prompt-cache`** — the prompt template appends closing markers
@@ -465,7 +465,7 @@ more dogfood data).
   (partial report) + reconnect-retry across app restarts.
 - **Corpus (KEEP):** `script/fetch_eval_sets.py discord` sifts
   mookiezi/Discord-Dialogues (HF, Apache-2.0, 7.3M exchanges) → deterministic
-  2,000-question quiz at `~/.cache/steadytype-eval/discord_eval.jsonl`
+  2,000-question quiz at `~/.cache/tilde-eval/discord_eval.jsonl`
   (data never enters the repo). 2.86M rejected as <5-word quips.
 - **Socket protocol (KEEP):** optional `"page"` field — explicit screen text
   overrides the live OCR resolver; `""` forces none. Eval-only surface today;

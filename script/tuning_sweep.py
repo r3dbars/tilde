@@ -13,7 +13,7 @@ Results stream to a JSONL log as each version finishes, so a crash mid-sweep
 never loses completed rows. At the end a league table is printed sorted by
 ExactMatch@1, each row deltaed against the first "baseline" control.
 
-Not committed data: reads corpus + scaffolds from ~/.cache/steadytype-eval.
+Not committed data: reads corpus + scaffolds from ~/.cache/tilde-eval.
 """
 import json
 import os
@@ -21,15 +21,15 @@ import subprocess
 import sys
 import time
 
-ROOT = "/Users/redbars/Steadytype/.claude/worktrees/busy-kare-569e80"
-APP_BIN = os.path.join(ROOT, "dist/SteadyType.app/Contents/MacOS/SteadyType")
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_BIN = os.path.join(ROOT, "dist/Tilde.app/Contents/MacOS/Tilde")
 EVAL = os.path.join(ROOT, "script/golden_eval.py")
 CORPUS = os.environ.get("SWEEP_CORPUS",
-                        os.path.expanduser("~/.cache/steadytype-eval/discord_eval.jsonl"))
-SCAFFOLDS = os.path.expanduser("~/.cache/steadytype-eval/scaffolds")
-SOCK = os.path.expanduser("~/Library/Application Support/SteadyType/ghost.sock")
-GGUF_DIR = os.path.expanduser("~/Library/Application Support/SteadyType/Models/GGUF")
-RESULTS = os.path.expanduser("~/.cache/steadytype-eval/sweep_results.jsonl")
+                        os.path.expanduser("~/.cache/tilde-eval/discord_eval.jsonl"))
+SCAFFOLDS = os.path.expanduser("~/.cache/tilde-eval/scaffolds")
+SOCK = os.path.expanduser("~/Library/Application Support/Tilde/ghost.sock")
+GGUF_DIR = os.path.expanduser("~/Library/Application Support/Tilde/Models/GGUF")
+RESULTS = os.path.expanduser("~/.cache/tilde-eval/sweep_results.jsonl")
 
 
 def sh(cmd, **kw):
@@ -37,7 +37,7 @@ def sh(cmd, **kw):
 
 
 def scaffold(name):
-    return {"STEADYTYPE_SCAFFOLD_CHAT_FILE": os.path.join(SCAFFOLDS, name)}
+    return {"TILDE_SCAFFOLD_CHAT_FILE": os.path.join(SCAFFOLDS, name)}
 
 
 # Each version: label, env overrides (relaunch knobs), quiz flags (harness
@@ -63,14 +63,14 @@ VERSIONS = [
     ("scaffold-size14", scaffold("chat_size14.txt"), BASE_FLAGS, {"scaffold_chat": "size14"}),
 
     # 3) suggestion length (token budget)
-    ("budget-8", {"STEADYTYPE_TOKEN_BUDGET": "8"}, BASE_FLAGS, {"token_budget": "8"}),
-    ("budget-12", {"STEADYTYPE_TOKEN_BUDGET": "12"}, BASE_FLAGS, {"token_budget": "12"}),
-    ("budget-20", {"STEADYTYPE_TOKEN_BUDGET": "20"}, BASE_FLAGS, {"token_budget": "20"}),
-    ("budget-28", {"STEADYTYPE_TOKEN_BUDGET": "28"}, BASE_FLAGS, {"token_budget": "28"}),
+    ("budget-8", {"TILDE_TOKEN_BUDGET": "8"}, BASE_FLAGS, {"token_budget": "8"}),
+    ("budget-12", {"TILDE_TOKEN_BUDGET": "12"}, BASE_FLAGS, {"token_budget": "12"}),
+    ("budget-20", {"TILDE_TOKEN_BUDGET": "20"}, BASE_FLAGS, {"token_budget": "20"}),
+    ("budget-28", {"TILDE_TOKEN_BUDGET": "28"}, BASE_FLAGS, {"token_budget": "28"}),
 
     # 4) temperature (confirm greedy is best for exact-match)
-    ("temp-0.15", {"STEADYTYPE_TEMPERATURE": "0.15"}, BASE_FLAGS, {"temperature": "0.15"}),
-    ("temp-0.3", {"STEADYTYPE_TEMPERATURE": "0.3"}, BASE_FLAGS, {"temperature": "0.3"}),
+    ("temp-0.15", {"TILDE_TEMPERATURE": "0.15"}, BASE_FLAGS, {"temperature": "0.15"}),
+    ("temp-0.3", {"TILDE_TEMPERATURE": "0.3"}, BASE_FLAGS, {"temperature": "0.3"}),
 
     # 5) conversation-context formatting (harness-only, baseline binary)
     ("context-turns1", {}, "--context prior --context-turns 1", {}),
@@ -82,8 +82,8 @@ VERSIONS = [
     ("register-prose", {}, "--context prior --force-app com.apple.TextEdit", {}),
     ("register-email", {}, "--context prior --force-app com.apple.mail", {}),
 
-    # 7) smaller model (the M1 MacBook question)
-    ("model-E2B", {"STEADYTYPE_MODEL": "E2B"}, BASE_FLAGS, {"model": "E2B"}),
+    # (the old "model-E2B" smaller-model row is gone with the tier system —
+    # pin any alternative GGUF via TILDE_MODEL_PATH instead)
 
     ("baseline-control-B", {}, BASE_FLAGS, {}),
 ]
@@ -92,13 +92,13 @@ VERSIONS = [
 # suggestion when the model's first-token probability is below the threshold.
 CONFIDENCE_VERSIONS = [
     ("confidence-off", {}, BASE_FLAGS, {"confidence": "0"}),
-    ("confidence-0.10", {"STEADYTYPE_CONFIDENCE": "0.10"}, BASE_FLAGS, {"confidence": "0.10"}),
-    ("confidence-0.15", {"STEADYTYPE_CONFIDENCE": "0.15"}, BASE_FLAGS, {"confidence": "0.15"}),
-    ("confidence-0.20", {"STEADYTYPE_CONFIDENCE": "0.20"}, BASE_FLAGS, {"confidence": "0.20"}),
-    ("confidence-0.25", {"STEADYTYPE_CONFIDENCE": "0.25"}, BASE_FLAGS, {"confidence": "0.25"}),
-    ("confidence-0.30", {"STEADYTYPE_CONFIDENCE": "0.30"}, BASE_FLAGS, {"confidence": "0.30"}),
-    ("confidence-0.40", {"STEADYTYPE_CONFIDENCE": "0.40"}, BASE_FLAGS, {"confidence": "0.40"}),
-    ("confidence-0.50", {"STEADYTYPE_CONFIDENCE": "0.50"}, BASE_FLAGS, {"confidence": "0.50"}),
+    ("confidence-0.10", {"TILDE_CONFIDENCE": "0.10"}, BASE_FLAGS, {"confidence": "0.10"}),
+    ("confidence-0.15", {"TILDE_CONFIDENCE": "0.15"}, BASE_FLAGS, {"confidence": "0.15"}),
+    ("confidence-0.20", {"TILDE_CONFIDENCE": "0.20"}, BASE_FLAGS, {"confidence": "0.20"}),
+    ("confidence-0.25", {"TILDE_CONFIDENCE": "0.25"}, BASE_FLAGS, {"confidence": "0.25"}),
+    ("confidence-0.30", {"TILDE_CONFIDENCE": "0.30"}, BASE_FLAGS, {"confidence": "0.30"}),
+    ("confidence-0.40", {"TILDE_CONFIDENCE": "0.40"}, BASE_FLAGS, {"confidence": "0.40"}),
+    ("confidence-0.50", {"TILDE_CONFIDENCE": "0.50"}, BASE_FLAGS, {"confidence": "0.50"}),
 ]
 
 if os.environ.get("SWEEP_SET") == "confidence":
@@ -106,19 +106,19 @@ if os.environ.get("SWEEP_SET") == "confidence":
 
 # Base-model re-tune (SWEEP_SET=retune): re-measure the "more predictive" levers
 # — suggestion length (token budget) and scaffold — on whatever model is pinned
-# via STEADYTYPE_MODEL_PATH (export it before running). Includes a length x
+# via TILDE_MODEL_PATH (export it before running). Includes a length x
 # scaffold combo. Compared against the base-model default (baseline-control-A).
 RETUNE_VERSIONS = [
     ("baseline-control-A", {}, BASE_FLAGS, {}),
-    ("budget-20", {"STEADYTYPE_TOKEN_BUDGET": "20"}, BASE_FLAGS, {"token_budget": "20"}),
-    ("budget-28", {"STEADYTYPE_TOKEN_BUDGET": "28"}, BASE_FLAGS, {"token_budget": "28"}),
-    ("budget-36", {"STEADYTYPE_TOKEN_BUDGET": "36"}, BASE_FLAGS, {"token_budget": "36"}),
+    ("budget-20", {"TILDE_TOKEN_BUDGET": "20"}, BASE_FLAGS, {"token_budget": "20"}),
+    ("budget-28", {"TILDE_TOKEN_BUDGET": "28"}, BASE_FLAGS, {"token_budget": "28"}),
+    ("budget-36", {"TILDE_TOKEN_BUDGET": "36"}, BASE_FLAGS, {"token_budget": "36"}),
     ("scaffold-short", scaffold("chat_short.txt"), BASE_FLAGS, {"scaffold_chat": "short"}),
     ("scaffold-mixed", scaffold("chat_mixed.txt"), BASE_FLAGS, {"scaffold_chat": "mixed"}),
     ("scaffold-size6", scaffold("chat_size6.txt"), BASE_FLAGS, {"scaffold_chat": "size6"}),
     ("context-labeled", {}, "--context prior --context-style labeled", {}),
     ("combo-short+budget28",
-     dict(list(scaffold("chat_short.txt").items()) + [("STEADYTYPE_TOKEN_BUDGET", "28")]),
+     dict(list(scaffold("chat_short.txt").items()) + [("TILDE_TOKEN_BUDGET", "28")]),
      BASE_FLAGS, {"scaffold_chat": "short", "token_budget": "28"}),
 ]
 
@@ -126,22 +126,19 @@ if os.environ.get("SWEEP_SET") == "retune":
     VERSIONS = RETUNE_VERSIONS
 
 # Model bakeoff (SWEEP_SET=models): one version per GGUF in the models dir, each
-# pointed at via STEADYTYPE_MODEL_PATH. Built dynamically so it picks up whatever
-# the downloader produced. The current default (E4B) is the reference row.
+# pointed at via TILDE_MODEL_PATH. The shipping default (no override) is the
+# reference row; any legacy model joins by dropping its GGUF in the dir.
 if os.environ.get("SWEEP_SET") == "models":
     import glob
-    MODEL_DIR = os.path.expanduser("~/.cache/steadytype-eval/models")
-    # Both Gemma 4 tiers as references (current shipping E4B + the low-RAM E2B),
-    # scored on the same diverse quiz as every bakeoff candidate.
+    MODEL_DIR = os.path.expanduser("~/.cache/tilde-eval/models")
     VERSIONS = [
-        ("ref-gemma4-E4B", {}, BASE_FLAGS, {}),
-        ("ref-gemma4-E2B", {"STEADYTYPE_MODEL": "E2B"}, BASE_FLAGS, {"model": "E2B"}),
+        ("ref-shipping-default", {}, BASE_FLAGS, {}),
     ]
     for path in sorted(glob.glob(os.path.join(MODEL_DIR, "*.gguf"))):
         stem = os.path.basename(path)[:-5]
         VERSIONS.append((
             "m-" + stem[:34],
-            {"STEADYTYPE_MODEL_PATH": path},
+            {"TILDE_MODEL_PATH": path},
             BASE_FLAGS,
             {"model_path": os.path.basename(path)[:16]},
         ))
@@ -152,12 +149,12 @@ def kill_app():
     # make us quiz the wrong (old) binary. Escalate to -9, then remove the
     # socket file so a fresh bind is unambiguous.
     for attempt in range(15):
-        sh("pkill -x SteadyType")
+        sh("pkill -x Tilde")
         sh("pkill -f 'llama-server.*17872'")
         time.sleep(1)
-        if not sh("pgrep -x SteadyType").stdout.strip():
+        if not sh("pgrep -x Tilde").stdout.strip():
             break
-        sh("pkill -9 -x SteadyType")
+        sh("pkill -9 -x Tilde")
         sh("pkill -9 -f 'llama-server.*17872'")
         time.sleep(1)
     try:
@@ -217,16 +214,6 @@ def probe_config():
         return {}
 
 
-def running_model_gguf():
-    out = sh("pgrep -fl 'llama-server.*17872'")
-    line = out.stdout
-    if "E2B" in line:
-        return "E2B"
-    if "E4B" in line:
-        return "E4B"
-    return "?"
-
-
 def launch(env_overrides):
     env = dict(os.environ)
     env.update(env_overrides)
@@ -260,17 +247,11 @@ def run_version(label, env_overrides, flags, expect):
         got = str(cfg.get(field, ""))
         if want not in got:
             mismatches.append("%s: want ~%r got %r" % (field, want, got))
-    # Model is verified independently against the actual llama-server cmdline.
-    if env_overrides.get("STEADYTYPE_MODEL"):
-        want_model = env_overrides["STEADYTYPE_MODEL"]
-        got_model = running_model_gguf()
-        if want_model != got_model:
-            mismatches.append("model(gguf): want %s got %s" % (want_model, got_model))
     # For an explicit GGUF path, the config echo already reports model_path and
     # kill_app guarantees the port was free before launch — so verify via the
     # echo (below) rather than a flaky pgrep of the process cmdline.
-    if env_overrides.get("STEADYTYPE_MODEL_PATH"):
-        want_base = os.path.basename(env_overrides["STEADYTYPE_MODEL_PATH"])
+    if env_overrides.get("TILDE_MODEL_PATH"):
+        want_base = os.path.basename(env_overrides["TILDE_MODEL_PATH"])
         if want_base not in str(cfg.get("model_path", "")):
             mismatches.append("model_path echo: %s not in %r" % (want_base, cfg.get("model_path")))
     if mismatches:

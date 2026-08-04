@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="SteadyType"
-BUNDLE_ID="bar.r3d.steadytype"
+APP_NAME="Tilde"
+BUNDLE_ID="bar.r3d.tilde"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
@@ -18,7 +18,7 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
-ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"
+ENTITLEMENTS_PLIST="$ROOT_DIR/script/Tilde.entitlements"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
 GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
@@ -500,8 +500,6 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
-  <key>CFBundleDisplayName</key>
-  <string>Tilde</string>
   <key>CFBundleShortVersionString</key>
   <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>

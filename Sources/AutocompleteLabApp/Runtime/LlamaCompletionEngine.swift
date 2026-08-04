@@ -12,24 +12,16 @@ enum LlamaEngineError: Error {
 final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
 
     private let baseURL: URL
-    // STEADYTYPE_MAX_VISIBLE_WORDS caps how many words a suggestion may show
+    // TILDE_MAX_VISIBLE_WORDS caps how many words a suggestion may show
     // (owner tuning 2026-07-24: shorter offers, higher precision).
     private let cleaner = CompletionOutputCleaner(
-        maxVisibleWords: ProcessInfo.processInfo.environment["STEADYTYPE_MAX_VISIBLE_WORDS"].flatMap(Int.init)
+        maxVisibleWords: ProcessInfo.processInfo.environment["TILDE_MAX_VISIBLE_WORDS"].flatMap(Int.init)
             ?? CompletionModelPolicy.mvp.maxVisibleWords
     )
 
     init(baseURL: URL) {
         self.baseURL = baseURL
     }
-
-    /// System dictionary + personal lexicon, loaded once per process. The
-    /// lexicon file is optional — a fresh install constrains against the
-    /// system dictionary alone until the nightly job writes one.
-    private static let vocabulary: WordVocabulary? = WordVocabulary.load(
-        lexiconURL: FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/SteadyType/lexicon.txt")
-    )
 
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         try await suggestion(for: request) { _ in }
@@ -40,51 +32,51 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
-        // All tuning knobs read from the environment so tuning drivers can
-        // turn any dial without a rebuild.
+        // All tuning knobs read from the environment so the auto-research loop
+        // can turn any dial without a rebuild (see script/research_loop.py).
         let env = ProcessInfo.processInfo.environment
-        // env still wins; persisted "steadytype.<NAME>" defaults survive reboots.
-        func envInt(_ k: String) -> Int? { RuntimeSetting.int(String(k.dropFirst("STEADYTYPE_".count))) }
-        func envDouble(_ k: String) -> Double? { RuntimeSetting.double(String(k.dropFirst("STEADYTYPE_".count))) }
+        // env still wins; persisted "tilde.<NAME>" defaults survive reboots.
+        func envInt(_ k: String) -> Int? { RuntimeSetting.int(String(k.dropFirst("TILDE_".count))) }
+        func envDouble(_ k: String) -> Double? { RuntimeSetting.double(String(k.dropFirst("TILDE_".count))) }
 
         let register = ContinuationRegister.from(bundleIdentifier: request.appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: request.textBeforeCursor,
             screenContext: request.visiblePageContext?.promptText,
             register: register,
-            maxContextCharacters: envInt("STEADYTYPE_MAX_CONTEXT_CHARS") ?? 3000,
-            maxScreenContextCharacters: envInt("STEADYTYPE_MAX_SCREEN_CHARS") ?? 700
+            maxContextCharacters: envInt("TILDE_MAX_CONTEXT_CHARS") ?? 3000,
+            maxScreenContextCharacters: envInt("TILDE_MAX_SCREEN_CHARS") ?? 700
         )
         // Opener mode with nothing to ground it (no screen context) builds an
         // empty prompt: stay silent rather than hallucinate from nothing.
         guard !recipe.prompt.isEmpty else { return nil }
         // Greedy (temperature 0) is the default; the loop can explore warmer
         // settings with the sampler knobs below.
-        let temperature = envDouble("STEADYTYPE_TEMPERATURE") ?? 0
+        let temperature = envDouble("TILDE_TEMPERATURE") ?? 0
         // Confidence gate (0..1): suppress the whole suggestion when the model's
         // first-token probability is below the bar. 0 = off. n_probs:1 asks
         // llama.cpp to report each token's logprob.
-        var confidenceThreshold = envDouble("STEADYTYPE_CONFIDENCE") ?? 0
+        var confidenceThreshold = envDouble("TILDE_CONFIDENCE") ?? 0
         // Brave start, strict cruise: with only a few words on the page the
         // model's first-token probability is naturally low (0.03–0.07 observed),
         // so a uniform bar mutes exactly the moment the writer wants company.
         // Under the short-context cutoff, halve the bar (both tunable).
-        let shortContextCutoff = envInt("STEADYTYPE_CONFIDENCE_SHORT_CUTOFF") ?? 60
+        let shortContextCutoff = envInt("TILDE_CONFIDENCE_SHORT_CUTOFF") ?? 60
         if request.textBeforeCursor.count < shortContextCutoff {
-            confidenceThreshold = envDouble("STEADYTYPE_CONFIDENCE_SHORT") ?? confidenceThreshold / 2
+            confidenceThreshold = envDouble("TILDE_CONFIDENCE_SHORT") ?? confidenceThreshold / 2
         }
         // Screen-echo guard: drop suggestions that copy >= N visible words from
         // the screen. Tunable because a low N can over-suppress good guesses.
-        let echoGuardMinWords = envInt("STEADYTYPE_ECHO_GUARD_MIN_WORDS") ?? 4
+        let echoGuardMinWords = envInt("TILDE_ECHO_GUARD_MIN_WORDS") ?? 4
         // Owner's "holding it wrong" hypothesis (2026-07-25): instruct models
         // failed our RAW recipe — but the task can be ASKED as a question with
-        // a proper chat template. STEADYTYPE_PROMPT_MODE=instruct tests that:
+        // a proper chat template. TILDE_PROMPT_MODE=instruct tests that:
         // Gemma-template prompt framing screen+typed-text as an explicit task.
         let instructMode = RuntimeSetting.string("PROMPT_MODE") == "instruct"
         var stops = ["\n"]
         var servedPrompt = recipe.prompt
         if instructMode {
-            let tail = String(request.textBeforeCursor.suffix(envInt("STEADYTYPE_MAX_CONTEXT_CHARS") ?? 3000))
+            let tail = String(request.textBeforeCursor.suffix(envInt("TILDE_MAX_CONTEXT_CHARS") ?? 3000))
             let screen = (request.visiblePageContext?.promptText).map { String($0.prefix(700)) }
             var task = "You are the writer's silent autocomplete. "
             if let screen, !screen.isEmpty {
@@ -108,22 +100,10 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         ]
         // Sampler knobs — only bite when temperature > 0; the loop pairs them
         // with warmer temperatures to explore beyond greedy decoding.
-        if let v = envDouble("STEADYTYPE_TOP_P") { body["top_p"] = v }
-        if let v = envInt("STEADYTYPE_TOP_K") { body["top_k"] = v }
-        if let v = envDouble("STEADYTYPE_MIN_P") { body["min_p"] = v }
-        if let v = envDouble("STEADYTYPE_REPEAT_PENALTY") { body["repeat_penalty"] = v }
-        // Mid-word, the model must finish the word being typed — untethered it
-        // emits a leading space 96.6% of the time (midword_quiz 2026-08-01;
-        // word-1 1.2% raw vs 46.0% trie-constrained). STEADYTYPE_MIDWORD_GRAMMAR=0
-        // disables; instruct mode keeps its own prompt contract.
-        if request.mode == .wordCompletion, !instructMode,
-           RuntimeSetting.int("MIDWORD_GRAMMAR") != 0,
-           let grammar = MidwordGrammar.grammar(
-               textBeforeCursor: request.textBeforeCursor,
-               vocabulary: Self.vocabulary
-           ) {
-            body["grammar"] = grammar
-        }
+        if let v = envDouble("TILDE_TOP_P") { body["top_p"] = v }
+        if let v = envInt("TILDE_TOP_K") { body["top_k"] = v }
+        if let v = envDouble("TILDE_MIN_P") { body["min_p"] = v }
+        if let v = envDouble("TILDE_REPEAT_PENALTY") { body["repeat_penalty"] = v }
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -144,7 +124,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         // cap, cut the suggestion at the first token whose probability falls
         // below this floor. The model runs as far as it stays SURE — two words
         // on a shaky guess, fifteen on a confident one. 0 = off.
-        let tokenConfidenceFloor = envDouble("STEADYTYPE_TOKEN_CONFIDENCE_FLOOR") ?? 0
+        let tokenConfidenceFloor = envDouble("TILDE_TOKEN_CONFIDENCE_FLOOR") ?? 0
         for try await line in bytes.lines {
             guard line.hasPrefix("data: ") else { continue }
             guard let object = try? JSONSerialization.jsonObject(
@@ -230,7 +210,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
                 let clean = repaired.trimmingCharacters(in: .whitespaces)
                 suggestion = clean.isEmpty ? nil : CompletionSuggestion(
                     text: repaired,
-                    maxVisibleWords: envInt("STEADYTYPE_MAX_VISIBLE_WORDS")
+                    maxVisibleWords: envInt("TILDE_MAX_VISIBLE_WORDS")
                         ?? CompletionModelPolicy.mvp.maxVisibleWords
                 )
             }
@@ -241,7 +221,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             let trimmed = String(s.text.drop(while: { $0 == " " }))
             suggestion = trimmed.isEmpty ? nil : CompletionSuggestion(
                 text: trimmed,
-                maxVisibleWords: envInt("STEADYTYPE_MAX_VISIBLE_WORDS")
+                maxVisibleWords: envInt("TILDE_MAX_VISIBLE_WORDS")
                     ?? CompletionModelPolicy.mvp.maxVisibleWords
             )
         }
@@ -279,10 +259,11 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
     }
 }
 
-/// Routes phrase continuations to the reliability engine (llama.cpp/Gemma) when
-/// it is healthy, everything else — and any llama failure — to the MLX engine.
-/// A llama SILENCE (nil suggestion) is respected, not retried on MLX: both
-/// engines share the same output discipline, and silence means low confidence.
+/// Routes phrase continuations to the llama.cpp/Gemma engine when it is
+/// healthy, everything else — and any llama failure — to the fallback engine
+/// (UnavailableCompletionEngine; llama-only, owner decision 2026-07-22).
+/// A llama SILENCE (nil suggestion) is respected, never retried on the
+/// fallback: silence means low confidence.
 final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
 
     private let phraseEngine: any CompletionEngine
@@ -322,7 +303,7 @@ final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
                 // output discipline).
                 return try await phraseEngine.suggestion(for: request, onPartialSuggestion: onPartialSuggestion)
             } catch {
-                // Engine/transport failure only: fall back to MLX.
+                // Engine/transport failure only: fall through to the fallback.
             }
         }
         return try await fallbackEngine.suggestion(for: request, onPartialSuggestion: onPartialSuggestion)
