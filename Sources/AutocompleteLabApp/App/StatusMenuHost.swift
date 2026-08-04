@@ -1,15 +1,25 @@
 import AppKit
 
-/// The menu-bar presence, minimal by design: engine status, the screen-context
-/// toggle, feedback, quit. The keyboard itself is configured from the system
-/// input menu; the app is just the brain's caretaker.
+/// Tilde's complete user-facing surface: useful stats, honest engine status,
+/// working controls, pause, local data, and quit. No settings window or panes.
 @MainActor
 final class StatusMenuHost: NSObject {
 
     private weak var appDelegate: AppDelegate?
     private var statusItem: NSStatusItem?
-    private var engineStatusItem: NSMenuItem?
-    private var screenContextItem: NSMenuItem?
+
+    private var lifetimeItem: NSMenuItem?
+    private var todayItem: NSMenuItem?
+    private var engineItem: NSMenuItem?
+    private var suggestionsItem: NSMenuItem?
+    private var screenItem: NSMenuItem?
+    private var soundsItem: NSMenuItem?
+    private var learningItem: NSMenuItem?
+    private var pauseItem: NSMenuItem?
+
+    /// Every setting, its defaults domain, and its fallback live in one tested
+    /// type so menu switches cannot silently target keys nothing reads.
+    private let settings = TildeSettings()
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -18,55 +28,115 @@ final class StatusMenuHost: NSObject {
     func start() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(
-            systemSymbolName: "keyboard.badge.ellipsis",
-            accessibilityDescription: "Tilde"
-        )
+        item.button?.image = Self.menuBarMark()
 
         let menu = NSMenu()
-        let status = NSMenuItem(title: "Starting…", action: nil, keyEquivalent: "")
-        status.isEnabled = false
-        menu.addItem(status)
-        engineStatusItem = status
+        lifetimeItem = addInfoRow(to: menu, "Tilde")
+        todayItem = addInfoRow(to: menu, "Today: no typing yet")
+        engineItem = addInfoRow(to: menu, "Engine: starting…")
         menu.addItem(.separator())
 
-        let screenContext = NSMenuItem(
-            title: "Screen-aware suggestions",
-            action: #selector(toggleScreenContext(_:)),
-            keyEquivalent: ""
-        )
-        screenContext.target = self
-        menu.addItem(screenContext)
-        screenContextItem = screenContext
+        suggestionsItem = addToggle(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
+        screenItem = addToggle(to: menu, "Screen-aware", #selector(toggleScreenContext(_:)))
+        soundsItem = addToggle(to: menu, "Sounds", #selector(toggleSounds(_:)))
+        learningItem = addToggle(to: menu, "Learns from typing", #selector(toggleLearning(_:)))
         menu.addItem(.separator())
 
-        let feedback = NSMenuItem(
-            title: BetaFeedbackLink.menuTitle,
-            action: #selector(openFeedback(_:)),
-            keyEquivalent: ""
-        )
-        feedback.target = self
-        menu.addItem(feedback)
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(title: "Quit Tilde", action: #selector(quit(_:)), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
+        addAction(to: menu, "Show data in Finder", #selector(showData(_:)))
+        addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
         menu.delegate = self
         item.menu = menu
         statusItem = item
     }
 
-    @objc private func toggleScreenContext(_ sender: Any?) {
-        let defaults = UserDefaults.standard
-        defaults.set(!defaults.bool(forKey: "VisiblePageContextEnabled"), forKey: "VisiblePageContextEnabled")
+    /// Draw the brand mark directly: there is no tilde SF Symbol. Keeping it a
+    /// template image lets macOS recolor it correctly in every menu-bar state.
+    private static func menuBarMark() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { _ in
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: 2.5, y: 7.0))
+            path.curve(
+                to: NSPoint(x: 9.0, y: 9.0),
+                controlPoint1: NSPoint(x: 4.5, y: 12.0),
+                controlPoint2: NSPoint(x: 7.0, y: 12.0)
+            )
+            path.curve(
+                to: NSPoint(x: 15.5, y: 11.0),
+                controlPoint1: NSPoint(x: 11.0, y: 6.0),
+                controlPoint2: NSPoint(x: 13.5, y: 6.0)
+            )
+            path.lineWidth = 2.0
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
-    @objc private func openFeedback(_ sender: Any?) {
-        if let url = URL(string: BetaFeedbackLink.issueTemplateURLString) {
-            NSWorkspace.shared.open(url)
+    @discardableResult
+    private func addInfoRow(to menu: NSMenu, _ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
+        return item
+    }
+
+    @discardableResult
+    private func addToggle(to menu: NSMenu, _ title: String, _ action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+        return item
+    }
+
+    @discardableResult
+    private func addAction(
+        to menu: NSMenu,
+        _ title: String,
+        _ action: Selector,
+        key: String = ""
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        menu.addItem(item)
+        return item
+    }
+
+    @objc private func toggleSuggestions(_ sender: Any?) {
+        settings.suggestionsEnabled.toggle()
+    }
+
+    @objc private func toggleLearning(_ sender: Any?) {
+        settings.learningEnabled.toggle()
+    }
+
+    @objc private func toggleSounds(_ sender: Any?) {
+        settings.soundsEnabled.toggle()
+    }
+
+    @objc private func togglePause(_ sender: Any?) {
+        if settings.pausedUntil != nil {
+            settings.resume()
+        } else {
+            settings.pause(for: 3600)
         }
+    }
+
+    @objc private func toggleScreenContext(_ sender: Any?) {
+        settings.screenAware.toggle()
+    }
+
+    @objc private func showData(_ sender: Any?) {
+        let folder = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tilde", isDirectory: true)
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
     }
 
     @objc private func quit(_ sender: Any?) {
@@ -76,7 +146,33 @@ final class StatusMenuHost: NSObject {
 
 extension StatusMenuHost: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        engineStatusItem?.title = appDelegate?.engineStatusLine() ?? "Tilde"
-        screenContextItem?.state = UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled") ? .on : .off
+        let lifetime = TildeStats.lifetimeWordsAccepted()
+        lifetimeItem?.title = lifetime > 0
+            ? "\(lifetime.formatted()) words written for you"
+            : "Tilde"
+
+        let today = TildeStats.today()
+        if today.wordsAccepted > 0 {
+            var line = "Today: \(today.wordsAccepted) words (\(today.shareOfTyping)%)"
+            if today.wordsPerMinute > 0 {
+                line += " · \(today.wordsPerMinute) wpm"
+            }
+            todayItem?.title = line
+        } else {
+            todayItem?.title = "Today: no typing yet"
+        }
+
+        engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
+        suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
+        screenItem?.state = settings.screenAware ? .on : .off
+        soundsItem?.state = settings.soundsEnabled ? .on : .off
+        learningItem?.state = settings.learningEnabled ? .on : .off
+
+        if let until = settings.pausedUntil {
+            let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
+            pauseItem?.title = "Resume Tilde (paused \(minutes)m)"
+        } else {
+            pauseItem?.title = "Pause for an hour"
+        }
     }
 }
