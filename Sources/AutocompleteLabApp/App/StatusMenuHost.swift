@@ -39,7 +39,11 @@ final class StatusMenuHost: NSObject {
         suggestionsItem = addToggle(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
         screenItem = addToggle(to: menu, "Screen-aware", #selector(toggleScreenContext(_:)))
         soundsItem = addToggle(to: menu, "Sounds", #selector(toggleSounds(_:)))
-        learningItem = addToggle(to: menu, "Learns from typing", #selector(toggleLearning(_:)))
+        learningItem = addToggle(
+            to: menu,
+            "Learn from my writing (syncs to iCloud)",
+            #selector(toggleLearning(_:))
+        )
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
@@ -133,10 +137,21 @@ final class StatusMenuHost: NSObject {
     }
 
     @objc private func showData(_ sender: Any?) {
-        let folder = FileManager.default
+        let fileManager = FileManager.default
+        let localFolder = fileManager
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Tilde", isDirectory: true)
-        NSWorkspace.shared.activateFileViewerSelecting([folder])
+        let iCloudFolder = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage", isDirectory: true)
+        let existingFolders = [localFolder, iCloudFolder].filter {
+            fileManager.fileExists(atPath: $0.path)
+        }
+        if existingFolders.isEmpty {
+            try? fileManager.createDirectory(at: localFolder, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(localFolder)
+        } else {
+            existingFolders.forEach { NSWorkspace.shared.open($0) }
+        }
     }
 
     @objc private func quit(_ sender: Any?) {

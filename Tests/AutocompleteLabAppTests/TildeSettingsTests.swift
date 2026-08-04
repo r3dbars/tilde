@@ -14,13 +14,16 @@ struct TildeSettingsTests {
         return (TildeSettings(keyboard: keyboard, app: app), keyboard, app)
     }
 
-    @Test("Fresh keyboard settings match the keyboard's registered defaults")
-    func absentKeysDefaultOn() {
+    @Test("Fresh keyboard settings keep raw learning opt-in")
+    func absentKeysUsePrivacySafeDefaults() throws {
         let (settings, _, _) = makeSettings()
         #expect(settings.suggestionsEnabled)
         #expect(settings.soundsEnabled)
-        #expect(settings.learningEnabled)
+        #expect(!settings.learningEnabled)
         #expect(settings.pausedUntil == nil)
+
+        let sources = try Self.keyboardSourceText()
+        #expect(sources.contains("\"GhostUsageCaptureEnabled\": false"))
     }
 
     @Test("Keyboard settings stay in the keyboard defaults domain")
