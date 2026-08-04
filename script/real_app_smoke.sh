@@ -198,6 +198,9 @@ line_count() {
   fi
 }
 
+# Waits for the brain's privacy-safe suggestion-served event: proof that a
+# real keystroke travelled keyboard → socket → engine → back. Display inside
+# the host app is IMKit's side of the contract and not observable here.
 wait_for_suggestion() {
   local start_line="$1"
   local bundle_identifier="$2"
@@ -206,13 +209,13 @@ wait_for_suggestion() {
   while ((SECONDS < deadline)); do
     if [[ -f "$LOG_PATH" ]] &&
       tail -n "+$((start_line + 1))" "$LOG_PATH" |
-        grep -Eq "suggestion-presented .*app=${bundle_identifier}([[:space:]]|$)"; then
+        grep -Eq "suggestion-served .*app=${bundle_identifier}([[:space:]]|$)"; then
       return 0
     fi
     sleep 0.25
   done
 
-  fail "timed out waiting for a privacy-safe suggestion-presented event for $bundle_identifier"
+  fail "timed out waiting for a privacy-safe suggestion-served event for $bundle_identifier"
 }
 
 type_disposable_text() {

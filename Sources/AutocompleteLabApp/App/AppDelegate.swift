@@ -66,13 +66,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         llamaServerHost.start()
         registerAsLoginItemIfNeeded()
         ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
+        // Any launch means the brain is wanted again: lift the keyboard
+        // watchdog's stay-quiet flag from a previous deliberate quit.
+        UserDefaults(suiteName: Self.keyboardDefaultsSuite)?
+            .removeObject(forKey: "GhostBrainQuietQuit")
         DiagnosticsLog.shared.record("launch", metadata: [:])
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Deaths must leave a trace: an unexplained brainless morning
+        // (2026-08-04) had no shutdown line to tell crash from quit. Flush,
+        // or the exit races the log queue and the line never lands.
+        DiagnosticsLog.shared.record("shutdown", metadata: [:])
+        DiagnosticsLog.shared.flush()
         llamaServerHost.stop()
         ghostBrainServerHost.stop()
     }
+
+    /// The keyboard's own defaults domain — the one channel the app and the
+    /// IME process share (TrainingSampleLog reads its capture flag the same way).
+    static let keyboardDefaultsSuite = "bar.r3d.inputmethod.InlineGhost"
 
     /// One line for the status menu: which engine is answering. Honest by
     /// rule — the app may fail, but never silently. The personal/generic
@@ -90,8 +103,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The keyboard is only as smart as this app is alive: register as a login
     /// item once. The user keeps control in System Settings › Login Items.
+    /// Status is logged every launch and failures are logged, never swallowed —
+    /// a silently-failed registration is how mornings start brainless.
     private func registerAsLoginItemIfNeeded() {
-        guard SMAppService.mainApp.status == .notRegistered else { return }
-        try? SMAppService.mainApp.register()
+        let service = SMAppService.mainApp
+        if service.status == .notRegistered {
+            do {
+                try service.register()
+            } catch {
+                DiagnosticsLog.shared.record(
+                    "login-item-register-failed",
+                    metadata: ["reason": error.localizedDescription]
+                )
+            }
+        }
+        DiagnosticsLog.shared.record(
+            "login-item-status",
+            metadata: ["status": Self.describe(service.status)]
+        )
+    }
+
+    private static func describe(_ status: SMAppService.Status) -> String {
+        switch status {
+        case .notRegistered: return "notRegistered"
+        case .enabled: return "enabled"
+        case .requiresApproval: return "requiresApproval"
+        case .notFound: return "notFound"
+        @unknown default: return "unknown"
+        }
     }
 }

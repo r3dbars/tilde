@@ -4,7 +4,7 @@ import Foundation
 /// Serves completions to the InlineGhostIME input method over a local unix socket.
 ///
 /// The IME stays a thin, crash-proof pipe; this host answers its requests from the
-/// app's already-warm MLX engine. Wire protocol: one newline-delimited JSON request
+/// app's already-warm llama/Gemma engine. Wire protocol: one newline-delimited JSON request
 /// {"v":1,"context":"...","app":?,"field":?,"page":?} → a STREAM of newline-delimited JSON
 /// responses: zero or more {"suggestion":"...","partial":true} as the model
 /// generates, then a final {"suggestion":"..."} and close. Partials put the first
@@ -159,7 +159,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     "scaffold_chat": env["TILDE_SCAFFOLD_CHAT_FILE"] ?? "builtin",
                     "token_budget": env["TILDE_TOKEN_BUDGET"] ?? "default",
                     "temperature": env["TILDE_TEMPERATURE"] ?? "0",
-                    "model": env["TILDE_MODEL"] ?? "auto",
                     "model_path": env["TILDE_MODEL_PATH"] ?? "default",
                     "confidence": env["TILDE_CONFIDENCE"] ?? "0",
                     "max_context_chars": env["TILDE_MAX_CONTEXT_CHARS"] ?? "3000",
@@ -209,6 +208,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // "page" reports whether screen context was attached — observability
             // for the capture pipeline (content itself never leaves the process).
             send(["suggestion": final?.visibleText ?? "", "page": pageContext != nil])
+            // The end-to-end proof lane (script/real_app_smoke.sh) waits for
+            // this event: a real keystroke travelled keyboard → socket →
+            // engine → back. "Served", deliberately not "presented" — the IME
+            // may still drop a stale answer, and display isn't observable from
+            // this process. Bundle id and shape only — never content.
+            if let visible = final?.visibleText, !visible.isEmpty {
+                DiagnosticsLog.shared.record("suggestion-served", metadata: [
+                    "app": payload.app ?? "unknown",
+                    "chars": String(visible.count)
+                ])
+            }
         }
     }
 

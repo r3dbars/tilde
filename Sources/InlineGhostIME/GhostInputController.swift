@@ -694,7 +694,30 @@ final class GhostInputController: IMKInputController {
         inlineGhostVisible = true
     }
 
-    // MARK: - Model layer: Tilde MLX brain first, Apple on-device model fallback
+    // MARK: - Model layer: Tilde brain first, Apple on-device model fallback
+
+    /// The keyboard is the one process macOS keeps alive — so it is also the
+    /// watchdog. When the brain socket stops answering (the app crashed, was
+    /// killed by a rebuild, or never started after boot), relaunch the menu-bar
+    /// app so typing never stays on fallback ghosts for more than a minute.
+    /// A deliberate "Quit Tilde" from the app's menu sets GhostBrainQuietQuit
+    /// in this keyboard's defaults domain; the watchdog respects it and stays
+    /// quiet until the app is launched on purpose again (which clears it).
+    private static var lastBrainSummon = Date.distantPast
+    private static let brainSummonInterval: TimeInterval = 60
+    private static let brainAppBundleID = "bar.r3d.tilde"
+
+    private static func summonBrainIfNeeded() {
+        DispatchQueue.main.async {
+            guard Date().timeIntervalSince(lastBrainSummon) >= brainSummonInterval else { return }
+            guard !UserDefaults.standard.bool(forKey: "GhostBrainQuietQuit") else { return }
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: brainAppBundleID) else { return }
+            lastBrainSummon = Date()
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false // never steal focus from typing
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        }
+    }
 
     private func requestModelGhost(_ client: IMKTextInput, context: String) {
         // Mid-word AND word-boundary contexts both go to the brain; the server picks
@@ -711,10 +734,10 @@ final class GhostInputController: IMKInputController {
         let fieldIdentity = client.uniqueClientIdentifierString()
         modelTask?.cancel()
         modelTask = Task { [weak self] in
-            // 1) Tilde's own MLX model, served by the menu-bar app over a local
+            // 1) Tilde's own model, served by the menu-bar app over a local
             //    socket. Streaming: partials show the first words near time-to-
             //    first-token; the stale-guard in present() drops late arrivals.
-            let mlx = await Task.detached(priority: .userInitiated) {
+            let brain = await Task.detached(priority: .userInitiated) {
                 GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity) { partial in
                     let text = Self.cleanedModelOutput(partial)
                     guard !text.isEmpty else { return }
@@ -722,18 +745,20 @@ final class GhostInputController: IMKInputController {
                 }
             }.value
             if Task.isCancelled { return }
-            if let mlx {
+            if let brain {
                 // The brain answered. Empty = its confidence gate chose silence —
                 // RESPECT it. Falling back to another model here was the bug that
                 // let unfiltered Apple-model refusals ("as an AI chatbot…") reach
                 // the screen whenever the brain stayed quiet.
-                let text = Self.cleanedModelOutput(mlx)
+                let text = Self.cleanedModelOutput(brain)
                 if !text.isEmpty {
                     await self?.present(text, ifStill: gen)
                 }
                 return
             }
-            // 2) Apple's on-device model — ONLY when the brain is unreachable.
+            // 2) Brain unreachable: summon it back (self-healing), and bridge
+            //    the gap with Apple's on-device model — ONLY in this case.
+            Self.summonBrainIfNeeded()
             await self?.appleModelGhost(tail: tail, gen: gen)
         }
     }

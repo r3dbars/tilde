@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Build a self-contained, notarized Tilde.app for installation on any
-# Apple Silicon Mac running macOS 26:
+# Apple Silicon Mac running macOS 26. The app carries everything it needs:
 #   - Tilde.app (menu-bar brain) with
-#       Contents/Helpers/llama-server        (static binary, no dylib deps)
-#       Contents/Library/InlineGhostIME.app  (the keyboard; auto-installed at launch)
-#   - The Gemma GGUF downloads on first launch (hardware-tiered E2B/E4B).
+#       Contents/Helpers/llama-server         (static binary, no dylib deps)
+#       Contents/Library/InlineGhostIME.app   (the keyboard; auto-installed at launch)
+#       Contents/Resources/bundled-model.gguf (the Gemma model; nothing downloads at runtime)
 #
-# Usage: LLAMA_SERVER_BIN=/path/to/static/llama-server ./script/package_app.sh
+# Usage: LLAMA_SERVER_BIN=/path/to/static/llama-server \
+#        BUNDLED_MODEL=/path/to/gemma-2-2b.Q4_K_M.gguf ./script/package_app.sh
 #
 # LLAMA_SERVER_BIN must be a STATIC build (no non-system dylibs):
 #   cmake -B build -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF \
@@ -37,13 +38,12 @@ cp "$LLAMA_SERVER_BIN" "$APP/Contents/Helpers/llama-server"
 rm -rf "$APP/Contents/Library/InlineGhostIME.app"
 cp -R dist/InlineGhostIME.app "$APP/Contents/Library/InlineGhostIME.app"
 
-# Optional bundled model: ship a GGUF inside the app so it runs offline with no
-# first-run download (LlamaServerProcessHost prefers Contents/Resources/bundled-model.gguf).
-if [ -n "${BUNDLED_MODEL:-}" ]; then
-    echo "==> embedding bundled model ($(du -h "$BUNDLED_MODEL" | cut -f1))"
-    mkdir -p "$APP/Contents/Resources"
-    cp "$BUNDLED_MODEL" "$APP/Contents/Resources/bundled-model.gguf"
-fi
+# The model ships inside the app — required, not optional. There is no
+# runtime download path anymore (LlamaServerProcessHost.resolveModelPath).
+BUNDLED_MODEL="${BUNDLED_MODEL:?set BUNDLED_MODEL to the GGUF to ship inside the app}"
+echo "==> embedding bundled model ($(du -h "$BUNDLED_MODEL" | cut -f1))"
+mkdir -p "$APP/Contents/Resources"
+cp "$BUNDLED_MODEL" "$APP/Contents/Resources/bundled-model.gguf"
 
 echo "==> signing (inside out)"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP/Contents/Helpers/llama-server"
