@@ -79,6 +79,7 @@ final class StatusMenuHost: NSObject {
             path.stroke()
             return true
         }
+        image.accessibilityDescription = "Tilde"
         image.isTemplate = true
         return image
     }
