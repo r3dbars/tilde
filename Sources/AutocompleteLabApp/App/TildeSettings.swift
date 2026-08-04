@@ -3,8 +3,8 @@ import Foundation
 /// Every menu setting, the process that owns it, and its default.
 ///
 /// The keyboard is a separate process, so its settings must be written to the
-/// InlineGhost defaults suite. Absent keyboard values mean the keyboard's
-/// registered defaults, which are on for a fresh install.
+/// InlineGhost defaults suite. Suggestions and sounds start on; learning stores
+/// writing context and therefore stays off until the user explicitly enables it.
 struct TildeSettings {
     enum KeyboardKey: String, CaseIterable {
         case suggestions = "GhostSuggestionsEnabled"
@@ -64,7 +64,7 @@ struct TildeSettings {
     }
 
     private func flag(_ key: KeyboardKey) -> Bool {
-        keyboard.object(forKey: key.rawValue) as? Bool ?? true
+        keyboard.object(forKey: key.rawValue) as? Bool ?? (key != .learning)
     }
 
     var screenAware: Bool {
