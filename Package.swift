@@ -28,6 +28,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "InlineGhostIME",
+            dependencies: ["AutocompleteLabCore"],
             exclude: ["Info.plist", "README.md"],
             // IMKit's un-annotated types fight Swift 6 strict concurrency; the IME
             // stays in Swift 5 mode until the controller is modernized.
