@@ -72,6 +72,29 @@ struct TildeSettingsTests {
         }
     }
 
+    @Test("Tab inserts before optional sound and stats work")
+    func tabInsertionStaysFirst() throws {
+        let source = try Self.keyboardSourceText()
+        for functionName in ["acceptWholeGhost", "acceptOneWord"] {
+            let function = try Self.functionBody(named: functionName, in: source)
+            let insertion = try #require(function.range(of: "client.insertText"))
+            let sound = try #require(function.range(of: "playAcceptSound"))
+            let stats = try #require(function.range(of: "recordAccept"))
+            #expect(insertion.lowerBound < sound.lowerBound)
+            #expect(insertion.lowerBound < stats.lowerBound)
+        }
+    }
+
+    @Test("Tab defers fresh prediction instead of running it inline")
+    func tabDefersFreshPrediction() throws {
+        let source = try Self.keyboardSourceText()
+        for functionName in ["acceptWholeGhost", "acceptOneWord"] {
+            let function = try Self.functionBody(named: functionName, in: source)
+            #expect(function.contains("scheduleGhostAfterPause(client)"))
+            #expect(!function.contains("updateGhost(client)"))
+        }
+    }
+
     private static func keyboardSourceText() throws -> String {
         var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         while directory.pathComponents.count > 1 {
@@ -89,7 +112,19 @@ struct TildeSettingsTests {
         throw TestFailure.keyboardSourcesNotFound
     }
 
+    private static func functionBody(named name: String, in source: String) throws -> Substring {
+        guard let start = source.range(of: "private func \(name)")?.lowerBound else {
+            throw TestFailure.keyboardFunctionNotFound(name)
+        }
+        let tail = source[start...]
+        guard let nextFunction = tail.dropFirst().range(of: "\n    private func ")?.lowerBound else {
+            return tail
+        }
+        return tail[..<nextFunction]
+    }
+
     enum TestFailure: Error {
         case keyboardSourcesNotFound
+        case keyboardFunctionNotFound(String)
     }
 }
