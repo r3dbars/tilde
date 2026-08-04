@@ -109,7 +109,55 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     // MARK: - Internals
 
+    /// A previous app instance's llama child can outlive it (kill -9, hard
+    /// crash) and keep our port — the new child then fails to bind in a loop
+    /// while the ORPHAN answers /health, which reads as "healthy then exit"
+    /// and exhausts the restart budget (2026-08-04: root cause of the
+    /// overnight engine death, reproduced live twice). Reap any llama-server
+    /// listening on our port before launching ours. Anything else on the port
+    /// is a loud unavailability, never a kill target.
+    /// Returns true when the port is ours to bind.
+    private static func reapOrphanServer() -> Bool {
+        let listeners = shell("/usr/sbin/lsof", ["-ti", "tcp:\(port)", "-sTCP:LISTEN"])
+            .split(separator: "\n")
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+        guard !listeners.isEmpty else { return true }
+        var portIsOurs = true
+        for pid in listeners {
+            let command = shell("/bin/ps", ["-o", "comm=", "-p", String(pid)])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if command.hasSuffix("llama-server") {
+                kill(pid, SIGTERM)
+                DiagnosticsLog.shared.record("llama-orphan-reaped", metadata: ["pid": String(pid)])
+            } else {
+                portIsOurs = false
+                DiagnosticsLog.shared.record(
+                    "llama-server-unavailable",
+                    metadata: ["reason": "port-held-by-foreign-process"]
+                )
+            }
+        }
+        // Give the kernel a beat to release the socket; if the orphan lingers,
+        // the bind fails and the restart budget retries in 3s anyway.
+        if portIsOurs { usleep(300_000) }
+        return portIsOurs
+    }
+
+    private static func shell(_ path: String, _ arguments: [String]) -> String {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = arguments
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
     private func launch(binary: String, modelPath: String) {
+        guard Self.reapOrphanServer() else { return }
         let child = Process()
         child.executableURL = URL(fileURLWithPath: binary)
         child.arguments = [
