@@ -6,6 +6,8 @@ CHECK="$ROOT_DIR/script/check_complexity_budget.sh"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tilde-complexity-test.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 unset PROOF_STRUCTURAL_CHANGE PROOF_DIFF_BASE PROOF_STRUCTURAL_LOC_EXCEPTION
+# Git hooks export repository-local variables; fixture repos must not inherit them.
+unset $(git rev-parse --local-env-vars)
 
 fail() { echo "complexity budget self-test: $*" >&2; exit 1; }
 require() { grep -Fq "$1" <<<"$2" || fail "missing '$1'"; }
