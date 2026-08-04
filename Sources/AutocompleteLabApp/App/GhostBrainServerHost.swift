@@ -159,7 +159,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     "scaffold_chat": env["TILDE_SCAFFOLD_CHAT_FILE"] ?? "builtin",
                     "token_budget": env["TILDE_TOKEN_BUDGET"] ?? "default",
                     "temperature": env["TILDE_TEMPERATURE"] ?? "0",
-                    "model": env["TILDE_MODEL"] ?? "auto",
                     "model_path": env["TILDE_MODEL_PATH"] ?? "default",
                     "confidence": env["TILDE_CONFIDENCE"] ?? "0",
                     "max_context_chars": env["TILDE_MAX_CONTEXT_CHARS"] ?? "3000",

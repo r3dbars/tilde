@@ -82,8 +82,8 @@ VERSIONS = [
     ("register-prose", {}, "--context prior --force-app com.apple.TextEdit", {}),
     ("register-email", {}, "--context prior --force-app com.apple.mail", {}),
 
-    # 7) smaller model (the M1 MacBook question)
-    ("model-E2B", {"TILDE_MODEL": "E2B"}, BASE_FLAGS, {"model": "E2B"}),
+    # (the old "model-E2B" smaller-model row is gone with the tier system —
+    # pin any alternative GGUF via TILDE_MODEL_PATH instead)
 
     ("baseline-control-B", {}, BASE_FLAGS, {}),
 ]
@@ -126,16 +126,13 @@ if os.environ.get("SWEEP_SET") == "retune":
     VERSIONS = RETUNE_VERSIONS
 
 # Model bakeoff (SWEEP_SET=models): one version per GGUF in the models dir, each
-# pointed at via TILDE_MODEL_PATH. Built dynamically so it picks up whatever
-# the downloader produced. The current default (E4B) is the reference row.
+# pointed at via TILDE_MODEL_PATH. The shipping default (no override) is the
+# reference row; any legacy model joins by dropping its GGUF in the dir.
 if os.environ.get("SWEEP_SET") == "models":
     import glob
     MODEL_DIR = os.path.expanduser("~/.cache/tilde-eval/models")
-    # Both Gemma 4 tiers as references (current shipping E4B + the low-RAM E2B),
-    # scored on the same diverse quiz as every bakeoff candidate.
     VERSIONS = [
-        ("ref-gemma4-E4B", {}, BASE_FLAGS, {}),
-        ("ref-gemma4-E2B", {"TILDE_MODEL": "E2B"}, BASE_FLAGS, {"model": "E2B"}),
+        ("ref-shipping-default", {}, BASE_FLAGS, {}),
     ]
     for path in sorted(glob.glob(os.path.join(MODEL_DIR, "*.gguf"))):
         stem = os.path.basename(path)[:-5]
@@ -217,16 +214,6 @@ def probe_config():
         return {}
 
 
-def running_model_gguf():
-    out = sh("pgrep -fl 'llama-server.*17872'")
-    line = out.stdout
-    if "E2B" in line:
-        return "E2B"
-    if "E4B" in line:
-        return "E4B"
-    return "?"
-
-
 def launch(env_overrides):
     env = dict(os.environ)
     env.update(env_overrides)
@@ -260,12 +247,6 @@ def run_version(label, env_overrides, flags, expect):
         got = str(cfg.get(field, ""))
         if want not in got:
             mismatches.append("%s: want ~%r got %r" % (field, want, got))
-    # Model is verified independently against the actual llama-server cmdline.
-    if env_overrides.get("TILDE_MODEL"):
-        want_model = env_overrides["TILDE_MODEL"]
-        got_model = running_model_gguf()
-        if want_model != got_model:
-            mismatches.append("model(gguf): want %s got %s" % (want_model, got_model))
     # For an explicit GGUF path, the config echo already reports model_path and
     # kill_app guarantees the port was free before launch — so verify via the
     # echo (below) rather than a flaky pgrep of the process cmdline.
