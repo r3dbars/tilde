@@ -36,6 +36,13 @@ final class DiagnosticsLog: @unchecked Sendable {
         }
     }
 
+    /// Blocks until every already-recorded event has reached disk. For
+    /// shutdown paths only: an exit racing the async queue would drop the
+    /// final events — exactly the crash-vs-quit ambiguity they exist to solve.
+    func flush() {
+        queue.sync {}
+    }
+
     func recentLines(limit: Int) -> [String] {
         queue.sync { [logURL] in
             guard limit > 0,
