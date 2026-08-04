@@ -8,9 +8,9 @@
 ## Context
 
 Tilde needs a simple business model that pays for deeper personalization
-without making the basic writing experience worse. The Tilde identity is being
-introduced in [PR #326](https://github.com/r3dbars/steadytype/pull/326); this
-record does not rename or change the app.
+without making the basic writing experience worse. The Tilde identity was
+introduced in [PR #329](https://github.com/r3dbars/tilde/pull/329); this record
+does not rename or change the app.
 
 ## Decision
 
