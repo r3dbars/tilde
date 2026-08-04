@@ -70,6 +70,11 @@ final class StatusMenuHost: NSObject {
     }
 
     @objc private func quit(_ sender: Any?) {
+        // Deliberate quit means STAY quit: tell the keyboard's watchdog not to
+        // summon the brain back. The flag lives in the IME's defaults domain
+        // and is cleared by the next on-purpose app launch.
+        UserDefaults(suiteName: AppDelegate.keyboardDefaultsSuite)?
+            .set(true, forKey: "GhostBrainQuietQuit")
         NSApp.terminate(nil)
     }
 }

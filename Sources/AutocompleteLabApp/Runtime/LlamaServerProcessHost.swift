@@ -1,13 +1,14 @@
 import AutocompleteLabCore
 import Foundation
 
-/// Manages a local llama.cpp server as the app's child process — the reliable
-/// engine for models MLX can't serve well (Gemma 4, per docs/ime-tuning-log.md).
+/// Manages a local llama.cpp server as the app's child process — the app's
+/// only model engine (llama-only, owner decision 2026-07-22).
 ///
 /// Lifecycle: start() launches llama-server bound to localhost, polls /health
-/// until ready, relaunches on unexpected exit (bounded), and terminates the
-/// child with the app. When the binary or model is missing the host simply
-/// stays unhealthy and callers fall back to the MLX engine.
+/// until ready, relaunches on unexpected exit (bounded by LlamaRestartBudget),
+/// and terminates the child with the app. When the binary or model is missing
+/// the host simply stays unhealthy and the keyboard falls back to its
+/// dictionary layer and Apple's on-device model.
 final class LlamaServerProcessHost: @unchecked Sendable {
 
     static let port = 17872
@@ -73,8 +74,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var process: Process?
     private var healthy = false
     private var stopped = false
-    private var restartCount = 0
-    private let maximumRestarts = 3
+    private var launchedAt: Date?
+    private var restartBudget = LlamaRestartBudget()
 
     func start() {
         guard let binary = Self.binaryCandidates.first(where: {
@@ -215,17 +216,21 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         }
         lock.lock()
         process = child
+        launchedAt = Date()
+        let restarts = restartBudget.consecutiveFailures
         lock.unlock()
-        DiagnosticsLog.shared.record("llama-server-start", metadata: ["restart": String(restartCount)])
+        DiagnosticsLog.shared.record("llama-server-start", metadata: ["restart": String(restarts)])
         pollHealth()
     }
 
     private func handleExit(binary: String, modelPath: String) {
         lock.lock()
+        let wasHealthy = healthy
+        let uptime = launchedAt.map { Date().timeIntervalSince($0) } ?? 0
         healthy = false
         process = nil
-        let shouldRestart = !stopped && restartCount < maximumRestarts
-        if shouldRestart { restartCount += 1 }
+        launchedAt = nil
+        let shouldRestart = !stopped && restartBudget.shouldRestart(wasHealthy: wasHealthy, uptime: uptime)
         lock.unlock()
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
         guard shouldRestart else { return }

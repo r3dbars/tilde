@@ -259,10 +259,11 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
     }
 }
 
-/// Routes phrase continuations to the reliability engine (llama.cpp/Gemma) when
-/// it is healthy, everything else — and any llama failure — to the MLX engine.
-/// A llama SILENCE (nil suggestion) is respected, not retried on MLX: both
-/// engines share the same output discipline, and silence means low confidence.
+/// Routes phrase continuations to the llama.cpp/Gemma engine when it is
+/// healthy, everything else — and any llama failure — to the fallback engine
+/// (UnavailableCompletionEngine; llama-only, owner decision 2026-07-22).
+/// A llama SILENCE (nil suggestion) is respected, never retried on the
+/// fallback: silence means low confidence.
 final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
 
     private let phraseEngine: any CompletionEngine
@@ -302,7 +303,7 @@ final class ModeRoutedCompletionEngine: CompletionEngine, @unchecked Sendable {
                 // output discipline).
                 return try await phraseEngine.suggestion(for: request, onPartialSuggestion: onPartialSuggestion)
             } catch {
-                // Engine/transport failure only: fall back to MLX.
+                // Engine/transport failure only: fall through to the fallback.
             }
         }
         return try await fallbackEngine.suggestion(for: request, onPartialSuggestion: onPartialSuggestion)
