@@ -306,17 +306,16 @@ struct CompletionOutputCleanerTests {
         )?.visibleText == " enough")
     }
 
-    @Test("Single-word completions pass the cleaner (twitch filter retired)")
-    func singleWordPhraseCompletionsPass() {
-        // lowValueSingleWordPhrase retired 2026-07-28: it accounted for 72%
-        // of all suggestion kills while live behavior accepts single words at
-        // the highest rate of any length. Value-policing moved upstream to
-        // the confidence floor and rejected-ghost bench. If live twitch noise
-        // returns, reinstate a NARROW version with fresh evidence.
+    @Test("Suppresses one word twitch completions")
+    func suppressesLowValueOneWordPhraseCompletions() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
-        #expect(cleaner.clean("it", after: "I think") != nil)
-        #expect(cleaner.clean("the", after: "This is") != nil)
+        #expect(cleaner.clean("it", after: "I think") == nil)
+        #expect(cleaner.clean("I", after: "Today") == nil)
+        #expect(cleaner.clean("we.", after: "I think") == nil)
+        #expect(cleaner.clean("you", after: "Can") == nil)
+        #expect(cleaner.clean("is.", after: "The answer") == nil)
+        #expect(cleaner.clean("the", after: "This is") == nil)
         #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
     }
 

@@ -1,4 +1,4 @@
-# InlineGhostIME — SteadyType's input method
+# InlineGhostIME — Tilde's input method
 
 Graduated from `spike/` on 2026-07-22 after the owner declared this the product
 direction. Built as the `InlineGhostIME` SwiftPM executable target; assembled,
@@ -9,7 +9,7 @@ A minimal macOS input method that renders inline autocomplete suggestions
 no caret geometry, no synthetic keystrokes. Validated end-to-end on macOS 26 in
 TextEdit, Notes, Obsidian (Electron), Chrome, and Atlas.
 
-The owner declared this the new architecture direction for SteadyType. The
+The owner declared this the new architecture direction for Tilde. The
 AX + overlay stack is now legacy pending this path maturing.
 
 ## What it does
@@ -63,7 +63,7 @@ Then: System Settings → Keyboard → Input Sources → Edit → `+` → search
 
 ## Next (engineering, not research)
 
-- Swap Apple's model for SteadyType's MLX model — app hosts the engine, IME is
+- Swap Apple's model for Tilde's MLX model — app hosts the engine, IME is
   a thin local-IPC client with fallbacks.
 - Papercuts: caret clicks, undo, autocorrect coexistence, dead keys/accents,
   key repeat, Tab's day job in forms/editors, IME crash recovery.

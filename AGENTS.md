@@ -1,4 +1,4 @@
-# SteadyType Agent Guide
+# Tilde Agent Guide
 
 Open-source macOS autocomplete app; the owner daily-drives it. The bar for
 every change: does it make the app feel faster, more accurate, or simpler? If

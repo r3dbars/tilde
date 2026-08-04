@@ -1,53 +1,24 @@
 import AutocompleteLabCore
 import Foundation
 
-/// Manages a local llama.cpp server as the app's child process — the reliable
-/// engine for models MLX can't serve well (Gemma 4, per docs/ime-tuning-log.md).
+/// Manages a local llama.cpp server as the app's child process — the app's
+/// only model engine (llama-only, owner decision 2026-07-22).
 ///
 /// Lifecycle: start() launches llama-server bound to localhost, polls /health
-/// until ready, relaunches on unexpected exit (bounded), and terminates the
-/// child with the app. When the binary or model is missing the host simply
-/// stays unhealthy and callers fall back to the MLX engine.
+/// until ready, relaunches on unexpected exit (bounded by LlamaRestartBudget),
+/// and terminates the child with the app. When the binary or model is missing
+/// the host simply stays unhealthy and the keyboard falls back to its
+/// dictionary layer and Apple's on-device model.
 final class LlamaServerProcessHost: @unchecked Sendable {
 
     static let port = 17872
 
-    /// Hardware-tiered model choice: machines under 24GB (base M1/M2 class) get
-    /// the ~3GB E2B; everything else gets the E4B quality tier. Both are
-    /// Google's official QAT GGUFs at pinned immutable revisions.
-    struct ModelTier {
-        let fileName: String
-        let downloadURL: URL
-        let expectedMinimumBytes: Int64
-
-        // Default model, one for every Mac (base beats instruct for our raw
-        // recipe; 1.6GB fits any machine — see docs/quiz-lessons.md bakeoff).
-        static let gemma2_2b = ModelTier(
-            fileName: "gemma-2-2b.Q4_K_M.gguf",
-            downloadURL: URL(string: "https://huggingface.co/RichardErkhov/google_-_gemma-2-2b-gguf/resolve/main/gemma-2-2b.Q4_K_M.gguf")!,
-            expectedMinimumBytes: 1_500_000_000
-        )
-        static let e2b = ModelTier(
-            fileName: "gemma-4-E2B_q4_0-it.gguf",
-            downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf")!,
-            expectedMinimumBytes: 2_500_000_000
-        )
-        static let e4b = ModelTier(
-            fileName: "gemma-4-E4B_q4_0-it.gguf",
-            downloadURL: URL(string: "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/4b4a2c1d584be7264f87aac328a1bc739ce81b6c/gemma-4-E4B_q4_0-it.gguf")!,
-            expectedMinimumBytes: 4_000_000_000
-        )
-
-        static var current: ModelTier {
-            // Override: STEADYTYPE_MODEL=E2B|E4B pins an old Gemma-4 tier (bakeoff
-            // A/B). Default is the single Gemma 2 2B base model for all hardware.
-            switch ProcessInfo.processInfo.environment["STEADYTYPE_MODEL"]?.uppercased() {
-            case "E2B": return e2b
-            case "E4B": return e4b
-            default: return gemma2_2b
-            }
-        }
-    }
+    /// THE model: Gemma 2 2B base, Q4_K_M (~1.6GB) — settled after the
+    /// 14-model bakeoff (docs/quiz-lessons.md; base beats instruct for the raw
+    /// recipe, fits any Apple Silicon Mac). One model, no hardware tiers, no
+    /// runtime download: the GGUF ships inside the app.
+    static let modelFileName = "gemma-2-2b.Q4_K_M.gguf"
+    static let modelMinimumBytes: Int64 = 1_500_000_000
 
     /// Bundled binary first (self-contained installs), brew fallbacks for dev.
     static var binaryCandidates: [String] {
@@ -73,8 +44,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var process: Process?
     private var healthy = false
     private var stopped = false
-    private var restartCount = 0
-    private let maximumRestarts = 3
+    private var launchedAt: Date?
+    private var restartBudget = LlamaRestartBudget()
 
     func start() {
         guard let binary = Self.binaryCandidates.first(where: {
@@ -83,61 +54,40 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "binary-missing"])
             return
         }
-        // Bakeoff override: STEADYTYPE_MODEL_PATH points llama-server at an
-        // arbitrary local GGUF, bypassing tiering/download entirely. The sweep
-        // driver pre-downloads each candidate and sets this per version.
+        guard let model = Self.resolveModelPath() else {
+            // Fail loudly and stay unhealthy — nothing downloads at runtime.
+            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "model-missing"])
+            return
+        }
+        launch(binary: binary, modelPath: model)
+    }
+
+    /// The model is part of the app. Resolution order:
+    ///   1. MODEL_PATH override — research: point at any local GGUF
+    ///   2. the GGUF bundled inside the app — every distributed build
+    ///   3. the dev copy in Application Support/Tilde/Models/GGUF
+    /// Deleting the tier table, first-run download, and HF-cache adoption
+    /// (2026-08-04) also removed the app's only network egress.
+    static func resolveModelPath() -> String? {
         if let explicit = RuntimeSetting.string("MODEL_PATH"),
            FileManager.default.isReadableFile(atPath: explicit) {
-            launch(binary: binary, modelPath: explicit)
-            return
+            return explicit
         }
-        // Bundled model: a self-contained distribution ships its GGUF inside the
-        // app (Contents/Resources/bundled-model.gguf) and uses it verbatim — no
-        // hardware tiering, no first-run download. Absent in dev builds, which
-        // fall through to the tiered download below.
-        let bundledModel = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
-        if FileManager.default.isReadableFile(atPath: bundledModel) {
-            launch(binary: binary, modelPath: bundledModel)
-            return
+        let bundled = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
+        if isUsableModelFile(at: URL(fileURLWithPath: bundled), minimumBytes: modelMinimumBytes) {
+            return bundled
         }
-        let tier = ModelTier.current
-        let modelURL = Self.modelsDirectory.appendingPathComponent(tier.fileName)
-        if !Self.isUsableModelFile(at: modelURL, minimumBytes: tier.expectedMinimumBytes) {
-            Self.adoptHuggingFaceCacheIfPresent(tier: tier, destination: modelURL)
+        let dev = modelsDirectory.appendingPathComponent(modelFileName)
+        if isUsableModelFile(at: dev, minimumBytes: modelMinimumBytes) {
+            return dev.path
         }
-        if Self.isUsableModelFile(at: modelURL, minimumBytes: tier.expectedMinimumBytes) {
-            launch(binary: binary, modelPath: modelURL.path)
-            return
-        }
-        downloadModel(tier: tier, to: modelURL) { [weak self] success in
-            guard success, let self, !self.isStopped else { return }
-            self.launch(binary: binary, modelPath: modelURL.path)
-        }
+        return nil
     }
 
     static var modelsDirectory: URL {
         (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory()))
-            .appendingPathComponent("SteadyType/Models/GGUF", isDirectory: true)
-    }
-
-    /// Dev machines that used `llama-server -hf` already hold the GGUF in the
-    /// Hugging Face cache — hardlink it instead of re-downloading gigabytes.
-    private static func adoptHuggingFaceCacheIfPresent(tier: ModelTier, destination: URL) {
-        let repoDirectory = tier.downloadURL.pathComponents.dropFirst().prefix(2).joined(separator: "--")
-        let hubDirectory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cache/huggingface/hub/models--\(repoDirectory)/snapshots", isDirectory: true)
-        guard let snapshots = try? FileManager.default.contentsOfDirectory(atPath: hubDirectory.path) else { return }
-        for snapshot in snapshots {
-            let candidate = hubDirectory.appendingPathComponent(snapshot).appendingPathComponent(tier.fileName)
-            guard isUsableModelFile(at: candidate.resolvingSymlinksInPath(), minimumBytes: tier.expectedMinimumBytes) else { continue }
-            try? FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
-            try? FileManager.default.linkItem(at: candidate.resolvingSymlinksInPath(), to: destination)
-            if isUsableModelFile(at: destination, minimumBytes: tier.expectedMinimumBytes) {
-                DiagnosticsLog.shared.record("llama-model-adopted-hf-cache", metadata: [:])
-                return
-            }
-        }
+            .appendingPathComponent("Tilde/Models/GGUF", isDirectory: true)
     }
 
     private static func isUsableModelFile(at url: URL, minimumBytes: Int64) -> Bool {
@@ -145,34 +95,6 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             return false
         }
         return size >= minimumBytes
-    }
-
-    /// First-run model download (2.5–4.5GB). Runs in the background; the engine
-    /// simply stays unhealthy (MLX/fallbacks cover) until the file is complete.
-    private func downloadModel(tier: ModelTier, to destination: URL, completion: @escaping @Sendable (Bool) -> Void) {
-        DiagnosticsLog.shared.record("llama-model-download-start", metadata: ["file": tier.fileName])
-        try? FileManager.default.createDirectory(at: Self.modelsDirectory, withIntermediateDirectories: true)
-        let task = URLSession.shared.downloadTask(with: tier.downloadURL) { temporary, response, error in
-            guard
-                error == nil,
-                let temporary,
-                let http = response as? HTTPURLResponse, http.statusCode == 200
-            else {
-                DiagnosticsLog.shared.record("llama-model-download-failed", metadata: [:])
-                completion(false)
-                return
-            }
-            do {
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: temporary, to: destination)
-                DiagnosticsLog.shared.record("llama-model-download-complete", metadata: [:])
-                completion(Self.isUsableModelFile(at: destination, minimumBytes: tier.expectedMinimumBytes))
-            } catch {
-                DiagnosticsLog.shared.record("llama-model-download-failed", metadata: ["reason": "move-failed"])
-                completion(false)
-            }
-        }
-        task.resume()
     }
 
     func stop() {
@@ -187,7 +109,55 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     // MARK: - Internals
 
+    /// A previous app instance's llama child can outlive it (kill -9, hard
+    /// crash) and keep our port — the new child then fails to bind in a loop
+    /// while the ORPHAN answers /health, which reads as "healthy then exit"
+    /// and exhausts the restart budget (2026-08-04: root cause of the
+    /// overnight engine death, reproduced live twice). Reap any llama-server
+    /// listening on our port before launching ours. Anything else on the port
+    /// is a loud unavailability, never a kill target.
+    /// Returns true when the port is ours to bind.
+    private static func reapOrphanServer() -> Bool {
+        let listeners = shell("/usr/sbin/lsof", ["-ti", "tcp:\(port)", "-sTCP:LISTEN"])
+            .split(separator: "\n")
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+        guard !listeners.isEmpty else { return true }
+        var portIsOurs = true
+        for pid in listeners {
+            let command = shell("/bin/ps", ["-o", "comm=", "-p", String(pid)])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if command.hasSuffix("llama-server") {
+                kill(pid, SIGTERM)
+                DiagnosticsLog.shared.record("llama-orphan-reaped", metadata: ["pid": String(pid)])
+            } else {
+                portIsOurs = false
+                DiagnosticsLog.shared.record(
+                    "llama-server-unavailable",
+                    metadata: ["reason": "port-held-by-foreign-process"]
+                )
+            }
+        }
+        // Give the kernel a beat to release the socket; if the orphan lingers,
+        // the bind fails and the restart budget retries in 3s anyway.
+        if portIsOurs { usleep(300_000) }
+        return portIsOurs
+    }
+
+    private static func shell(_ path: String, _ arguments: [String]) -> String {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = arguments
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
     private func launch(binary: String, modelPath: String) {
+        guard Self.reapOrphanServer() else { return }
         let child = Process()
         child.executableURL = URL(fileURLWithPath: binary)
         child.arguments = [
@@ -215,17 +185,21 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         }
         lock.lock()
         process = child
+        launchedAt = Date()
+        let restarts = restartBudget.consecutiveFailures
         lock.unlock()
-        DiagnosticsLog.shared.record("llama-server-start", metadata: ["restart": String(restartCount)])
+        DiagnosticsLog.shared.record("llama-server-start", metadata: ["restart": String(restarts)])
         pollHealth()
     }
 
     private func handleExit(binary: String, modelPath: String) {
         lock.lock()
+        let wasHealthy = healthy
+        let uptime = launchedAt.map { Date().timeIntervalSince($0) } ?? 0
         healthy = false
         process = nil
-        let shouldRestart = !stopped && restartCount < maximumRestarts
-        if shouldRestart { restartCount += 1 }
+        launchedAt = nil
+        let shouldRestart = !stopped && restartBudget.shouldRestart(wasHealthy: wasHealthy, uptime: uptime)
         lock.unlock()
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
         guard shouldRestart else { return }
@@ -241,11 +215,12 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         return stopped
     }
 
-    /// Polls /health until the server reports ready (model download + load can
-    /// take minutes on first run), then flips `healthy`.
+    /// Polls /health until the server reports ready (loading the 1.6GB model
+    /// takes seconds; five minutes covers a cold, busy disk), then flips
+    /// `healthy`.
     private func pollHealth() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            for _ in 0..<600 {
+            for _ in 0..<150 {
                 guard let self, !self.isStopped else { return }
                 self.lock.lock()
                 let running = self.process != nil

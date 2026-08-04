@@ -1,9 +1,9 @@
 import Foundation
 
-/// Creates and tightens SteadyType's local on-disk artifacts to owner-only permissions
+/// Creates and tightens Tilde's local on-disk artifacts to owner-only permissions
 /// (directories `0700`, files `0600`).
 ///
-/// SteadyType writes derived-from-user data under `~/Library` — diagnostic traces (which can
+/// Tilde writes derived-from-user data under `~/Library` — diagnostic traces (which can
 /// hold raw text while raw-content dogfood tracing is opted in), the Personal Capture journal
 /// (verbatim typed text), caret-region screenshots, and the downloaded model asset. macOS
 /// currently keeps `~/Library` itself at `0700`, but these files must not *depend* on a parent

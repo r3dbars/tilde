@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Converts public datasets into the SteadyType eval-corpus JSONL contract
+"""Converts public datasets into the Tilde eval-corpus JSONL contract
 consumed by script/golden_eval.py. Output files live OUTSIDE the repo under
-~/.cache/steadytype-eval and are never committed.
+~/.cache/tilde-eval and are never committed.
 
 Eval corpus JSONL contract (one JSON object per line):
     {"source": "discord|imessage|enron|aeslc|blog",
@@ -18,7 +18,7 @@ without disturbing this one.
 
 discord: converts mookiezi/Discord-Dialogues (ChatML exchanges) fetched via:
     hf download mookiezi/Discord-Dialogues --repo-type dataset \\
-        --local-dir ~/.cache/steadytype-eval/discord
+        --local-dir ~/.cache/tilde-eval/discord
 """
 import argparse
 import hashlib
@@ -27,7 +27,7 @@ import re
 import sys
 from pathlib import Path
 
-CACHE_ROOT = Path.home() / ".cache" / "steadytype-eval"
+CACHE_ROOT = Path.home() / ".cache" / "tilde-eval"
 DISCORD_DIR = CACHE_ROOT / "discord"
 DISCORD_OUT = CACHE_ROOT / "discord_eval.jsonl"
 DISCORD_APP = "com.hnc.Discord"

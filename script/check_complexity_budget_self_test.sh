@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT_DIR/script/check_complexity_budget.sh"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-complexity-test.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tilde-complexity-test.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 unset PROOF_STRUCTURAL_CHANGE PROOF_DIFF_BASE PROOF_STRUCTURAL_LOC_EXCEPTION
 # Git hooks export repository-local variables; fixture repos must not inherit them.
@@ -32,19 +32,19 @@ pass_root="$(fixture pass)"
 pass_output="$(cd "$pass_root" && script/check_complexity_budget.sh)"
 require 'production Swift LOC: 2 / 90000' "$pass_output"
 require 'AppDelegate LOC:      1 / 17244' "$pass_output"
-require 'scripts:              1 / 37' "$pass_output"
-require 'docs files:           1 / 41' "$pass_output"
+require 'scripts:              1 / 35' "$pass_output"
+require 'docs files:           1 / 30' "$pass_output"
 require 'largest production Swift files' "$pass_output"
 
 limit_root="$(fixture limits)"
 awk 'BEGIN { for (i=1; i<=90001; i++) print "// line" }' > "$limit_root/Sources/AutocompleteLabCore/Huge.swift"
 awk 'BEGIN { for (i=1; i<=17245; i++) print "// line" }' > "$limit_root/Sources/AutocompleteLabApp/App/AppDelegate.swift"
 awk 'BEGIN { for (i=1; i<=3001; i++) print "// line" }' > "$limit_root/Sources/AutocompleteLabCore/Large.swift"
-for i in $(seq 1 37); do : > "$limit_root/script/$i.sh"; done
-for i in $(seq 1 41); do : > "$limit_root/docs/$i.md"; done
+for i in $(seq 1 35); do : > "$limit_root/script/$i.sh"; done
+for i in $(seq 1 30); do : > "$limit_root/docs/$i.md"; done
 if limit_output="$(cd "$limit_root" && script/check_complexity_budget.sh 2>&1)"; then fail "ceilings did not fail"; fi
 for message in 'production Swift LOC exceeds 90000' 'AppDelegate.swift LOC exceeds 17244' \
-  'Large.swift exceeds 3000 LOC' 'script count exceeds 37' 'docs count exceeds 41'; do
+  'Large.swift exceeds 3000 LOC' 'script count exceeds 35' 'docs count exceeds 30'; do
   require "$message" "$limit_output"
 done
 

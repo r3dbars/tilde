@@ -1,9 +1,9 @@
-# Overnight exploration — making SteadyType feel magical
+# Overnight exploration — making Tilde feel magical
 
 Started 2026-07-23 evening. Autonomous run: test every theory we have, wake the
 owner to **specific recommendations**. This file is the live journal — results
 append under each theory as experiments finish. Raw numbers in
-`~/.cache/steadytype-eval/overnight_results.jsonl`.
+`~/.cache/tilde-eval/overnight_results.jsonl`.
 
 ## The theories under test
 
@@ -86,7 +86,7 @@ Predict the owner's real reply from 2 words + screen. Which brain?
 Disk plan: ~9.7GB free. NOT pruning the audio/TTS/whisper HF caches (likely the
 owner's other active projects). The fine-tune stage will instead reclaim the
 now-disposable bakeoff GGUFs (gemma-4-12b/26b, big Qwens, ~40GB in my own
-steadytype-eval/models) once the experiments finish with them.
+tilde-eval/models) once the experiments finish with them.
 
 Next (scheduled orchestration): finish GPU experiments → free disk → personal
 fine-tune → semantic re-score → dictionary test → SPECIFIC RECOMMENDATIONS.
@@ -150,14 +150,14 @@ touched.
 **Tooling** (all under `script/`, none touch the running app):
 - `dict_probe.swift` — standalone mirror of `dictionaryCompletion(for:)`,
   byte-for-byte identical logic at default env vars, with all six heuristics
-  exposed as knobs (`STEADYTYPE_DICT_MIN_LETTERS`, `_MIN_SUFFIX`,
+  exposed as knobs (`TILDE_DICT_MIN_LETTERS`, `_MIN_SUFFIX`,
   `_MAX_OBSCURE_LEN`, `_PREFER_COMMON`, `_COMMON_ONLY`,
   `_BLOCK_COMPLETE_COMMON`). Reads prefixes from stdin in a long-lived
   process (NSSpellChecker/XPC warms up once) so per-call timing is realistic
   and the eval harness doesn't pay process-spawn cost per data point.
   Build: `swiftc -O script/dict_probe.swift -o script/dict_probe`.
 - `dictionary_eval.py` — quiz harness. Pulls real words (≥5 letters) from
-  the owner's own vocabulary (`~/.cache/steadytype-eval/imessage_eval.jsonl`,
+  the owner's own vocabulary (`~/.cache/tilde-eval/imessage_eval.jsonl`,
   32,337 messages) and general chat (`diverse_eval.jsonl`), cuts each word
   after 1/2/3/4 letters, scores top-1 accuracy, a looser "helpful-prefix"
   partial-credit metric, keystrokes saved, false-completion rate, silence
@@ -168,7 +168,7 @@ touched.
   ~3 keystrokes of trust since there's no confirm step).
 - Quiz set used below: 300 words/source × cut at 1/2/3/4 letters = **2,400
   test cases** (600 per cut length), seed 17.
-- Raw results + full sweep log: `~/.cache/steadytype-eval/dictionary_layer_eval_v2.jsonl`,
+- Raw results + full sweep log: `~/.cache/tilde-eval/dictionary_layer_eval_v2.jsonl`,
   `dictionary_layer_sweep.jsonl`, `dictionary_layer_summary.json`.
 
 ### Headline finding: the shipped defaults are trigger-happy and usually wrong when they speak
@@ -194,7 +194,7 @@ config tried, an order of magnitude under the 20ms budget); precision is.
 | 4 letters | 91.5% spoken / 65.0% wrong | 92.2% spoken / **39.2% wrong** |
 
 The single worst offender is **2-letter prefixes**: the shipped
-`STEADYTYPE_DICT_MIN_LETTERS=2` gate lets the layer guess off almost nothing,
+`TILDE_DICT_MIN_LETTERS=2` gate lets the layer guess off almost nothing,
 and it's wrong 4 times out of 5 when it does. Cutting that bucket entirely
 (raising the gate to 3 letters) removes the layer's worst failure mode for
 free. 4-letter prefixes improve the most from the second change
@@ -299,7 +299,7 @@ GhostInputController.dictionaryCompletion — halves the instant layer's wrong g
 
 LoRA fine-tune of Gemma 2 2B on 30,720 of the owner's own iMessage replies
 (8 layers, 1000 iters, val loss 4.44→0.61). Fused → GGUF Q4 →
-`~/.cache/steadytype-eval/models/gemma-2-2b-personal.Q4_K_M.gguf`.
+`~/.cache/tilde-eval/models/gemma-2-2b-personal.Q4_K_M.gguf`.
 
 Reply quiz on the owner's own data (800 cases, predict from 2 words + screen):
 | model | EM@1 | EM@2 | keystrokes/reply | p50 |
@@ -316,12 +316,12 @@ personalizes on their own data (their data never leaves their machine).
 ---
 # ⭐ SPECIFIC RECOMMENDATIONS (morning briefing)
 
-Ranked, concrete, evidence-backed — how to make SteadyType magical:
+Ranked, concrete, evidence-backed — how to make Tilde magical:
 
 1. **SHIP PERSONALIZATION — the headline.** Fine-tuning Gemma 2 2B on the owner's
    own 32k replies lifted reply prediction +38% (19.0→26.2% EM@1) and keystrokes
    +49% (1.01→1.50), same 58ms speed. The personalized build is in iCloud +
-   Downloads NOW (`SteadyType-personal.zip`). For a general product: ship the
+   Downloads NOW (`Tilde-personal.zip`). For a general product: ship the
    base model + the fine-tune pipeline so each user personalizes on their OWN
    local data (never leaves their machine). THIS is what makes it read your mind.
 2. **Keep the fast Gemma 2 2B base — no second/bigger brain.** Base beats instruct
@@ -546,7 +546,7 @@ teacher (Sonnet-5, an instruct model, prompted as a task) does it superbly. So
 the historical instruct failures may have been unfair: we always fed instructs
 the RAW base recipe, no chat template, no instruction.
 
-Built STEADYTYPE_PROMPT_MODE=instruct (proper Gemma chat template, task framed
+Built TILDE_PROMPT_MODE=instruct (proper Gemma chat template, task framed
 as an explicit question incl. screen context) and re-quizzed (500-case probes):
 
 | model | holding | EM@1 | similar | p50 |
@@ -769,7 +769,7 @@ the forefront — two mechanical pieces, the AI brain and the application."
 First fix, the landmine: the live app's entire identity (personal model
 path, scaffold, every tuning knob) lived only in the launching shell's
 environment. One reboot → login-item relaunch → generic model, silently.
-Shipped `RuntimeSetting` (env → persisted `steadytype.<NAME>` default →
+Shipped `RuntimeSetting` (env → persisted `tilde.<NAME>` default →
 builtin), migrated personal.gguf + scaffold out of the eval cache into
 Application Support, persisted the live config as defaults, and proved it:
 killed everything, relaunched via `open` with zero env — llama-server
@@ -902,7 +902,7 @@ workhorse, dictionary the helper.
 Goal: fix "I'm"-heavy openers using the owner's real reply style (their
 true opener distribution: "i" 15.1%, "yeah" 7.5%, then what/oh/no/hey...).
 Built the right machinery: opener scaffold now file-overridable
-(STEADYTYPE_OPENER_SCAFFOLD_FILE / persisted default), mined 6 real
+(TILDE_OPENER_SCAFFOLD_FILE / persisted default), mined 6 real
 message→reply pairs from the corpus, A/B'd on 6 unseen messages.
 
 RESULT: NEGATIVE — mode collapse. Randomly-selected real pairs were too
@@ -932,57 +932,7 @@ math) → uisfx open-source pack (github.com/romainsimon/uisfx, CC0 public
 domain, license-clean for a future paid Tilde). Owner picked the ZEN
 personality: press.mp3 → tab_1/2/3.wav (Tab word-accept), long-press.mp3 →
 tilde.wav (whole-phrase accept). Architecture stayed minimal: ~25 lines,
-NSSound from Application Support/SteadyType/sounds/ (user-swappable, no
+NSSound from Application Support/Tilde/sounds/ (user-swappable, no
 rebuild), menu toggle, system-sound fallback. The tilde deliberately owns
 the richest sound — habit formation for the highest-value gesture; watch
 accept_all share (4-8% baseline) for the measurable effect.
-
-## 2026-07-26 — The taste pipeline: owner grades become benchmark + curriculum
-
-Owner directive: evals are the quality engine; "bake my taste into the
-model." Built script/taste_pipeline.py: trace grades → (1) taste_bench
-(every ruling = a permanent personal-benchmark row; future model swaps must
-beat it), (2) taste_prefs (FAIL+typed-instead → chosen/rejected DPO pairs;
-gym rejection is pair #1), (3) taste_gold (replacement-phrase corrections →
-gold SFT pairs; 0 so far — coaching: corrections should be the literal
-words, not commentary). Targets: ~50 grades → first taste-tuned retrain;
-~200 → statistically sharp bench + apprentice-judge conversation.
-
-## 2026-07-28 — The four-employees gap analysis (owner explainer vs reality)
-
-Owner wrote the plain-language explainer (docs/how-tilde-works.md); grading
-it against the app produced the working roadmap:
-
-BUILT & STRONG: Watcher (keyboard), Writer (personal Gemma + nightly LoRA
-exam-gated), Judge (gates/rulebook/manners), speed stack (40ms, cache
-verified), evals (3-paper exam + flags + bench), Tab-walk, sounds.
-
-MISSING (the ADD list, ranked): (1) Memory's recall half — the MATCHMAKER
-(per-message retrieval from 32k exchanges) + phrase memory; (2) candidates
-+ sounds-like-owner ranker (near-miss rate 28% says convertible); (3) true
-personal dictionary (fast layer is Apple's system dictionary — doesn't know
-Jamf/Transcripted; mine corpus proper nouns); (4) regret signal (accepted-
-then-immediately-deleted capture).
-
-DELETE list: (1) Judge bloat — merge/remove rulebook filters that don't
-earn their keep per kill-log + grades (audit #33); (2) ghost presence in
-hostile terrain (terminal 7%, browser chrome 9%).
-
-Execution order (owner): DELETION FIRST, piece by piece.
-
-## 2026-07-28 — Matchmaker: the simplest plan (owner-directed)
-
-Two owner decisions reshaped it: NO history import (capture-only memory,
-users start from zero — owner dogfoods the cold start), and SIMPLEST
-implementation. Two simplifications: (1) v1 keys = the writer's OWN typed
-context ("when I started a sentence like this, how did I finish it?") —
-sidesteps the screen-OCR extraction problem entirely, works in all apps;
-incoming-message keys deferred to v2. (2) Prefer Apple NLEmbedding (built
-into macOS, zero new processes) over a second embed-server — decided by
-retrieval eyeball at Sitting 1. Pre-mortem survivors baked in: similarity
-floor (thin memory injects NOTHING — the mined-scaffold lesson),
-same-register-first retrieval, typed-instead entries preferred over
-ghost-assisted (echo-chamber guard), index local-only never synced, frozen
-snapshots for evals. Three sittings: build+eyeball (kill test: owner nods
-at retrievals) → offline A/B (gate: similar★ up, nothing down) → wire
-behind a toggle + live week judged by acceptance/flags.

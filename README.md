@@ -1,8 +1,8 @@
-# SteadyType
+# Tilde
 
-![SteadyType cover](Assets/GitHub/steadytype-cover.png)
+![Tilde cover](Assets/GitHub/tilde-cover.png)
 
-SteadyType is an open-source macOS menu bar app for quiet, local inline writing
+Tilde is an open-source macOS menu bar app for quiet, local inline writing
 suggestions. It watches the focused text field through Accessibility, shows a
 short ghost-text suggestion near the caret, and inserts text only when you
 accept it. All inference runs on-device with MLX on Apple Silicon — no cloud,
@@ -29,8 +29,8 @@ secure fields, and sensitive fields are hard-blocked.
 ## Build and run
 
 ```bash
-git clone https://github.com/r3dbars/steadytype
-cd steadytype
+git clone https://github.com/r3dbars/tilde
+cd tilde
 ./script/build_and_run.sh          # builds the bundle and launches it
 ```
 
@@ -43,6 +43,7 @@ builds and validates without launching.
 ```bash
 ./script/proof.sh fast             # the pre-merge gate (CI runs exactly this)
 swift test --jobs 1                # full suite
+./script/smoke_test.sh             # full suite + bundle verify (macOS)
 ./script/release_check.sh          # release gate incl. live network-egress proof
 ```
 

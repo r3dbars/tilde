@@ -1,4 +1,4 @@
-# SteadyType Replay Eval — Phase 1
+# Tilde Replay Eval — Phase 1
 
 - Engine: batch
 - Requested model: gemma-4-e4b-it-optiq

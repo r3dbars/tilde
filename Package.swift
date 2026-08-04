@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "SteadyType",
+    name: "Tilde",
     platforms: [
         .macOS(.v26)
     ],
@@ -13,7 +13,7 @@ let package = Package(
             targets: ["AutocompleteLabCore"]
         ),
         .executable(
-            name: "SteadyType",
+            name: "Tilde",
             targets: ["AutocompleteLabApp"]
         ),
         .executable(
@@ -28,12 +28,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "InlineGhostIME",
-            // Core linked 2026-07-28 for the typing-journal policy pieces
-            // (TypingJournalBuffer, SensitiveTextScrubber) — tested policy
-            // stays single-sourced in core; core is pure Foundation.
-            dependencies: [
-                "AutocompleteLabCore",
-            ],
+            dependencies: ["AutocompleteLabCore"],
             exclude: ["Info.plist", "README.md"],
             // IMKit's un-annotated types fight Swift 6 strict concurrency; the IME
             // stays in Swift 5 mode until the controller is modernized.

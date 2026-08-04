@@ -3,21 +3,19 @@
 import AppKit
 import Foundation
 
-let outputPath = CommandLine.arguments.dropFirst().first ?? "dist/SteadyType.app/Contents/Resources/AppIcon.icns"
-// Source of record: docs/brand/icon-v1.png (owner, 2026-07-29) → cropped to the
-// squircle, superellipse alpha, 824-in-1024 macOS grid = tilde-icon-master.png.
-let sourcePath = CommandLine.arguments.dropFirst(2).first ?? "Assets/AppIcon/tilde-icon-master.png"
+let outputPath = CommandLine.arguments.dropFirst().first ?? "dist/Tilde.app/Contents/Resources/AppIcon.icns"
+let sourcePath = CommandLine.arguments.dropFirst(2).first ?? "Assets/AppIcon/tilde-icon.png"
 let outputURL = URL(fileURLWithPath: outputPath)
 let sourceURL = URL(fileURLWithPath: sourcePath)
 let fileManager = FileManager.default
 let iconsetURL = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("SteadyType-\(UUID().uuidString).iconset", isDirectory: true)
+    .appendingPathComponent("Tilde-\(UUID().uuidString).iconset", isDirectory: true)
 let temporaryOutputURL = URL(fileURLWithPath: NSTemporaryDirectory())
-    .appendingPathComponent("SteadyType-\(UUID().uuidString).icns")
+    .appendingPathComponent("Tilde-\(UUID().uuidString).icns")
 
 guard let sourceImage = NSImage(contentsOf: sourceURL) else {
     throw NSError(
-        domain: "SteadyTypeIcon",
+        domain: "TildeIcon",
         code: 1,
         userInfo: [NSLocalizedDescriptionKey: "Could not load icon source at \(sourcePath)"]
     )
@@ -63,7 +61,7 @@ func writePNG(named name: String, pixels: CGFloat) throws {
         let pngData = bitmap.representation(using: .png, properties: [:])
     else {
         throw NSError(
-            domain: "SteadyTypeIcon",
+            domain: "TildeIcon",
             code: 2,
             userInfo: [NSLocalizedDescriptionKey: "Could not render \(name)"]
         )
@@ -85,7 +83,7 @@ process.waitUntilExit()
 
 guard process.terminationStatus == 0 else {
     throw NSError(
-        domain: "SteadyTypeIcon",
+        domain: "TildeIcon",
         code: Int(process.terminationStatus),
         userInfo: [NSLocalizedDescriptionKey: "iconutil failed"]
     )

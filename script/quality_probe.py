@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Quality probe for the ghost brain: a fixed corpus across registers, scored
 for the failure modes dogfood has surfaced. Run before and after any prompt or
-cleaner change; compare the summary lines. Requires the SteadyType app running.
+cleaner change; compare the summary lines. Requires the Tilde app running.
 """
 import json
 import socket
 import sys
 import time
 
-SOCK = "/Users/redbars/Library/Application Support/SteadyType/ghost.sock"
+SOCK = "/Users/redbars/Library/Application Support/Tilde/ghost.sock"
 
 CORPUS = [
     ("chat", "com.tinyspeck.slackmacgap", "yeah lol that makes sense, I think we "),
