@@ -10,6 +10,8 @@ struct TildeSettings {
         case suggestions = "GhostSuggestionsEnabled"
         case sounds = "GhostSoundsEnabled"
         case learning = "GhostUsageCaptureEnabled"
+        case personalWords = "GhostPersonalWordsEnabled"
+        case personalPhrases = "GhostPersonalPhrasesEnabled"
         case pausedUntil = "GhostPausedUntil"
     }
 
@@ -45,6 +47,16 @@ struct TildeSettings {
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.learning.rawValue) }
     }
 
+    var personalWordsEnabled: Bool {
+        get { flag(.personalWords) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.personalWords.rawValue) }
+    }
+
+    var personalPhrasesEnabled: Bool {
+        get { flag(.personalPhrases) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.personalPhrases.rawValue) }
+    }
+
     var pausedUntil: Date? {
         let stamp = keyboard.double(forKey: KeyboardKey.pausedUntil.rawValue)
         guard stamp > 0 else { return nil }
@@ -64,7 +76,15 @@ struct TildeSettings {
     }
 
     private func flag(_ key: KeyboardKey) -> Bool {
-        keyboard.object(forKey: key.rawValue) as? Bool ?? (key != .learning)
+        if let stored = keyboard.object(forKey: key.rawValue) as? Bool {
+            return stored
+        }
+        switch key {
+        case .learning, .personalPhrases:
+            return false
+        case .suggestions, .sounds, .personalWords, .pausedUntil:
+            return true
+        }
     }
 
     var screenAware: Bool {

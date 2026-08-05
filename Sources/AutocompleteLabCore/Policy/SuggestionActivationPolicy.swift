@@ -14,3 +14,15 @@ public enum SuggestionActivationPolicy {
         return false
     }
 }
+
+/// Fail closed at the start of a field. When a client cannot expose even its
+/// first character, treating a location-zero field as blank is calmer and safer
+/// than carrying context over from the previously focused field.
+public enum BlankFieldSuggestionPolicy {
+    public static func shouldSuppress(
+        selectionLocation: Int,
+        firstCharacterAtCursor: String?
+    ) -> Bool {
+        selectionLocation == 0 && (firstCharacterAtCursor?.isEmpty ?? true)
+    }
+}

@@ -46,15 +46,24 @@ final class GhostInputController: IMKInputController {
     /// Typing punctuation next swallows that space (like iOS smart punctuation).
     private var pendingAutoSpace = false
     /// What produced the ghost currently on screen (for per-source accept stats).
-    private enum GhostSource: String { case fast, model }
+    private enum GhostSource: String {
+        case fast
+        case personalWord
+        case model
+        case modelMemory
+    }
     private var ghostSource: GhostSource = .fast
+    private let personalMemory = PersonalMemorySnapshotClient.shared
+    private var lastBlankFieldIdentity: String?
 
     /// `ghostSource` translated for `GhostUsageLog` (kept as a separate type so
     /// the opt-in usage log doesn't couple to this controller's internals).
     private var usageSource: GhostUsageLog.Source {
         switch ghostSource {
         case .fast: return .fast
+        case .personalWord: return .personalWord
         case .model: return .model
+        case .modelMemory: return .modelMemory
         }
     }
 
@@ -216,8 +225,8 @@ final class GhostInputController: IMKInputController {
         Stats.charactersAccepted += text.count
         Stats.ghostsAccepted += 1
         switch ghostSource {
-        case .fast: Stats.fastAccepts += 1
-        case .model: Stats.modelAccepts += 1
+        case .fast, .personalWord: Stats.fastAccepts += 1
+        case .model, .modelMemory: Stats.modelAccepts += 1
         }
         Stats.flushIfDue()
     }
@@ -383,6 +392,7 @@ final class GhostInputController: IMKInputController {
         if let client = sender as? IMKTextInput { clearGhost(client) }
         typedFallback = ""
         ghost = ""
+        lastBlankFieldIdentity = nil
         generation += 1
         modelTask?.cancel()
         super.deactivateServer(sender)
@@ -406,6 +416,25 @@ final class GhostInputController: IMKInputController {
         return typedFallback
     }
 
+    /// A new location-zero field must not inherit the previous field's fallback
+    /// buffer. If the app cannot expose the first character, fail closed.
+    private func fieldIsBlank(_ client: IMKTextInput) -> Bool {
+        let selection = client.selectedRange()
+        guard selection.location != NSNotFound else { return false }
+        let firstCharacter = client.attributedSubstring(
+            from: NSRange(location: 0, length: 1)
+        )?.string
+        let blank = BlankFieldSuggestionPolicy.shouldSuppress(
+            selectionLocation: selection.location,
+            firstCharacterAtCursor: firstCharacter
+        )
+        if blank {
+            typedFallback = ""
+            clientGivesContext = firstCharacter != nil
+        }
+        return blank
+    }
+
     // MARK: - Prediction (deliberately tiny — the channel is what's under test)
 
     private static let phraseOpeners: [(prefix: String, suffix: String)] = [
@@ -418,28 +447,35 @@ final class GhostInputController: IMKInputController {
 
     /// Chain up to four words so Tab-per-word acceptance has a runway. The chain is
     /// computed ONCE per keystroke — tabbing through it never re-rolls the words.
-    private func predict(context: String) -> String {
+    private struct FastPrediction {
+        let text: String
+        let source: GhostSource
+    }
+
+    private func predict(context: String) -> FastPrediction {
         var ghostText = ""
         var ctx = context
+        var source = GhostSource.fast
         for _ in 0..<4 {
             let piece = predictOne(context: ctx)
-            guard !piece.isEmpty else { break }
-            ghostText += piece
-            ctx += piece
+            guard !piece.text.isEmpty else { break }
+            if ghostText.isEmpty { source = piece.source }
+            ghostText += piece.text
+            ctx += piece.text
             ghostText += " "
             ctx += " "
         }
         while ghostText.hasSuffix(" ") { ghostText.removeLast() }
-        return ghostText
+        return FastPrediction(text: ghostText, source: source)
     }
 
-    private func predictOne(context: String) -> String {
+    private func predictOne(context: String) -> FastPrediction {
         let tail = String(context.suffix(400))
         let lowerTail = tail.lowercased()
 
         // 1. Phrase openers on exact tail match.
         for (prefix, suffix) in Self.phraseOpeners where lowerTail.hasSuffix(prefix) {
-            return suffix
+            return FastPrediction(text: suffix, source: .fast)
         }
 
         let separators = CharacterSet.alphanumerics.inverted
@@ -450,9 +486,22 @@ final class GhostInputController: IMKInputController {
         //    vocabulary); doc words only fill in when the dictionary is silent,
         //    which keeps rare personal/project terms completing.
         if let last = tail.unicodeScalars.last, !separators.contains(last) {
-            guard let partial = words.last, partial.count >= 2 else { return "" }
+            guard let partial = words.last, partial.count >= 2 else {
+                return FastPrediction(text: "", source: .fast)
+            }
+            let defaults = UserDefaults.standard
+            if defaults.bool(forKey: "GhostUsageCaptureEnabled"),
+               defaults.bool(forKey: "GhostPersonalWordsEnabled"),
+               let personal = personalMemory.wordCompletion(for: partial) {
+                return FastPrediction(
+                    text: String(personal.dropFirst(partial.count)),
+                    source: .personalWord
+                )
+            }
             let fromDictionary = dictionaryCompletion(for: partial)
-            if !fromDictionary.isEmpty { return fromDictionary }
+            if !fromDictionary.isEmpty {
+                return FastPrediction(text: fromDictionary, source: .fast)
+            }
             let lowerPartial = partial.lowercased()
             var counts: [String: Int] = [:]
             for word in words.dropLast() where word.count > partial.count {
@@ -460,12 +509,18 @@ final class GhostInputController: IMKInputController {
                 if lower.hasPrefix(lowerPartial) { counts[lower, default: 0] += 1 }
             }
             if let best = counts.max(by: { ($0.value, $1.key) < ($1.value, $0.key) })?.key {
-                return String(best.dropFirst(partial.count))
+                return FastPrediction(
+                    text: String(best.dropFirst(partial.count)),
+                    source: .fast
+                )
             }
-            return ""
+            return FastPrediction(text: "", source: .fast)
         }
 
-        return nextWordPrediction(lowerTail: lowerTail, words: words)
+        return FastPrediction(
+            text: nextWordPrediction(lowerTail: lowerTail, words: words),
+            source: .fast
+        )
     }
 
     /// Everyday words the dictionary should prefer completing TO — and never
@@ -616,27 +671,47 @@ final class GhostInputController: IMKInputController {
            Self.mutedBundlePrefixes.contains(where: bundle.hasPrefix) {
             return
         }
+        if fieldIsBlank(client) {
+            clearGhost(client)
+            let identity = client.uniqueClientIdentifierString()
+            if lastBlankFieldIdentity != identity {
+                lastBlankFieldIdentity = identity
+                GhostUsageLog.record(
+                    event: .suppressedBlank,
+                    ghostText: "",
+                    source: .policy,
+                    appBundle: client.bundleIdentifier()
+                )
+            }
+            return
+        }
+        lastBlankFieldIdentity = nil
         guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: typedFallback) else {
             clearGhost(client)
             return
         }
         let context = contextBeforeCaret(client)
+        guard context.contains(where: { !$0.isWhitespace }) else {
+            clearGhost(client)
+            return
+        }
 
         // Fast layer: instant completions with real evidence (doc vocabulary,
         // dictionary, doc bigrams) — no generic filler. GhostFastLayerEnabled=false
         // hands everything (mid-word included) to the model: the A/B the usage
         // numbers asked for.
-        let suffix = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
+        let prediction = UserDefaults.standard.bool(forKey: "GhostFastLayerEnabled")
             ? predict(context: context)
-            : ""
+            : FastPrediction(text: "", source: .fast)
+        let suffix = prediction.text
         ghost = suffix
         if !suffix.isEmpty {
-            ghostSource = .fast
+            ghostSource = prediction.source
             show(suffix, client)
             GhostUsageLog.record(
                 event: .shown,
                 ghostText: suffix,
-                source: .fast,
+                source: usageSource,
                 appBundle: client.bundleIdentifier(),
                 context: typedFallback
             )
@@ -792,9 +867,10 @@ final class GhostInputController: IMKInputController {
             //    first-token; the stale-guard in present() drops late arrivals.
             let brain = await Task.detached(priority: .userInitiated) {
                 GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity) { partial in
-                    let text = Self.cleanedModelOutput(partial)
+                    let text = Self.cleanedModelOutput(partial.text)
                     guard !text.isEmpty else { return }
-                    Task { @MainActor in self?.present(text, ifStill: gen) }
+                    let source: GhostSource = partial.memoryAssisted ? .modelMemory : .model
+                    Task { @MainActor in self?.present(text, source: source, ifStill: gen) }
                 }
             }.value
             if Task.isCancelled { return }
@@ -803,9 +879,10 @@ final class GhostInputController: IMKInputController {
                 // RESPECT it. Falling back to another model here was the bug that
                 // let unfiltered Apple-model refusals ("as an AI chatbot…") reach
                 // the screen whenever the brain stayed quiet.
-                let text = Self.cleanedModelOutput(brain)
+                let text = Self.cleanedModelOutput(brain.text)
                 if !text.isEmpty {
-                    await self?.present(text, ifStill: gen)
+                    let source: GhostSource = brain.memoryAssisted ? .modelMemory : .model
+                    await self?.present(text, source: source, ifStill: gen)
                 }
                 return
             }
@@ -817,15 +894,15 @@ final class GhostInputController: IMKInputController {
     }
 
     @MainActor
-    private func present(_ text: String, ifStill gen: Int) {
+    private func present(_ text: String, source: GhostSource, ifStill gen: Int) {
         guard generation == gen, let liveClient = client() else { return }
         ghost = text
-        ghostSource = .model
+        ghostSource = source
         show(text, liveClient)
         GhostUsageLog.record(
             event: .shown,
             ghostText: text,
-            source: .model,
+            source: usageSource,
             appBundle: liveClient.bundleIdentifier(),
             context: typedFallback
         )
@@ -860,7 +937,7 @@ final class GhostInputController: IMKInputController {
             return // guardrail refusal / cancellation / transient — fast layer stands
         }
         guard !text.isEmpty else { return }
-        await present(text, ifStill: gen)
+        await present(text, source: .model, ifStill: gen)
         #endif
     }
 

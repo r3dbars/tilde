@@ -102,19 +102,39 @@ struct CapInducedDanglerRepairTests {
     }
 }
 
-@Test("Opener mode: empty context + screen builds a reply prompt; no screen builds nothing")
-func openerMode() {
+@Test("Blank fields stay silent even with screen context or personal examples")
+func blankFieldsStaySilent() {
     let withScreen = RawContinuationPrompt(
         textBeforeCursor: "",
         screenContext: "want to grab dinner tonight?",
+        personalWritingExamples: [
+            PersonalWritingExample(text: "want to grab", continuation: "dinner tonight")
+        ],
         register: .chat
     )
-    #expect(withScreen.prompt.hasSuffix("Message: want to grab dinner tonight?\nReply:"))
-    #expect(withScreen.prompt.contains("real chat messages"))
+    #expect(withScreen.prompt.isEmpty)
 
     let noScreen = RawContinuationPrompt(textBeforeCursor: "", screenContext: nil, register: .chat)
     #expect(noScreen.prompt.isEmpty)
 
     let whitespaceOnly = RawContinuationPrompt(textBeforeCursor: "   ", screenContext: nil, register: .chat)
     #expect(whitespaceOnly.prompt.isEmpty)
+}
+
+@Test("Personal examples are bounded and placed before the active text")
+func personalExamplesAreAdded() {
+    let recipe = RawContinuationPrompt(
+        textBeforeCursor: "I think we should ",
+        personalWritingExamples: [
+            PersonalWritingExample(text: "last time we should", continuation: "ship it today"),
+            PersonalWritingExample(text: "maybe we should", continuation: "ship and learn"),
+            PersonalWritingExample(text: "ignored third", continuation: "example")
+        ],
+        register: .chat
+    )
+    #expect(recipe.prompt.contains("Relevant examples of how this same writer"))
+    #expect(recipe.prompt.contains("Text: last time we should\nContinuation: ship it today"))
+    #expect(recipe.prompt.contains("Text: maybe we should\nContinuation: ship and learn"))
+    #expect(!recipe.prompt.contains("ignored third"))
+    #expect(recipe.prompt.hasSuffix("Text: I think we should\nContinuation:"))
 }

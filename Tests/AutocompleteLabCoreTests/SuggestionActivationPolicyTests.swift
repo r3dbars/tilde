@@ -21,4 +21,24 @@ struct SuggestionActivationPolicyTests {
         #expect(SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: "y e s"))
         #expect(SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: "café"))
     }
+
+    @Test("Location-zero fields fail closed when blank or unreadable")
+    func blankFieldPolicyFailsClosed() {
+        #expect(BlankFieldSuggestionPolicy.shouldSuppress(
+            selectionLocation: 0,
+            firstCharacterAtCursor: nil
+        ))
+        #expect(BlankFieldSuggestionPolicy.shouldSuppress(
+            selectionLocation: 0,
+            firstCharacterAtCursor: ""
+        ))
+        #expect(!BlankFieldSuggestionPolicy.shouldSuppress(
+            selectionLocation: 0,
+            firstCharacterAtCursor: "H"
+        ))
+        #expect(!BlankFieldSuggestionPolicy.shouldSuppress(
+            selectionLocation: 12,
+            firstCharacterAtCursor: nil
+        ))
+    }
 }

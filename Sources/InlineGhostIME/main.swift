@@ -16,6 +16,8 @@ UserDefaults.standard.register(defaults: [
     "GhostUsageCaptureEnabled": false,
     "GhostSoundsEnabled": true,
     "GhostFastLayerEnabled": true,
+    "GhostPersonalWordsEnabled": true,
+    "GhostPersonalPhrasesEnabled": false,
 ])
 
 // Retain the server for the process lifetime; IMK dispatches client sessions to it.

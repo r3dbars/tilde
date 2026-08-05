@@ -21,6 +21,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
     private let engineProvider: @MainActor () -> any CompletionEngine
     private let screenContextResolver: @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext?
+    private let personalExamplesResolver: @Sendable (_ textBeforeCursor: String) -> [PersonalWritingExample]
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
@@ -33,10 +34,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
     init(
         engineProvider: @escaping @MainActor () -> any CompletionEngine,
-        screenContextResolver: @escaping @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext? = { _, _, _ in nil }
+        screenContextResolver: @escaping @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext? = { _, _, _ in nil },
+        personalExamplesResolver: @escaping @Sendable (_ textBeforeCursor: String) -> [PersonalWritingExample] = { _ in [] }
     ) {
         self.engineProvider = engineProvider
         self.screenContextResolver = screenContextResolver
+        self.personalExamplesResolver = personalExamplesResolver
     }
 
     func start() {
@@ -171,6 +174,20 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 ], to: connection)
                 return
             }
+            // A blank field never asks the model to speak first, even when OCR
+            // sees a message elsewhere on screen. This is the server-side backstop
+            // for clients that bypass the normal keyboard activation policy.
+            guard payload.context.contains(where: { !$0.isWhitespace }) else {
+                Self.write([
+                    "suggestion": "",
+                    "page": false,
+                    "memory_assisted": false,
+                ], to: connection)
+                DiagnosticsLog.shared.record("blank-field-suppressed", metadata: [
+                    "app": payload.app ?? "unknown"
+                ])
+                return
+            }
             let engine = await self.engineProvider()
             // Mid-word contexts want the engine's word-completion mode; word
             // boundaries want phrase continuation. App + field identity let the
@@ -185,11 +202,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
             } else {
                 pageContext = self.screenContextResolver(payload.app, payload.field, payload.context)
             }
+            let personalExamples = self.personalExamplesResolver(payload.context)
             let request = CompletionRequest(
                 textBeforeCursor: payload.context,
                 appBundleIdentifier: payload.app,
                 fieldIdentityDescription: payload.field,
                 visiblePageContext: pageContext,
+                personalWritingExamples: personalExamples,
                 mode: midWord ? .wordCompletion : .phraseContinuation
             )
             // Partial callbacks can fire from generation threads; serialize socket
@@ -203,11 +222,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let final = try? await engine.suggestion(for: request) { partial in
                 let text = partial.visibleText
                 guard !text.isEmpty else { return }
-                send(["suggestion": text, "partial": true])
+                send([
+                    "suggestion": text,
+                    "partial": true,
+                    "memory_assisted": !personalExamples.isEmpty,
+                ])
             }
             // "page" reports whether screen context was attached — observability
             // for the capture pipeline (content itself never leaves the process).
-            send(["suggestion": final?.visibleText ?? "", "page": pageContext != nil])
+            send([
+                "suggestion": final?.visibleText ?? "",
+                "page": pageContext != nil,
+                "memory_assisted": !personalExamples.isEmpty,
+            ])
             // The end-to-end proof lane (script/real_app_smoke.sh) waits for
             // this event: a real keystroke travelled keyboard → socket →
             // engine → back. "Served", deliberately not "presented" — the IME
@@ -216,7 +243,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
             if let visible = final?.visibleText, !visible.isEmpty {
                 DiagnosticsLog.shared.record("suggestion-served", metadata: [
                     "app": payload.app ?? "unknown",
-                    "chars": String(visible.count)
+                    "chars": String(visible.count),
+                    "personalMemoryExamples": String(personalExamples.count),
                 ])
             }
         }
@@ -255,8 +283,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
         if (object["config"] as? Bool) == true {
             return RequestPayload(context: "", app: nil, field: nil, page: nil, configProbe: true)
         }
-        // Empty context is legal: it requests an OPENER (reply's first words
-        // grounded in screen context alone).
+        // Empty context still parses so the server can return an explicit,
+        // observable silence instead of treating the keyboard as disconnected.
         guard let context = object["context"] as? String
         else { return nil }
         return RequestPayload(

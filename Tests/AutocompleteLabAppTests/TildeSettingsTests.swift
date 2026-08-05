@@ -20,6 +20,8 @@ struct TildeSettingsTests {
         #expect(settings.suggestionsEnabled)
         #expect(settings.soundsEnabled)
         #expect(!settings.learningEnabled)
+        #expect(settings.personalWordsEnabled)
+        #expect(!settings.personalPhrasesEnabled)
         #expect(settings.pausedUntil == nil)
 
         let sources = try Self.keyboardSourceText()
@@ -32,10 +34,14 @@ struct TildeSettingsTests {
         settings.suggestionsEnabled = false
         settings.soundsEnabled = false
         settings.learningEnabled = false
+        settings.personalWordsEnabled = false
+        settings.personalPhrasesEnabled = true
 
         #expect(keyboard.object(forKey: "GhostSuggestionsEnabled") as? Bool == false)
         #expect(keyboard.object(forKey: "GhostSoundsEnabled") as? Bool == false)
         #expect(keyboard.object(forKey: "GhostUsageCaptureEnabled") as? Bool == false)
+        #expect(keyboard.object(forKey: "GhostPersonalWordsEnabled") as? Bool == false)
+        #expect(keyboard.object(forKey: "GhostPersonalPhrasesEnabled") as? Bool == true)
         for key in TildeSettings.KeyboardKey.allCases {
             #expect(app.object(forKey: key.rawValue) == nil)
         }

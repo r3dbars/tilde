@@ -31,6 +31,7 @@ public struct CompletionRequest: Equatable, Sendable {
     public let appBundleIdentifier: String?
     public let fieldIdentityDescription: String?
     public let visiblePageContext: VisiblePageContext?
+    public let personalWritingExamples: [PersonalWritingExample]
     public let maxVisibleWords: Int
     public let mode: CompletionRequestMode
 
@@ -40,6 +41,7 @@ public struct CompletionRequest: Equatable, Sendable {
         appBundleIdentifier: String? = nil,
         fieldIdentityDescription: String? = nil,
         visiblePageContext: VisiblePageContext? = nil,
+        personalWritingExamples: [PersonalWritingExample] = [],
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
         mode: CompletionRequestMode = .phraseContinuation
     ) {
@@ -48,6 +50,7 @@ public struct CompletionRequest: Equatable, Sendable {
         self.appBundleIdentifier = appBundleIdentifier
         self.fieldIdentityDescription = fieldIdentityDescription
         self.visiblePageContext = visiblePageContext
+        self.personalWritingExamples = personalWritingExamples
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         self.mode = mode
     }

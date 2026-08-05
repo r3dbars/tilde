@@ -10,6 +10,11 @@ import Foundation
 /// just vanish because the brain is away.
 enum GhostBrainClient {
 
+    struct Completion {
+        let text: String
+        let memoryAssisted: Bool
+    }
+
     static let socketPath = NSString(
         string: "~/Library/Application Support/Tilde/ghost.sock"
     ).expandingTildeInPath
@@ -24,8 +29,8 @@ enum GhostBrainClient {
         context: String,
         app: String?,
         field: String?,
-        onPartial: ((String) -> Void)? = nil
-    ) -> String? {
+        onPartial: ((Completion) -> Void)? = nil
+    ) -> Completion? {
         var object: [String: Any] = ["v": 1, "context": context]
         // App + field identity let the brain's prompt KV cache recognize
         // consecutive keystrokes in the same field (the big latency win).
@@ -70,7 +75,7 @@ enum GhostBrainClient {
         // final (no "partial" flag). On timeout/EOF, the last partial stands.
         var pending = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
-        var lastPartial: String?
+        var lastPartial: Completion?
         while pending.count < 262_144 {
             let n = read(fd, &buffer, buffer.count)
             guard n > 0 else { break }
@@ -82,16 +87,22 @@ enum GhostBrainClient {
                     let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                     let suggestion = object["suggestion"] as? String
                 else { continue }
+                let completion = Completion(
+                    text: suggestion,
+                    memoryAssisted: object["memory_assisted"] as? Bool ?? false
+                )
                 if (object["partial"] as? Bool) == true {
                     if !suggestion.isEmpty {
-                        lastPartial = suggestion
-                        onPartial?(suggestion)
+                        lastPartial = completion
+                        onPartial?(completion)
                     }
                 } else {
                     // The brain ANSWERED — empty means it chose silence. Return ""
                     // (not nil) so callers respect the silence instead of treating
                     // it as "brain unreachable" and falling back to another model.
-                    return suggestion.isEmpty ? (lastPartial ?? "") : suggestion
+                    return suggestion.isEmpty
+                        ? (lastPartial ?? Completion(text: "", memoryAssisted: completion.memoryAssisted))
+                        : completion
                 }
             }
         }

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var ghostScreenContextBridge = GhostScreenContextBridge(provider: visiblePageContextProvider)
     private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
+    private let personalMemorySnapshotHost = PersonalMemorySnapshotHost()
 
     // Phrase continuations go to the llama/Gemma engine when its server is
     // healthy; word completion belongs to the keyboard's dictionary layer, so
@@ -41,6 +42,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: text,
                 enabled: UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled")
             )
+        },
+        personalExamplesResolver: { [memory = personalMemorySnapshotHost] context in
+            let defaults = UserDefaults(suiteName: TildeSettings.keyboardSuiteName)
+            guard defaults?.bool(forKey: TildeSettings.KeyboardKey.learning.rawValue) == true,
+                  defaults?.bool(forKey: TildeSettings.KeyboardKey.personalPhrases.rawValue) == true
+            else { return [] }
+            return memory.examples(after: context, limit: 2)
         }
     )
 
@@ -62,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
         statusMenuHost.start()
+        personalMemorySnapshotHost.start()
         ghostBrainServerHost.start()
         llamaServerHost.start()
         registerAsLoginItemIfNeeded()
@@ -81,11 +90,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.flush()
         llamaServerHost.stop()
         ghostBrainServerHost.stop()
+        personalMemorySnapshotHost.stop()
     }
 
     /// The keyboard's own defaults domain — the one channel the app and the
     /// IME process share (TrainingSampleLog reads its capture flag the same way).
     static let keyboardDefaultsSuite = "bar.r3d.inputmethod.InlineGhost"
+
+    func refreshPersonalMemory() {
+        personalMemorySnapshotHost.refreshNow()
+    }
 
     /// One line for the status menu: which engine is answering. Honest by
     /// rule — the app may fail, but never silently. The personal/generic

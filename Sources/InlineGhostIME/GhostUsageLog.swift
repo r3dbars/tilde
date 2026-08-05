@@ -25,17 +25,22 @@ enum GhostUsageLog {
         case acceptAll = "accept_all"
         case dismiss
         case typedInstead = "typed_instead"
+        case suppressedBlank = "suppressed_blank"
     }
 
     enum Source: String {
         case fast
+        case personalWord = "personal_word"
         case model
+        case modelMemory = "model_memory"
+        case policy
     }
 
     /// Log to iCloud Drive when available so multiple Macs feed one folder the
     /// owner (and their tools) can read; per-host filename keeps machines'
     /// streams separate. Falls back to local Application Support if iCloud is
-    /// absent. Redacted events only — never raw text — so this is safe to sync.
+    /// absent. The owner explicitly opts in because these events include raw
+    /// context and accepted/typed text for personal learning.
     private static let logDirectory: String = {
         let icloud = NSString(string: "~/Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage")
             .expandingTildeInPath

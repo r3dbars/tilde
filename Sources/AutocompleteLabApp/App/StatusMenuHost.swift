@@ -15,6 +15,8 @@ final class StatusMenuHost: NSObject {
     private var screenItem: NSMenuItem?
     private var soundsItem: NSMenuItem?
     private var learningItem: NSMenuItem?
+    private var personalWordsItem: NSMenuItem?
+    private var personalPhrasesItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
 
     /// Every setting, its defaults domain, and its fallback live in one tested
@@ -43,6 +45,16 @@ final class StatusMenuHost: NSObject {
             to: menu,
             "Learn from my writing (syncs to iCloud)",
             #selector(toggleLearning(_:))
+        )
+        personalWordsItem = addToggle(
+            to: menu,
+            "Personal word memory",
+            #selector(togglePersonalWords(_:))
+        )
+        personalPhrasesItem = addToggle(
+            to: menu,
+            "Longer personal memory (experimental)",
+            #selector(togglePersonalPhrases(_:))
         )
         menu.addItem(.separator())
 
@@ -119,6 +131,15 @@ final class StatusMenuHost: NSObject {
 
     @objc private func toggleLearning(_ sender: Any?) {
         settings.learningEnabled.toggle()
+        appDelegate?.refreshPersonalMemory()
+    }
+
+    @objc private func togglePersonalWords(_ sender: Any?) {
+        settings.personalWordsEnabled.toggle()
+    }
+
+    @objc private func togglePersonalPhrases(_ sender: Any?) {
+        settings.personalPhrasesEnabled.toggle()
     }
 
     @objc private func toggleSounds(_ sender: Any?) {
@@ -188,6 +209,8 @@ extension StatusMenuHost: NSMenuDelegate {
         screenItem?.state = settings.screenAware ? .on : .off
         soundsItem?.state = settings.soundsEnabled ? .on : .off
         learningItem?.state = settings.learningEnabled ? .on : .off
+        personalWordsItem?.state = settings.personalWordsEnabled ? .on : .off
+        personalPhrasesItem?.state = settings.personalPhrasesEnabled ? .on : .off
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))

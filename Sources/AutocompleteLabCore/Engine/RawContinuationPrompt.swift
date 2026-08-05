@@ -115,6 +115,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public init(
         textBeforeCursor: String,
         screenContext: String? = nil,
+        personalWritingExamples: [PersonalWritingExample] = [],
         register: ContinuationRegister = .prose,
         maxContextCharacters: Int = 3000,
         maxScreenContextCharacters: Int = 700
@@ -125,24 +126,25 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         )
         contextEndedInWhitespace = trimmed.count != tail.count
 
-        // Opener mode: nothing typed yet, but a message is visible on screen —
-        // propose the first words of a reply instead of waiting for the writer.
-        // Only fires with real screen context; an empty field with no screen is
-        // silence (nothing to ground a guess in).
+        // Blank fields always stay silent. Screen context can ground a continuation
+        // after the writer starts, but it must never cause Tilde to speak first.
         if trimmed.isEmpty {
-            let bounded = screenContext.map {
-                String($0.prefix(max(120, maxScreenContextCharacters)))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            } ?? ""
-            if bounded.isEmpty {
-                prompt = ""
-                return
-            }
-            prompt = Self.openerScaffold + "Message: " + bounded + "\nReply:"
+            prompt = ""
             return
         }
 
         var pieces = Self.scaffold(for: register)
+        let examples = personalWritingExamples.prefix(2).compactMap { example -> String? in
+            let text = Self.singleLine(example.text, limit: 220)
+            let continuation = Self.singleLine(example.continuation, limit: 140)
+            guard !text.isEmpty, !continuation.isEmpty else { return nil }
+            return "Text: \(text)\nContinuation: \(continuation)\n\n"
+        }
+        if !examples.isEmpty {
+            pieces += "Relevant examples of how this same writer continued text with the same ending:\n\n"
+            pieces += examples.joined()
+            pieces += "\n"
+        }
         if let screenContext {
             let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -176,6 +178,10 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             }
         }
         prompt = pieces + "Text: " + trimmed + "\nContinuation:"
+    }
+
+    private static func singleLine(_ value: String, limit: Int) -> String {
+        String(value.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(limit))
     }
 
     /// Few-shot recipe for opener mode: message→reply pairs teach the model

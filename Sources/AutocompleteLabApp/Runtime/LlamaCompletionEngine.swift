@@ -43,6 +43,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         let recipe = RawContinuationPrompt(
             textBeforeCursor: request.textBeforeCursor,
             screenContext: request.visiblePageContext?.promptText,
+            personalWritingExamples: request.personalWritingExamples,
             register: register,
             maxContextCharacters: envInt("TILDE_MAX_CONTEXT_CHARS") ?? 3000,
             maxScreenContextCharacters: envInt("TILDE_MAX_SCREEN_CHARS") ?? 700
@@ -240,6 +241,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
             "promptTokensProcessed": promptTokensProcessed.map(String.init) ?? "unknown",
             "screenContextAttached": String(request.visiblePageContext != nil),
+            "personalMemoryExamples": String(request.personalWritingExamples.count),
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
             "mode": request.mode.rawValue,
         ])
