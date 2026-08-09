@@ -90,7 +90,10 @@ final class SuggestionPanelController {
     ) -> CGRect? {
         let fontSize = defaultFontSize(anchorRect: anchorRect, renderMode: renderMode)
         let font = style?.font ?? NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        let color = visualStyle.textColor(for: renderMode)
+        let rendering = GhostTextColorPolicy.rendering(
+            matching: style?.foregroundColor,
+            renderMode: renderMode
+        )
 
         let textInsets = Self.textInsets(for: renderMode)
         let textPadding = CGSize(
@@ -198,7 +201,8 @@ final class SuggestionPanelController {
         ghostTextView.update(
             text: text,
             font: font,
-            color: color,
+            color: rendering.color,
+            halo: rendering.halo,
             renderMode: renderMode,
             textInsets: textInsets
         )
@@ -351,34 +355,46 @@ final class SuggestionPanelController {
 }
 
 enum GhostTextColorPolicy {
+    struct Rendering {
+        let color: NSColor
+        let halo: NSShadow?
+    }
+
+    static func rendering(
+        matching foregroundColor: NSColor?,
+        renderMode: SuggestionRenderMode
+    ) -> Rendering {
+        switch renderMode {
+        case .floatingMirror:
+            return Rendering(color: .labelColor, halo: nil)
+        case .disabled:
+            return Rendering(color: .secondaryLabelColor, halo: nil)
+        case .inlineAdjacent:
+            let spec = InlineGhostLegibilityPolicy.spec(
+                reportedTextLuminance: relativeLuminance(of: foregroundColor).map(Double.init)
+            )
+            let halo = NSShadow()
+            halo.shadowColor = NSColor(
+                calibratedWhite: CGFloat(spec.haloWhite),
+                alpha: CGFloat(spec.haloAlpha)
+            )
+            halo.shadowBlurRadius = CGFloat(spec.haloBlurRadius)
+            halo.shadowOffset = .zero
+            return Rendering(
+                color: NSColor(
+                    calibratedWhite: CGFloat(spec.fillWhite),
+                    alpha: CGFloat(spec.fillAlpha)
+                ),
+                halo: halo
+            )
+        }
+    }
+
     static func color(
         matching foregroundColor: NSColor?,
         renderMode: SuggestionRenderMode
     ) -> NSColor {
-        switch renderMode {
-        case .floatingMirror:
-            return NSColor.labelColor
-        case .inlineAdjacent:
-            return inlineColor(matching: foregroundColor)
-        case .disabled:
-            return NSColor.secondaryLabelColor
-        }
-    }
-
-    private static func inlineColor(matching foregroundColor: NSColor?) -> NSColor {
-        guard let luminance = relativeLuminance(of: foregroundColor) else {
-            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
-        }
-
-        if luminance >= 0.62 {
-            return NSColor(calibratedWhite: 0.82, alpha: 0.88)
-        }
-
-        if luminance <= 0.25 {
-            return NSColor(calibratedWhite: 0.52, alpha: 0.78)
-        }
-
-        return NSColor(calibratedWhite: 0.62, alpha: 0.82)
+        rendering(matching: foregroundColor, renderMode: renderMode).color
     }
 
     private static func relativeLuminance(of color: NSColor?) -> CGFloat? {
@@ -526,6 +542,7 @@ private final class GhostTextView: NSView {
     private var text = ""
     private var font = NSFont.systemFont(ofSize: 15)
     private var color = NSColor.labelColor.withAlphaComponent(0.42)
+    private var halo: NSShadow?
     private var renderMode = SuggestionRenderMode.inlineAdjacent
     private var textInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
@@ -537,12 +554,14 @@ private final class GhostTextView: NSView {
         text: String,
         font: NSFont,
         color: NSColor,
+        halo: NSShadow?,
         renderMode: SuggestionRenderMode,
         textInsets: NSEdgeInsets
     ) {
         self.text = text
         self.font = font
         self.color = color
+        self.halo = halo
         self.renderMode = renderMode
         self.textInsets = textInsets
         needsDisplay = true
@@ -555,11 +574,14 @@ private final class GhostTextView: NSView {
             return
         }
 
-        let attributes: [NSAttributedString.Key: Any] = [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: color,
             .paragraphStyle: paragraphStyle
         ]
+        if let halo {
+            attributes[.shadow] = halo
+        }
         let textSize = text.size(withAttributes: attributes)
         let point = NSPoint(
             x: textInsets.left,

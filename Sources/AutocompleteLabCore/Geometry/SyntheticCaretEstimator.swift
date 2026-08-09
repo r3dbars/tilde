@@ -15,6 +15,7 @@ public enum SyntheticCaretEstimator {
         inlineGap: CGFloat = 8,
         inlineVerticalDropFactor: CGFloat = 0.85,
         centerSingleLineWhenTall: Bool = false,
+        measuredCurrentLineRect: CGRect? = nil,
         widthOfText: (String) -> CGFloat
     ) -> CGRect? {
         guard elementRect.width > 80, elementRect.height > 20 else {
@@ -25,6 +26,32 @@ public enum SyntheticCaretEstimator {
         }
 
         let lineHeight = max(rawLineHeight, 20)
+
+        // A real on-screen rect for the caret's line beats any width estimate:
+        // the estimate multiplies a guessed font by the whole line, so its
+        // error grows with every character, while the measured rect is truth.
+        if let measured = usableMeasuredCurrentLineRect(
+            measuredCurrentLineRect,
+            elementRect: elementRect,
+            lineHeight: lineHeight
+        ) {
+            let caretHeight = max(min(measured.height, lineHeight * 1.5), 16)
+            let upperX = max(elementRect.minX, elementRect.maxX - horizontalPadding)
+            let preferredX = measured.maxX + inlineGap
+            let y = clampedCaretY(
+                measured.minY,
+                caretHeight: caretHeight,
+                elementRect: elementRect,
+                windowRect: windowRect
+            )
+            return CGRect(
+                x: min(max(preferredX, elementRect.minX), upperX),
+                y: y,
+                width: 0,
+                height: caretHeight
+            )
+        }
+
         let maxLineWidth = max(40, elementRect.width - (horizontalPadding * 2))
         let visualLines = wrappedVisualLines(
             for: boundedTextBeforeCursor(textBeforeCursor),
@@ -89,6 +116,23 @@ public enum SyntheticCaretEstimator {
         }
 
         return lines.isEmpty ? [""] : lines
+    }
+
+    private static func usableMeasuredCurrentLineRect(
+        _ rect: CGRect?,
+        elementRect: CGRect,
+        lineHeight: CGFloat
+    ) -> CGRect? {
+        guard let rect,
+              rect.isFinitePlacementRect,
+              rect.width >= 1,
+              rect.height >= 8,
+              rect.height <= lineHeight * 3,
+              elementRect.insetBy(dx: -24, dy: -24).intersects(rect) else {
+            return nil
+        }
+
+        return rect
     }
 
     private static func boundedTextBeforeCursor(_ text: String) -> String {
