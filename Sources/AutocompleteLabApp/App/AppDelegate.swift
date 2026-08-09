@@ -441,6 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastTextLineRect: CGRect?
     private var lastClippingRect: CGRect?
     private var lastTextStyle: FocusedTextStyle?
+    private var ghostWidthCalibration: [String: GhostWidthCalibration] = [:]
     private var lastRenderMode: SuggestionRenderMode?
     private var lastCompatibilityLearningTrustContext: CompatibilityLearningVisualTrustContext?
     private var lastVisibleSuggestionGeometrySnapshot: SuggestionGeometrySnapshot?
@@ -3808,6 +3809,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && terminalScreenPromptAnchor != nil
             ? "terminal-screen-prompt"
             : "text-area-estimate"
+        let syntheticFont = syntheticTextAreaResolvedFont(
+            for: context,
+            bundleIdentifier: syntheticCaretBundleIdentifier
+        )
         let capabilities = FocusedTextCapabilities(
             canReadValue: context.capabilities.canReadValue,
             canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange,
@@ -3836,7 +3841,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowRect: context.windowRect,
             windowIdentifier: context.windowIdentifier,
             textLineRect: syntheticCaret,
-            textStyle: context.textStyle,
+            textStyle: FocusedTextStyle(
+                fontName: syntheticFont.fontName,
+                fontSize: syntheticFont.pointSize,
+                foregroundColor: context.textStyle?.foregroundColor
+            ),
             isSecure: context.isSecure,
             caretIsSynthetic: true,
             capabilities: capabilities
@@ -4095,7 +4104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let tuning = syntheticTextAreaTuning(for: context, bundleIdentifier: bundleIdentifier)
-        let font = tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
+        let font = syntheticTextAreaResolvedFont(for: context, bundleIdentifier: bundleIdentifier)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
 
         if bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
@@ -4122,6 +4131,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return obsidianScrolledCaret
         }
 
+        let measuredCurrentLineRect = syntheticMeasuredCurrentLineRect(for: context)
+        var calibration = ghostWidthCalibration[bundleIdentifier] ?? .neutral
+        if let measuredCurrentLineRect {
+            let currentLine = context.textBeforeCursor
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .last
+                .map(String.init) ?? context.textBeforeCursor
+            calibration = calibration.updated(
+                measuredWidth: Double(measuredCurrentLineRect.width),
+                estimatedWidth: Double(width(of: currentLine, font: font))
+            )
+            ghostWidthCalibration[bundleIdentifier] = calibration
+        }
+        let widthScale = CGFloat(calibration.scale)
+
         return SyntheticCaretEstimator.caretRect(
             textBeforeCursor: context.textBeforeCursor,
             elementRect: elementRect,
@@ -4131,7 +4155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             verticalPadding: tuning.verticalPadding,
             inlineGap: tuning.inlineGap,
             centerSingleLineWhenTall: tuning.centerSingleLineWhenTall,
-            widthOfText: { width(of: $0, font: font) }
+            measuredCurrentLineRect: measuredCurrentLineRect,
+            widthOfText: { width(of: $0, font: font) * widthScale }
         )
     }
 
@@ -4289,6 +4314,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return textStyle.font
+    }
+
+    /// The one font used for both caret-width estimation and ghost rendering.
+    /// If measurement and rendering resolve fonts independently they can
+    /// disagree, which misplaces the ghost even when its size looks right.
+    private func syntheticTextAreaResolvedFont(
+        for context: FocusedTextContext,
+        bundleIdentifier: String
+    ) -> NSFont {
+        let tuning = syntheticTextAreaTuning(for: context, bundleIdentifier: bundleIdentifier)
+        return tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
+    }
+
+    /// A real AX line rect for the caret's line, usable only when the caret
+    /// sits at the end of it so the rect's trailing edge is the caret.
+    private func syntheticMeasuredCurrentLineRect(for context: FocusedTextContext) -> CGRect? {
+        guard context.textAfterCursor.isEmpty,
+              context.selectedTextLength == 0,
+              let lineRect = context.textLineRect,
+              lineRect.width >= 1 else {
+            return nil
+        }
+
+        return lineRect
     }
 
     private func usesChromeRichEditorSyntheticTuning(

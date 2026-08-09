@@ -1686,7 +1686,11 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         let attributes = attributedString.attributes(at: 0, effectiveRange: nil)
-        let font = accessibilityFont(from: attributes) ?? NSFont.systemFont(ofSize: 13)
+        // No reported font means no style: a fabricated size would flow into
+        // ghost rendering and caret estimation looking like ground truth.
+        guard let font = accessibilityFont(from: attributes) else {
+            return nil
+        }
 
         return FocusedTextStyle(
             fontName: font.fontName,
@@ -1730,7 +1734,9 @@ final class AccessibilityClient: @unchecked Sendable {
             return nil
         }
 
-        let fontSize = (fontDictionary["AXFontSize"] as? NSNumber)?.doubleValue ?? 13
+        guard let fontSize = (fontDictionary["AXFontSize"] as? NSNumber)?.doubleValue else {
+            return nil
+        }
         let fontName = fontDictionary["AXFontName"] as? String
             ?? fontDictionary["AXVisibleName"] as? String
             ?? fontDictionary["AXFontFamily"] as? String
