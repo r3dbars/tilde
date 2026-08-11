@@ -22,7 +22,6 @@ public enum CompletionCleanRejectionReason: String, Codable, Equatable, Sendable
     case invalidWordCompletion
     case lowValueSingleWordPhrase
     case lowSignalPhrase
-    case duplicateCandidate
 }
 
 public enum CompletionCleanResult: Equatable, Sendable {
@@ -63,11 +62,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     public let maxVisibleWords: Int
 
     public init(
-        minimumVisibleWords: Int = CompletionModelPolicy.minimumVisibleWords,
-        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
+        minimumVisibleWords: Int = 1,
+        maxVisibleWords: Int = CompletionSuggestion.defaultMaxVisibleWords
     ) {
         self.minimumVisibleWords = max(1, minimumVisibleWords)
-        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
+        self.maxVisibleWords = CompletionSuggestion.clampedVisibleWords(maxVisibleWords)
     }
 
     public func clean(_ rawOutput: String) -> CompletionSuggestion? {
@@ -290,50 +289,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return .accepted(suggestion)
-    }
-
-    private func candidateLines(from rawOutput: String) -> [String] {
-        let withoutThinking = rawOutput
-            .replacingOccurrences(
-                of: #"<think>[\s\S]*?</think>"#,
-                with: "",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: #"</?think>"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-
-        let lines = withoutThinking
-            .components(separatedBy: .newlines)
-            .map(strippingCandidatePrefix)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-        return lines.isEmpty ? [withoutThinking] : lines
-    }
-
-    private func strippingCandidatePrefix(from text: String) -> String {
-        text
-            .replacingOccurrences(
-                of: #"^\s*candidate\s+\d+\s*[\).:-]?\s*"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .replacingOccurrences(
-                of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
-                with: "",
-                options: .regularExpression
-            )
-    }
-
-    private func normalizedCandidateKey(_ text: String) -> String {
-        text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 
     private func isNoSuggestionSentinel(_ text: String) -> Bool {
