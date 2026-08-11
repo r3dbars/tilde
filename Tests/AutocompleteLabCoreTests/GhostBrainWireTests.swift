@@ -29,5 +29,6 @@ struct GhostBrainWireTests {
         }
         #expect(GhostBrainResponse.suggestion("") == .silence)
         #expect(GhostBrainResponse.silence != .unavailable)
+        #expect(GhostBrainResponse.decode(Data("not-json".utf8)) == .error)
     }
 }

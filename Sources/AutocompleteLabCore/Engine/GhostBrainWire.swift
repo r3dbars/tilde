@@ -38,4 +38,10 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
     public static let error = Self(outcome: .error, suggestion: nil)
     public static let timeout = Self(outcome: .timeout, suggestion: nil)
     public static let invalidRequest = Self(outcome: .invalidRequest, suggestion: nil)
+
+    /// A response from an authenticated peer that does not match this protocol
+    /// is a runtime error, not an unavailable app.
+    public static func decode(_ data: Data) -> Self {
+        (try? JSONDecoder().decode(Self.self, from: data)) ?? .error
+    }
 }
