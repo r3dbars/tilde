@@ -9,6 +9,23 @@ BINARY="$APP/Contents/MacOS/Tilde"
 PORT=17872
 SOCKET="$HOME/Library/Application Support/Tilde/ghost.sock"
 
+usage() {
+  echo "Usage: script/restart_app.sh"
+}
+
+case "$#:${1:-}" in
+  0:) ;;
+  1:-h|1:--help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "restart_app.sh: unknown argument: ${1:-}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 [[ -x "$BINARY" ]] || { echo "missing built app: $APP" >&2; exit 1; }
 
 tilde_pids() {

@@ -33,7 +33,7 @@ final class StatusMenuHost: NSObject {
         engineItem = addInfoRow(to: menu, "Engine: starting…")
         menu.addItem(.separator())
 
-        suggestionsItem = addToggle(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
+        suggestionsItem = addAction(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
@@ -77,14 +77,6 @@ final class StatusMenuHost: NSObject {
     private func addInfoRow(to menu: NSMenu, _ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
-        menu.addItem(item)
-        return item
-    }
-
-    @discardableResult
-    private func addToggle(to menu: NSMenu, _ title: String, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
         menu.addItem(item)
         return item
     }

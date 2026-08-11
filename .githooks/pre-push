@@ -4,7 +4,6 @@
 #
 # Enable once:   git config core.hookspath .githooks
 # Bypass once:   git push --no-verify        (or: PROOF_SKIP_PREPUSH=1 git push)
-# Skip Swift:    PROOF_SKIP_SWIFT=1 git push (e.g. on a cold build)
 set -uo pipefail
 
 if [ "${PROOF_SKIP_PREPUSH:-}" = "1" ]; then

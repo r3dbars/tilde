@@ -3,7 +3,6 @@ description: Report an autocomplete or app compatibility problem without sharing
 title: "[Bug] "
 labels:
   - bug
-  - needs triage
 body:
   - type: markdown
     attributes:

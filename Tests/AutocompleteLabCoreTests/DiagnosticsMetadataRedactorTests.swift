@@ -6,9 +6,9 @@ struct DiagnosticsMetadataRedactorTests {
     @Test("Known scalar fields survive unchanged")
     func keepsKnownScalars() {
         #expect(field("totalMilliseconds", "42") == "totalMilliseconds=42")
-        #expect(field("firstTokenProbability", "0.812") == "firstTokenProbability=0.812")
+        #expect(field("cleanedChars", "8") == "cleanedChars=8")
         #expect(field("willRestart", "true") == "willRestart=true")
-        #expect(field("reason", "binary-missing") == "reason=binary-missing")
+        #expect(field("reason", "launch-failed") == "reason=launch-failed")
         #expect(field("reason", "assets-missing") == "reason=assets-missing")
         #expect(field("reason", "port-in-use") == "reason=port-in-use")
         #expect(field("reason", "health-timeout") == "reason=health-timeout")
