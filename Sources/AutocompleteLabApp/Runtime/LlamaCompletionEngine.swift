@@ -34,11 +34,13 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         ]
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
+        urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
         urlRequest.timeoutInterval = 8
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let (data, response) = try await LocalhostURLSession.shared.data(for: urlRequest)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw LlamaEngineError.transport
         }

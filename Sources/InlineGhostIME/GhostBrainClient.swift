@@ -9,7 +9,11 @@ enum GhostBrainClient {
     ).expandingTildeInPath
 
     private static let timeoutNanoseconds: UInt64 = 2_000_000_000
-    private static let worker = DispatchQueue(label: "bar.r3d.tilde.ghost-client", qos: .userInitiated)
+    private static let worker = DispatchQueue(
+        label: "bar.r3d.tilde.ghost-client",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
 
     static func complete(context: String, app: String?) async -> GhostBrainResponse {
         guard let connection = Connection(path: socketPath) else { return .unavailable }
@@ -32,13 +36,22 @@ enum GhostBrainClient {
         private var closed = false
 
         init?(path: String) {
+            let directory = (path as NSString).deletingLastPathComponent
+            var directoryInfo = stat()
             var info = stat()
-            guard lstat(path, &info) == 0,
+            guard lstat(directory, &directoryInfo) == 0,
+                  directoryInfo.st_mode & S_IFMT == S_IFDIR,
+                  directoryInfo.st_uid == getuid(),
+                  directoryInfo.st_mode & 0o777 == 0o700,
+                  lstat(path, &info) == 0,
                   info.st_mode & S_IFMT == S_IFSOCK,
                   info.st_uid == getuid(),
-                  info.st_mode & 0o077 == 0 else { return nil }
+                  info.st_mode & 0o777 == 0o600 else { return nil }
             fd = socket(AF_UNIX, SOCK_STREAM, 0)
-            guard fd >= 0 else { return nil }
+            guard fd >= 0, fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 else {
+                if fd >= 0 { close(fd) }
+                return nil
+            }
             var noSigpipe: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
             deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
@@ -93,7 +106,9 @@ enum GhostBrainClient {
             var gid: gid_t = 0
             guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { return false }
 #if DEBUG
-            guard Bundle.main.bundleIdentifier == "bar.r3d.inputmethod.InlineGhost" else { return true }
+            if Bundle.main.bundleIdentifier != "bar.r3d.inputmethod.InlineGhost" {
+                return ProcessInfo.processInfo.environment["TILDE_ALLOW_UNSIGNED_LOCAL_PEER"] == "1"
+            }
 #else
             guard Bundle.main.bundleIdentifier == "bar.r3d.inputmethod.InlineGhost" else { return false }
 #endif
@@ -102,7 +117,13 @@ enum GhostBrainClient {
             guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 else { return false }
             guard let peer = Self.identity(pid: pid), peer.identifier == "bar.r3d.tilde",
                   let own = Self.identity(pid: getpid()) else { return false }
-            return own.team.map { peer.team == $0 } ?? true
+#if DEBUG
+            guard let ownTeam = own.team else { return peer.team == nil }
+            return peer.team == ownTeam
+#else
+            guard let ownTeam = own.team, let peerTeam = peer.team else { return false }
+            return ownTeam == peerTeam
+#endif
         }
 
         private static func identity(pid: pid_t) -> (identifier: String, team: String?)? {
@@ -115,7 +136,11 @@ enum GhostBrainClient {
             guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
                   let staticCode else { return nil }
             var information: CFDictionary?
-            guard SecCodeCopySigningInformation(staticCode, [], &information) == errSecSuccess,
+            guard SecCodeCopySigningInformation(
+                staticCode,
+                SecCSFlags(rawValue: kSecCSSigningInformation),
+                &information
+            ) == errSecSuccess,
                   let values = information as? [CFString: Any],
                   let identifier = values[kSecCodeInfoIdentifier] as? String else { return nil }
             return (identifier, values[kSecCodeInfoTeamIdentifier] as? String)
