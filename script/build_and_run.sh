@@ -26,7 +26,7 @@ Options:
   --jobs COUNT              Limit Swift build jobs.
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
-  --sign-identity IDENTITY  Sign with this identity instead of auto-detecting.
+  --sign-identity IDENTITY  Sign with this identity; use - for ad hoc signing.
 EOF
 }
 
@@ -122,7 +122,9 @@ if [[ -z "$SIGN_IDENTITY" ]]; then
   SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
     | awk '/Apple Development|Developer ID Application/ { print $2; exit }')"
 fi
-if [[ -n "$SIGN_IDENTITY" ]]; then
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  codesign --force --options runtime --sign - "$APP" >/dev/null
+elif [[ -n "$SIGN_IDENTITY" ]]; then
   RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
     | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
   [[ -n "$RESOLVED_IDENTITY" ]] \
