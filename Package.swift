@@ -8,10 +8,6 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
-        .library(
-            name: "AutocompleteLabCore",
-            targets: ["AutocompleteLabCore"]
-        ),
         .executable(
             name: "Tilde",
             targets: ["AutocompleteLabApp"]
@@ -21,7 +17,6 @@ let package = Package(
             targets: ["InlineGhostIME"]
         )
     ],
-    dependencies: [],
     targets: [
         .target(
             name: "AutocompleteLabCore"
@@ -36,9 +31,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "AutocompleteLabApp",
-            dependencies: [
-                "AutocompleteLabCore",
-            ]
+            dependencies: ["AutocompleteLabCore"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",

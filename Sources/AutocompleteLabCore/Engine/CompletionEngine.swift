@@ -40,7 +40,7 @@ public struct CompletionRequest: Equatable, Sendable {
         appBundleIdentifier: String? = nil,
         fieldIdentityDescription: String? = nil,
         visiblePageContext: VisiblePageContext? = nil,
-        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
+        maxVisibleWords: Int = CompletionSuggestion.defaultMaxVisibleWords,
         mode: CompletionRequestMode = .phraseContinuation
     ) {
         self.textBeforeCursor = textBeforeCursor
@@ -48,7 +48,7 @@ public struct CompletionRequest: Equatable, Sendable {
         self.appBundleIdentifier = appBundleIdentifier
         self.fieldIdentityDescription = fieldIdentityDescription
         self.visiblePageContext = visiblePageContext
-        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
+        self.maxVisibleWords = CompletionSuggestion.clampedVisibleWords(maxVisibleWords)
         self.mode = mode
     }
 }

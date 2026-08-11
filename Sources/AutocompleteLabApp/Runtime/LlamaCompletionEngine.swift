@@ -16,7 +16,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
     // (owner tuning 2026-07-24: shorter offers, higher precision).
     private let cleaner = CompletionOutputCleaner(
         maxVisibleWords: ProcessInfo.processInfo.environment["TILDE_MAX_VISIBLE_WORDS"].flatMap(Int.init)
-            ?? CompletionModelPolicy.mvp.maxVisibleWords
+            ?? CompletionSuggestion.defaultMaxVisibleWords
     )
 
     init(baseURL: URL) {
@@ -34,7 +34,6 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         let startedAt = Date()
         // All tuning knobs read from the environment so the auto-research loop
         // can turn any dial without a rebuild (see script/research_loop.py).
-        let env = ProcessInfo.processInfo.environment
         // env still wins; persisted "tilde.<NAME>" defaults survive reboots.
         func envInt(_ k: String) -> Int? { RuntimeSetting.int(String(k.dropFirst("TILDE_".count))) }
         func envDouble(_ k: String) -> Double? { RuntimeSetting.double(String(k.dropFirst("TILDE_".count))) }
@@ -211,7 +210,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
                 suggestion = clean.isEmpty ? nil : CompletionSuggestion(
                     text: repaired,
                     maxVisibleWords: envInt("TILDE_MAX_VISIBLE_WORDS")
-                        ?? CompletionModelPolicy.mvp.maxVisibleWords
+                        ?? CompletionSuggestion.defaultMaxVisibleWords
                 )
             }
         }
@@ -222,7 +221,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
             suggestion = trimmed.isEmpty ? nil : CompletionSuggestion(
                 text: trimmed,
                 maxVisibleWords: envInt("TILDE_MAX_VISIBLE_WORDS")
-                    ?? CompletionModelPolicy.mvp.maxVisibleWords
+                    ?? CompletionSuggestion.defaultMaxVisibleWords
             )
         }
         // Screen-echo guard: never "predict" words by copying a run of text the

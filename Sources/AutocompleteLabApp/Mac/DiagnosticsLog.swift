@@ -14,10 +14,6 @@ final class DiagnosticsLog: @unchecked Sendable {
             .appendingPathComponent("Library/Logs/Tilde/diagnostics.log")
     }
 
-    var path: String {
-        logURL.path
-    }
-
     func record(_ event: String, metadata: [String: String] = [:]) {
         queue.async { [self, logURL] in
             do {
@@ -43,31 +39,13 @@ final class DiagnosticsLog: @unchecked Sendable {
         queue.sync {}
     }
 
-    func recentLines(limit: Int) -> [String] {
-        queue.sync { [logURL] in
-            guard limit > 0,
-                  let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
-                return []
-            }
-
-            return contents
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .suffix(limit)
-                .map(String.init)
-        }
-    }
-
-    func deleteAll() {
-        queue.sync { [logURL] in
-            try? FileManager.default.removeItem(at: logURL)
-        }
-    }
-
     private func format(event: String, metadata: [String: String]) -> String {
         let timestamp = timestampFormatter.string(from: Date())
         let fields = metadata
             .sorted { $0.key < $1.key }
-            .map { "\($0.key)=\(RedactionLayer.logSafeValue(forKey: $0.key, value: $0.value))" }
+            .map {
+                "\($0.key)=\(DiagnosticsMetadataRedactor.logSafeValue(forKey: $0.key, value: $0.value))"
+            }
             .joined(separator: " ")
 
         if fields.isEmpty {
