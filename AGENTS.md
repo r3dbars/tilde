@@ -8,15 +8,16 @@ safer, or simpler.
 
 - Suggestions must help more than they interrupt. Silence and noise are both
   failures.
-- Privacy is a hard requirement. Never store, print, or transmit raw typed text,
-  prompts, model output, or accepted text.
+- Privacy is a hard requirement. Never store or print raw typed text, prompts,
+  model output, or accepted text, and never transmit them off-device.
 - The product is the input method. Render with IMKit marked text in the focused
   app; do not add an Accessibility/overlay insertion path.
 - Inference is app-owned and bundled. Users must not install Ollama, llama.cpp,
   Python, or a separate model server.
 - Do not add OCR, Screen Recording, screenshots, raw learning, writing history,
   cloud sync, accept sounds, or hidden telemetry.
-- Fail visibly when the input method, app, helper, or model is unavailable.
+- Show app, helper, and model status in the menu, and record input-method and
+  runtime failures in privacy-safe diagnostics.
 
 ## Architecture
 
