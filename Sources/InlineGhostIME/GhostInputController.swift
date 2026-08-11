@@ -215,7 +215,10 @@ final class GhostInputController: IMKInputController {
     // MARK: - Tickets and context
 
     private func clientIdentifier(_ client: IMKTextInput) -> String {
-        String(describing: ObjectIdentifier(client as AnyObject))
+        if let identifier = client.uniqueClientIdentifierString(), !identifier.isEmpty {
+            return identifier
+        }
+        return String(describing: ObjectIdentifier(client as AnyObject))
     }
 
     private func ticket(for client: IMKTextInput, context: String) -> InlineSuggestionTicket {
