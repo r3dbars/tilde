@@ -55,8 +55,10 @@ a cloud service.
 The release gate starts an isolated proof-mode app on a dedicated local port and
 observes that app and its exact helper child's open sockets while sending a
 fixed synthetic prompt directly to the helper. It may append privacy-safe
-diagnostics, but it does not quit or change the daily driver or install, launch,
-inspect, or terminate the input method. Any unexpected remote connection is a
+diagnostics, but it does not quit or change the daily driver. The proof reads
+process-table metadata to identify the exact proof app and helper and avoid
+other processes; it does not validate or observe sockets of the input method,
+or install, launch, or terminate it. Any unexpected remote connection is a
 release blocker. This is open-socket observation, not packet capture,
 authenticated-socket proof, or a real-editor round trip.
 
