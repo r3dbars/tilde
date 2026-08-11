@@ -1,17 +1,33 @@
+import AutocompleteLabCore
 import Foundation
 
 /// Aggregate-only keyboard counters. Typed text and suggestion text are never persisted.
 enum GhostStats {
     private static let persistenceQueue = DispatchQueue(label: "com.tilde.ghostStats", qos: .utility)
-    private static var wordsAccepted = 0
+    private static var pending = [String: Int]()
     private static var lastFlush = Date.distantPast
 
     static func recordAccepted(_ text: String) {
         let count = text.split(whereSeparator: \Character.isWhitespace).count
         guard count > 0 else { return }
+        record(count, key: "wordsAccepted")
+    }
+
+    static func recordFailure(_ outcome: GhostBrainResponse.Outcome) {
+        let key: String
+        switch outcome {
+        case .error: key = "completionErrors"
+        case .timeout: key = "completionTimeouts"
+        case .invalidRequest: key = "completionInvalidRequests"
+        case .suggestion, .silence, .unavailable: return
+        }
+        record(1, key: key)
+    }
+
+    private static func record(_ count: Int, key: String) {
         let now = Date()
         persistenceQueue.async {
-            wordsAccepted += count
+            pending[key, default: 0] += count
             persist(now: now, force: false)
         }
     }
@@ -27,17 +43,19 @@ enum GhostStats {
 
     private static func persist(now: Date, force: Bool) {
         guard force || now.timeIntervalSince(lastFlush) > 20 else { return }
-        let accepted = wordsAccepted
-        guard accepted > 0 else { return }
+        let recorded = pending
+        guard !recorded.isEmpty else { return }
         lastFlush = now
-        wordsAccepted = 0
+        pending.removeAll(keepingCapacity: true)
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let key = "stats." + formatter.string(from: now)
         let defaults = UserDefaults.standard
         var day = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
-        day["wordsAccepted", default: 0] += accepted
+        for (counter, count) in recorded {
+            day[counter, default: 0] += count
+        }
         defaults.set(day, forKey: key)
     }
 }
