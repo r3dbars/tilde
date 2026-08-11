@@ -7,8 +7,8 @@ import Foundation
 /// Lifecycle: start() launches llama-server bound to localhost, polls /health
 /// until ready, relaunches on unexpected exit (bounded by LlamaRestartBudget),
 /// and terminates the child with the app. When the binary or model is missing
-/// the host simply stays unhealthy and the keyboard falls back to its
-/// dictionary layer and Apple's on-device model.
+/// the host simply stays unhealthy; mid-word dictionary suffixes still work,
+/// while phrase suggestions stay silent until the app-owned model recovers.
 final class LlamaServerProcessHost: @unchecked Sendable {
 
     static let port = 17872

@@ -3,11 +3,10 @@ import Foundation
 /// Every menu setting, the process that owns it, and its default.
 ///
 /// The keyboard is a separate process, so its settings must be written to the
-/// InlineGhost defaults suite. Suggestions and sounds start on.
+/// InlineGhost settings shared with the keyboard process.
 struct TildeSettings {
     enum KeyboardKey: String, CaseIterable {
         case suggestions = "GhostSuggestionsEnabled"
-        case sounds = "GhostSoundsEnabled"
         case pausedUntil = "GhostPausedUntil"
     }
 
@@ -22,11 +21,6 @@ struct TildeSettings {
     var suggestionsEnabled: Bool {
         get { flag(.suggestions) }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.suggestions.rawValue) }
-    }
-
-    var soundsEnabled: Bool {
-        get { flag(.sounds) }
-        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.sounds.rawValue) }
     }
 
     var pausedUntil: Date? {

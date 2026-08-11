@@ -14,21 +14,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
-    // Phrase continuations go to the llama/Gemma engine when its server is
-    // healthy; word completion belongs to the keyboard's dictionary layer, so
-    // the server answers it with silence. No second model engine — llama-only
-    // (owner decision, 2026-07-22).
+    // Phrase continuations go to the llama/Gemma engine. Mid-word completion
+    // belongs only to the keyboard's system spell-checker path.
     private lazy var ghostBrainServerHost = GhostBrainServerHost(
         engineProvider: { [weak self] in
             guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
             let llama = self.llamaServerHost
-            return ModeRoutedCompletionEngine(
-                phraseEngine: LlamaCompletionEngine(baseURL: llama.baseURL),
-                fallbackEngine: UnavailableCompletionEngine(reason: "llama engine unavailable"),
-                phraseEngineIsHealthy: { llama.isHealthy },
-                // Live-flippable: defaults write bar.r3d.tilde ModelHandlesWordCompletions -bool true|false
-                routeWordCompletions: { UserDefaults.standard.bool(forKey: "ModelHandlesWordCompletions") }
-            )
+            guard llama.isHealthy else {
+                return UnavailableCompletionEngine(reason: "llama engine unavailable")
+            }
+            return LlamaCompletionEngine(baseURL: llama.baseURL)
         }
     )
 

@@ -12,7 +12,6 @@ final class StatusMenuHost: NSObject {
     private var todayItem: NSMenuItem?
     private var engineItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
-    private var soundsItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
 
     /// Every setting, its defaults domain, and its fallback live in one tested
@@ -35,7 +34,6 @@ final class StatusMenuHost: NSObject {
         menu.addItem(.separator())
 
         suggestionsItem = addToggle(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
-        soundsItem = addToggle(to: menu, "Sounds", #selector(toggleSounds(_:)))
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
@@ -108,10 +106,6 @@ final class StatusMenuHost: NSObject {
         settings.suggestionsEnabled.toggle()
     }
 
-    @objc private func toggleSounds(_ sender: Any?) {
-        settings.soundsEnabled.toggle()
-    }
-
     @objc private func togglePause(_ sender: Any?) {
         if settings.pausedUntil != nil {
             settings.resume()
@@ -150,7 +144,6 @@ extension StatusMenuHost: NSMenuDelegate {
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
-        soundsItem?.state = settings.soundsEnabled ? .on : .off
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
