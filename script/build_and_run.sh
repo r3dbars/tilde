@@ -27,7 +27,7 @@ Options:
   --jobs COUNT              Limit Swift build jobs.
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
-  --sign-identity IDENTITY  Sign with this exact identity; use - for explicit ad hoc signing.
+  --sign-identity SHA1      Sign with this exact SHA-1; use - for explicit ad hoc signing.
 
 Without --sign-identity, the sole eligible Apple Development identity is used.
 Zero or multiple eligible identities fail loudly. Ad hoc bundles cannot exercise
