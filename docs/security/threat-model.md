@@ -87,7 +87,9 @@ identity are out of scope.
 Run `./script/proof.sh fast` for every change. Before release, run
 `./script/package_app.sh` with reviewed helper and model hashes, and require all
 bundle, runtime, signing, notarization, Gatekeeper, and socket-observation lanes
-to pass. The egress lane sends a fixed synthetic prompt directly to the helper;
+to pass. File-shape checks and matching hashes do not prove provenance; the
+operator must review the source of both inputs. The egress lane sends a fixed
+synthetic prompt directly to the helper;
 its isolated proof mode observes only the exact app and helper on a dedicated
 port. It may append privacy-safe diagnostics, but it does not quit or change the
 daily driver or input method. It is open-socket observation, not packet capture,
