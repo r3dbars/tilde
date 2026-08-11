@@ -55,7 +55,7 @@ no option to bypass the ownership check.
   corpus paths, socket paths, or per-case results.
 - Outcomes are explicit: `ok`, `silent`, `protocol_error`, and `timeout`.
   Any protocol error or timeout makes `complete=false` and exits nonzero.
-- The helper is called with the production prose-register prompt, token budget,
+- The helper mirrors the production prose-register prompt, token budget,
   and final-only request shape. It does not exercise the chat or email recipes.
   Latency is `request_to_model_final`; there is no partial-response metric.
 - Pair a baseline and candidate only when both are complete and their
