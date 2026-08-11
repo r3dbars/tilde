@@ -44,26 +44,31 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
     private func bindAndListen() -> Bool {
         let directory = (Self.socketPath as NSString).deletingLastPathComponent
-        do {
-            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-            chmod(directory, 0o700)
-        } catch {
+        guard Self.secureSocketDirectory(directory) else {
             DiagnosticsLog.shared.record("ghost-socket-unavailable", metadata: ["reason": "directory"])
             return false
         }
         let lockPath = directory + "/runtime.lock"
         let lockFD = open(lockPath, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
-        guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
+        var lockInfo = stat()
+        guard lockFD >= 0,
+              fcntl(lockFD, F_SETFD, FD_CLOEXEC) == 0,
+              fchmod(lockFD, S_IRUSR | S_IWUSR) == 0,
+              fstat(lockFD, &lockInfo) == 0,
+              lockInfo.st_mode & S_IFMT == S_IFREG,
+              lockInfo.st_uid == getuid(),
+              lockInfo.st_mode & 0o777 == 0o600,
+              flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
             if lockFD >= 0 { close(lockFD) }
             DiagnosticsLog.shared.record("ghost-socket-unavailable", metadata: ["reason": "already-running"])
             return false
         }
-        fchmod(lockFD, S_IRUSR | S_IWUSR)
         self.lockFD = lockFD
         unlink(Self.socketPath)
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else {
+        guard fd >= 0, fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 else {
+            if fd >= 0 { close(fd) }
             releaseLock()
             return false
         }
@@ -81,12 +86,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
         let bound = pathOK && withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, size) == 0 }
         }
-        guard bound, listen(fd, 8) == 0 else {
+        guard bound, listen(fd, 8) == 0, chmod(Self.socketPath, 0o600) == 0,
+              Self.isOwnerOnlySocket(Self.socketPath) else {
             close(fd)
+            unlink(Self.socketPath)
             releaseLock()
             return false
         }
-        chmod(Self.socketPath, 0o600)
         listenerFD = fd
         ownsSocket = true
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
@@ -107,6 +113,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private func acceptOne() {
         let connection = accept(listenerFD, nil, nil)
         guard connection >= 0 else { return }
+        guard fcntl(connection, F_SETFD, FD_CLOEXEC) == 0 else {
+            close(connection)
+            return
+        }
         var timeout = timeval(tv_sec: 1, tv_usec: 0)
         setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
@@ -124,7 +134,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 _ = Self.write(.invalidRequest, to: connection)
                 return
             }
-            guard self.runtime.isHealthy else {
+            guard await self.runtime.isReadyForCompletion() else {
                 _ = Self.write(.unavailable, to: connection)
                 return
             }
@@ -219,7 +229,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
         var gid: gid_t = 0
         guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { return false }
 #if DEBUG
-        guard Bundle.main.bundleIdentifier == "bar.r3d.tilde" else { return true }
+        if Bundle.main.bundleIdentifier != "bar.r3d.tilde" {
+            return ProcessInfo.processInfo.environment["TILDE_ALLOW_UNSIGNED_LOCAL_PEER"] == "1"
+        }
 #else
         guard Bundle.main.bundleIdentifier == "bar.r3d.tilde" else { return false }
 #endif
@@ -228,7 +240,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
         guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 else { return false }
         guard let peer = identity(pid: pid), peer.identifier == "bar.r3d.inputmethod.InlineGhost",
               let own = identity(pid: getpid()) else { return false }
-        return own.team.map { peer.team == $0 } ?? true
+#if DEBUG
+        guard let ownTeam = own.team else { return peer.team == nil }
+        return peer.team == ownTeam
+#else
+        guard let ownTeam = own.team, let peerTeam = peer.team else { return false }
+        return ownTeam == peerTeam
+#endif
     }
 
     private static func identity(pid: pid_t) -> (identifier: String, team: String?)? {
@@ -244,10 +262,40 @@ final class GhostBrainServerHost: @unchecked Sendable {
         guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
               let staticCode else { return nil }
         var information: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, [], &information) == errSecSuccess,
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information
+        ) == errSecSuccess,
               let values = information as? [CFString: Any],
               let identifier = values[kSecCodeInfoIdentifier] as? String else { return nil }
         return (identifier, values[kSecCodeInfoTeamIdentifier] as? String)
+    }
+
+    private static func secureSocketDirectory(_ path: String) -> Bool {
+        do {
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        } catch {
+            return false
+        }
+        var info = stat()
+        guard lstat(path, &info) == 0,
+              info.st_mode & S_IFMT == S_IFDIR,
+              info.st_uid == getuid(),
+              chmod(path, 0o700) == 0,
+              lstat(path, &info) == 0,
+              info.st_mode & S_IFMT == S_IFDIR,
+              info.st_uid == getuid(),
+              info.st_mode & 0o777 == 0o700 else { return false }
+        return true
+    }
+
+    private static func isOwnerOnlySocket(_ path: String) -> Bool {
+        var info = stat()
+        return lstat(path, &info) == 0
+            && info.st_mode & S_IFMT == S_IFSOCK
+            && info.st_uid == getuid()
+            && info.st_mode & 0o777 == 0o600
     }
 
     private static func keyboardText(_ suggestion: CompletionSuggestion) -> String {
