@@ -13,13 +13,14 @@ MODEL_SHA256=""
 SIGN_IDENTITY=""
 NOTARY_PROFILE=""
 VERSION="0.1.0"
-BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+BUILD_NUMBER=""
 VERIFY_INPUTS_ONLY=0
 
 usage() {
   cat <<'EOF'
 Usage: script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
-  --model PATH --model-sha256 SHA256 --notary-profile PROFILE [options]
+  --model PATH --model-sha256 SHA256 --build-number NUMBER \
+  --notary-profile PROFILE [options]
        script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
   --model PATH --model-sha256 SHA256 --verify-inputs-only
 
@@ -31,11 +32,11 @@ Release inputs:
 
 Full release only:
   --notary-profile PROFILE  Stored notarytool keychain profile.
+  --build-number NUMBER     Required numeric bundle build number.
 
 Options:
   --sign-identity IDENTITY  Developer ID Application identity (auto-detected).
   --version VERSION         Release version (default: 0.1.0).
-  --build-number NUMBER     Numeric bundle build number.
   --verify-inputs-only      Verify pinned inputs, then exit without building,
                             signing, notarizing, or uploading anything.
 
@@ -101,7 +102,6 @@ verify_sha256() {
 [[ -s "$MODEL" ]] || { echo "missing --model file: $MODEL" >&2; exit 2; }
 LLAMA_SHA256="$(normalize_sha256 --llama-sha256 "$LLAMA_SHA256")"
 MODEL_SHA256="$(normalize_sha256 --model-sha256 "$MODEL_SHA256")"
-[[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
 verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
@@ -117,6 +117,8 @@ if [[ "$VERIFY_INPUTS_ONLY" == "1" ]]; then
   exit 0
 fi
 
+[[ -n "$BUILD_NUMBER" ]] || { echo "--build-number is required for a full release" >&2; exit 2; }
+[[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 [[ -n "$NOTARY_PROFILE" ]] || { echo "--notary-profile is required" >&2; exit 2; }
 
 if [[ -z "$SIGN_IDENTITY" ]]; then
@@ -176,8 +178,10 @@ echo "==> building release app without touching the running app"
   --sign-identity "$SIGN_IDENTITY"
 
 echo "==> building packaged input method"
-IME_SIGN_IDENTITY="$SIGN_IDENTITY" ./script/build_ime.sh \
-  --no-notarize --version "$VERSION" --build-number "$BUILD_NUMBER"
+./script/build_ime.sh \
+  --version "$VERSION" \
+  --build-number "$BUILD_NUMBER" \
+  --sign-identity "$SIGN_IDENTITY"
 
 echo "==> embedding app-owned runtime, input method, and model"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
