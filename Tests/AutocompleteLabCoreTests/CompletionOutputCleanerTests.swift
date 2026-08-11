@@ -136,18 +136,6 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
     }
 
-    @Test("Suppresses visible OCR chrome suggestions")
-    func suppressesVisibleOCRChromeSuggestions() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("Untitled 13", after: "Can I do the things that") == nil)
-        #expect(cleaner.clean("New chat Search Plugins", after: "I want this to") == nil)
-        #expect(cleaner.clean("Helvetica Regular", after: "Make the text") == nil)
-        #expect(cleaner.clean("**Ep quadrant**", after: "We need to keep iterating") == nil)
-        #expect(cleaner.clean("Ep claudebrain", after: "We need to keep iterating") == nil)
-        #expect(cleaner.clean("next to the cursor", after: "I want this to show")?.visibleText == " next to the cursor")
-    }
-
     @Test("Suppresses assistant replies when user is drafting an agent request")
     func suppressesAssistantRepliesForAgentRequests() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

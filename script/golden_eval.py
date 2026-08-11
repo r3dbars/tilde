@@ -15,17 +15,7 @@ under ~/.cache/tilde-eval and is never committed:
      "register": "chat|email|prose",
      "app": "<host app bundle id>",
      "text": "<a full real message exactly as its human author finished it>",
-     "prior_messages": ["up to 3 earlier turns for context, oldest first"],
      "ts": "ISO8601, optional"}
-
-Screen-context A/B (--context): the brain accepts an optional "page" field
-that overrides its live screen-OCR resolver. --context off (default) sends
-"page":"" forcing NO screen context — the clean baseline arm. --context prior
-sends the record's prior_messages joined as the page text, simulating what
-screen OCR would capture (the conversation being replied to). --context live
-omits the field entirely, leaving the app's real resolver in charge. The
-typed "context" string is always built solely from a prefix of the record's
-own "text".
 
 Run with --selftest to validate the cut + scoring logic offline (no socket,
 no corpus file needed). Otherwise pass one or more --corpus files and the
@@ -96,25 +86,6 @@ def normalize_word(word):
     return word.lower().strip(".,!?;:\"'()[]{}")
 
 
-def build_page(record, mode, turns=3, style="plain"):
-    """Build the request's "page" value for a context mode: "" forces no
-    screen context, a non-empty string is used as the OCR page text, and
-    None omits the field (live resolver behavior).
-
-    turns limits how many prior messages are included (most recent kept);
-    style "labeled" prefixes each with "them: " to mark the other speaker."""
-    if mode == "live":
-        return None
-    if mode == "prior":
-        prior = [p for p in record.get("prior_messages", []) if p.strip()]
-        if turns >= 0:
-            prior = prior[-turns:] if turns else []
-        if style == "labeled":
-            prior = ["them: " + p for p in prior]
-        return "\n".join(prior)
-    return ""
-
-
 def connect_with_retry(sock_path, timeout, retries=20, retry_wait=3.0):
     """Connect to the brain socket, retrying while the app is down/restarting
     (a watchdog may relaunch it). Raises after the last attempt fails."""
@@ -131,24 +102,22 @@ def connect_with_retry(sock_path, timeout, retries=20, retry_wait=3.0):
             time.sleep(retry_wait)
 
 
-def ask(ctx, app, sock_path=SOCK, timeout=60, page=None):
+def ask(ctx, app, sock_path=SOCK, timeout=60):
     s = connect_with_retry(sock_path, timeout)
     t0 = time.time()
-    request = {"v": 1, "context": ctx, "app": app, "field": "golden-eval"}
-    if page is not None:
-        request["page"] = page
+    request = {"v": 1, "context": ctx, "app": app}
     s.sendall((json.dumps(request) + "\n").encode())
     buf = b""
     while True:
         c = s.recv(4096)
         if not c:
-            return "", int((time.time() - t0) * 1000), False
+            return "", int((time.time() - t0) * 1000)
         buf += c
         while b"\n" in buf:
             line, buf = buf.split(b"\n", 1)
             o = json.loads(line)
             if not o.get("partial"):
-                return o.get("suggestion", ""), int((time.time() - t0) * 1000), bool(o.get("page"))
+                return o.get("suggestion", ""), int((time.time() - t0) * 1000)
 
 
 def exact_match_at_n(suggestion, golden, n):
@@ -188,7 +157,6 @@ def new_bucket():
         "em2_spoken": 0,
         "em3_spoken": 0,
         "keystrokes_total": 0,
-        "page_attached": 0,
         "latencies": [],
     }
 
@@ -246,7 +214,6 @@ def summarize(name, bucket):
     p50 = percentile(lat, 0.50)
     p95 = percentile(lat, 0.95)
     lines.append(f"latency: p50 {p50}ms  p95 {p95}ms  max {lat[-1]}ms")
-    lines.append(f"screen context attached: {bucket['page_attached']}/{total}")
     return "\n".join(lines)
 
 
@@ -274,8 +241,7 @@ def subsample(records, limit):
     return ordered[:limit]
 
 
-def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
-             context_turns=3, context_style="plain", force_app=None,
+def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, force_app=None,
              prefix_words=None, min_prior=0, dump_path=None):
     dump_f = open(dump_path, "w", encoding="utf-8") if dump_path else None
     overall = new_bucket()
@@ -290,8 +256,8 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
         source = rec.get("source", "unknown")
         app = rec.get("app", "")
 
-        # Reply-quiz filter: only records with enough on-screen content to
-        # actually be a reply situation.
+        # Reply-quiz filter: only records with enough prior conversation to be
+        # a reply situation.
         if min_prior > 0 and len([p for p in rec.get("prior_messages", []) if p.strip()]) < min_prior:
             continue
 
@@ -303,10 +269,9 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
             continue
 
         context, golden = quiz
-        page = build_page(rec, context_mode, turns=context_turns, style=context_style)
         req_app = force_app or app
         try:
-            suggestion, latency_ms, page_attached = ask(context, req_app, sock_path=sock_path, page=page)
+            suggestion, latency_ms = ask(context, req_app, sock_path=sock_path)
         except (OSError, ConnectionError) as e:
             # Never lose a partial run: stop here and report what completed.
             aborted = f"aborted at case {case_no}/{len(records)}: {e}"
@@ -326,8 +291,6 @@ def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, context_mode="off",
         src_bucket = by_source.setdefault(source, new_bucket())
         for bucket in (overall, reg_bucket, src_bucket):
             record_result(bucket, spoke, em1, em2, em3, saved, latency_ms)
-            if page_attached:
-                bucket["page_attached"] += 1
 
         if verbose_k and not em1 and len(mismatch_examples) < verbose_k:
             mismatch_examples.append((context, golden, suggestion))
@@ -484,18 +447,11 @@ def selftest():
     assert "spoke rate: 2/3" in summary_text
     assert "ExactMatch@1: 1/3" in summary_text
 
-    # 7. build_page context-arm construction.
-    rec_with_prior = {"prior_messages": ["hey are you coming tonight", "we're at the usual spot"]}
-    assert build_page(rec_with_prior, "off") == ""
-    assert build_page(rec_with_prior, "live") is None
-    assert build_page(rec_with_prior, "prior") == "hey are you coming tonight\nwe're at the usual spot"
-    assert build_page({}, "prior") == "", "no priors -> empty page (forces none)"
-
-    # 8. percentile sanity.
+    # 7. percentile sanity.
     assert percentile([10, 20, 30, 40, 50], 0.50) == 30
     assert percentile([], 0.50) == 0
 
-    # 9. subsample determinism and ordering by sha256(text).
+    # 8. subsample determinism and ordering by sha256(text).
     recs = [{"text": f"record number {i} with enough words to pass"} for i in range(10)]
     sub_a = subsample(recs, 4)
     sub_b = subsample(recs, 4)
@@ -514,13 +470,6 @@ def main():
     parser.add_argument("--verbose", type=int, default=0, metavar="K", help="print K mismatch examples")
     parser.add_argument("--sleep", type=float, default=0.25, help="seconds to sleep between cases")
     parser.add_argument("--sock", default=SOCK, help="path to the ghost brain unix socket")
-    parser.add_argument(
-        "--context", choices=("off", "prior", "live"), default="off",
-        help="screen-context arm: off = force none (clean baseline), "
-             "prior = send prior_messages as the OCR page, live = app resolver decides"
-    )
-    parser.add_argument("--context-turns", type=int, default=3, help="max prior messages to include (--context prior)")
-    parser.add_argument("--context-style", choices=("plain", "labeled"), default="plain", help="prior-message formatting")
     parser.add_argument("--force-app", default=None, help="override the request app id (register ablation)")
     parser.add_argument("--prefix-words", type=int, default=None, help="reply-quiz: fixed short prefix (first N words of the reply), predict the rest")
     parser.add_argument("--min-prior", type=int, default=0, help="reply-quiz: only records with >= N prior messages (real reply situations)")
@@ -557,8 +506,7 @@ def main():
 
     overall, by_register, by_source, mismatch_examples, aborted = run_eval(
         records, sleep_s=args.sleep, verbose_k=args.verbose, sock_path=args.sock,
-        context_mode=args.context, context_turns=args.context_turns,
-        context_style=args.context_style, force_app=args.force_app,
+        force_app=args.force_app,
         prefix_words=args.prefix_words, min_prior=args.min_prior, dump_path=args.dump
     )
     if args.json:
@@ -578,7 +526,6 @@ def main():
             "keystrokes_per_spoken": round(overall["keystrokes_total"] / spoke, 3) if spoke else 0,
             "p50_ms": percentile(lat, 0.50),
             "p95_ms": percentile(lat, 0.95),
-            "page_attached": overall["page_attached"],
             "aborted": aborted,
         }))
     else:

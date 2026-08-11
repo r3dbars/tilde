@@ -4,54 +4,34 @@ import Testing
 
 @Suite("Tilde settings")
 struct TildeSettingsTests {
-    private func makeSettings() -> (TildeSettings, UserDefaults, UserDefaults) {
+    private func makeSettings() -> (TildeSettings, UserDefaults) {
         let keyboardName = "tilde.tests.keyboard.\(UUID().uuidString)"
-        let appName = "tilde.tests.app.\(UUID().uuidString)"
         let keyboard = UserDefaults(suiteName: keyboardName)!
-        let app = UserDefaults(suiteName: appName)!
         keyboard.removePersistentDomain(forName: keyboardName)
-        app.removePersistentDomain(forName: appName)
-        return (TildeSettings(keyboard: keyboard, app: app), keyboard, app)
+        return (TildeSettings(keyboard: keyboard), keyboard)
     }
 
-    @Test("Fresh keyboard settings keep raw learning opt-in")
-    func absentKeysUsePrivacySafeDefaults() throws {
-        let (settings, _, _) = makeSettings()
+    @Test("Fresh keyboard settings enable suggestions and sounds")
+    func absentKeysUseProductDefaults() {
+        let (settings, _) = makeSettings()
         #expect(settings.suggestionsEnabled)
         #expect(settings.soundsEnabled)
-        #expect(!settings.learningEnabled)
         #expect(settings.pausedUntil == nil)
-
-        let sources = try Self.keyboardSourceText()
-        #expect(sources.contains("\"GhostUsageCaptureEnabled\": false"))
     }
 
     @Test("Keyboard settings stay in the keyboard defaults domain")
     func keyboardSettingsLandInKeyboardDomain() {
-        let (settings, keyboard, app) = makeSettings()
+        let (settings, keyboard) = makeSettings()
         settings.suggestionsEnabled = false
         settings.soundsEnabled = false
-        settings.learningEnabled = false
 
         #expect(keyboard.object(forKey: "GhostSuggestionsEnabled") as? Bool == false)
         #expect(keyboard.object(forKey: "GhostSoundsEnabled") as? Bool == false)
-        #expect(keyboard.object(forKey: "GhostUsageCaptureEnabled") as? Bool == false)
-        for key in TildeSettings.KeyboardKey.allCases {
-            #expect(app.object(forKey: key.rawValue) == nil)
-        }
-    }
-
-    @Test("App settings stay in the app defaults domain")
-    func appSettingsLandInAppDomain() {
-        let (settings, keyboard, app) = makeSettings()
-        settings.screenAware = true
-        #expect(app.bool(forKey: "VisiblePageContextEnabled"))
-        #expect(keyboard.object(forKey: "VisiblePageContextEnabled") == nil)
     }
 
     @Test("Pause expires and resume clears it")
     func pauseLifecycle() {
-        let (settings, keyboard, _) = makeSettings()
+        let (settings, keyboard) = makeSettings()
         settings.pause(for: 3600)
         #expect(settings.pausedUntil != nil)
         settings.resume()

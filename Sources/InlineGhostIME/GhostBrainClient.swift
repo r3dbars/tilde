@@ -23,14 +23,10 @@ enum GhostBrainClient {
     static func complete(
         context: String,
         app: String?,
-        field: String?,
         onPartial: ((String) -> Void)? = nil
     ) -> String? {
         var object: [String: Any] = ["v": 1, "context": context]
-        // App + field identity let the brain's prompt KV cache recognize
-        // consecutive keystrokes in the same field (the big latency win).
         if let app { object["app"] = app }
-        if let field { object["field"] = field }
         guard let request = try? JSONSerialization.data(withJSONObject: object) else {
             return nil
         }
