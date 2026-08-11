@@ -10,6 +10,8 @@ import Foundation
 final class GhostKeyboardInstallerHost {
 
     private static let bundledPathInApp = "Contents/Library/InlineGhostIME.app"
+    private static let bundleIdentifier = "bar.r3d.inputmethod.InlineGhost"
+    private static let executableName = "InlineGhostIME"
     private static let installedPath = NSString(
         string: "~/Library/Input Methods/InlineGhostIME.app"
     ).expandingTildeInPath
@@ -22,23 +24,17 @@ final class GhostKeyboardInstallerHost {
         let installed = URL(fileURLWithPath: Self.installedPath)
         let firstInstall = !FileManager.default.fileExists(atPath: installed.path)
 
-        if firstInstall || Self.bundledIsNewer(bundled: bundled, installed: installed) {
-            do {
-                try? FileManager.default.removeItem(at: installed)
-                try FileManager.default.createDirectory(
-                    at: installed.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try FileManager.default.copyItem(at: bundled, to: installed)
+        do {
+            if try Self.installIfNeeded(bundled: bundled, installed: installed) {
                 DiagnosticsLog.shared.record("ime-installed", metadata: ["firstInstall": String(firstInstall)])
-            } catch {
-                DiagnosticsLog.shared.record("ime-install-failed", metadata: [:])
-                return
+                // Live IME picks up the new binary on its next relaunch.
+                NSWorkspace.shared.runningApplications
+                    .filter { $0.bundleIdentifier == Self.bundleIdentifier }
+                    .forEach { $0.terminate() }
             }
-            // Live IME picks up the new binary on its next relaunch.
-            let running = NSWorkspace.shared.runningApplications
-            running.filter { $0.bundleIdentifier == "bar.r3d.inputmethod.InlineGhost" }
-                .forEach { $0.terminate() }
+        } catch {
+            DiagnosticsLog.shared.record("ime-install-failed", metadata: [:])
+            return
         }
 
         // Registration is wiped whenever TextInputMenuAgent restarts — re-run
@@ -50,10 +46,62 @@ final class GhostKeyboardInstallerHost {
         }
     }
 
-    private static func bundledIsNewer(bundled: URL, installed: URL) -> Bool {
+    /// Builds the replacement completely before swapping it into the live path.
+    /// `replaceItemAt` keeps the old bundle in place if replacement fails.
+    @discardableResult
+    static func installIfNeeded(
+        bundled: URL,
+        installed: URL,
+        fileManager: FileManager = .default
+    ) throws -> Bool {
+        try validateInputMethod(at: bundled, fileManager: fileManager)
+
+        let installedExists = fileManager.fileExists(atPath: installed.path)
+        if installedExists,
+           (try? validateInputMethod(at: installed, fileManager: fileManager)) != nil,
+           !bundledIsNewer(bundled: bundled, installed: installed, fileManager: fileManager) {
+            return false
+        }
+
+        let parent = installed.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+        let staging = parent.appendingPathComponent(".InlineGhostIME.install-\(UUID().uuidString)")
+        defer { try? fileManager.removeItem(at: staging) }
+
+        try fileManager.copyItem(at: bundled, to: staging)
+        try validateInputMethod(at: staging, fileManager: fileManager)
+
+        if installedExists {
+            _ = try fileManager.replaceItemAt(installed, withItemAt: staging)
+        } else {
+            try fileManager.moveItem(at: staging, to: installed)
+        }
+        return true
+    }
+
+    private static func validateInputMethod(at app: URL, fileManager: FileManager) throws {
+        let infoURL = app.appendingPathComponent("Contents/Info.plist")
+        let data = try Data(contentsOf: infoURL)
+        guard let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              info["CFBundleIdentifier"] as? String == bundleIdentifier,
+              info["CFBundleExecutable"] as? String == executableName else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let executable = app.appendingPathComponent("Contents/MacOS/\(executableName)")
+        guard fileManager.isExecutableFile(atPath: executable.path) else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+    }
+
+    private static func bundledIsNewer(
+        bundled: URL,
+        installed: URL,
+        fileManager: FileManager
+    ) -> Bool {
         func binaryDate(_ app: URL) -> Date {
-            let binary = app.appendingPathComponent("Contents/MacOS/InlineGhostIME")
-            return (try? FileManager.default.attributesOfItem(atPath: binary.path)[.modificationDate] as? Date)
+            let binary = app.appendingPathComponent("Contents/MacOS/\(executableName)")
+            return (try? fileManager.attributesOfItem(atPath: binary.path)[.modificationDate] as? Date)
                 .flatMap { $0 } ?? .distantPast
         }
         return binaryDate(bundled) > binaryDate(installed)
