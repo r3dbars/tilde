@@ -106,11 +106,14 @@ final class GhostInputController: IMKInputController {
     }
 
     private func appendFallback(_ text: String, for client: IMKTextInput) {
+        guard let owner = fallbackOwner else {
+            resetFallback()
+            return
+        }
         typedFallback.append(text)
         if typedFallback.count > Self.contextLimit {
             typedFallback.removeFirst(typedFallback.count - Self.contextLimit)
         }
-        guard let owner = fallbackOwner else { return }
         fallbackOwner = FallbackOwner(
             client: owner.client,
             bundle: owner.bundle,
@@ -260,7 +263,7 @@ final class GhostInputController: IMKInputController {
             return
         }
         let context = contextBeforeCaret(client)
-        guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: typedFallback) else {
+        guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: context) else {
             dismiss(client)
             return
         }
