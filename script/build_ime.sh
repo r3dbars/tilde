@@ -2,7 +2,9 @@
 # Build and sign the InlineGhostIME development bundle. Release signing and
 # notarization belong only to script/package_app.sh.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/script/signing_identity.sh"
 
 VERSION="0.1.0"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
@@ -17,10 +19,12 @@ Build and sign dist/InlineGhostIME.app without installing or notarizing it.
 Options:
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
-  --sign-identity IDENTITY  Sign with this identity; use - for ad hoc signing.
+  --sign-identity IDENTITY  Sign with this exact identity; use - for explicit ad hoc signing.
   -h, --help                Show this help.
 
-Without --sign-identity, local builds use an ad hoc signature.
+Without --sign-identity, the sole eligible Apple Development identity is used.
+Zero or multiple eligible identities fail loudly. Ad hoc bundles cannot exercise
+the authenticated app-to-IME runtime.
 EOF
 }
 
@@ -48,18 +52,7 @@ while (($#)); do
     shift
 done
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
-
-if [[ -n "$SIGN_IDENTITY" && "$SIGN_IDENTITY" != "-" ]]; then
-    RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-        | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
-    [[ -n "$RESOLVED_IDENTITY" ]] \
-        || { echo "signing identity is unavailable: $SIGN_IDENTITY" >&2; exit 1; }
-    SIGN_IDENTITY="$RESOLVED_IDENTITY"
-fi
-if [[ -z "$SIGN_IDENTITY" ]]; then
-    SIGN_IDENTITY="-"
-    echo "warning: no signing identity found; using an ad hoc signature" >&2
-fi
+SIGN_IDENTITY="$(tilde_resolve_signing_identity "$SIGN_IDENTITY")"
 
 APP="dist/InlineGhostIME.app"
 swift build -c release --product InlineGhostIME

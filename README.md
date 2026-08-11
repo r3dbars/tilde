@@ -42,7 +42,12 @@ The project is a Swift 6.2 package with no Xcode project file.
 ```
 
 The two build scripts create development bundles; they do not contain the
-release model or helper. `script/proof.sh fast` is the pre-merge gate.
+release model or helper. By default, both require the one eligible Apple
+Development identity in the keychain, so the app and IME receive matching,
+non-empty Team IDs. If multiple identities exist, pass the same exact SHA-1 to
+both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles,
+which cannot exercise the authenticated app-to-IME runtime.
+`script/proof.sh fast` is the pre-merge gate.
 `script/package_app.sh` is the single manual release driver; it requires exact
 SHA-256 pins for the helper and
 model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
