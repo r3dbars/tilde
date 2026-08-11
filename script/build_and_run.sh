@@ -27,6 +27,8 @@ Options:
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
   --sign-identity IDENTITY  Sign with this identity; use - for ad hoc signing.
+
+Without --sign-identity, local builds use an ad hoc signature.
 EOF
 }
 
@@ -118,10 +120,6 @@ cat >"$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if [[ -z "$SIGN_IDENTITY" ]]; then
-  SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-    | awk '/Apple Development|Developer ID Application/ { print $2; exit }')"
-fi
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
   codesign --force --options runtime --sign - "$APP" >/dev/null
 elif [[ -n "$SIGN_IDENTITY" ]]; then
