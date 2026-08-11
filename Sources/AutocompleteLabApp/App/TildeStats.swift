@@ -7,26 +7,6 @@ enum TildeStats {
     private static let lifetimeKey = "tilde.lifetimeWordsAccepted"
     private static let countedKey = "tilde.countedThroughDay"
 
-    struct Today {
-        let wordsAccepted: Int
-        let wordsTyped: Int
-        let activeSeconds: Int
-
-        var shareOfTyping: Int {
-            let total = wordsAccepted + wordsTyped
-            return total > 0
-                ? Int((Double(wordsAccepted) / Double(total) * 100).rounded())
-                : 0
-        }
-
-        var wordsPerMinute: Int {
-            guard activeSeconds >= 30 else { return 0 }
-            return Int(
-                (Double(wordsAccepted + wordsTyped) / (Double(activeSeconds) / 60)).rounded()
-            )
-        }
-    }
-
     private static func dayDict(_ key: String) -> [String: Int] {
         UserDefaults(suiteName: imeDomain)?.dictionary(forKey: "stats.\(key)") as? [String: Int] ?? [:]
     }
@@ -37,13 +17,8 @@ enum TildeStats {
         return formatter.string(from: Date())
     }
 
-    static func today() -> Today {
-        let day = dayDict(todayKey)
-        return Today(
-            wordsAccepted: day["wordsAccepted"] ?? 0,
-            wordsTyped: day["wordsTyped"] ?? 0,
-            activeSeconds: day["activeSeconds"] ?? 0
-        )
+    static func todayWordsAccepted() -> Int {
+        dayDict(todayKey)["wordsAccepted"] ?? 0
     }
 
     /// Closed days are folded into a persistent aggregate exactly once; today's
@@ -74,6 +49,6 @@ enum TildeStats {
             }
         }
 
-        return lifetime + self.today().wordsAccepted
+        return lifetime + todayWordsAccepted()
     }
 }
