@@ -17,6 +17,11 @@ and are not saved.
 Tilde does not use Accessibility, Screen Recording, OCR, screenshots, the
 clipboard, or synthetic key events for autocomplete.
 
+When macOS Secure Event Input is active, Tilde clears any fallback context,
+cancels pending work, and does not read, request, or display a suggestion. IMKit
+does not expose a general field-sensitivity flag, so custom secret fields must
+enable the macOS secure-input signal to receive this protection.
+
 ## What is stored
 
 Tilde stores only settings and privacy-safe diagnostics such as event names,

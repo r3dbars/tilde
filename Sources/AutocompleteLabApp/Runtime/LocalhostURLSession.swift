@@ -7,6 +7,7 @@ enum LocalhostURLSession {
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
         configuration.connectionProxyDictionary = [:]
         return URLSession(configuration: configuration)
     }()
