@@ -31,14 +31,14 @@ public struct CompletionOutputCleaner: Sendable {
         "\u{200B}", "\u{200C}", "\u{200D}", "\u{2060}", "\u{FEFF}",
     ]
     private static let instructionPrefixes = [
-        "before cursor", "after cursor", "inline autocomplete", "return only", "return exactly",
-        "continue the current sentence", "start the next sentence", "system:", "assistant:",
+        "the following are real chat messages being written by their authors",
+        "the following are real emails being written by their authors",
+        "the following are real documents being written by their authors",
+        "system:", "assistant:",
         "thinking process", "analyze the request", "okay, let's see", "okay, the user",
-        "the user ", "user is ",
     ]
-    private static let personaMarkers = [
-        "as an ai", "as a language model", "as an assistant", "ai chatbot", "ai assistant",
-        "language model", "i cannot assist", "i can't assist", "cannot help with that",
+    private static let refusalMarkers = [
+        "i cannot assist", "i can't assist", "cannot help with that",
     ]
 
     private let maxVisibleWords: Int
@@ -109,13 +109,19 @@ public struct CompletionOutputCleaner: Sendable {
     private func isInstructionLeak(_ text: String) -> Bool {
         let normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.range(
+            of: #"^(?:(?:i(?:['’]m| am) sorry,\s*(?:but\s+)?)as (?:an ai(?: assistant| chatbot| language model)?|a language model)\b|as (?:an ai(?: assistant| chatbot| language model)?|a language model)\b[,\s]+(?:i|my)\b|i(?:['’]m| am) (?:an ai(?: assistant| chatbot| language model)?|a language model)\b)"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+        if normalized.range(
             of: #"^(?:candidate\s+\d+|next(?:\s+\d+-\d+)? words?|continuation|completion|suggestion|suffix)\s*:?(?:,\s*or\s*<no_suggestion>)?$"#,
             options: .regularExpression
         ) != nil {
             return true
         }
         return Self.instructionPrefixes.contains(where: normalized.hasPrefix)
-            || Self.personaMarkers.contains(where: normalized.contains)
+            || Self.refusalMarkers.contains(where: normalized.contains)
     }
 
     private func containsUnsafeCharacter(_ text: String) -> Bool {

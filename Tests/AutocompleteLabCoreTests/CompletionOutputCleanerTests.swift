@@ -80,14 +80,18 @@ struct CompletionOutputCleanerTests {
         for output in sentinels { #expect(reason(output) == .noSuggestionSentinel) }
     }
 
-    @Test("Rejects prompt, persona, and reasoning leaks")
+    @Test("Rejects current scaffold, persona, and reasoning leaks")
     func rejectsInstructionLeaks() {
         let leaks = [
-            "Before cursor: private text", "Inline autocomplete. Return only the continuation.",
-            "Return only the next few words",
-            "System: continue this", "Thinking Process: analyze the request",
-            "Okay, let's see what comes next", "The user is trying to write",
+            "The following are real chat messages being written by their authors, continued naturally.",
+            "The following are real emails being written by their authors, continued naturally.",
+            "The following are real documents being written by their authors, continued naturally.",
+            "System: continue this", "Assistant: here is the answer",
+            "Thinking Process: analyze the request", "Okay, let's see what comes next",
+            "Okay, the user is trying to write",
             "I'm sorry, but as an AI chatbot developed", "I cannot assist with that request",
+            "As a language model I cannot say", "I am an AI language model",
+            "I'm an AI assistant",
             "candidate 1", "Next 3-8 words, or <NO_SUGGESTION>",
         ]
 
@@ -137,6 +141,14 @@ struct CompletionOutputCleanerTests {
             "Press Enter to send the prompt", "the key features and benefits",
             "I think we should make a plan", "it",
             "ready. Then we can send it", "- review all reports",
+            "The user asked for a clearer report", "User is the subject of this paragraph",
+            "The language model section needs edits", "Our AI assistant demo starts tomorrow",
+            "Research on an AI chatbot is moving quickly",
+            "We describe Tilde as an AI assistant for writers",
+            "As an airline, we publish the schedule", "As an assistant, I scheduled the meeting",
+            "As an AI assistant, Tilde predicts a short continuation",
+            "As an AI-powered tool, Tilde runs locally",
+            "Before cursor movement, save the selection", "Return only one file to the shelf",
         ]
 
         for output in ordinaryProse { #expect(clean(output, after: "Now") != nil) }
