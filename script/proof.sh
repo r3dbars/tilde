@@ -18,9 +18,6 @@
 #                           otherwise the working tree is checked.
 #   PROOF_STRUCTURAL_CHANGE=1
 #                           Require the production Swift diff to be net-negative.
-#   PROOF_STRUCTURAL_LOC_EXCEPTION=1
-#                           Allow a non-negative structural diff only when the
-#                           PR description explains the justified exception.
 #
 # The signed/notarized release path lives in script/package_app.sh.
 set -uo pipefail
@@ -106,7 +103,7 @@ check_structural_delta() {
   )
   net=$((added - deleted))
   printf 'production Swift delta (%s...HEAD): +%d -%d net %+d\n' "$base" "$added" "$deleted" "$net"
-  if [ "$net" -ge 0 ] && ! is_truthy "${PROOF_STRUCTURAL_LOC_EXCEPTION:-}"; then
+  if [ "$net" -ge 0 ]; then
     echo "structural changes must reduce production Swift LOC" >&2
     return 1
   fi
