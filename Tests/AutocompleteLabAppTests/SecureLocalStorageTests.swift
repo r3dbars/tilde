@@ -5,15 +5,15 @@ import Testing
 @Suite("Secure local storage")
 struct SecureLocalStorageTests {
     private func makeTempDirectoryURL() -> URL {
-        FileManager.default.temporaryDirectory
+        URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("tilde-secure-storage-tests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 
     private func posixMode(of url: URL) throws -> Int16 {
-        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        let number = try #require(attributes[.posixPermissions] as? NSNumber)
-        return number.int16Value & 0o777
+        var info = stat()
+        try #require(lstat(url.path, &info) == 0)
+        return Int16(info.st_mode & 0o7777)
     }
 
     @Test("Created directories are owner-only (0700)")
@@ -50,7 +50,8 @@ struct SecureLocalStorageTests {
             contents: Data("old\n".utf8),
             attributes: [.posixPermissions: NSNumber(value: Int16(0o644))]
         ))
-        #expect(try posixMode(of: file) == 0o644)
+        #expect(chmod(file.path, 0o4644) == 0)
+        #expect(try posixMode(of: file) == 0o4644)
 
         #expect(SecureLocalStorage.ensureFile(at: file))
         #expect(try posixMode(of: file) == 0o600)
@@ -68,10 +69,144 @@ struct SecureLocalStorageTests {
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: NSNumber(value: Int16(0o755))]
         )
-        #expect(try posixMode(of: root) == 0o755)
+        #expect(chmod(root.path, 0o1755) == 0)
+        #expect(try posixMode(of: root) == 0o1755)
 
         #expect(SecureLocalStorage.createDirectory(at: root))
         #expect(try posixMode(of: root) == 0o700)
+    }
+
+    @Test("Directory creation rejects a regular file")
+    func rejectsFileAsDirectory() throws {
+        let root = makeTempDirectoryURL()
+        let directory = root.appendingPathComponent("logs", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        #expect(FileManager.default.createFile(atPath: directory.path, contents: Data()))
+
+        #expect(!SecureLocalStorage.createDirectory(at: directory))
+    }
+
+    @Test("Directory creation rejects a symbolic link")
+    func rejectsSymlinkAsDirectory() throws {
+        let root = makeTempDirectoryURL()
+        let target = root.appendingPathComponent("target", isDirectory: true)
+        let link = root.appendingPathComponent("logs", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(
+            at: target,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: NSNumber(value: Int16(0o755))]
+        )
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(!SecureLocalStorage.createDirectory(at: link))
+        #expect(try posixMode(of: target) == 0o755)
+    }
+
+    @Test("Directory creation rejects a symbolic link in an earlier component")
+    func rejectsSymlinkInDirectoryPath() throws {
+        let root = makeTempDirectoryURL()
+        let target = root.appendingPathComponent("target", isDirectory: true)
+        let link = root.appendingPathComponent("link", isDirectory: true)
+        let directory = link.appendingPathComponent("nested/logs", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(!SecureLocalStorage.createDirectory(at: directory))
+        #expect(!FileManager.default.fileExists(
+            atPath: target.appendingPathComponent("nested").path
+        ))
+    }
+
+    @Test("File creation rejects a directory")
+    func rejectsDirectoryAsFile() throws {
+        let root = makeTempDirectoryURL()
+        let file = root.appendingPathComponent("diagnostics.log")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+
+        #expect(!SecureLocalStorage.ensureFile(at: file))
+    }
+
+    @Test("File creation rejects a symbolic link without changing its target")
+    func rejectsSymlinkAsFile() throws {
+        let root = makeTempDirectoryURL()
+        let target = root.appendingPathComponent("target.log")
+        let link = root.appendingPathComponent("diagnostics.log")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        #expect(FileManager.default.createFile(
+            atPath: target.path,
+            contents: Data("private\n".utf8),
+            attributes: [.posixPermissions: NSNumber(value: Int16(0o644))]
+        ))
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(!SecureLocalStorage.ensureFile(at: link))
+        #expect(try String(contentsOf: target, encoding: .utf8) == "private\n")
+        #expect(try posixMode(of: target) == 0o644)
+    }
+
+    @Test("Diagnostics refuse a symbolic-link log")
+    func diagnosticsRejectSymlink() throws {
+        let root = makeTempDirectoryURL()
+        let target = root.appendingPathComponent("target.log")
+        let link = root.appendingPathComponent("diagnostics.log")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("unchanged\n".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        let log = DiagnosticsLog(logURL: link)
+        log.record("must-not-write")
+        log.flush()
+
+        #expect(try String(contentsOf: target, encoding: .utf8) == "unchanged\n")
+    }
+
+    @Test("Diagnostics refuse a symbolic-link parent")
+    func diagnosticsRejectSymlinkParent() throws {
+        let root = makeTempDirectoryURL()
+        let target = root.appendingPathComponent("target", isDirectory: true)
+        let link = root.appendingPathComponent("logs", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        let log = DiagnosticsLog(logURL: link.appendingPathComponent("diagnostics.log"))
+        log.record("must-not-write")
+        log.flush()
+
+        #expect(!FileManager.default.fileExists(
+            atPath: target.appendingPathComponent("diagnostics.log").path
+        ))
+    }
+
+    @Test("Diagnostics append through the validated owner-only descriptor")
+    func diagnosticsAppendSecurely() throws {
+        let root = makeTempDirectoryURL()
+        let file = root.appendingPathComponent("diagnostics.log")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let log = DiagnosticsLog(logURL: file)
+        log.record("first-safe-event")
+        log.record("second-safe-event")
+        log.flush()
+
+        let contents = try String(contentsOf: file, encoding: .utf8)
+        #expect(contents.contains("first-safe-event"))
+        #expect(contents.contains("second-safe-event"))
+        #expect(try posixMode(of: root) == 0o700)
+        #expect(try posixMode(of: file) == 0o600)
     }
 
 }
