@@ -1,34 +1,71 @@
 #!/usr/bin/env bash
-# Build, sign, and optionally notarize the InlineGhostIME input method.
-#
-# Usage: ./script/build_ime.sh [--no-notarize] [--version VERSION] [--build-number NUMBER]
-#
-# Notarization is MANDATORY for the keyboard to appear in the System Settings
-# picker (Gatekeeper silently hides unnotarized input methods). One-time setup:
-#   xcrun notarytool store-credentials ghost-notary --apple-id <id> --team-id <team>
-# --no-notarize builds and signs only (CI / compile checks).
+# Build and sign the InlineGhostIME development bundle. Release signing and
+# notarization belong only to script/package_app.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-NOTARIZE=1
 VERSION="0.1.0"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+SIGN_IDENTITY=""
+
+usage() {
+    cat <<'EOF'
+Usage: script/build_ime.sh [options]
+
+Build and sign dist/InlineGhostIME.app without installing or notarizing it.
+
+Options:
+  --version VERSION         Set CFBundleShortVersionString.
+  --build-number NUMBER     Set CFBundleVersion.
+  --sign-identity IDENTITY  Sign with this identity; use - for ad hoc signing.
+  -h, --help                Show this help.
+
+Without --sign-identity, the script uses the first available Apple Development
+identity, then falls back to an ad hoc signature.
+EOF
+}
+
 while (($#)); do
     case "$1" in
-        --no-notarize) NOTARIZE=0 ;;
-        --version|--build-number)
+        --version|--build-number|--sign-identity)
             [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
-            if [[ "$1" == "--version" ]]; then VERSION="$2"; else BUILD_NUMBER="$2"; fi
+            case "$1" in
+                --version) VERSION="$2" ;;
+                --build-number) BUILD_NUMBER="$2" ;;
+                --sign-identity) SIGN_IDENTITY="$2" ;;
+            esac
             shift
             ;;
-        *) echo "unknown flag: $1" >&2; exit 2 ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "unknown option: $1" >&2
+            usage >&2
+            exit 2
+            ;;
     esac
     shift
 done
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 
-SIGN_IDENTITY="${IME_SIGN_IDENTITY:-9E29C607772DECCED7EC4E3BCBC01DD492548ECE}"
-NOTARY_PROFILE="${IME_NOTARY_PROFILE:-ghost-notary}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
+        | awk '/Apple Development/ { print $2; exit }' || true)"
+fi
+if [[ -n "$SIGN_IDENTITY" && "$SIGN_IDENTITY" != "-" ]]; then
+    RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
+        | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
+    [[ -n "$RESOLVED_IDENTITY" ]] \
+        || { echo "signing identity is unavailable: $SIGN_IDENTITY" >&2; exit 1; }
+    SIGN_IDENTITY="$RESOLVED_IDENTITY"
+fi
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY="-"
+    echo "warning: no signing identity found; using an ad hoc signature" >&2
+fi
+
 APP="dist/InlineGhostIME.app"
 swift build -c release --product InlineGhostIME
 
@@ -39,10 +76,3 @@ cp Sources/InlineGhostIME/Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP"
-
-if [ "$NOTARIZE" = 1 ]; then
-    ditto -c -k --keepParent "$APP" dist/InlineGhostIME.zip
-    xcrun notarytool submit dist/InlineGhostIME.zip \
-        --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$APP" >/dev/null
-fi
