@@ -1,11 +1,6 @@
 import AutocompleteLabCore
 import Foundation
 
-enum LlamaEngineError: Error {
-    case transport
-    case malformedResponse
-}
-
 /// One deterministic, final-only completion request to the app-owned llama server.
 final class LlamaCompletionEngine: @unchecked Sendable {
     private let baseURL: URL
@@ -15,11 +10,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         self.baseURL = baseURL
     }
 
-    func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+    func suggestion(
+        textBeforeCursor: String,
+        appBundleIdentifier: String?
+    ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
-        let register = ContinuationRegister.from(bundleIdentifier: request.appBundleIdentifier)
+        let register = ContinuationRegister.from(bundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
-            textBeforeCursor: request.textBeforeCursor,
+            textBeforeCursor: textBeforeCursor,
             register: register
         )
         guard !recipe.prompt.isEmpty else { return nil }
@@ -42,16 +40,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         let (data, response) = try await LocalhostURLSession.shared.data(for: urlRequest)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw LlamaEngineError.transport
+            throw URLError(.badServerResponse)
         }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let raw = object["content"] as? String else {
-            throw LlamaEngineError.malformedResponse
+            throw URLError(.cannotParseResponse)
         }
 
         let clean = cleaner.cleanWithReason(
             recipe.normalizedContinuation(raw),
-            after: request.textBeforeCursor
+            after: textBeforeCursor
         )
         if clean.suggestion == nil, !raw.isEmpty, let reason = clean.rejectionReason {
             DiagnosticsLog.shared.record("llama-suggestion-rejected", metadata: [
