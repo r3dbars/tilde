@@ -1,61 +1,50 @@
 # Tilde Privacy
 
-Tilde is local-first. That is a product requirement, not a preference.
+Tilde is local-only by design.
 
-## What Accessibility is used for
+## What Tilde reads
 
-The app asks for Accessibility so it can:
+While Tilde is the active input method, IMKit gives it keystrokes and access to
+the current text-input session. Tilde uses a bounded amount of text before the
+cursor to ask its local model for a continuation. It inserts text only when you
+accept a visible suggestion.
 
-- find the active app and focused text field,
-- read nearby text around the cursor,
-- read cursor and field bounds for placement,
-- insert only text you explicitly accept.
+The input method sends that bounded context to the Tilde app through an
+owner-only Unix socket on this Mac. The app passes it to its bundled model and
+returns the suggestion. Context and output are used in memory for that request
+and are not saved.
 
-Suggestions stay off when Accessibility is denied or the focused field is not
-safe to inspect. Secure fields (passwords, sensitive inputs) are hard-blocked.
+Tilde does not use Accessibility, Screen Recording, OCR, screenshots, the
+clipboard, or synthetic key events for autocomplete.
 
-Normal setup does not need Screen Recording. Screen Recording is only used for
-explicit, local, opt-in placement debugging.
+## What is stored
 
-## What stays on this Mac
+Tilde stores only settings and privacy-safe diagnostics such as event names,
+timings, counts, lengths, app identifiers, and failure labels. Diagnostics do
+not contain typed text, prompts, model output, or accepted text.
 
-By default, typed text, nearby context, prompts, model output, accepted text,
-screenshots, document names, URLs, recipients, and subject lines stay on this
-Mac.
+There is no writing history, raw trace, personal learning store, screenshot
+store, analytics SDK, crash-reporting SDK, or cloud sync path.
 
-Default diagnostics are local and redacted. They can include app bundle IDs,
-field kind, render mode, insertion mode, request mode, timing, counters,
-failure labels, and text lengths — never raw text.
+## Network behavior
 
-## What is never uploaded by default
+Autocomplete does not need the network. Distributed builds contain the model
+and a static `llama-server` helper inside the signed app. Tilde does not
+download a model at runtime and does not send autocomplete requests to a cloud
+service.
 
-The app must not upload typed text, nearby context, screenshots, window titles,
-prompts, model output, accepted text, or retained diagnostics by default.
+The release gate observes the running app's sockets with
+`script/check_runtime_network_egress.py`. Any unexpected remote connection is
+a release blocker.
 
-There is no remote crash reporting, analytics, or behavior telemetry path in
-this repo. The model is downloaded once from a pinned source; after that,
-autocomplete runs with no network egress. That claim is enforced by
-`script/check_runtime_network_egress.py`, a mandatory lane of
-`script/release_check.sh`, which observes the running app's sockets.
+## Control and removal
 
-## Optional sharing paths
+- Pause suggestions or quit Tilde from its menu.
+- Switch to another input source when you do not want Tilde handling typing.
+- Remove Tilde from System Settings → Keyboard → Input Sources.
+- Delete the Tilde app, `~/Library/Input Methods/InlineGhostIME.app`,
+  `~/Library/Application Support/Tilde`, and `~/Library/Logs/Tilde` for a full
+  local removal.
 
-Raw text traces and placement screenshots are debug opt-ins. Use them only for
-an explicit local debug session, and turn them off afterward. Delete local
-traces at any time with `script/delete_local_traces.sh` or from the app.
-
-## Pause, quit, disable, and delete
-
-- Pause suggestions from the menu bar.
-- Pause the current app from the menu bar.
-- Turn off optional local capture features from Settings if enabled.
-- Delete local traces from Diagnostics or `script/delete_local_traces.sh`.
-- Quit from the menu bar when you do not want the app watching typing.
-- Full removal: delete the app bundle, `~/Library/Application Support/Tilde`,
-  and `~/Library/Logs/Tilde`.
-
-## Dependencies
-
-Swift package dependencies are MLX and Hugging Face libraries for local model
-loading. The app must not add analytics or crash SDKs without updating this
-document, and any remote reporting must be opt-in.
+The [threat model](docs/security/threat-model.md) describes the trust granted to
+a macOS input method and the remaining local-process risks.
