@@ -1,536 +1,376 @@
 #!/usr/bin/env python3
-"""Golden-continuation eval harness for the ghost brain (Smart Compose-style).
+"""Run one bounded, aggregate-only continuation evaluation against Tilde.
 
-Replays real, human-finished messages against the RUNNING Tilde ghost
-brain and scores how well its suggestions predict what the author actually
-typed next. Each corpus record's "text" is treated as ground truth: we cut it
-at a deterministic word boundary to build a (context, golden-continuation)
-pair, send the context to the brain over the same unix-socket protocol as
-script/quality_probe.py, and compare the returned suggestion against the
-golden continuation.
-
-Corpus JSONL contract (one JSON object per line), data lives OUTSIDE the repo
-under ~/.cache/tilde-eval and is never committed:
-    {"source": "discord|imessage|enron|aeslc|blog",
-     "register": "chat|email|prose",
-     "app": "<host app bundle id>",
-     "text": "<a full real message exactly as its human author finished it>",
-     "ts": "ISO8601, optional"}
-
-Run with --selftest to validate the cut + scoring logic offline (no socket,
-no corpus file needed). Otherwise pass one or more --corpus files and the
-Tilde app must already be running (unix socket at
-~/Library/Application Support/Tilde/ghost.sock).
+Input is JSONL with a string ``text`` field. Additional fields are ignored.
+Raw text and model output stay in memory: stdout contains only aggregate JSON.
 """
+
 import argparse
 import hashlib
 import json
+from pathlib import Path
+import re
 import socket
 import sys
 import time
 
-SOCK = "/Users/redbars/Library/Application Support/Tilde/ghost.sock"
 
+SCHEMA = "tilde.continuation-eval.v1"
+DEFAULT_SOCKET = Path.home() / "Library/Application Support/Tilde/ghost.sock"
+DEFAULT_MAX_CASES = 200
+HARD_MAX_CASES = 2_000
+MAX_RESPONSE_BYTES = 1_048_576
 CUT_FRACTIONS = (0.4, 0.6, 0.8)
 MIN_CONTEXT_WORDS = 3
 MIN_GOLDEN_WORDS = 2
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$")
 
 
-def text_digest(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+class ProtocolError(Exception):
+    """The local completion socket did not follow its documented protocol."""
 
 
-def pick_cut_fraction(text):
-    """Deterministically choose a cut fraction from CUT_FRACTIONS using the
-    sha256 of the text, so re-running the eval on the same corpus always
-    quizzes the same (context, golden) split per record."""
-    digest = text_digest(text)
-    idx = int(digest[:8], 16) % len(CUT_FRACTIONS)
-    return CUT_FRACTIONS[idx]
+def canonical_text(text):
+    return " ".join(text.split())
 
 
-def build_quiz(text, prefix_words=None):
-    """Cut `text` at a word boundary to build (context, golden). Returns None
-    if the record doesn't have enough words on both sides of the cut.
+def case_id(text):
+    return hashlib.sha256(canonical_text(text).encode("utf-8")).hexdigest()
 
-    The context string MUST end with exactly one trailing space after the
-    cut word. The ghost brain infers completion mode from the context tail:
-    a context ending in a letter/digit is mid-word (word-completion mode,
-    phrase engine silent), while a trailing space after a whole word puts it
-    in phrase mode. Cutting at a word boundary and appending a single space
-    is what makes the brain treat this as a phrase-continuation request
-    instead of a word-completion request.
-    """
+
+def digest_ids(ids):
+    payload = "\n".join(sorted(ids)).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def build_quiz(text):
+    text = canonical_text(text)
     words = text.split()
-    min_context = 1 if prefix_words is not None else MIN_CONTEXT_WORDS
-    if len(words) < min_context + MIN_GOLDEN_WORDS:
+    if len(words) < MIN_CONTEXT_WORDS + MIN_GOLDEN_WORDS:
         return None
-    if prefix_words is not None:
-        # Reply-quiz mode: fixed short prefix (the first few words of the reply),
-        # predict the rest — tests "predict my response", not "finish my reply".
-        cut = max(1, min(prefix_words, len(words) - MIN_GOLDEN_WORDS))
-    else:
-        fraction = pick_cut_fraction(text)
-        cut = int(round(len(words) * fraction))
-        cut = max(MIN_CONTEXT_WORDS, min(cut, len(words) - MIN_GOLDEN_WORDS))
-    context_words = words[:cut]
-    golden_words = words[cut:]
-    if len(context_words) < min_context or len(golden_words) < MIN_GOLDEN_WORDS:
-        return None
-    context = " ".join(context_words) + " "  # single trailing space: see docstring
-    golden = " ".join(golden_words)
-    return context, golden
+    fraction = CUT_FRACTIONS[int(case_id(text)[:8], 16) % len(CUT_FRACTIONS)]
+    cut = int(round(len(words) * fraction))
+    cut = max(MIN_CONTEXT_WORDS, min(cut, len(words) - MIN_GOLDEN_WORDS))
+    return " ".join(words[:cut]) + " ", " ".join(words[cut:])
+
+
+def load_corpus(paths):
+    by_id = {}
+    records = ineligible = duplicates = 0
+    for corpus_number, path in enumerate(paths, start=1):
+        try:
+            handle = open(path, "r", encoding="utf-8")
+        except OSError as exc:
+            raise ValueError(f"corpus {corpus_number} could not be read") from exc
+        with handle:
+            try:
+                lines = enumerate(handle, start=1)
+                for line_number, line in lines:
+                    if not line.strip():
+                        continue
+                    records += 1
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(
+                            f"corpus {corpus_number} has invalid JSON at line {line_number}"
+                        ) from exc
+                    text = record.get("text") if isinstance(record, dict) else None
+                    if not isinstance(text, str):
+                        raise ValueError(
+                            f"corpus {corpus_number} has a non-string text field at line {line_number}"
+                        )
+                    quiz = build_quiz(text)
+                    if quiz is None:
+                        ineligible += 1
+                        continue
+                    identifier = case_id(text)
+                    if identifier in by_id:
+                        duplicates += 1
+                        continue
+                    by_id[identifier] = quiz
+            except UnicodeDecodeError as exc:
+                raise ValueError(f"corpus {corpus_number} is not UTF-8") from exc
+    cases = [(identifier, *by_id[identifier]) for identifier in sorted(by_id)]
+    return cases, {
+        "records": records,
+        "ineligible": ineligible,
+        "duplicates": duplicates,
+    }
 
 
 def normalize_word(word):
     return word.lower().strip(".,!?;:\"'()[]{}")
 
 
-def connect_with_retry(sock_path, timeout, retries=20, retry_wait=3.0):
-    """Connect to the brain socket, retrying while the app is down/restarting
-    (a watchdog may relaunch it). Raises after the last attempt fails."""
-    for attempt in range(retries + 1):
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        try:
-            s.connect(sock_path)
-            return s
-        except (ConnectionRefusedError, FileNotFoundError):
-            s.close()
-            if attempt == retries:
-                raise
-            time.sleep(retry_wait)
-
-
-def ask(ctx, app, sock_path=SOCK, timeout=60):
-    s = connect_with_retry(sock_path, timeout)
-    t0 = time.time()
-    request = {"v": 1, "context": ctx, "app": app}
-    s.sendall((json.dumps(request) + "\n").encode())
-    buf = b""
-    while True:
-        c = s.recv(4096)
-        if not c:
-            return "", int((time.time() - t0) * 1000)
-        buf += c
-        while b"\n" in buf:
-            line, buf = buf.split(b"\n", 1)
-            o = json.loads(line)
-            if not o.get("partial"):
-                return o.get("suggestion", ""), int((time.time() - t0) * 1000)
-
-
 def exact_match_at_n(suggestion, golden, n):
-    sug_words = [normalize_word(w) for w in suggestion.split()][:n]
-    gold_words = [normalize_word(w) for w in golden.split()][:n]
-    if len(sug_words) < n or len(gold_words) < n:
-        return False
-    return sug_words == gold_words
+    suggestion_words = [normalize_word(word) for word in suggestion.split()][:n]
+    golden_words = [normalize_word(word) for word in golden.split()][:n]
+    return len(suggestion_words) == n and suggestion_words == golden_words
 
 
 def keystrokes_saved(suggestion, golden):
-    """Count consecutive matching words from the start of suggestion vs
-    golden (case/punctuation-normalized). Return keystrokes saved = sum of
-    len(word) + 1 (for the trailing space) over matched words."""
-    sug_words = suggestion.split()
-    gold_words = golden.split()
-    matched = 0
-    for sw, gw in zip(sug_words, gold_words):
-        if normalize_word(sw) != normalize_word(gw):
+    matched = []
+    for suggested, expected in zip(suggestion.split(), golden.split()):
+        if normalize_word(suggested) != normalize_word(expected):
             break
-        matched += 1
-    # Deliberate: counts the RAW suggestion's characters (what accepting
-    # actually inserts), not the normalized/golden form.
-    saved = sum(len(w) + 1 for w in sug_words[:matched])
-    return matched, saved
+        matched.append(suggested)
+    return sum(len(word) + 1 for word in matched)
 
 
-def new_bucket():
+def request_completion(context, socket_path, timeout_seconds):
+    request = json.dumps({"v": 1, "context": context}, separators=(",", ":"))
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(timeout_seconds)
+        connection.connect(socket_path)
+        started = time.monotonic()
+        connection.sendall(request.encode("utf-8") + b"\n")
+        buffered = b""
+        received = 0
+        first_partial_ms = None
+        while received <= MAX_RESPONSE_BYTES:
+            chunk = connection.recv(4096)
+            if not chunk:
+                raise ProtocolError("connection closed before a final response")
+            received += len(chunk)
+            if received > MAX_RESPONSE_BYTES:
+                raise ProtocolError("response exceeded the byte limit")
+            buffered += chunk
+            while b"\n" in buffered:
+                line, buffered = buffered.split(b"\n", 1)
+                try:
+                    response = json.loads(line)
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise ProtocolError("response was not JSON") from exc
+                if not isinstance(response, dict):
+                    raise ProtocolError("response was not an object")
+                partial = response.get("partial", False)
+                suggestion = response.get("suggestion")
+                if not isinstance(partial, bool) or not isinstance(suggestion, str):
+                    raise ProtocolError("response fields had invalid types")
+                elapsed_ms = round((time.monotonic() - started) * 1000)
+                if partial:
+                    if first_partial_ms is None:
+                        first_partial_ms = elapsed_ms
+                    continue
+                return suggestion, first_partial_ms, elapsed_ms
+    raise ProtocolError("response ended without a final response")
+
+
+def percentile(values, fraction):
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, round(fraction * (len(ordered) - 1)))
+    return ordered[index]
+
+
+def latency_summary(values):
     return {
-        "total": 0,
-        "skipped": 0,
-        "spoke": 0,
-        "em1_all": 0,
-        "em2_all": 0,
-        "em3_all": 0,
-        "em1_spoken": 0,
-        "em2_spoken": 0,
-        "em3_spoken": 0,
-        "keystrokes_total": 0,
-        "latencies": [],
+        "count": len(values),
+        "p50": percentile(values, 0.50),
+        "p95": percentile(values, 0.95),
+        "max": max(values) if values else None,
     }
 
 
-def record_result(bucket, spoke, em1, em2, em3, saved, latency_ms):
-    bucket["total"] += 1
-    bucket["latencies"].append(latency_ms)
-    if spoke:
-        bucket["spoke"] += 1
-        bucket["keystrokes_total"] += saved
-        if em1:
-            bucket["em1_spoken"] += 1
-        if em2:
-            bucket["em2_spoken"] += 1
-        if em3:
-            bucket["em3_spoken"] += 1
-    if em1:
-        bucket["em1_all"] += 1
-    if em2:
-        bucket["em2_all"] += 1
-    if em3:
-        bucket["em3_all"] += 1
+def rate(count, denominator):
+    return round(count / denominator, 6) if denominator else 0.0
 
 
-def percentile(sorted_vals, pct):
-    if not sorted_vals:
-        return 0
-    idx = min(len(sorted_vals) - 1, int(round(pct * (len(sorted_vals) - 1))))
-    return sorted_vals[idx]
+def evaluate(cases, ask):
+    outcomes = {"ok": 0, "silent": 0, "protocol_error": 0, "timeout": 0}
+    exact = {1: 0, 2: 0, 3: 0}
+    saved = 0
+    first_partial_latencies = []
+    final_latencies = []
 
-
-def summarize(name, bucket):
-    total = bucket["total"]
-    spoke = bucket["spoke"]
-    lines = []
-    lines.append(f"-- {name} --")
-    lines.append(f"cases: {total}  skipped: {bucket['skipped']}")
-    if total == 0:
-        return "\n".join(lines)
-    spoke_rate = spoke / total
-    lines.append(f"spoke rate: {spoke}/{total} ({spoke_rate:.1%})")
-    for n in (1, 2, 3):
-        all_hits = bucket[f"em{n}_all"]
-        spoken_hits = bucket[f"em{n}_spoken"]
-        all_rate = all_hits / total
-        spoken_rate = (spoken_hits / spoke) if spoke else 0.0
-        lines.append(
-            f"ExactMatch@{n}: {all_hits}/{total} ({all_rate:.1%}) over all cases, "
-            f"{spoken_hits}/{spoke} ({spoken_rate:.1%}) over spoken cases"
-        )
-    ks_total = bucket["keystrokes_total"]
-    ks_mean = (ks_total / spoke) if spoke else 0.0
-    lines.append(f"keystrokes saved: total {ks_total}, mean/spoken-case {ks_mean:.1f}")
-    lat = sorted(bucket["latencies"])
-    p50 = percentile(lat, 0.50)
-    p95 = percentile(lat, 0.95)
-    lines.append(f"latency: p50 {p50}ms  p95 {p95}ms  max {lat[-1]}ms")
-    return "\n".join(lines)
-
-
-def load_corpus(paths):
-    records = []
-    for path in paths:
-        with open(path, "r", encoding="utf-8") as f:
-            for line_no, line in enumerate(f, start=1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError as e:
-                    print(f"skip malformed line {path}:{line_no}: {e}", file=sys.stderr)
-                    continue
-                records.append(obj)
-    return records
-
-
-def subsample(records, limit):
-    if limit is None or limit >= len(records):
-        return records
-    ordered = sorted(records, key=lambda r: text_digest(r.get("text", "")))
-    return ordered[:limit]
-
-
-def run_eval(records, sleep_s, verbose_k, sock_path=SOCK, force_app=None,
-             prefix_words=None, min_prior=0, dump_path=None):
-    dump_f = open(dump_path, "w", encoding="utf-8") if dump_path else None
-    overall = new_bucket()
-    by_register = {}
-    by_source = {}
-    mismatch_examples = []
-    aborted = None
-
-    for case_no, rec in enumerate(records, start=1):
-        text = rec.get("text", "")
-        register = rec.get("register", "unknown")
-        source = rec.get("source", "unknown")
-        app = rec.get("app", "")
-
-        # Reply-quiz filter: only records with enough prior conversation to be
-        # a reply situation.
-        if min_prior > 0 and len([p for p in rec.get("prior_messages", []) if p.strip()]) < min_prior:
-            continue
-
-        quiz = build_quiz(text, prefix_words=prefix_words)
-        if quiz is None:
-            overall["skipped"] += 1
-            by_register.setdefault(register, new_bucket())["skipped"] += 1
-            by_source.setdefault(source, new_bucket())["skipped"] += 1
-            continue
-
-        context, golden = quiz
-        req_app = force_app or app
+    for _identifier, context, golden in cases:
         try:
-            suggestion, latency_ms = ask(context, req_app, sock_path=sock_path)
-        except (OSError, ConnectionError) as e:
-            # Never lose a partial run: stop here and report what completed.
-            aborted = f"aborted at case {case_no}/{len(records)}: {e}"
-            break
-        if dump_f is not None:
-            dump_f.write(json.dumps({
-                "prior": " ".join(p for p in rec.get("prior_messages", []) if p.strip()),
-                "golden": golden, "suggestion": suggestion,
-            }) + "\n")
-        spoke = bool(suggestion.strip())
-        em1 = exact_match_at_n(suggestion, golden, 1)
-        em2 = exact_match_at_n(suggestion, golden, 2)
-        em3 = exact_match_at_n(suggestion, golden, 3)
-        _, saved = keystrokes_saved(suggestion, golden)
+            suggestion, first_partial_ms, final_ms = ask(context)
+        except (socket.timeout, TimeoutError):
+            outcomes["timeout"] += 1
+            continue
+        except (ProtocolError, OSError):
+            outcomes["protocol_error"] += 1
+            continue
+        if suggestion.strip():
+            outcomes["ok"] += 1
+        else:
+            outcomes["silent"] += 1
+        if first_partial_ms is not None:
+            first_partial_latencies.append(first_partial_ms)
+        final_latencies.append(final_ms)
+        for n in exact:
+            exact[n] += int(exact_match_at_n(suggestion, golden, n))
+        saved += keystrokes_saved(suggestion, golden)
 
-        reg_bucket = by_register.setdefault(register, new_bucket())
-        src_bucket = by_source.setdefault(source, new_bucket())
-        for bucket in (overall, reg_bucket, src_bucket):
-            record_result(bucket, spoke, em1, em2, em3, saved, latency_ms)
-
-        if verbose_k and not em1 and len(mismatch_examples) < verbose_k:
-            mismatch_examples.append((context, golden, suggestion))
-
-        if sleep_s > 0:
-            time.sleep(sleep_s)
-
-    if dump_f is not None:
-        dump_f.close()
-    return overall, by_register, by_source, mismatch_examples, aborted
-
-
-def print_report(overall, by_register, by_source, mismatch_examples, aborted=None):
-    if aborted:
-        print(f"!! {aborted} — report covers completed cases only\n")
-    print(summarize("overall", overall))
-    print()
-    for register in sorted(by_register):
-        print(summarize(f"register={register}", by_register[register]))
-        print()
-    for source in sorted(by_source):
-        print(summarize(f"source={source}", by_source[source]))
-        print()
-    if mismatch_examples:
-        print("-- mismatch examples --")
-        for context, golden, suggestion in mismatch_examples:
-            print(f"context:  ...{context[-60:]!r}")
-            print(f"golden:   {golden[:60]!r}")
-            print(f"got:      {suggestion[:60]!r}")
-            print()
-
-
-def make_synthetic_corpus():
-    """~6 inline synthetic records for --selftest: no socket, no corpus file."""
-    return [
-        {
-            "source": "discord",
-            "register": "chat",
-            "app": "com.hnc.Discord",
-            "text": "yeah honestly I think we should just wait until tomorrow to ship it",
+    completed = outcomes["ok"] + outcomes["silent"]
+    return {
+        "outcomes": outcomes,
+        "quality": {
+            "completed_cases": completed,
+            "exact_match_at_1": {"count": exact[1], "rate": rate(exact[1], completed)},
+            "exact_match_at_2": {"count": exact[2], "rate": rate(exact[2], completed)},
+            "exact_match_at_3": {"count": exact[3], "rate": rate(exact[3], completed)},
+            "keystrokes_saved": {
+                "total": saved,
+                "per_completed_case": round(saved / completed, 6) if completed else 0.0,
+            },
         },
-        {
-            "source": "enron",
-            "register": "email",
-            "app": "com.apple.mail",
-            "text": "Thanks for the quick turnaround on this, the revised numbers look good to me",
+        "latency_ms": {
+            "request_to_first_partial": latency_summary(first_partial_latencies),
+            "request_to_final": latency_summary(final_latencies),
         },
-        {
-            "source": "blog",
-            "register": "prose",
-            "app": "com.apple.TextEdit",
-            "text": "The most surprising result of the experiment was how quickly the model converged",
+    }
+
+
+def build_report(cases, corpus_stats, all_case_ids, args, aggregate):
+    selected_ids = [case[0] for case in cases]
+    outcomes = aggregate["outcomes"]
+    complete = (
+        sum(outcomes.values()) == len(cases)
+        and outcomes["protocol_error"] == 0
+        and outcomes["timeout"] == 0
+    )
+    return {
+        "schema": SCHEMA,
+        "privacy": {
+            "aggregate_only": True,
+            "raw_contexts": False,
+            "raw_outputs": False,
+            "app_ids": False,
+            "paths": False,
         },
-        {
-            "source": "imessage",
-            "register": "chat",
-            "app": "com.apple.MobileSMS",
-            "text": "running a bit late but I can still make the seven o clock reservation",
+        "runtime": {
+            "arm": args.arm,
+            "build_id": args.build_id,
+            "model_id": args.model_id,
+            "config_id": args.config_id,
         },
-        {
-            "source": "aeslc",
-            "register": "email",
-            "app": "com.microsoft.Outlook",
-            "text": "I would love to set up a call next week to walk through the proposal",
+        "corpus": {
+            **corpus_stats,
+            "eligible": len(all_case_ids),
+            "selected": len(cases),
+            "case_id_algorithm": "sha256-canonical-text-v1",
+            "digest_sha256": digest_ids(all_case_ids),
+            "selection_digest_sha256": digest_ids(selected_ids),
         },
-        {
-            "source": "discord",
-            "register": "chat",
-            "app": "com.hnc.Discord",
-            "text": "too",
-        },
-    ]
+        **aggregate,
+        "complete": complete,
+    }
+
+
+def validate_args(parser, args):
+    if not 1 <= args.max_cases <= HARD_MAX_CASES:
+        parser.error(f"--max-cases must be between 1 and {HARD_MAX_CASES}")
+    if args.timeout <= 0 or args.timeout > 120:
+        parser.error("--timeout must be greater than 0 and no more than 120 seconds")
+    for value in (args.build_id, args.model_id, args.config_id):
+        if value is not None and not SAFE_ID.fullmatch(value):
+            parser.error("runtime metadata must be a short identifier, not a path or free text")
+
+
+def exit_code(report):
+    return 0 if report["complete"] else 1
 
 
 def selftest():
-    # 1. cut determinism: same text always yields the same fraction/cut.
-    text = "the quick brown fox jumps over the lazy dog again and again today"
-    f1 = pick_cut_fraction(text)
-    f2 = pick_cut_fraction(text)
-    assert f1 == f2, "cut fraction must be deterministic for the same text"
-    assert f1 in CUT_FRACTIONS
+    secret_context = "PRIVATE_CONTEXT_SENTINEL alpha beta gamma delta epsilon zeta"
+    cases = []
+    for suffix in ("one", "two", "three", "four"):
+        text = f"{secret_context} {suffix} eta theta"
+        context, golden = build_quiz(text)
+        cases.append((case_id(text), context, golden))
 
-    quiz1 = build_quiz(text)
-    quiz2 = build_quiz(text)
-    assert quiz1 == quiz2, "build_quiz must be deterministic"
-    context, golden = quiz1
-    assert context.endswith(" ") and not context.endswith("  "), "context must end with exactly one space"
-    assert not context[-2].isspace(), "only one trailing space, not a run of them"
-    assert len(context.split()) >= MIN_CONTEXT_WORDS
-    assert len(golden.split()) >= MIN_GOLDEN_WORDS
-    assert context.strip() + " " + golden == text, "context+golden must reconstruct the original text"
+    calls = 0
 
-    # 2. too-short records are skipped.
-    assert build_quiz("hi there") is None, "too few words overall should skip"
-    assert build_quiz("a b c d") is None or len(build_quiz("a b c d")[1].split()) >= MIN_GOLDEN_WORDS
+    def incomplete_ask(_context):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return "PRIVATE_OUTPUT_SENTINEL", 4, 9
+        if calls == 2:
+            return "", None, 7
+        if calls == 3:
+            raise TimeoutError
+        raise ProtocolError
 
-    # 3. normalize_word strips case/punctuation.
-    assert normalize_word("Hello,") == "hello"
-    assert normalize_word("WORLD!") == "world"
-    assert normalize_word("don't") == "don't"
+    aggregate = evaluate(cases, incomplete_ask)
+    args = argparse.Namespace(
+        arm="single", build_id="build-1", model_id="model-1", config_id="config-1"
+    )
+    report = build_report(
+        cases,
+        {"records": 4, "ineligible": 0, "duplicates": 0},
+        [case[0] for case in cases],
+        args,
+        aggregate,
+    )
+    assert report["outcomes"] == {
+        "ok": 1, "silent": 1, "protocol_error": 1, "timeout": 1
+    }
+    assert exit_code(report) == 1, "incomplete runs must fail nonzero"
+    assert set(report) == {
+        "schema", "privacy", "runtime", "corpus", "outcomes",
+        "quality", "latency_ms", "complete"
+    }
+    serialized = json.dumps(report, sort_keys=True)
+    for forbidden in (
+        "PRIVATE_CONTEXT_SENTINEL", "PRIVATE_OUTPUT_SENTINEL", "/Users/", "com.apple"
+    ):
+        assert forbidden not in serialized
 
-    # 4. exact_match_at_n hits and misses.
-    assert exact_match_at_n("thanks for the help", "thanks for the help today", 3) is True
-    assert exact_match_at_n("Thanks, for the", "thanks for the", 3) is True  # punctuation-insensitive
-    assert exact_match_at_n("thanks a lot", "thanks for the", 2) is False
-    assert exact_match_at_n("thanks", "thanks for the", 2) is False  # suggestion too short for N
-
-    # 5. keystrokes_saved arithmetic: matched, saved.
-    matched, saved = keystrokes_saved("thanks for the help", "thanks for the meeting")
-    assert matched == 3, matched
-    expected_saved = len("thanks") + 1 + len("for") + 1 + len("the") + 1
-    assert saved == expected_saved, (saved, expected_saved)
-
-    matched0, saved0 = keystrokes_saved("nope entirely different", "thanks for the meeting")
-    assert matched0 == 0
-    assert saved0 == 0
-
-    matched_full, saved_full = keystrokes_saved("thanks for the", "thanks for the")
-    assert matched_full == 3
-    assert saved_full == expected_saved
-
-    # 6. scoring bucket bookkeeping via record_result, using synthetic corpus
-    # to also exercise build_quiz across varied lengths (incl. the 1-word
-    # "too" record which must be skipped).
-    synthetic = make_synthetic_corpus()
-    quizzed = 0
-    skipped = 0
-    for rec in synthetic:
-        q = build_quiz(rec["text"])
-        if q is None:
-            skipped += 1
-        else:
-            quizzed += 1
-    assert skipped == 1, f"expected exactly the 1-word record to be skipped, got {skipped}"
-    assert quizzed == len(synthetic) - 1
-
-    # exercise record_result/summarize end-to-end without a socket.
-    bucket = new_bucket()
-    cases = [
-        (True, True, True, False, 10, 120),   # spoke, EM1, EM2, not EM3
-        (True, False, False, False, 0, 80),   # spoke, no matches
-        (False, False, False, False, 0, 200),  # silent
-    ]
-    for spoke, em1, em2, em3, saved, latency in cases:
-        record_result(bucket, spoke, em1, em2, em3, saved, latency)
-    assert bucket["total"] == 3
-    assert bucket["spoke"] == 2
-    assert bucket["em1_all"] == 1
-    assert bucket["em1_spoken"] == 1
-    assert bucket["em2_all"] == 1
-    assert bucket["em3_all"] == 0
-    assert bucket["keystrokes_total"] == 10
-    summary_text = summarize("selftest-bucket", bucket)
-    assert "spoke rate: 2/3" in summary_text
-    assert "ExactMatch@1: 1/3" in summary_text
-
-    # 7. percentile sanity.
-    assert percentile([10, 20, 30, 40, 50], 0.50) == 30
-    assert percentile([], 0.50) == 0
-
-    # 8. subsample determinism and ordering by sha256(text).
-    recs = [{"text": f"record number {i} with enough words to pass"} for i in range(10)]
-    sub_a = subsample(recs, 4)
-    sub_b = subsample(recs, 4)
-    assert [r["text"] for r in sub_a] == [r["text"] for r in sub_b], "subsample must be deterministic"
-    assert len(sub_a) == 4
-    expected_order = sorted(recs, key=lambda r: text_digest(r["text"]))[:4]
-    assert sub_a == expected_order
-
-    print("selftest OK: cut determinism, quiz skip logic, exact-match, keystrokes, bucket scoring, subsampling all pass")
+    complete = evaluate(cases[:2], lambda _context: ("", None, 5))
+    complete_report = build_report(
+        cases[:2],
+        {"records": 4, "ineligible": 0, "duplicates": 0},
+        [case[0] for case in cases],
+        args,
+        complete,
+    )
+    assert exit_code(complete_report) == 0
+    assert complete_report["outcomes"]["silent"] == 2
+    assert build_quiz(secret_context) == build_quiz(secret_context)
+    assert exact_match_at_n("Thanks, for", "thanks for today", 2)
+    print("selftest OK: aggregate privacy schema, stable corpus IDs, and incomplete-run failure")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--corpus", action="append", default=[], help="path to a corpus JSONL file (repeatable)")
-    parser.add_argument("--limit", type=int, default=None, help="deterministic subsample size (order by sha256 of text)")
-    parser.add_argument("--verbose", type=int, default=0, metavar="K", help="print K mismatch examples")
-    parser.add_argument("--sleep", type=float, default=0.25, help="seconds to sleep between cases")
-    parser.add_argument("--sock", default=SOCK, help="path to the ghost brain unix socket")
-    parser.add_argument("--force-app", default=None, help="override the request app id (register ablation)")
-    parser.add_argument("--prefix-words", type=int, default=None, help="reply-quiz: fixed short prefix (first N words of the reply), predict the rest")
-    parser.add_argument("--min-prior", type=int, default=0, help="reply-quiz: only records with >= N prior messages (real reply situations)")
-    parser.add_argument("--dump", default=None, help="write {prior,golden,suggestion} per case to this JSONL (for semantic re-scoring)")
-    parser.add_argument("--config-only", action="store_true", help="print the app's active config JSON and exit")
-    parser.add_argument("--json", action="store_true", help="emit one machine-readable JSON line of overall metrics")
-    parser.add_argument("--selftest", action="store_true", help="run offline self-test of cut/scoring logic and exit")
+    parser.add_argument("--corpus", action="append", default=[], help="input JSONL (repeatable)")
+    parser.add_argument("--max-cases", type=int, default=DEFAULT_MAX_CASES)
+    parser.add_argument("--timeout", type=float, default=15.0, help="per-case seconds")
+    parser.add_argument("--sock", default=str(DEFAULT_SOCKET), help="local Tilde socket")
+    parser.add_argument("--arm", choices=("single", "baseline", "candidate"), default="single")
+    parser.add_argument("--build-id")
+    parser.add_argument("--model-id")
+    parser.add_argument("--config-id")
+    parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
-
+    validate_args(parser, args)
     if args.selftest:
         selftest()
         return 0
-
-    if args.config_only:
-        s = connect_with_retry(args.sock, 10)
-        s.sendall((json.dumps({"v": 1, "config": True}) + "\n").encode())
-        buf = b""
-        while b"\n" not in buf:
-            c = s.recv(4096)
-            if not c:
-                break
-            buf += c
-        print(buf.split(b"\n", 1)[0].decode("utf-8"))
-        return 0
-
     if not args.corpus:
-        parser.error("--corpus PATH is required (repeatable) unless --selftest is passed")
-
-    records = load_corpus(args.corpus)
-    records = subsample(records, args.limit)
-    if not records:
-        print("no records loaded from corpus", file=sys.stderr)
-        return 1
-
-    overall, by_register, by_source, mismatch_examples, aborted = run_eval(
-        records, sleep_s=args.sleep, verbose_k=args.verbose, sock_path=args.sock,
-        force_app=args.force_app,
-        prefix_words=args.prefix_words, min_prior=args.min_prior, dump_path=args.dump
-    )
-    if args.json:
-        total = overall["total"]
-        spoke = overall["spoke"]
-        lat = sorted(overall["latencies"]) or [0]
-        print(json.dumps({
-            "cases": total,
-            "spoke": spoke,
-            "spoke_rate": round(spoke / total, 4) if total else 0,
-            "em1": overall["em1_all"],
-            "em1_rate": round(overall["em1_all"] / total, 4) if total else 0,
-            "em1_spoken_rate": round(overall["em1_spoken"] / spoke, 4) if spoke else 0,
-            "em2_rate": round(overall["em2_all"] / total, 4) if total else 0,
-            "em3_rate": round(overall["em3_all"] / total, 4) if total else 0,
-            "keystrokes_total": overall["keystrokes_total"],
-            "keystrokes_per_spoken": round(overall["keystrokes_total"] / spoke, 3) if spoke else 0,
-            "p50_ms": percentile(lat, 0.50),
-            "p95_ms": percentile(lat, 0.95),
-            "aborted": aborted,
-        }))
-    else:
-        print_report(overall, by_register, by_source, mismatch_examples, aborted)
-    return 1 if aborted else 0
+        parser.error("--corpus is required unless --selftest is used")
+    try:
+        all_cases, corpus_stats = load_corpus(args.corpus)
+        if not all_cases:
+            raise ValueError("corpus has no eligible continuation cases")
+        selected = all_cases[:args.max_cases]
+        aggregate = evaluate(
+            selected,
+            lambda context: request_completion(context, args.sock, args.timeout),
+        )
+        report = build_report(
+            selected, corpus_stats, [case[0] for case in all_cases], args, aggregate
+        )
+    except ValueError as exc:
+        print(f"evaluation error: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+    return exit_code(report)
 
 
 if __name__ == "__main__":
