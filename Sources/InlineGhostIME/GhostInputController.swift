@@ -361,7 +361,9 @@ final class GhostInputController: IMKInputController {
                 await self?.present(text, ticket: requestTicket)
             case .unavailable:
                 Self.summonBrainIfNeeded()
-            case .silence, .error, .timeout, .invalidRequest:
+            case .error, .timeout, .invalidRequest:
+                GhostStats.recordFailure(result.outcome)
+            case .silence:
                 break
             }
         }
