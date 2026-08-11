@@ -26,6 +26,7 @@ final class GhostInputController: IMKInputController {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
             return false
         }
+        guard !stopForSecureInput(client) else { return false }
         let defaults = UserDefaults.standard
         let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
         let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
@@ -103,6 +104,15 @@ final class GhostInputController: IMKInputController {
             return nil
         }
         return characters
+    }
+
+    /// IMKit exposes no field semantics. Fail closed when the host protects a
+    /// field with macOS secure event input.
+    private func stopForSecureInput(_ client: IMKTextInput) -> Bool {
+        guard IsSecureEventInputEnabled() else { return false }
+        dismiss(client)
+        resetFallback()
+        return true
     }
 
     private func appendFallback(_ text: String, for client: IMKTextInput) {
@@ -221,6 +231,7 @@ final class GhostInputController: IMKInputController {
     }
 
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
+        guard !IsSecureEventInputEnabled() else { return "" }
         let selection = client.selectedRange()
         guard selection.location != NSNotFound, selection.length == 0 else { return "" }
         if selection.location > 0 {
@@ -256,6 +267,7 @@ final class GhostInputController: IMKInputController {
     }
 
     private func updateSuggestion(for client: IMKTextInput) {
+        guard !stopForSecureInput(client) else { return }
         let selection = client.selectedRange()
         guard selection.location != NSNotFound, selection.length == 0 else {
             dismiss(client)
@@ -322,6 +334,7 @@ final class GhostInputController: IMKInputController {
     @MainActor
     private func present(_ text: String, ticket requestTicket: InlineSuggestionTicket) {
         guard let liveClient = client() else { return }
+        guard !stopForSecureInput(liveClient) else { return }
         let currentContext = contextBeforeCaret(liveClient)
         guard ticket(for: liveClient, context: currentContext) == requestTicket else { return }
         apply(state.reduce(.present(text, requestTicket)), to: liveClient)
