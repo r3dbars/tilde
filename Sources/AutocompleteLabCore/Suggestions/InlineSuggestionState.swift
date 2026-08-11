@@ -67,7 +67,7 @@ public struct InlineSuggestionState: Equatable, Sendable {
         case hide
         case insert(String)
         case show(String)
-        case schedule
+        case schedule(afterTyping: String)
     }
 
     public private(set) var visibleText = ""
@@ -103,8 +103,8 @@ public struct InlineSuggestionState: Equatable, Sendable {
                 String(first) == grapheme
             else {
                 let effects: [Effect] = isVisible
-                    ? [.hide, .insert(grapheme), .schedule]
-                    : [.insert(grapheme), .schedule]
+                    ? [.hide, .insert(grapheme), .schedule(afterTyping: grapheme)]
+                    : [.insert(grapheme), .schedule(afterTyping: grapheme)]
                 visibleText = ""
                 visibleTicket = nil
                 return effects
