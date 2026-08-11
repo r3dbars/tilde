@@ -12,15 +12,18 @@ SOCKET="$HOME/Library/Application Support/Tilde/ghost.sock"
 HELPER="$APP/Contents/Helpers/llama-server"
 RELEASE_PROOF=0
 CLEANUP=0
+SELFTEST=0
 
 usage() {
   cat <<'EOF'
 Usage: script/restart_app.sh
        script/restart_app.sh --release-proof [--cleanup]
+       script/restart_app.sh --selftest
 
 The release-proof path never quits another Tilde or touches the input method.
 --cleanup stops only this dist app launched with --release-proof and its exact
-packaged helper.
+packaged helper on the dedicated release-proof port. --selftest validates that
+selection logic without launching or signaling a process.
 EOF
 }
 
@@ -28,6 +31,7 @@ while (($#)); do
   case "$1" in
     --release-proof) RELEASE_PROOF=1 ;;
     --cleanup) CLEANUP=1 ;;
+    --selftest) SELFTEST=1 ;;
     -h|--help)
       usage
       exit 0
@@ -45,8 +49,10 @@ done
   echo "restart_app.sh: --cleanup requires --release-proof" >&2
   exit 2
 }
-
-[[ -x "$BINARY" ]] || { echo "missing built app: $APP" >&2; exit 1; }
+[[ "$SELFTEST" == "0" || ( "$RELEASE_PROOF" == "0" && "$CLEANUP" == "0" ) ]] || {
+  echo "restart_app.sh: --selftest cannot be combined with process actions" >&2
+  exit 2
+}
 
 tilde_pids() {
   ps ax -o pid=,command= | awk '
@@ -94,47 +100,67 @@ stop_exact_processes() {
   return 1
 }
 
-exact_helper_pid_is_running() {
-  local command
-  command="$(ps -p "$1" -o command= 2>/dev/null || true)"
-  [[ "$command" == "$HELPER" || "$command" == "$HELPER "* ]]
+process_executable() {
+  /usr/sbin/lsof -nP -a -p "$1" -d txt -Fn 2>/dev/null \
+    | awk '/^n/ { sub(/^n/, ""); print; exit }' || true
 }
-
-stop_captured_helpers() {
-  local pids="$1"
-  local pid any_running
-  while read -r pid; do
-    [[ -n "$pid" ]] || continue
-    exact_helper_pid_is_running "$pid" && kill -TERM "$pid" 2>/dev/null || true
-  done <<<"$pids"
-  for _ in {1..20}; do
-    any_running=0
-    while read -r pid; do
-      [[ -n "$pid" ]] && exact_helper_pid_is_running "$pid" && any_running=1
-    done <<<"$pids"
-    [[ "$any_running" == "0" ]] && return 0
-    sleep 0.1
-  done
-  while read -r pid; do
-    [[ -n "$pid" ]] || continue
-    exact_helper_pid_is_running "$pid" && kill -KILL "$pid" 2>/dev/null || true
-  done <<<"$pids"
+proof_helper_command() {
+  local command="$1" args
+  [[ "$command" == "$HELPER "* ]] || return 1
+  args="${command#"$HELPER"}"
+  [[ "$args" =~ (^|[[:space:]])--port[[:space:]]+${RELEASE_PROOF_PORT}([[:space:]]|$) ]]
+}
+release_proof_helper_identities() {
+  local listeners rc=0 pid row parent command birth
+  listeners="$(/usr/sbin/lsof -nP -t -a -iTCP:"$RELEASE_PROOF_PORT" \
+    -sTCP:LISTEN 2>/dev/null)" || rc=$?
+  [[ "$rc" == "0" || "$rc" == "1" ]] || return "$rc"
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    row="$(ps -p "$pid" -o ppid=,command= 2>/dev/null || true)"
+    read -r parent command <<<"$row"
+    [[ "$parent" == "1" && "$(process_executable "$pid")" == "$HELPER" ]] || continue
+    proof_helper_command "$command" || continue
+    birth="$(ps -p "$pid" -o lstart= 2>/dev/null || true)"
+    [[ -n "${birth//[[:space:]]/}" ]] && printf '%s\t%s\n' "$pid" "$birth"
+  done <<<"$listeners"
   return 0
 }
-
-cleanup_release_proof() {
-  local app_pids child_pids="" app_pid child_pid
-  app_pids="$(proof_candidate_pids)"
-  while read -r app_pid; do
-    [[ -n "$app_pid" ]] || continue
-    while read -r child_pid; do
-      [[ -n "$child_pid" ]] && child_pids+="${child_pids:+$'\n'}$child_pid"
-    done < <(proof_child_pid "$app_pid")
-  done <<<"$app_pids"
-  stop_exact_processes "app" proof_candidate_pids
-  stop_captured_helpers "$child_pids"
+captured_helper_is_current() {
+  local identity="$1" pid
+  pid="${identity%%$'\t'*}"
+  helper_identity_matches "$identity" "$(process_executable "$pid")" \
+    "$(ps -p "$pid" -o lstart= 2>/dev/null || true)"
 }
-
+helper_identity_matches() {
+  [[ "$2" == "$HELPER" && "$3" == "${1#*$'\t'}" ]]
+}
+stop_captured_helpers() {
+  local captured="$1" signal identity pid any_running
+  for signal in TERM KILL; do
+    while IFS= read -r identity; do
+      pid="${identity%%$'\t'*}"
+      [[ -n "$pid" ]] && captured_helper_is_current "$identity" \
+        && kill "-$signal" "$pid" 2>/dev/null || true
+    done <<<"$captured"
+    for _ in {1..20}; do
+      any_running=0
+      while IFS= read -r identity; do
+        [[ -n "$identity" ]] && captured_helper_is_current "$identity" && any_running=1
+      done <<<"$captured"
+      [[ "$any_running" == "0" ]] && return 0
+      sleep 0.1
+    done
+  done
+  echo "release-proof helper did not stop; unrelated processes were left untouched" >&2
+  return 1
+}
+cleanup_release_proof() {
+  local helpers
+  stop_exact_processes "app" proof_candidate_pids
+  helpers="$(release_proof_helper_identities)" || return 1
+  stop_captured_helpers "$helpers"
+}
 proof_child_pid() {
   local wanted_parent="$1"
   ps ax -o pid=,ppid=,command= | while read -r pid parent command; do
@@ -144,6 +170,18 @@ proof_child_pid() {
     fi
   done
 }
+if [[ "$SELFTEST" == "1" ]]; then
+  HELPER="/tmp/Tilde Proof.app/Contents/Helpers/llama-server"
+  proof_helper_command "$HELPER --port $RELEASE_PROOF_PORT"
+  ! proof_helper_command "$HELPER --port $PRODUCTION_PORT"
+  helper_identity_matches $'201\tbirth-a' "$HELPER" birth-a
+  ! helper_identity_matches $'201\tbirth-a' /tmp/other birth-a
+  ! helper_identity_matches $'201\tbirth-a' "$HELPER" birth-b
+  echo "selftest OK: cleanup matcher rejects port, path, and birth mismatches"
+  exit 0
+fi
+
+[[ -x "$BINARY" ]] || { echo "missing built app: $APP" >&2; exit 1; }
 
 if [[ "$RELEASE_PROOF" == "1" ]]; then
   cleanup_release_proof
