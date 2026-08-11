@@ -10,10 +10,17 @@ RELEASE_INPUT_MODEL=""
 APP_BUNDLE_SET=0
 APP_BUNDLE="$ROOT_DIR/dist/Tilde.app"
 MIN_MODEL_BYTES=1500000000
+SELFTEST_TMP_DIR=""
 
 fail() {
   echo "bundle check failed: $*" >&2
   exit 1
+}
+
+cleanup_selftest() {
+  local temp_dir="${SELFTEST_TMP_DIR:-}"
+  SELFTEST_TMP_DIR=""
+  [[ -z "$temp_dir" ]] || /bin/rm -rf -- "$temp_dir"
 }
 
 team_identifier_from_details() {
@@ -37,7 +44,7 @@ signing_team_identifier() {
 
 is_macho_execute() {
   local headers
-  headers="$(/usr/bin/otool -hv "$1" 2>/dev/null)" || return 1
+  headers="$(/usr/bin/otool -arch all -hv "$1" 2>/dev/null)" || return 1
   /usr/bin/awk '
     $1 == "magic" {
       filetype_column = 0
@@ -55,7 +62,7 @@ is_macho_execute() {
 
 has_system_only_dependencies() {
   local dependencies
-  dependencies="$(/usr/bin/otool -L "$1" 2>/dev/null)" || return 1
+  dependencies="$(/usr/bin/otool -arch all -L "$1" 2>/dev/null)" || return 1
   /usr/bin/awk '
     /^[[:space:]]/ {
       if ($1 !~ /^\/System\// && $1 !~ /^\/usr\/lib\//) invalid = 1
@@ -89,6 +96,8 @@ validate_release_inputs() {
 
 run_selftest() {
   local selftest_dir invalid_helper valid_model readme_model small_gguf
+  local fixture_source fixture_main invalid_dylib invalid_executable valid_slice
+  local mixed_filetype_helper mixed_dependency_helper
   [[ "$(team_identifier_from_details $'Executable=/tmp/Tilde\nTeamIdentifier=ABCDE12345')" \
     == "ABCDE12345" ]] || return 1
   if team_identifier_from_details "Executable=/tmp/Tilde" >/dev/null; then return 1; fi
@@ -98,12 +107,20 @@ run_selftest() {
     return 1
   fi
 
-  selftest_dir="$(mktemp -d "${TMPDIR:-/tmp}/tilde-bundle-selftest.XXXXXX")"
-  trap 'rm -rf "$selftest_dir"' EXIT
+  SELFTEST_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tilde-bundle-selftest.XXXXXX")"
+  trap cleanup_selftest EXIT
+  selftest_dir="$SELFTEST_TMP_DIR"
   invalid_helper="$selftest_dir/not-a-helper"
   valid_model="$selftest_dir/valid.gguf"
   readme_model="$selftest_dir/README"
   small_gguf="$selftest_dir/small.gguf"
+  fixture_source="$selftest_dir/fixture.c"
+  fixture_main="$selftest_dir/main.c"
+  invalid_dylib="$selftest_dir/invalid.dylib"
+  invalid_executable="$selftest_dir/invalid-dependency"
+  valid_slice="$selftest_dir/valid-arm64e"
+  mixed_filetype_helper="$selftest_dir/mixed-filetype-helper"
+  mixed_dependency_helper="$selftest_dir/mixed-dependency-helper"
 
   printf '#!/bin/sh\nexit 0\n' >"$invalid_helper"
   chmod +x "$invalid_helper"
@@ -114,6 +131,19 @@ run_selftest() {
   /bin/dd if=/dev/zero of="$readme_model" bs=1 seek="$((MIN_MODEL_BYTES - 1))" \
     count=1 conv=notrunc >/dev/null 2>&1
   printf 'GGUF' >"$small_gguf"
+  printf 'int tilde_selftest_dependency(void) { return 0; }\n' >"$fixture_source"
+  printf 'int tilde_selftest_dependency(void);\nint main(void) { return tilde_selftest_dependency(); }\n' \
+    >"$fixture_main"
+
+  /usr/bin/xcrun clang -arch x86_64 -dynamiclib \
+    -Wl,-install_name,@rpath/libtilde-selftest.dylib \
+    "$fixture_source" -o "$invalid_dylib" >/dev/null 2>&1
+  /usr/bin/xcrun clang -arch x86_64 "$fixture_main" "$invalid_dylib" \
+    -o "$invalid_executable" >/dev/null 2>&1
+  /usr/bin/lipo /usr/bin/true -thin arm64e -output "$valid_slice"
+  /usr/bin/lipo -create "$valid_slice" "$invalid_dylib" -output "$mixed_filetype_helper"
+  /usr/bin/lipo -create "$valid_slice" "$invalid_executable" -output "$mixed_dependency_helper"
+  chmod +x "$mixed_filetype_helper" "$mixed_dependency_helper"
 
   "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$valid_model" \
     >/dev/null 2>&1 || return 1
@@ -123,10 +153,14 @@ run_selftest() {
     >/dev/null 2>&1; then return 1; fi
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$small_gguf" \
     >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$mixed_filetype_helper" "$valid_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$mixed_dependency_helper" "$valid_model" \
+    >/dev/null 2>&1; then return 1; fi
 
-  rm -rf "$selftest_dir"
+  cleanup_selftest
   trap - EXIT
-  echo "selftest OK: signing parser and release input shapes fail closed"
+  echo "selftest OK: signing parser and every release-input architecture fail closed"
 }
 
 while (($#)); do
