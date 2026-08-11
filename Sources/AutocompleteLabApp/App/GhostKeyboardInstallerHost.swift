@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Foundation
+import Security
 
 /// Installs the bundled InlineGhostIME input method on launch: copies it from
 /// Contents/Library into ~/Library/Input Methods when missing or outdated,
@@ -8,6 +9,8 @@ import Foundation
 /// user the one step macOS reserves for them — adding the keyboard in System
 /// Settings. The bundled input method remains disabled until the user enables it.
 final class GhostKeyboardInstallerHost {
+
+    typealias TrustDecision = (URL) -> String?
 
     private static let bundledPathInApp = "Contents/Library/InlineGhostIME.app"
     private static let bundleIdentifier = "bar.r3d.inputmethod.InlineGhost"
@@ -25,7 +28,15 @@ final class GhostKeyboardInstallerHost {
         let firstInstall = !FileManager.default.fileExists(atPath: installed.path)
 
         do {
-            if try Self.installIfNeeded(bundled: bundled, installed: installed) {
+            guard let ownerTeam = Self.strictSignatureTeamIdentifier(at: Bundle.main.bundleURL) else {
+                throw CocoaError(.fileReadNoPermission)
+            }
+            if try Self.installIfNeeded(
+                bundled: bundled,
+                installed: installed,
+                expectedTeamIdentifier: ownerTeam,
+                trust: { Self.strictSignatureTeamIdentifier(at: $0) }
+            ) {
                 DiagnosticsLog.shared.record("ime-installed", metadata: ["firstInstall": String(firstInstall)])
                 // Live IME picks up the new binary on its next relaunch.
                 NSWorkspace.shared.runningApplications
@@ -52,13 +63,20 @@ final class GhostKeyboardInstallerHost {
     static func installIfNeeded(
         bundled: URL,
         installed: URL,
+        expectedTeamIdentifier: String,
+        trust: TrustDecision,
         fileManager: FileManager = .default
     ) throws -> Bool {
         try validateInputMethod(at: bundled, fileManager: fileManager)
+        guard !expectedTeamIdentifier.isEmpty,
+              trust(bundled) == expectedTeamIdentifier else {
+            throw CocoaError(.fileReadNoPermission)
+        }
 
         let installedExists = fileManager.fileExists(atPath: installed.path)
         if installedExists,
            (try? validateInputMethod(at: installed, fileManager: fileManager)) != nil,
+           trust(installed) == expectedTeamIdentifier,
            !bundledShouldReplace(bundled: bundled, installed: installed) {
             return false
         }
@@ -70,6 +88,9 @@ final class GhostKeyboardInstallerHost {
 
         try fileManager.copyItem(at: bundled, to: staging)
         try validateInputMethod(at: staging, fileManager: fileManager)
+        guard trust(staging) == expectedTeamIdentifier else {
+            throw CocoaError(.fileReadNoPermission)
+        }
 
         if installedExists {
             _ = try fileManager.replaceItemAt(installed, withItemAt: staging)
@@ -77,6 +98,29 @@ final class GhostKeyboardInstallerHost {
             try fileManager.moveItem(at: staging, to: installed)
         }
         return true
+    }
+
+    /// Returns a non-empty Team ID only for a bundle whose complete code seal
+    /// passes strict validation. Ad-hoc and unsigned bundles fail closed.
+    private static func strictSignatureTeamIdentifier(at bundle: URL) -> String? {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(bundle as CFURL, [], &code) == errSecSuccess,
+              let code else { return nil }
+        let flags = SecCSFlags(
+            rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate
+        )
+        guard SecStaticCodeCheckValidity(code, flags, nil) == errSecSuccess else { return nil }
+
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            code,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information
+        ) == errSecSuccess,
+              let values = information as? [CFString: Any],
+              let team = values[kSecCodeInfoTeamIdentifier] as? String,
+              !team.isEmpty else { return nil }
+        return team
     }
 
     private static func validateInputMethod(at app: URL, fileManager: FileManager) throws {
@@ -137,11 +181,11 @@ final class GhostKeyboardInstallerHost {
             alert.messageText = "One step to turn on Tilde's keyboard"
             alert.informativeText = """
             Tilde types its suggestions through a macOS keyboard called \
-            InlineGhostIME. macOS asks that you add it yourself:
+            Tilde. macOS asks that you add it yourself:
 
             1. System Settings → Keyboard → Input Sources → Edit… → +
-            2. Search "inline", select InlineGhostIME, click Add
-            3. Pick InlineGhostIME from the keyboard menu in the menu bar
+            2. Search "Tilde", select Tilde, click Add
+            3. Pick Tilde from the keyboard menu in the menu bar
 
             If it does not appear in the list yet, log out and back in once — \
             macOS scans for new keyboards at login.
