@@ -27,7 +27,7 @@ public struct CompletionSuggestion: Equatable, Sendable {
     }
 
     public var visibleText: String {
-        acceptedPrefix(wordLimit: maxVisibleWords)
+        Self.acceptedPrefix(in: text, wordLimit: maxVisibleWords)
     }
 
     public var visibleWordCount: Int {
