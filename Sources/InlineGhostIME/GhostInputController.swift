@@ -71,9 +71,16 @@ final class GhostInputController: IMKInputController {
         }
 
         if let grapheme = printableGrapheme(from: event) {
-            let current = matchingVisibleTicket(for: client)
+            let match = matchingVisibleState(for: client)
             cancelPendingWork()
-            let advanced = current?.advancing(with: grapheme)
+            let advanced = match.map { match in
+                match.ticket.advancing(
+                    with: grapheme,
+                    boundedContext: match.context,
+                    contextLimit: Self.contextLimit
+                )
+            }
+            let current = match?.ticket
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
             appendFallback(grapheme, for: client)
@@ -189,7 +196,7 @@ final class GhostInputController: IMKInputController {
     }
 
     private func acceptSuggestion(_ client: IMKTextInput) -> Bool {
-        let current = matchingVisibleTicket(for: client)
+        let current = matchingVisibleState(for: client)?.ticket
         cancelPendingWork()
         let effects = state.reduce(.accept(current))
         guard case let .insert(accepted)? = effects.first(where: {
@@ -225,10 +232,13 @@ final class GhostInputController: IMKInputController {
 
     /// Re-read the bounded context on acceptance so a same-range field change
     /// cannot commit a stale suggestion.
-    private func matchingVisibleTicket(for client: IMKTextInput) -> InlineSuggestionTicket? {
+    private func matchingVisibleState(
+        for client: IMKTextInput
+    ) -> (ticket: InlineSuggestionTicket, context: String)? {
         guard let visible = state.visibleTicket else { return nil }
-        let current = ticket(for: client, context: contextBeforeCaret(client))
-        return visible.matchesFieldState(of: current) ? visible : nil
+        let context = contextBeforeCaret(client)
+        let current = ticket(for: client, context: context)
+        return visible.matchesFieldState(of: current) ? (visible, context) : nil
     }
 
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
@@ -299,7 +309,7 @@ final class GhostInputController: IMKInputController {
             return
         }
         let context = contextBeforeCaret(client)
-        guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: context) else {
+        guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: typedFallback) else {
             dismiss(client)
             return
         }
@@ -318,7 +328,6 @@ final class GhostInputController: IMKInputController {
     /// letter partial word, run after the key callback has returned.
     private func spellCheckerSuffix(for context: String) -> String {
         let partial = String(context.reversed().prefix(while: \Character.isLetter).reversed())
-        guard partial.count >= 3 else { return "" }
         let range = NSRange(location: 0, length: partial.utf16.count)
         let candidates = NSSpellChecker.shared.completions(
             forPartialWordRange: range,
@@ -326,8 +335,17 @@ final class GhostInputController: IMKInputController {
             language: "en",
             inSpellDocumentWithTag: 0
         ) ?? []
+        return Self.dictionarySuffix(for: partial, candidates: candidates)
+    }
+
+    static func dictionarySuffix(for partial: String, candidates: [String]) -> String {
+        guard partial.count >= 3 else { return "" }
+        let normalizedPartial = partial.lowercased()
+        guard !candidates.contains(where: { $0.lowercased() == normalizedPartial }) else {
+            return ""
+        }
         guard let match = candidates.first(where: {
-            $0.count > partial.count && $0.lowercased().hasPrefix(partial.lowercased())
+            $0.count > partial.count && $0.lowercased().hasPrefix(normalizedPartial)
         }) else { return "" }
         return String(match.dropFirst(partial.count))
     }

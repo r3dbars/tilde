@@ -1,3 +1,5 @@
+import Foundation
+
 public struct InlineSuggestionTicket: Equatable, Sendable {
     public let clientIdentifier: String
     public let bundleIdentifier: String
@@ -28,15 +30,21 @@ public struct InlineSuggestionTicket: Equatable, Sendable {
         }
     }
 
-    public func advancing(with text: String) -> Self {
-        let fingerprint = text.utf8.reduce(contextFingerprint) { value, byte in
-            (value ^ UInt64(byte)) &* 1_099_511_628_211
-        }
+    public func advancing(
+        with text: String,
+        boundedContext: String,
+        contextLimit: Int
+    ) -> Self {
+        let combinedContext = boundedContext + text
+        let utf16Context = combinedContext as NSString
+        let nextContext = utf16Context.substring(
+            from: max(0, utf16Context.length - max(0, contextLimit))
+        )
         let utf16Count = text.utf16.count
         return Self(
             clientIdentifier: clientIdentifier,
             bundleIdentifier: bundleIdentifier,
-            contextFingerprint: fingerprint,
+            contextFingerprint: Self.fingerprint(nextContext),
             selectionLocation: selectionLocation < 0 ? selectionLocation : selectionLocation + utf16Count,
             selectionLength: 0,
             requestIdentifier: requestIdentifier
