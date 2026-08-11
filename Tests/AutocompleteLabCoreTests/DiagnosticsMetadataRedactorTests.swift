@@ -9,7 +9,11 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("firstTokenProbability", "0.812") == "firstTokenProbability=0.812")
         #expect(field("willRestart", "true") == "willRestart=true")
         #expect(field("reason", "binary-missing") == "reason=binary-missing")
-        #expect(field("mode", "wordCompletion") == "mode=wordCompletion")
+        #expect(field("reason", "assets-missing") == "reason=assets-missing")
+        #expect(field("reason", "port-in-use") == "reason=port-in-use")
+        #expect(field("reason", "health-timeout") == "reason=health-timeout")
+        #expect(field("reason", "directory") == "reason=directory")
+        #expect(field("reason", "already-running") == "reason=already-running")
         #expect(field("app", "com.apple.TextEdit") == "app=com.apple.TextEdit")
     }
 

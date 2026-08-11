@@ -7,18 +7,16 @@ struct CompletionOutputCleanerTests {
 
     private func clean(
         _ output: String,
-        after context: String? = nil,
-        mode: CompletionRequestMode = .phraseContinuation
+        after context: String? = nil
     ) -> CompletionSuggestion? {
-        cleaner.clean(output, after: context, mode: mode)
+        cleaner.clean(output, after: context)
     }
 
     private func reason(
         _ output: String,
-        after context: String? = nil,
-        mode: CompletionRequestMode = .phraseContinuation
+        after context: String? = nil
     ) -> CompletionCleanRejectionReason? {
-        cleaner.cleanWithReason(output, after: context, mode: mode).rejectionReason
+        cleaner.cleanWithReason(output, after: context).rejectionReason
     }
 
     @Test("Normalizes thinking, labels, spacing, and lines")
@@ -42,17 +40,15 @@ struct CompletionOutputCleanerTests {
     func capsVisibleOutput() {
         let wordCapped = CompletionOutputCleaner(maxVisibleWords: 3).clean(
             "one two three four five",
-            after: nil,
-            mode: .phraseContinuation
+            after: nil
         )
         let clamped = CompletionOutputCleaner(maxVisibleWords: 200).clean(
             (1...24).map { "word\($0)" }.joined(separator: " "),
-            after: nil,
-            mode: .phraseContinuation
+            after: nil
         )
 
         #expect(wordCapped?.visibleText == " one two three")
-        #expect(clamped?.visibleWordCount == 20)
+        #expect(clamped?.visibleText.split(whereSeparator: { $0.isWhitespace }).count == 20)
     }
 
     @Test("Rejects unsafe hidden and control characters")
@@ -78,11 +74,11 @@ struct CompletionOutputCleanerTests {
     func rejectsInstructionLeaks() {
         let leaks = [
             "Before cursor: private text", "Inline autocomplete. Return only the continuation.",
-            "Return only the next few words", "No spaces or punctuation",
+            "Return only the next few words",
             "System: continue this", "Thinking Process: analyze the request",
             "Okay, let's see what comes next", "The user is trying to write",
             "I'm sorry, but as an AI chatbot developed", "I cannot assist with that request",
-            "Suffix", "candidate 1", "Next 3-8 words, or <NO_SUGGESTION>",
+            "candidate 1", "Next 3-8 words, or <NO_SUGGESTION>",
         ]
 
         for output in leaks { #expect(reason(output, after: "Can we") == .promptInstructionEcho) }
@@ -124,18 +120,6 @@ struct CompletionOutputCleanerTests {
         #expect(clean("the way they connect ideas", after: current)?.visibleText == " the way they connect ideas")
     }
 
-    @Test("Validates and extracts word suffixes")
-    func validatesWordSuffixes() {
-        let mode = CompletionRequestMode.wordCompletion
-
-        #expect(clean("dictation", after: "dic", mode: mode)?.visibleText == "tation")
-        #expect(clean("tation", after: "dic", mode: mode)?.visibleText == "tation")
-        #expect(clean("Suffix: tation next", after: "dic", mode: mode)?.visibleText == "tation")
-        #expect(reason("ing.", after: "walk", mode: mode) == .invalidWordCompletion)
-        #expect(reason("ing", after: "walk ", mode: mode) == .invalidWordCompletion)
-        #expect(reason("ing", after: nil, mode: mode) == .invalidWordCompletion)
-    }
-
     @Test("Allows ordinary prose instead of judging style")
     func allowsFormerSubjectiveBlacklistPhrases() {
         let ordinaryProse = [
@@ -152,8 +136,7 @@ struct CompletionOutputCleanerTests {
     func reportsReasons() {
         let result = cleaner.cleanWithReason(
             "private\u{200B}text",
-            after: "private typed text",
-            mode: .phraseContinuation
+            after: "private typed text"
         )
 
         #expect(result.rejectionReason == .unsafeHiddenOrControlCharacter)

@@ -7,7 +7,7 @@ enum LlamaEngineError: Error {
 }
 
 /// One deterministic, final-only completion request to the app-owned llama server.
-final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
+final class LlamaCompletionEngine: @unchecked Sendable {
     private let baseURL: URL
     private let cleaner = CompletionOutputCleaner()
 
@@ -26,7 +26,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
 
         let body: [String: Any] = [
             "prompt": recipe.prompt,
-            "n_predict": min(register.generatedTokenBudget, request.mode.generatedTokenCeiling),
+            "n_predict": register.generatedTokenBudget,
             "temperature": 0,
             "cache_prompt": true,
             "stop": ["\n"],
@@ -49,8 +49,7 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
 
         let clean = cleaner.cleanWithReason(
             recipe.normalizedContinuation(raw),
-            after: request.textBeforeCursor,
-            mode: request.mode
+            after: request.textBeforeCursor
         )
         if clean.suggestion == nil, !raw.isEmpty, let reason = clean.rejectionReason {
             DiagnosticsLog.shared.record("llama-suggestion-rejected", metadata: [

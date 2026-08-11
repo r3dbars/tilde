@@ -132,8 +132,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let completion = Task {
                 try await self.engine.suggestion(for: CompletionRequest(
                     textBeforeCursor: request.context,
-                    appBundleIdentifier: request.app,
-                    mode: .phraseContinuation
+                    appBundleIdentifier: request.app
                 ))
             }
             let disconnect = DispatchSource.makeReadSource(
