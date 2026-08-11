@@ -241,8 +241,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
         guard let peer = identity(pid: pid), peer.identifier == "bar.r3d.inputmethod.InlineGhost",
               let own = identity(pid: getpid()) else { return false }
 #if DEBUG
-        guard let ownTeam = own.team else { return peer.team == nil }
-        return peer.team == ownTeam
+        if let ownTeam = own.team, let peerTeam = peer.team {
+            return ownTeam == peerTeam
+        }
+        return own.team == nil
+            && peer.team == nil
+            && ProcessInfo.processInfo.environment["TILDE_ALLOW_UNSIGNED_LOCAL_PEER"] == "1"
 #else
         guard let ownTeam = own.team, let peerTeam = peer.team else { return false }
         return ownTeam == peerTeam
