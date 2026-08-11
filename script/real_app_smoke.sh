@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Automatic real-app smoke entry point used by AppProofCommandRunner.
 #
-# This intentionally owns only the two automatic app lanes. Build and bundle
-# setup stay in build_and_run.sh; fixtures are disposable and output is limited
+# This intentionally owns only the two automatic app lanes. Build and restart
+# stay explicit; fixtures are disposable and output is limited
 # to privacy-safe status metadata.
 set -euo pipefail
 
@@ -163,10 +163,11 @@ if [[ "$DRY_RUN" == "1" ]]; then
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
-  "$ROOT_DIR/script/build_and_run.sh" --verify
+  "$ROOT_DIR/script/build_and_run.sh"
+  "$ROOT_DIR/script/restart_app.sh"
 fi
 
-[[ -x "$APP_BINARY" ]] || fail "current app bundle is unavailable; run script/build_and_run.sh --verify first"
+[[ -x "$APP_BINARY" ]] || fail "current app bundle is unavailable; run script/build_and_run.sh first"
 
 current_app_is_running() {
   local pid command
@@ -182,8 +183,7 @@ current_app_is_running() {
 
 current_app_is_running || fail "current checkout's Tilde app is not running"
 
-# build_and_run.sh waits for this same lock, so acquire it only after any
-# delegated build has finished.
+# Serialize the disposable UI fixture.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   fail "another real-app smoke is already running"
 fi
