@@ -42,6 +42,16 @@ public struct InlineSuggestionTicket: Equatable, Sendable {
             requestIdentifier: requestIdentifier
         )
     }
+
+    /// A visible suggestion keeps its original request identity while the user
+    /// types through it. Only the live field state must still match.
+    public func matchesFieldState(of other: Self) -> Bool {
+        clientIdentifier == other.clientIdentifier
+            && bundleIdentifier == other.bundleIdentifier
+            && contextFingerprint == other.contextFingerprint
+            && selectionLocation == other.selectionLocation
+            && selectionLength == other.selectionLength
+    }
 }
 
 public struct InlineSuggestionState: Equatable, Sendable {

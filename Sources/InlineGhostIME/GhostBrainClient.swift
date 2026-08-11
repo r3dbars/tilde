@@ -24,6 +24,10 @@ enum GhostBrainClient {
         }
     }
 
+    static func decodeResponse(_ data: Data) -> GhostBrainResponse {
+        (try? JSONDecoder().decode(GhostBrainResponse.self, from: data)) ?? .error
+    }
+
     private final class Connection: @unchecked Sendable {
         private let fd: Int32
         private let deadline: UInt64
@@ -59,7 +63,7 @@ enum GhostBrainClient {
             guard let line = readLine(maximumBytes: 8_192) else {
                 return timedOut ? .timeout : .unavailable
             }
-            return (try? JSONDecoder().decode(GhostBrainResponse.self, from: line)) ?? .unavailable
+            return GhostBrainClient.decodeResponse(line)
         }
 
         private func connect() -> Bool {

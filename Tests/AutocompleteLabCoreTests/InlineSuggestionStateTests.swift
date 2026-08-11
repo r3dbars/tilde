@@ -49,6 +49,35 @@ struct InlineSuggestionStateTests {
         #expect(state.pendingTicket == nil)
     }
 
+    @Test("Multiple type-through characters keep the visible request valid for Tab")
+    func multipleTypeThroughCharactersThenAccept() {
+        let original = ticket(context: "h", location: 1, request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(original))
+        _ = state.reduce(.present("ello", original))
+
+        let afterE = original.advancing(with: "e")
+        #expect(state.reduce(.type("e", current: original, advanced: afterE)) == [
+            .hide, .insert("e"), .show("llo"),
+        ])
+
+        // Scheduling revisions may advance while the visible request remains 7.
+        let liveAfterE = ticket(context: "he", location: 2, request: 99)
+        let matchedAfterE = state.visibleTicket.flatMap {
+            $0.matchesFieldState(of: liveAfterE) ? $0 : nil
+        }
+        let afterL = matchedAfterE?.advancing(with: "l")
+        #expect(state.reduce(.type("l", current: matchedAfterE, advanced: afterL)) == [
+            .hide, .insert("l"), .show("lo"),
+        ])
+
+        let liveAfterL = ticket(context: "hel", location: 3, request: 100)
+        let matchedForTab = state.visibleTicket.flatMap {
+            $0.matchesFieldState(of: liveAfterL) ? $0 : nil
+        }
+        #expect(state.reduce(.accept(matchedForTab)) == [.hide, .insert("lo")])
+    }
+
     @Test("Divergence hides, inserts, then schedules a new request")
     func divergenceEffectOrder() {
         let current = ticket()
