@@ -59,7 +59,7 @@ final class GhostKeyboardInstallerHost {
         let installedExists = fileManager.fileExists(atPath: installed.path)
         if installedExists,
            (try? validateInputMethod(at: installed, fileManager: fileManager)) != nil,
-           !bundledIsNewer(bundled: bundled, installed: installed, fileManager: fileManager) {
+           !bundledShouldReplace(bundled: bundled, installed: installed) {
             return false
         }
 
@@ -84,7 +84,9 @@ final class GhostKeyboardInstallerHost {
         let data = try Data(contentsOf: infoURL)
         guard let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               info["CFBundleIdentifier"] as? String == bundleIdentifier,
-              info["CFBundleExecutable"] as? String == executableName else {
+              info["CFBundleExecutable"] as? String == executableName,
+              let build = info["CFBundleVersion"] as? String,
+              Int(build) != nil else {
             throw CocoaError(.fileReadCorruptFile)
         }
 
@@ -94,17 +96,37 @@ final class GhostKeyboardInstallerHost {
         }
     }
 
-    private static func bundledIsNewer(
+    /// Release builds move forward by CFBundleVersion. Equal-build binaries
+    /// are compared directly so an uncommitted developer rebuild still updates,
+    /// while an older packaged keyboard can never overwrite a newer install.
+    private static func bundledShouldReplace(
         bundled: URL,
-        installed: URL,
-        fileManager: FileManager
+        installed: URL
     ) -> Bool {
-        func binaryDate(_ app: URL) -> Date {
-            let binary = app.appendingPathComponent("Contents/MacOS/\(executableName)")
-            return (try? fileManager.attributesOfItem(atPath: binary.path)[.modificationDate] as? Date)
-                .flatMap { $0 } ?? .distantPast
+        func buildNumber(_ app: URL) -> Int? {
+            let infoURL = app.appendingPathComponent("Contents/Info.plist")
+            guard let data = try? Data(contentsOf: infoURL),
+                  let info = try? PropertyListSerialization.propertyList(
+                    from: data,
+                    format: nil
+                  ) as? [String: Any],
+                  let value = info["CFBundleVersion"] as? String else {
+                return nil
+            }
+            return Int(value)
         }
-        return binaryDate(bundled) > binaryDate(installed)
+
+        guard let bundledBuild = buildNumber(bundled),
+              let installedBuild = buildNumber(installed) else {
+            return true
+        }
+        if bundledBuild != installedBuild {
+            return bundledBuild > installedBuild
+        }
+
+        let bundledBinary = bundled.appendingPathComponent("Contents/MacOS/\(executableName)")
+        let installedBinary = installed.appendingPathComponent("Contents/MacOS/\(executableName)")
+        return (try? Data(contentsOf: bundledBinary)) != (try? Data(contentsOf: installedBinary))
     }
 
     /// The one step macOS reserves for the user (TISEnableInputSource does not
