@@ -4,7 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_MODE=0
 SELFTEST=0
+RELEASE_INPUTS_MODE=0
+RELEASE_INPUT_HELPER=""
+RELEASE_INPUT_MODEL=""
+APP_BUNDLE_SET=0
 APP_BUNDLE="$ROOT_DIR/dist/Tilde.app"
+MIN_MODEL_BYTES=1500000000
 
 fail() {
   echo "bundle check failed: $*" >&2
@@ -30,7 +35,60 @@ signing_team_identifier() {
   team_identifier_from_details "$details"
 }
 
+is_macho_execute() {
+  local headers
+  headers="$(/usr/bin/otool -hv "$1" 2>/dev/null)" || return 1
+  /usr/bin/awk '
+    $1 == "magic" {
+      filetype_column = 0
+      for (column = 1; column <= NF; column++) {
+        if ($column == "filetype") filetype_column = column
+      }
+      if (filetype_column == 0 || getline <= 0 || $filetype_column != "EXECUTE") {
+        invalid = 1
+      }
+      headers += 1
+    }
+    END { exit !(headers > 0 && invalid == 0) }
+  ' <<<"$headers"
+}
+
+has_system_only_dependencies() {
+  local dependencies
+  dependencies="$(/usr/bin/otool -L "$1" 2>/dev/null)" || return 1
+  /usr/bin/awk '
+    /^[[:space:]]/ {
+      if ($1 !~ /^\/System\// && $1 !~ /^\/usr\/lib\//) invalid = 1
+    }
+    END { exit invalid == 0 ? 0 : 1 }
+  ' <<<"$dependencies"
+}
+
+has_gguf_magic() {
+  [[ "$(LC_ALL=C /usr/bin/head -c 4 "$1" 2>/dev/null)" == "GGUF" ]]
+}
+
+has_release_model_size() {
+  local size
+  size="$(/usr/bin/stat -f '%z' "$1" 2>/dev/null)" || return 1
+  [[ "$size" =~ ^[0-9]+$ ]] && ((size >= MIN_MODEL_BYTES))
+}
+
+validate_release_inputs() {
+  local helper="$1"
+  local model="$2"
+  [[ -f "$helper" && -x "$helper" ]] || fail "missing executable llama-server: $helper"
+  is_macho_execute "$helper" || fail "llama-server is not Mach-O filetype EXECUTE"
+  has_system_only_dependencies "$helper" \
+    || fail "llama-server dependency inspection failed or found a non-system library"
+  [[ -f "$model" ]] || fail "missing model: $model"
+  has_gguf_magic "$model" || fail "model does not begin with GGUF magic"
+  has_release_model_size "$model" \
+    || fail "model is smaller than the 1500000000-byte release minimum"
+}
+
 run_selftest() {
+  local selftest_dir invalid_helper valid_model readme_model small_gguf
   [[ "$(team_identifier_from_details $'Executable=/tmp/Tilde\nTeamIdentifier=ABCDE12345')" \
     == "ABCDE12345" ]] || return 1
   if team_identifier_from_details "Executable=/tmp/Tilde" >/dev/null; then return 1; fi
@@ -39,39 +97,94 @@ run_selftest() {
   if team_identifier_from_details $'TeamIdentifier=ABCDE12345\nTeamIdentifier=ABCDE12345' >/dev/null; then
     return 1
   fi
-  echo "selftest OK: signing TeamIdentifier parser fails closed"
+
+  selftest_dir="$(mktemp -d "${TMPDIR:-/tmp}/tilde-bundle-selftest.XXXXXX")"
+  trap 'rm -rf "$selftest_dir"' EXIT
+  invalid_helper="$selftest_dir/not-a-helper"
+  valid_model="$selftest_dir/valid.gguf"
+  readme_model="$selftest_dir/README"
+  small_gguf="$selftest_dir/small.gguf"
+
+  printf '#!/bin/sh\nexit 0\n' >"$invalid_helper"
+  chmod +x "$invalid_helper"
+  printf 'GGUF' >"$valid_model"
+  /bin/dd if=/dev/zero of="$valid_model" bs=1 seek="$((MIN_MODEL_BYTES - 1))" \
+    count=1 conv=notrunc >/dev/null 2>&1
+  printf 'README' >"$readme_model"
+  /bin/dd if=/dev/zero of="$readme_model" bs=1 seek="$((MIN_MODEL_BYTES - 1))" \
+    count=1 conv=notrunc >/dev/null 2>&1
+  printf 'GGUF' >"$small_gguf"
+
+  "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$valid_model" \
+    >/dev/null 2>&1 || return 1
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$invalid_helper" "$valid_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$readme_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$small_gguf" \
+    >/dev/null 2>&1; then return 1; fi
+
+  rm -rf "$selftest_dir"
+  trap - EXIT
+  echo "selftest OK: signing parser and release input shapes fail closed"
 }
 
-for arg in "$@"; do
-  case "$arg" in
+while (($#)); do
+  case "$1" in
     --release)
       RELEASE_MODE=1
+      shift
       ;;
     --selftest)
       SELFTEST=1
+      shift
+      ;;
+    --release-inputs)
+      [[ $# -ge 3 ]] || fail "--release-inputs requires HELPER and MODEL paths"
+      RELEASE_INPUTS_MODE=1
+      RELEASE_INPUT_HELPER="$2"
+      RELEASE_INPUT_MODEL="$3"
+      shift 3
       ;;
     -h|--help)
       cat <<'EOF'
 Usage: script/check_app_bundle.sh [--release] [path/to/Tilde.app]
        script/check_app_bundle.sh --selftest
+       script/check_app_bundle.sh --release-inputs HELPER MODEL
 
 Checks the local app bundle shape, signature, and hardened runtime.
 Use --release to require the packaged model, server, input method, and a
 Developer ID Application signature.
+Use --release-inputs to check only the helper and model file shapes.
 EOF
       exit 0
       ;;
     -*)
-      fail "unknown option: $arg"
+      fail "unknown option: $1"
       ;;
     *)
-      APP_BUNDLE="$arg"
+      [[ "$APP_BUNDLE_SET" == "0" ]] || fail "multiple app bundle paths provided"
+      APP_BUNDLE="$1"
+      APP_BUNDLE_SET=1
+      shift
       ;;
   esac
 done
 
+if [[ "$SELFTEST" == "1" && ("$RELEASE_MODE" == "1" || "$RELEASE_INPUTS_MODE" == "1" || "$APP_BUNDLE_SET" == "1") ]]; then
+  fail "--selftest cannot be combined with bundle or release-input checks"
+fi
+if [[ "$RELEASE_INPUTS_MODE" == "1" && ("$RELEASE_MODE" == "1" || "$APP_BUNDLE_SET" == "1") ]]; then
+  fail "--release-inputs cannot be combined with a bundle check"
+fi
+
 if [[ "$SELFTEST" == "1" ]]; then
   run_selftest
+  exit 0
+fi
+if [[ "$RELEASE_INPUTS_MODE" == "1" ]]; then
+  validate_release_inputs "$RELEASE_INPUT_HELPER" "$RELEASE_INPUT_MODEL"
+  echo "Release helper and model shapes verified."
   exit 0
 fi
 
@@ -128,19 +241,12 @@ SIGNATURE_DETAILS="$(codesign --display --verbose=4 "$APP_BUNDLE" 2>&1 || true)"
 grep -F "runtime" <<<"$SIGNATURE_DETAILS" >/dev/null || fail "hardened runtime flag is missing"
 
 if [[ "$RELEASE_MODE" == "1" ]]; then
-  [[ -x "$LLAMA_SERVER" ]] || fail "missing packaged llama-server"
-  [[ -s "$MODEL" ]] || fail "missing packaged model"
+  validate_release_inputs "$LLAMA_SERVER" "$MODEL"
   [[ -x "$IME/Contents/MacOS/InlineGhostIME" ]] || fail "missing packaged InlineGhostIME"
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$IME_INFO_PLIST")" \
     == "$(plist_value CFBundleShortVersionString)" ]] || fail "input method release version mismatch"
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$IME_INFO_PLIST")" \
     == "$(plist_value CFBundleVersion)" ]] || fail "input method build number mismatch"
-
-  if otool -L "$LLAMA_SERVER" | tail -n +2 \
-    | awk '{ print $1 }' \
-    | grep -Ev '^(/System/|/usr/lib/)' >/dev/null; then
-    fail "packaged llama-server links a non-system library"
-  fi
 
   codesign --verify --strict "$LLAMA_SERVER" >/dev/null 2>&1 \
     || fail "llama-server signature verification failed"

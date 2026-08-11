@@ -51,6 +51,8 @@ required release inputs. Its isolated runtime lane observes only the exact
 packaged app and helper on a dedicated port. It may append privacy-safe
 diagnostics, but it does not quit or change the daily driver or input method;
 IME/editor/authenticated-socket proof stays manual.
+The pins must come from human review: matching bytes and valid file shapes do
+not prove where a helper or model came from.
 
 For private, aggregate-only model comparisons, see the
 [evaluation guide](docs/evaluation.md).
