@@ -7,26 +7,37 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 LLAMA_SERVER=""
+LLAMA_SHA256=""
 MODEL=""
+MODEL_SHA256=""
 SIGN_IDENTITY=""
 NOTARY_PROFILE=""
 VERSION="0.1.0"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+VERIFY_INPUTS_ONLY=0
 
 usage() {
   cat <<'EOF'
-Usage: script/package_app.sh --llama-server PATH --model PATH \
-  --notary-profile PROFILE [options]
+Usage: script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
+  --model PATH --model-sha256 SHA256 --notary-profile PROFILE [options]
+       script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
+  --model PATH --model-sha256 SHA256 --verify-inputs-only
 
-Required:
+Release inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
+  --llama-sha256 SHA256     Exact SHA-256 of the llama-server input.
   --model PATH              GGUF model embedded in the app.
+  --model-sha256 SHA256     Exact SHA-256 of the model input.
+
+Full release only:
   --notary-profile PROFILE  Stored notarytool keychain profile.
 
 Options:
   --sign-identity IDENTITY  Developer ID Application identity (auto-detected).
   --version VERSION         Release version (default: 0.1.0).
   --build-number NUMBER     Numeric bundle build number.
+  --verify-inputs-only      Verify pinned inputs, then exit without building,
+                            signing, notarizing, or uploading anything.
 
 This is intentionally fail-closed. It creates release artifacts only after the
 full test suite, packaged-runtime health/completion/socket observation, Apple
@@ -36,17 +47,22 @@ EOF
 
 while (($#)); do
   case "$1" in
-    --llama-server|--model|--notary-profile|--sign-identity|--version|--build-number)
+    --llama-server|--llama-sha256|--model|--model-sha256|--notary-profile|--sign-identity|--version|--build-number)
       [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
       case "$1" in
         --llama-server) LLAMA_SERVER="$2" ;;
+        --llama-sha256) LLAMA_SHA256="$2" ;;
         --model) MODEL="$2" ;;
+        --model-sha256) MODEL_SHA256="$2" ;;
         --notary-profile) NOTARY_PROFILE="$2" ;;
         --sign-identity) SIGN_IDENTITY="$2" ;;
         --version) VERSION="$2" ;;
         --build-number) BUILD_NUMBER="$2" ;;
       esac
       shift
+      ;;
+    --verify-inputs-only)
+      VERIFY_INPUTS_ONLY=1
       ;;
     -h|--help)
       usage
@@ -61,17 +77,47 @@ while (($#)); do
   shift
 done
 
+normalize_sha256() {
+  local label="$1"
+  local value
+  value="$(tr '[:upper:]' '[:lower:]' <<<"$2")"
+  [[ "$value" =~ ^[0-9a-f]{64}$ ]] \
+    || { echo "$label must be exactly 64 hexadecimal characters" >&2; return 2; }
+  printf '%s' "$value"
+}
+
+verify_sha256() {
+  local label="$1"
+  local path="$2"
+  local expected="$3"
+  local actual
+  actual="$(shasum -a 256 "$path" | awk '{ print $1 }')"
+  [[ "$actual" == "$expected" ]] \
+    || { echo "$label SHA-256 mismatch: expected $expected, got $actual" >&2; return 1; }
+}
+
 [[ -f "$LLAMA_SERVER" ]] || { echo "missing --llama-server file: $LLAMA_SERVER" >&2; exit 2; }
 [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server is not executable: $LLAMA_SERVER" >&2; exit 2; }
 [[ -s "$MODEL" ]] || { echo "missing --model file: $MODEL" >&2; exit 2; }
-[[ -n "$NOTARY_PROFILE" ]] || { echo "--notary-profile is required" >&2; exit 2; }
+LLAMA_SHA256="$(normalize_sha256 --llama-sha256 "$LLAMA_SHA256")"
+MODEL_SHA256="$(normalize_sha256 --model-sha256 "$MODEL_SHA256")"
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
+
+verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
+verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 
 if otool -L "$LLAMA_SERVER" | tail -n +2 | awk '{ print $1 }' \
   | grep -Ev '^(/System/|/usr/lib/)' >/dev/null; then
   echo "llama-server links a non-system library; use a static release build" >&2
   exit 1
 fi
+
+if [[ "$VERIFY_INPUTS_ONLY" == "1" ]]; then
+  echo "Release inputs verified. No build, signing, notarization, or upload performed."
+  exit 0
+fi
+
+[[ -n "$NOTARY_PROFILE" ]] || { echo "--notary-profile is required" >&2; exit 2; }
 
 if [[ -z "$SIGN_IDENTITY" ]]; then
   SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
@@ -133,12 +179,16 @@ echo "==> building packaged input method"
 IME_SIGN_IDENTITY="$SIGN_IDENTITY" ./script/build_ime.sh --no-install --no-notarize
 
 echo "==> embedding app-owned runtime, input method, and model"
+verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
+verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Library" "$APP/Contents/Resources"
 cp "$LLAMA_SERVER" "$APP/Contents/Helpers/llama-server"
 chmod +x "$APP/Contents/Helpers/llama-server"
 rm -rf "$APP/Contents/Library/InlineGhostIME.app"
 cp -R "$IME" "$APP/Contents/Library/InlineGhostIME.app"
 cp "$MODEL" "$APP/Contents/Resources/bundled-model.gguf"
+verify_sha256 "bundled llama-server" "$APP/Contents/Helpers/llama-server" "$LLAMA_SHA256"
+verify_sha256 "bundled model" "$APP/Contents/Resources/bundled-model.gguf" "$MODEL_SHA256"
 
 echo "==> signing nested code and app with hardened runtime"
 codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
