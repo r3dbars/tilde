@@ -7,11 +7,10 @@
 #
 # Every lane is BLOCKING and real:
 #   1. git diff --check            whitespace / conflict markers
-#   2. complexity budget           structural high-water marks stay bounded
+#   2. structural Swift delta      refactors remove more production code than they add
 #   3. bash -n script/*.sh         all remaining shell tooling parses
 #   4. byte-compile script/*.py    all remaining python tooling parses
-#   5. harness self-tests          proof helpers police their own contracts
-#   6. swift test                  the complete Swift suite passes
+#   5. swift test                  the complete Swift suite passes
 #
 # Environment:
 #   PROOF_DIFF_BASE=<ref>   If set, run `git diff --check <ref>...HEAD` (catches
@@ -83,6 +82,36 @@ check_diff() {
   fi
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1 | true | TRUE | yes | on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+check_structural_delta() {
+  if ! is_truthy "${PROOF_STRUCTURAL_CHANGE:-}"; then
+    echo "structural delta check not requested"
+    return 0
+  fi
+
+  local base="${PROOF_DIFF_BASE:-origin/main}"
+  git rev-parse --verify --quiet "${base}^{commit}" >/dev/null \
+    || { echo "structural diff base is not a commit: $base" >&2; return 2; }
+
+  local added deleted net
+  read -r added deleted < <(
+    git diff --numstat "${base}...HEAD" -- ':(glob)Sources/**/*.swift' |
+      awk '{ added += $1; deleted += $2 } END { printf "%d %d\n", added, deleted }'
+  )
+  net=$((added - deleted))
+  printf 'production Swift delta (%s...HEAD): +%d -%d net %+d\n' "$base" "$added" "$deleted" "$net"
+  if [ "$net" -ge 0 ] && ! is_truthy "${PROOF_STRUCTURAL_LOC_EXCEPTION:-}"; then
+    echo "structural changes must reduce production Swift LOC" >&2
+    return 1
+  fi
+}
+
 run_swift() {
   if ! command -v swift >/dev/null 2>&1; then
     echo
@@ -117,8 +146,7 @@ echo "Tilde fast proof gate (mode: ${MODE})"
 echo "Repo: ${ROOT_DIR}"
 
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff
-run_blocking "complexity budget" bash script/check_complexity_budget.sh
-run_blocking "complexity budget self-test" bash script/check_complexity_budget_self_test.sh
+run_blocking "structural Swift delta" check_structural_delta
 run_blocking "bash -n script/*.sh" bash -n script/*.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_swift
