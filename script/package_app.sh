@@ -177,7 +177,7 @@ echo "==> building release app without touching the running app"
 
 echo "==> building packaged input method"
 IME_SIGN_IDENTITY="$SIGN_IDENTITY" ./script/build_ime.sh \
-  --no-install --no-notarize --version "$VERSION" --build-number "$BUILD_NUMBER"
+  --no-notarize --version "$VERSION" --build-number "$BUILD_NUMBER"
 
 echo "==> embedding app-owned runtime, input method, and model"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
