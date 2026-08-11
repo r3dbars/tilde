@@ -49,6 +49,8 @@ model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
 open-socket observation checks. Run `./script/package_app.sh --help` for its
 required release inputs. Its non-mutating runtime lane observes only the exact
 packaged app and helper; IME/editor/authenticated-socket proof stays manual.
+The pins must come from human review: matching bytes and valid file shapes do
+not prove where a helper or model came from.
 
 For private, aggregate-only model comparisons, see the
 [evaluation guide](docs/evaluation.md).

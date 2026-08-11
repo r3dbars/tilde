@@ -26,9 +26,9 @@ Usage: script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
 
 Release inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
-  --llama-sha256 SHA256     Exact SHA-256 of the llama-server input.
+  --llama-sha256 SHA256     Human-reviewed SHA-256 pin for the helper bytes.
   --model PATH              GGUF model embedded in the app.
-  --model-sha256 SHA256     Exact SHA-256 of the model input.
+  --model-sha256 SHA256     Human-reviewed SHA-256 pin for the model bytes.
 
 Full release only:
   --notary-profile PROFILE  Stored notarytool keychain profile.
@@ -43,6 +43,8 @@ Options:
 This is intentionally fail-closed. It creates release artifacts only after the
 full test suite, non-mutating packaged-helper health/completion/socket
 observation, Apple notarization, stapling, and Gatekeeper assessment all pass.
+Shape checks and matching hashes do not establish input provenance; the release
+operator remains responsible for reviewing where the helper and model came from.
 EOF
 }
 
@@ -100,20 +102,17 @@ verify_sha256() {
 [[ -f "$LLAMA_SERVER" ]] || { echo "missing --llama-server file: $LLAMA_SERVER" >&2; exit 2; }
 [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server is not executable: $LLAMA_SERVER" >&2; exit 2; }
 [[ -s "$MODEL" ]] || { echo "missing --model file: $MODEL" >&2; exit 2; }
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$MODEL"
 LLAMA_SHA256="$(normalize_sha256 --llama-sha256 "$LLAMA_SHA256")"
 MODEL_SHA256="$(normalize_sha256 --model-sha256 "$MODEL_SHA256")"
 
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
 verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 
-if otool -L "$LLAMA_SERVER" | tail -n +2 | awk '{ print $1 }' \
-  | grep -Ev '^(/System/|/usr/lib/)' >/dev/null; then
-  echo "llama-server links a non-system library; use a static release build" >&2
-  exit 1
-fi
-
 if [[ "$VERIFY_INPUTS_ONLY" == "1" ]]; then
-  echo "Release inputs verified. No build, signing, notarization, or upload performed."
+  echo "Release shapes passed and caller-provided SHA-256 pins match."
+  echo "Input provenance remains a human review boundary."
+  echo "No build, signing, notarization, or upload performed."
   exit 0
 fi
 
@@ -195,6 +194,7 @@ echo "==> building packaged input method"
   --sign-identity "$SIGN_IDENTITY"
 
 echo "==> embedding app-owned runtime, input method, and model"
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$MODEL"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
 verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Library" "$APP/Contents/Resources"
