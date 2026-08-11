@@ -165,23 +165,25 @@ final class GhostBrainServerHost: @unchecked Sendable {
             guard !completion.isCancelled else { return }
 
             let response: GhostBrainResponse
+            let servedMetadata: [String: String]?
             switch result {
             case let .success(suggestion):
                 let text = suggestion.map {
                     String($0.visibleText.drop(while: \Character.isWhitespace))
                 } ?? ""
                 response = .suggestion(text)
-                if !text.isEmpty {
-                    DiagnosticsLog.shared.record("suggestion-served", metadata: [
-                        "app": request.app ?? "unknown",
-                        "chars": String(text.count),
-                    ])
-                }
+                servedMetadata = text.isEmpty ? nil : [
+                    "app": request.app ?? "unknown",
+                    "chars": String(text.count),
+                ]
             case let .failure(error):
                 self.runtime.reportCompletionFailure()
                 response = (error as? URLError)?.code == .timedOut ? .timeout : .error
+                servedMetadata = nil
             }
-            _ = Self.write(response, to: connection)
+            if Self.write(response, to: connection), let servedMetadata {
+                DiagnosticsLog.shared.record("suggestion-served", metadata: servedMetadata)
+            }
         }
     }
 

@@ -149,6 +149,7 @@ run_blocking "bash -n script/*.sh" bash -n script/*.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "runtime egress harness self-test" python3 script/check_runtime_network_egress.py --selftest
 run_blocking "golden evaluator self-test" python3 script/golden_eval.py --selftest
+run_blocking "bundle signing parser self-test" bash script/check_app_bundle.sh --selftest
 run_swift
 
 summarize_and_exit
