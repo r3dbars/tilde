@@ -40,6 +40,7 @@ APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 LLAMA_SERVER="$APP_BUNDLE/Contents/Helpers/llama-server"
 MODEL="$APP_BUNDLE/Contents/Resources/bundled-model.gguf"
 IME="$APP_BUNDLE/Contents/Library/InlineGhostIME.app"
+IME_INFO_PLIST="$IME/Contents/Info.plist"
 ICON_TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$ICON_TMP_DIR"' EXIT
 
@@ -89,6 +90,10 @@ if [[ "$RELEASE_MODE" == "1" ]]; then
   [[ -x "$LLAMA_SERVER" ]] || fail "missing packaged llama-server"
   [[ -s "$MODEL" ]] || fail "missing packaged model"
   [[ -x "$IME/Contents/MacOS/InlineGhostIME" ]] || fail "missing packaged InlineGhostIME"
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$IME_INFO_PLIST")" \
+    == "$(plist_value CFBundleShortVersionString)" ]] || fail "input method release version mismatch"
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$IME_INFO_PLIST")" \
+    == "$(plist_value CFBundleVersion)" ]] || fail "input method build number mismatch"
 
   if otool -L "$LLAMA_SERVER" | tail -n +2 \
     | awk '{ print $1 }' \

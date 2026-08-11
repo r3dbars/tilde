@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build, sign, notarize, install, and register the InlineGhostIME input method.
 #
-# Usage: ./script/build_ime.sh [--no-install] [--no-notarize]
+# Usage: ./script/build_ime.sh [--no-install] [--no-notarize] [--version VERSION] [--build-number NUMBER]
 #
 # Notarization is MANDATORY for the keyboard to appear in the System Settings
 # picker (Gatekeeper silently hides unnotarized input methods). One-time setup:
@@ -12,13 +12,22 @@ cd "$(dirname "$0")/.."
 
 INSTALL=1
 NOTARIZE=1
-for arg in "$@"; do
-    case "$arg" in
+VERSION="0.1.0"
+BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+while (($#)); do
+    case "$1" in
         --no-install) INSTALL=0 ;;
         --no-notarize) NOTARIZE=0 ;;
-        *) echo "unknown flag: $arg" >&2; exit 2 ;;
+        --version|--build-number)
+            [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
+            if [[ "$1" == "--version" ]]; then VERSION="$2"; else BUILD_NUMBER="$2"; fi
+            shift
+            ;;
+        *) echo "unknown flag: $1" >&2; exit 2 ;;
     esac
+    shift
 done
+[[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 
 SIGN_IDENTITY="${IME_SIGN_IDENTITY:-9E29C607772DECCED7EC4E3BCBC01DD492548ECE}"
 NOTARY_PROFILE="${IME_NOTARY_PROFILE:-ghost-notary}"
@@ -31,6 +40,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/InlineGhostIME "$APP/Contents/MacOS/InlineGhostIME"
 cp Sources/InlineGhostIME/Info.plist "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP"
 
 if [ "$NOTARIZE" = 1 ]; then
