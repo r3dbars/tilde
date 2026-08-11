@@ -25,14 +25,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var restartPolicy = LlamaRestartPolicy()
 
     func start() {
-        preparation.async { [weak self] in
-            guard let self else { return }
-            guard let assets = Self.resolveAssets() else {
-                DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "assets-missing"])
-                return
-            }
-            lifecycle.async { self.prepareLaunch(assets) }
-        }
+        lifecycle.async { [weak self] in self?.prepareLaunch() }
     }
 
     func stop() {
@@ -45,7 +38,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             defer { process = nil }
             return process
         }
-        Self.shutDown(child)
+        Self.shutDownNow(child)
     }
 
     /// A transport/protocol failure means the owned helper is not serving a
@@ -54,7 +47,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         lifecycle.async { [weak self] in
             guard let self, healthy, let process else { return }
             healthy = false
-            Self.shutDown(process)
+            Self.requestShutdown(process)
         }
     }
 
@@ -68,26 +61,27 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         return ownsListener && lifecycle.sync { healthy && process === child && !stopped }
     }
 
-    /// A packaged app always uses its exact embedded pair and must pass its
-    /// resource-seal check first. Development overrides are only considered
-    /// when neither embedded asset exists.
+    /// Release builds use only their exact embedded, sealed pair. Debug builds
+    /// may use explicit development overrides when neither embedded asset exists.
     private static func resolveAssets() -> Assets? {
         let binary = Bundle.main.bundlePath + "/Contents/Helpers/llama-server"
         let model = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
+#if DEBUG
         let hasPackagedAsset = FileManager.default.fileExists(atPath: binary)
             || FileManager.default.fileExists(atPath: model)
-        if hasPackagedAsset {
-            guard validCurrentBundleSeal(),
-                  FileManager.default.isExecutableFile(atPath: binary),
-                  usableModel(model) else { return nil }
-            return Assets(binary: binary, model: model)
+        if !hasPackagedAsset {
+            let environment = ProcessInfo.processInfo.environment
+            guard let devBinary = environment["TILDE_DEV_LLAMA_SERVER"],
+                  let devModel = environment["TILDE_DEV_MODEL_PATH"],
+                  FileManager.default.isExecutableFile(atPath: devBinary),
+                  usableModel(devModel) else { return nil }
+            return Assets(binary: devBinary, model: devModel)
         }
-        let environment = ProcessInfo.processInfo.environment
-        guard let devBinary = environment["TILDE_DEV_LLAMA_SERVER"],
-              let devModel = environment["TILDE_DEV_MODEL_PATH"],
-              FileManager.default.isExecutableFile(atPath: devBinary),
-              usableModel(devModel) else { return nil }
-        return Assets(binary: devBinary, model: devModel)
+#endif
+        guard validCurrentBundleSeal(),
+              FileManager.default.isExecutableFile(atPath: binary),
+              usableModel(model) else { return nil }
+        return Assets(binary: binary, model: model)
     }
 
     private static func validCurrentBundleSeal() -> Bool {
@@ -107,24 +101,29 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         return size >= modelMinimumBytes
     }
 
-    private func prepareLaunch(_ assets: Assets) {
+    private func prepareLaunch() {
         guard !stopped, process == nil, !preparing else { return }
         preparing = true
         preparation.async { [weak self] in
             guard let self else { return }
-            let ready = Self.preparePort(for: assets.binary)
+            let assets = Self.resolveAssets()
+            let ready = assets.map { Self.preparePort(for: $0.binary) } ?? false
             self.lifecycle.async { [weak self] in
                 self?.finishPreparation(assets, ready: ready)
             }
         }
     }
 
-    private func finishPreparation(_ assets: Assets, ready: Bool) {
+    private func finishPreparation(_ assets: Assets?, ready: Bool) {
         preparing = false
         guard !stopped, process == nil else { return }
+        guard let assets else {
+            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "assets-missing"])
+            return
+        }
         guard ready else {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "port-in-use"])
-            scheduleRestart(assets, wasHealthy: false, uptime: 0)
+            scheduleRestart(wasHealthy: false, uptime: 0)
             return
         }
         launchPrepared(assets)
@@ -148,13 +147,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         child.standardError = FileHandle.nullDevice
         child.terminationHandler = { [weak self, weak child] _ in
             guard let self, let child else { return }
-            lifecycle.async { self.handleExit(child, assets: assets) }
+            lifecycle.async { self.handleExit(child) }
         }
         do {
             try child.run()
         } catch {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "launch-failed"])
-            scheduleRestart(assets, wasHealthy: false, uptime: 0)
+            scheduleRestart(wasHealthy: false, uptime: 0)
             return
         }
         process = child
@@ -164,7 +163,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         pollHealth(of: child)
     }
 
-    private func handleExit(_ child: Process, assets: Assets) {
+    private func handleExit(_ child: Process) {
         guard process === child else { return }
         let wasHealthy = healthy
         let uptime = Date().timeIntervalSince(launchedAt)
@@ -174,14 +173,14 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         healthTask = nil
         let shouldRestart = !stopped
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
-        if shouldRestart { scheduleRestart(assets, wasHealthy: wasHealthy, uptime: uptime) }
+        if shouldRestart { scheduleRestart(wasHealthy: wasHealthy, uptime: uptime) }
     }
 
-    private func scheduleRestart(_ assets: Assets, wasHealthy: Bool, uptime: TimeInterval) {
+    private func scheduleRestart(wasHealthy: Bool, uptime: TimeInterval) {
         guard !stopped else { return }
         let delay = restartPolicy.delay(wasHealthy: wasHealthy, uptime: uptime)
         lifecycle.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.prepareLaunch(assets)
+            self?.prepareLaunch()
         }
     }
 
@@ -206,7 +205,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             }
             guard self.isCurrent(child) else { return }
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "health-timeout"])
-            Self.shutDown(child)
+            Self.requestShutdown(child)
         }
         healthTask = task
     }
@@ -293,16 +292,28 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         return String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
     }
 
-    /// TERM first, then KILL the same launched child after a bounded grace
-    /// period. The caller never waits for child shutdown.
-    private static func shutDown(_ child: Process?) {
+    /// Runtime failures shut down away from the lifecycle queue. Clean app
+    /// termination calls `shutDownNow` directly so the child cannot be orphaned.
+    private static func requestShutdown(_ child: Process?) {
         guard let child else { return }
         DispatchQueue.global(qos: .utility).async {
-            guard child.isRunning else { return }
-            child.terminate()
-            let deadline = Date().addingTimeInterval(1)
-            while child.isRunning, Date() < deadline { usleep(20_000) }
-            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+            shutDownNow(child)
         }
+    }
+
+    /// Bounded TERM-to-KILL shutdown of this exact `Process`. The maximum wait
+    /// is 1.2 seconds, including the post-KILL reap window.
+    static func shutDownNow(_ child: Process?) {
+        guard let child, child.isRunning else { return }
+        child.terminate()
+        waitForExit(child, timeout: 1)
+        guard child.isRunning else { return }
+        kill(child.processIdentifier, SIGKILL)
+        waitForExit(child, timeout: 0.2)
+    }
+
+    private static func waitForExit(_ child: Process, timeout: TimeInterval) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while child.isRunning, Date() < deadline { usleep(20_000) }
     }
 }
