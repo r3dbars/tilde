@@ -21,6 +21,7 @@ final class GhostInputController: IMKInputController {
     private var scheduleRevision = 0
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
+    private var calmRevealByBundle = [String: Bool]()
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
@@ -176,8 +177,8 @@ final class GhostInputController: IMKInputController {
                     selectionRange: NSRange(location: 0, length: 0),
                     replacementRange: Self.unset
                 )
-            case .schedule:
-                scheduleSuggestion(for: client)
+            case let .schedule(afterTyping: grapheme):
+                scheduleSuggestion(for: client, afterUserTyped: grapheme)
             }
         }
     }
@@ -246,14 +247,16 @@ final class GhostInputController: IMKInputController {
 
     // MARK: - Suggestion paths
 
-    private func scheduleSuggestion(for client: IMKTextInput) {
+    private func scheduleSuggestion(for client: IMKTextInput, afterUserTyped grapheme: String) {
         cancelPendingWork()
         scheduleRevision += 1
         let revision = scheduleRevision
         let expectedClient = clientIdentifier(client)
         let expectedBundle = client.bundleIdentifier() ?? ""
-        let midWord = typedFallback.last?.isLetter == true
-        let delay: UInt64 = midWord ? 10_000_000 : 50_000_000
+        let delay = SuggestionRevealDelayPolicy.nanoseconds(
+            afterUserTyped: grapheme,
+            calmMarkedText: usesCalmReveal(for: expectedBundle)
+        )
 
         revealTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: delay)
@@ -264,6 +267,27 @@ final class GhostInputController: IMKInputController {
                   (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
             self.updateSuggestion(for: liveClient)
         }
+    }
+
+    /// Chromium browsers and Electron apps render marked-text carets at the
+    /// ghost's end. Their longer pause prevents visible caret ping-pong while
+    /// keeping native editors on the near-instant path.
+    private func usesCalmReveal(for bundleIdentifier: String) -> Bool {
+        guard !bundleIdentifier.isEmpty else { return false }
+        if let cached = calmRevealByBundle[bundleIdentifier] { return cached }
+        let electronFramework = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .first?.bundleURL?
+            .appendingPathComponent("Contents/Frameworks/Electron Framework.framework")
+        let electron = electronFramework.map {
+            FileManager.default.fileExists(atPath: $0.path)
+        } ?? false
+        let calm = SuggestionRevealDelayPolicy.requiresCalmMarkedText(
+            bundleIdentifier: bundleIdentifier,
+            hasElectronFramework: electron
+        )
+        calmRevealByBundle[bundleIdentifier] = calm
+        return calm
     }
 
     private func updateSuggestion(for client: IMKTextInput) {
