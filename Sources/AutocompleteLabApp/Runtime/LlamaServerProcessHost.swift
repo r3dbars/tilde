@@ -1,6 +1,40 @@
 import Foundation
 import Security
 
+enum LlamaRuntimeSnapshot: Equatable, Sendable {
+    enum FailureReason: Equatable, Sendable {
+        case assetsMissing, portInUse, launchFailed, healthTimeout, processExited, completionFailed
+
+        fileprivate var menuDescription: String {
+            switch self {
+            case .assetsMissing: "Engine files missing — reinstall Tilde"
+            case .portInUse: "Engine port busy"
+            case .launchFailed: "Engine couldn't start"
+            case .healthTimeout: "Engine didn't become ready"
+            case .processExited: "Engine stopped"
+            case .completionFailed: "Engine stopped responding"
+            }
+        }
+    }
+
+    case starting, ready
+    case retrying(FailureReason), failed(FailureReason)
+
+    var menuLine: String {
+        switch self {
+        case .starting: "Engine: Gemma (starting…)"
+        case .ready: "Engine: Gemma (ready)"
+        case let .retrying(reason): "⚠️ \(reason.menuDescription) — retrying"
+        case let .failed(reason): "⚠️ \(reason.menuDescription)"
+        }
+    }
+
+    var restartReasonAfterExit: FailureReason {
+        if case let .retrying(reason) = self { return reason }
+        return .processExited
+    }
+}
+
 /// Owns the app's one llama-server child, health state, and restart policy.
 final class LlamaServerProcessHost: @unchecked Sendable {
     static let modelMinimumBytes: Int64 = 1_500_000_000
@@ -8,26 +42,28 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     let port: Int
 
     var baseURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
-    var isHealthy: Bool { lifecycle.sync { healthy } }
+    var snapshot: LlamaRuntimeSnapshot { lifecycle.sync { runtimeSnapshot } }
 
-    private struct Assets: Sendable {
+    struct Assets: Sendable {
         let binary: String
         let model: String
     }
 
     private let lifecycle = DispatchQueue(label: "bar.r3d.tilde.llama-lifecycle")
     private let preparation = DispatchQueue(label: "bar.r3d.tilde.llama-preparation", qos: .utility)
+    private let assetResolver: @Sendable () -> Assets?
     private var process: Process?
     private var healthTask: Task<Void, Never>?
-    private var healthy = false
+    private var runtimeSnapshot = LlamaRuntimeSnapshot.starting
     private var stopped = false
     private var preparing = false
     private var launchedAt = Date.distantPast
     private var restartPolicy = LlamaRestartPolicy()
 
-    init(port: Int) {
+    init(port: Int, assetResolver: @escaping @Sendable () -> Assets? = resolveAssets) {
         precondition((1...65_535).contains(port))
         self.port = port
+        self.assetResolver = assetResolver
     }
 
     func start() {
@@ -38,7 +74,6 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         let child: Process? = lifecycle.sync {
             stopped = true
             preparing = false
-            healthy = false
             healthTask?.cancel()
             healthTask = nil
             defer { process = nil }
@@ -51,8 +86,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     /// usable model. Concurrent failures see the cleared health bit and stop.
     func reportCompletionFailure() {
         lifecycle.async { [weak self] in
-            guard let self, healthy, let process else { return }
-            healthy = false
+            guard let self, runtimeSnapshot == .ready, let process else { return }
+            runtimeSnapshot = .retrying(.completionFailed)
             Self.requestShutdown(process)
         }
     }
@@ -60,11 +95,15 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     /// Recheck ownership immediately before a completion request. Cached
     /// health alone cannot prove the current listener is still our child.
     func isReadyForCompletion() async -> Bool {
-        guard let child = lifecycle.sync(execute: { healthy ? process : nil }) else { return false }
+        guard let child = lifecycle.sync(execute: { runtimeSnapshot == .ready ? process : nil }) else {
+            return false
+        }
         let ownsListener = await Task.detached(priority: .userInitiated) {
             Self.listenerBelongs(to: child, port: self.port)
         }.value
-        return ownsListener && lifecycle.sync { healthy && process === child && !stopped }
+        return ownsListener && lifecycle.sync {
+            runtimeSnapshot == .ready && process === child && !stopped
+        }
     }
 
     /// Release builds use only their exact embedded, sealed pair. Debug builds
@@ -112,7 +151,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         preparing = true
         preparation.async { [weak self] in
             guard let self else { return }
-            let assets = Self.resolveAssets()
+            let assets = self.assetResolver()
             let ready = assets.map { Self.preparePort(for: $0.binary, port: self.port) } ?? false
             self.lifecycle.async { [weak self] in
                 self?.finishPreparation(assets, ready: ready)
@@ -124,12 +163,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         preparing = false
         guard !stopped, process == nil else { return }
         guard let assets else {
+            runtimeSnapshot = .failed(.assetsMissing)
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "assets-missing"])
             return
         }
         guard ready else {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "port-in-use"])
-            scheduleRestart(wasHealthy: false, uptime: 0)
+            scheduleRestart(reason: .portInUse, wasHealthy: false, uptime: 0)
             return
         }
         launchPrepared(assets)
@@ -159,11 +199,11 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             try child.run()
         } catch {
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "launch-failed"])
-            scheduleRestart(wasHealthy: false, uptime: 0)
+            scheduleRestart(reason: .launchFailed, wasHealthy: false, uptime: 0)
             return
         }
         process = child
-        healthy = false
+        runtimeSnapshot = .starting
         launchedAt = Date()
         DiagnosticsLog.shared.record("llama-server-start", metadata: [:])
         pollHealth(of: child)
@@ -171,19 +211,22 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     private func handleExit(_ child: Process) {
         guard process === child else { return }
-        let wasHealthy = healthy
+        let wasHealthy = runtimeSnapshot == .ready
+        let reason = runtimeSnapshot.restartReasonAfterExit
         let uptime = Date().timeIntervalSince(launchedAt)
         process = nil
-        healthy = false
         healthTask?.cancel()
         healthTask = nil
         let shouldRestart = !stopped
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
-        if shouldRestart { scheduleRestart(wasHealthy: wasHealthy, uptime: uptime) }
+        if shouldRestart { scheduleRestart(reason: reason, wasHealthy: wasHealthy, uptime: uptime) }
     }
 
-    private func scheduleRestart(wasHealthy: Bool, uptime: TimeInterval) {
+    private func scheduleRestart(
+        reason: LlamaRuntimeSnapshot.FailureReason, wasHealthy: Bool, uptime: TimeInterval
+    ) {
         guard !stopped else { return }
+        runtimeSnapshot = .retrying(reason)
         let delay = restartPolicy.delay(wasHealthy: wasHealthy, uptime: uptime)
         lifecycle.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.prepareLaunch()
@@ -198,8 +241,9 @@ final class LlamaServerProcessHost: @unchecked Sendable {
                 guard !Task.isCancelled, self.isCurrent(child) else { return }
                 if await self.probeHealth(of: child) {
                     let transitioned = self.lifecycle.sync { () -> Bool in
-                        guard !self.stopped, !self.healthy, self.process === child else { return false }
-                        self.healthy = true
+                        guard !self.stopped, self.runtimeSnapshot == .starting,
+                              self.process === child else { return false }
+                        self.runtimeSnapshot = .ready
                         return true
                     }
                     if transitioned {
@@ -210,6 +254,12 @@ final class LlamaServerProcessHost: @unchecked Sendable {
                 try? await Task.sleep(for: .seconds(2))
             }
             guard self.isCurrent(child) else { return }
+            let timedOut = self.lifecycle.sync { () -> Bool in
+                guard !self.stopped, self.process === child else { return false }
+                self.runtimeSnapshot = .retrying(.healthTimeout)
+                return true
+            }
+            guard timedOut else { return }
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "health-timeout"])
             Self.requestShutdown(child)
         }
