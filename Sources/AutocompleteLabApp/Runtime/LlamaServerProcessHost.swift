@@ -3,10 +3,11 @@ import Security
 
 /// Owns the app's one llama-server child, health state, and restart policy.
 final class LlamaServerProcessHost: @unchecked Sendable {
-    static let port = 17872
     static let modelMinimumBytes: Int64 = 1_500_000_000
 
-    var baseURL: URL { URL(string: "http://127.0.0.1:\(Self.port)")! }
+    let port: Int
+
+    var baseURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
     var isHealthy: Bool { lifecycle.sync { healthy } }
 
     private struct Assets: Sendable {
@@ -23,6 +24,11 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var preparing = false
     private var launchedAt = Date.distantPast
     private var restartPolicy = LlamaRestartPolicy()
+
+    init(port: Int) {
+        precondition((1...65_535).contains(port))
+        self.port = port
+    }
 
     func start() {
         lifecycle.async { [weak self] in self?.prepareLaunch() }
@@ -56,7 +62,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     func isReadyForCompletion() async -> Bool {
         guard let child = lifecycle.sync(execute: { healthy ? process : nil }) else { return false }
         let ownsListener = await Task.detached(priority: .userInitiated) {
-            Self.listenerBelongs(to: child, port: Self.port)
+            Self.listenerBelongs(to: child, port: self.port)
         }.value
         return ownsListener && lifecycle.sync { healthy && process === child && !stopped }
     }
@@ -107,7 +113,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         preparation.async { [weak self] in
             guard let self else { return }
             let assets = Self.resolveAssets()
-            let ready = assets.map { Self.preparePort(for: $0.binary) } ?? false
+            let ready = assets.map { Self.preparePort(for: $0.binary, port: self.port) } ?? false
             self.lifecycle.async { [weak self] in
                 self?.finishPreparation(assets, ready: ready)
             }
@@ -138,7 +144,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         child.arguments = [
             "-m", assets.model,
             "--host", "127.0.0.1",
-            "--port", String(Self.port),
+            "--port", String(port),
             "-c", "4096",
             "--swa-full",
             "--cache-reuse", "256",
@@ -215,7 +221,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     }
 
     private func probeHealth(of child: Process) async -> Bool {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(Self.port)/health")!)
+        var request = URLRequest(url: baseURL.appendingPathComponent("health"))
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.timeoutInterval = 2
@@ -224,7 +230,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
               http.statusCode == 200,
               String(data: data, encoding: .utf8)?.contains("ok") == true else { return false }
         return await Task.detached(priority: .utility) {
-            Self.listenerBelongs(to: child, port: Self.port)
+            Self.listenerBelongs(to: child, port: self.port)
         }.value
     }
 
@@ -240,7 +246,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     /// Reap only a re-parented helper from this exact app asset. Any other
     /// listener is left untouched and keeps this runtime unavailable.
-    private static func preparePort(for binary: String) -> Bool {
+    private static func preparePort(for binary: String, port: Int) -> Bool {
         guard let output = command(
             "/usr/sbin/lsof", ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
         ) else { return false }

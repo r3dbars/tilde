@@ -47,8 +47,10 @@ release model or helper. `script/proof.sh fast` is the pre-merge gate.
 SHA-256 pins for the helper and
 model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
 open-socket observation checks. Run `./script/package_app.sh --help` for its
-required release inputs. Its non-mutating runtime lane observes only the exact
-packaged app and helper; IME/editor/authenticated-socket proof stays manual.
+required release inputs. Its isolated runtime lane observes only the exact
+packaged app and helper on a dedicated port. It may append privacy-safe
+diagnostics, but it does not quit or change the daily driver or input method;
+IME/editor/authenticated-socket proof stays manual.
 
 For private, aggregate-only model comparisons, see the
 [evaluation guide](docs/evaluation.md).

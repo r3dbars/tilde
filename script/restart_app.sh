@@ -6,7 +6,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT_DIR/dist/Tilde.app"
 BINARY="$APP/Contents/MacOS/Tilde"
-PORT=17872
+PRODUCTION_PORT=17872
+RELEASE_PROOF_PORT=17873
 SOCKET="$HOME/Library/Application Support/Tilde/ghost.sock"
 HELPER="$APP/Contents/Helpers/llama-server"
 RELEASE_PROOF=0
@@ -160,7 +161,8 @@ if [[ "$RELEASE_PROOF" == "1" ]]; then
     app_pid="$(proof_candidate_pids | head -n 1)"
     if [[ -n "$app_pid" ]]; then
       child_pid="$(proof_child_pid "$app_pid" | head -n 1)"
-      if [[ -n "$child_pid" ]] && curl -sf "http://127.0.0.1:$PORT/health" >/dev/null; then
+      if [[ -n "$child_pid" ]] \
+        && curl -sf "http://127.0.0.1:$RELEASE_PROOF_PORT/health" >/dev/null; then
         echo "Tilde release proof started from $APP (pid $app_pid, llama-server child $child_pid)."
         exit 0
       fi
@@ -195,7 +197,7 @@ for _ in {1..60}; do
     expected_helper="$APP/Contents/Helpers/llama-server"
     if [[ -n "$child_pid" ]] \
       && [[ "$child_command" == "$expected_helper" || "$child_command" == "$expected_helper "* ]] \
-      && curl -sf "http://127.0.0.1:$PORT/health" >/dev/null \
+      && curl -sf "http://127.0.0.1:$PRODUCTION_PORT/health" >/dev/null \
       && [[ -S "$SOCKET" ]]; then
       echo "Tilde restarted from $APP (pid $app_pid, llama-server child $child_pid)."
       exit 0
