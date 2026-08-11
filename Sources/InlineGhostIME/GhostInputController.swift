@@ -272,16 +272,17 @@ final class GhostInputController: IMKInputController {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = client.bundleIdentifier()
         modelTask = Task { [weak self] in
-            let result = await Task.detached(priority: .userInitiated) {
-                GhostBrainClient.complete(context: tail, app: bundle)
-            }.value
+            let result = await GhostBrainClient.complete(context: tail, app: bundle)
             guard !Task.isCancelled else { return }
-            guard let result else {
+            switch result.outcome {
+            case .suggestion:
+                guard let text = result.suggestion else { return }
+                await self?.present(text, ticket: requestTicket)
+            case .unavailable:
                 Self.summonBrainIfNeeded()
-                return
+            case .silence, .error, .timeout, .invalidRequest:
+                break
             }
-            guard !result.isEmpty else { return }
-            await self?.present(result, ticket: requestTicket)
         }
     }
 

@@ -1,257 +1,265 @@
-import AutocompleteLabCore
 import Foundation
 
-/// Manages a local llama.cpp server as the app's child process — the app's
-/// only model engine (llama-only, owner decision 2026-07-22).
-///
-/// Lifecycle: start() launches llama-server bound to localhost, polls /health
-/// until ready, relaunches on unexpected exit (bounded by LlamaRestartBudget),
-/// and terminates the child with the app. When the binary or model is missing
-/// the host simply stays unhealthy; mid-word dictionary suffixes still work,
-/// while phrase suggestions stay silent until the app-owned model recovers.
+/// Owns the app's one llama-server child, health state, and restart policy.
 final class LlamaServerProcessHost: @unchecked Sendable {
-
     static let port = 17872
-
-    /// THE model: Gemma 2 2B base, Q4_K_M (~1.6GB) — settled after the
-    /// 14-model bakeoff (docs/quiz-lessons.md; base beats instruct for the raw
-    /// recipe, fits any Apple Silicon Mac). One model, no hardware tiers, no
-    /// runtime download: the GGUF ships inside the app.
-    static let modelFileName = "gemma-2-2b.Q4_K_M.gguf"
     static let modelMinimumBytes: Int64 = 1_500_000_000
 
-    /// Bundled binary first (self-contained installs), brew fallbacks for dev.
-    static var binaryCandidates: [String] {
-        var paths: [String] = []
-        if let helpers = Bundle.main.url(forResource: nil, withExtension: nil, subdirectory: "Helpers")?.path {
-            paths.append(helpers + "/llama-server")
-        }
-        paths.append(Bundle.main.bundlePath + "/Contents/Helpers/llama-server")
-        paths.append("/opt/homebrew/bin/llama-server")
-        paths.append("/usr/local/bin/llama-server")
-        return paths
-    }
-
     var baseURL: URL { URL(string: "http://127.0.0.1:\(Self.port)")! }
+    var isHealthy: Bool { synchronized { healthy } }
 
-    var isHealthy: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return healthy
+    private struct Assets: Sendable {
+        let binary: String
+        let model: String
     }
 
     private let lock = NSLock()
     private var process: Process?
+    private var healthTask: Task<Void, Never>?
     private var healthy = false
     private var stopped = false
-    private var launchedAt: Date?
-    private var restartBudget = LlamaRestartBudget()
+    private var launchedAt = Date.distantPast
+    private var restartPolicy = LlamaRestartPolicy()
 
     func start() {
-        guard let binary = Self.binaryCandidates.first(where: {
-            FileManager.default.isExecutableFile(atPath: $0)
-        }) else {
-            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "binary-missing"])
+        guard let assets = Self.resolveAssets() else {
+            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "assets-missing"])
             return
         }
-        guard let model = Self.resolveModelPath() else {
-            // Fail loudly and stay unhealthy — nothing downloads at runtime.
-            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "model-missing"])
-            return
-        }
-        launch(binary: binary, modelPath: model)
-    }
-
-    /// The model is part of the app. Resolution order:
-    ///   1. MODEL_PATH override — research: point at any local GGUF
-    ///   2. the GGUF bundled inside the app — every distributed build
-    ///   3. the dev copy in Application Support/Tilde/Models/GGUF
-    /// Deleting the tier table, first-run download, and HF-cache adoption
-    /// (2026-08-04) also removed the app's only network egress.
-    static func resolveModelPath() -> String? {
-        if let explicit = RuntimeSetting.string("MODEL_PATH"),
-           FileManager.default.isReadableFile(atPath: explicit) {
-            return explicit
-        }
-        let bundled = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
-        if isUsableModelFile(at: URL(fileURLWithPath: bundled), minimumBytes: modelMinimumBytes) {
-            return bundled
-        }
-        let dev = modelsDirectory.appendingPathComponent(modelFileName)
-        if isUsableModelFile(at: dev, minimumBytes: modelMinimumBytes) {
-            return dev.path
-        }
-        return nil
-    }
-
-    static var modelsDirectory: URL {
-        (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory()))
-            .appendingPathComponent("Tilde/Models/GGUF", isDirectory: true)
-    }
-
-    private static func isUsableModelFile(at url: URL, minimumBytes: Int64) -> Bool {
-        guard let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 else {
-            return false
-        }
-        return size >= minimumBytes
+        launch(assets)
     }
 
     func stop() {
         lock.lock()
         stopped = true
         healthy = false
-        let running = process
+        let child = process
         process = nil
+        let health = healthTask
+        healthTask = nil
         lock.unlock()
-        running?.terminate()
+        health?.cancel()
+        child?.terminate()
     }
 
-    // MARK: - Internals
-
-    /// A previous app instance's llama child can outlive it (kill -9, hard
-    /// crash) and keep our port — the new child then fails to bind in a loop
-    /// while the ORPHAN answers /health, which reads as "healthy then exit"
-    /// and exhausts the restart budget (2026-08-04: root cause of the
-    /// overnight engine death, reproduced live twice). Reap any llama-server
-    /// listening on our port before launching ours. Anything else on the port
-    /// is a loud unavailability, never a kill target.
-    /// Returns true when the port is ours to bind.
-    private static func reapOrphanServer() -> Bool {
-        let listeners = shell("/usr/sbin/lsof", ["-ti", "tcp:\(port)", "-sTCP:LISTEN"])
-            .split(separator: "\n")
-            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
-        guard !listeners.isEmpty else { return true }
-        var portIsOurs = true
-        for pid in listeners {
-            let command = shell("/bin/ps", ["-o", "comm=", "-p", String(pid)])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if command.hasSuffix("llama-server") {
-                kill(pid, SIGTERM)
-                DiagnosticsLog.shared.record("llama-orphan-reaped", metadata: ["pid": String(pid)])
-            } else {
-                portIsOurs = false
-                DiagnosticsLog.shared.record(
-                    "llama-server-unavailable",
-                    metadata: ["reason": "port-held-by-foreign-process"]
-                )
-            }
+    /// A transport/protocol failure means the owned helper is not serving a
+    /// usable model. Restart that exact child once; concurrent failures see the
+    /// cleared health bit and do nothing.
+    func reportCompletionFailure() {
+        let child: Process? = synchronized {
+            guard healthy, let process else { return nil }
+            healthy = false
+            return process
         }
-        // Give the kernel a beat to release the socket; if the orphan lingers,
-        // the bind fails and the restart budget retries in 3s anyway.
-        if portIsOurs { usleep(300_000) }
-        return portIsOurs
+        child?.terminate()
     }
 
-    private static func shell(_ path: String, _ arguments: [String]) -> String {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
-        do { try task.run() } catch { return "" }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+    /// A packaged app always uses its exact embedded pair. Only a build without
+    /// embedded assets may use the two explicit development overrides.
+    private static func resolveAssets() -> Assets? {
+        let binary = Bundle.main.bundlePath + "/Contents/Helpers/llama-server"
+        let model = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
+        let hasPackagedAsset = FileManager.default.fileExists(atPath: binary)
+            || FileManager.default.fileExists(atPath: model)
+        if hasPackagedAsset {
+            guard FileManager.default.isExecutableFile(atPath: binary), usableModel(model) else { return nil }
+            return Assets(binary: binary, model: model)
+        }
+        let environment = ProcessInfo.processInfo.environment
+        guard let devBinary = environment["TILDE_DEV_LLAMA_SERVER"],
+              let devModel = environment["TILDE_DEV_MODEL_PATH"],
+              FileManager.default.isExecutableFile(atPath: devBinary),
+              usableModel(devModel) else { return nil }
+        return Assets(binary: devBinary, model: devModel)
     }
 
-    private func launch(binary: String, modelPath: String) {
-        guard Self.reapOrphanServer() else { return }
+    private static func usableModel(_ path: String) -> Bool {
+        guard let size = try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64 else {
+            return false
+        }
+        return size >= modelMinimumBytes
+    }
+
+    private func launch(_ assets: Assets) {
+        lock.lock()
+        guard !stopped, process == nil else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        guard Self.preparePort(for: assets.binary) else {
+            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "port-in-use"])
+            scheduleRestart(assets, wasHealthy: false, uptime: 0)
+            return
+        }
+
         let child = Process()
-        child.executableURL = URL(fileURLWithPath: binary)
+        child.executableURL = URL(fileURLWithPath: assets.binary)
         child.arguments = [
-            "-m", modelPath,
+            "-m", assets.model,
             "--host", "127.0.0.1",
             "--port", String(Self.port),
             "-c", "4096",
-            // Gemma uses sliding-window attention; without --swa-full the slot
-            // cache can't roll back past the window and consecutive keystrokes
-            // re-read the whole prompt. --cache-reuse enables chunked prefix
-            // reuse so only the newly typed tokens are processed.
             "--swa-full",
             "--cache-reuse", "256",
         ]
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice
-        child.terminationHandler = { [weak self] _ in
-            self?.handleExit(binary: binary, modelPath: modelPath)
-        }
-        do {
-            try child.run()
-        } catch {
-            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "launch-failed"])
-            return
+        child.terminationHandler = { [weak self, weak child] _ in
+            guard let child else { return }
+            self?.handleExit(child, assets: assets)
         }
         lock.lock()
         process = child
+        healthy = false
         launchedAt = Date()
-        let restarts = restartBudget.consecutiveFailures
         lock.unlock()
-        DiagnosticsLog.shared.record("llama-server-start", metadata: ["restart": String(restarts)])
-        pollHealth()
+        do {
+            try child.run()
+        } catch {
+            lock.lock()
+            if process === child { process = nil }
+            lock.unlock()
+            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "launch-failed"])
+            scheduleRestart(assets, wasHealthy: false, uptime: 0)
+            return
+        }
+
+        lock.lock()
+        guard !stopped else {
+            lock.unlock()
+            child.terminate()
+            return
+        }
+        lock.unlock()
+        DiagnosticsLog.shared.record("llama-server-start", metadata: [:])
+        pollHealth(of: child)
     }
 
-    private func handleExit(binary: String, modelPath: String) {
+    private func handleExit(_ child: Process, assets: Assets) {
         lock.lock()
+        guard process === child else {
+            lock.unlock()
+            return
+        }
         let wasHealthy = healthy
-        let uptime = launchedAt.map { Date().timeIntervalSince($0) } ?? 0
-        healthy = false
+        let uptime = Date().timeIntervalSince(launchedAt)
         process = nil
-        launchedAt = nil
-        let shouldRestart = !stopped && restartBudget.shouldRestart(wasHealthy: wasHealthy, uptime: uptime)
+        healthy = false
+        healthTask?.cancel()
+        healthTask = nil
+        let shouldRestart = !stopped
         lock.unlock()
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
-        guard shouldRestart else { return }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3) { [weak self] in
-            guard let self, !self.isStopped else { return }
-            self.launch(binary: binary, modelPath: modelPath)
+        if shouldRestart { scheduleRestart(assets, wasHealthy: wasHealthy, uptime: uptime) }
+    }
+
+    private func scheduleRestart(_ assets: Assets, wasHealthy: Bool, uptime: TimeInterval) {
+        lock.lock()
+        guard !stopped else {
+            lock.unlock()
+            return
+        }
+        let delay = restartPolicy.delay(wasHealthy: wasHealthy, uptime: uptime)
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.launch(assets)
         }
     }
 
-    private var isStopped: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return stopped
-    }
-
-    /// Polls /health until the server reports ready (loading the 1.6GB model
-    /// takes seconds; five minutes covers a cold, busy disk), then flips
-    /// `healthy`.
-    private func pollHealth() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            for _ in 0..<150 {
-                guard let self, !self.isStopped else { return }
-                self.lock.lock()
-                let running = self.process != nil
-                self.lock.unlock()
-                guard running else { return }
-                if Self.probeHealth(port: Self.port) {
-                    self.lock.lock()
-                    self.healthy = true
-                    self.lock.unlock()
+    private func pollHealth(of child: Process) {
+        let task = Task { [weak self, weak child] in
+            guard let self, let child else { return }
+            for _ in 0..<45 {
+                guard !Task.isCancelled, self.isCurrent(child) else { return }
+                if await self.probeHealth(of: child) {
+                    self.synchronized {
+                        if self.process === child { self.healthy = true }
+                    }
                     DiagnosticsLog.shared.record("llama-server-healthy", metadata: [:])
                     return
                 }
-                Thread.sleep(forTimeInterval: 2)
+                try? await Task.sleep(for: .seconds(2))
             }
+            guard self.isCurrent(child) else { return }
+            DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "health-timeout"])
+            child.terminate()
         }
+        lock.lock()
+        healthTask?.cancel()
+        healthTask = task
+        lock.unlock()
     }
 
-    private static func probeHealth(port: Int) -> Bool {
-        guard let url = URL(string: "http://127.0.0.1:\(port)/health") else { return false }
-        var request = URLRequest(url: url)
+    private func isCurrent(_ child: Process) -> Bool {
+        synchronized { !stopped && process === child }
+    }
+
+    private func probeHealth(of child: Process) async -> Bool {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(Self.port)/health")!)
         request.timeoutInterval = 2
-        let semaphore = DispatchSemaphore(value: 0)
-        var ok = false
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            if let http = response as? HTTPURLResponse, http.statusCode == 200,
-               let data, String(data: data, encoding: .utf8)?.contains("ok") == true {
-                ok = true
-            }
-            semaphore.signal()
-        }.resume()
-        semaphore.wait()
-        return ok
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              http.statusCode == 200,
+              String(data: data, encoding: .utf8)?.contains("ok") == true else { return false }
+        return Self.listenerBelongs(to: child, port: Self.port)
+    }
+
+    private static func listenerBelongs(to child: Process, port: Int) -> Bool {
+        guard child.isRunning else { return false }
+        return command(
+            "/usr/sbin/lsof",
+            [
+                "-nP", "-a", "-p", String(child.processIdentifier),
+                "-iTCP:\(port)", "-sTCP:LISTEN", "-t",
+            ]
+        ).trimmingCharacters(in: .whitespacesAndNewlines) == String(child.processIdentifier)
+    }
+
+    /// Reap only a re-parented helper from this exact app asset. Any other
+    /// listener is left untouched and keeps this runtime unavailable.
+    private static func preparePort(for binary: String) -> Bool {
+        let listeners = command(
+            "/usr/sbin/lsof",
+            ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
+        ).split(whereSeparator: \Character.isNewline).compactMap { Int32($0) }
+        guard !listeners.isEmpty else { return true }
+        guard listeners.count == 1,
+              let pid = listeners.first,
+              processPath(pid: pid) == URL(fileURLWithPath: binary).standardizedFileURL.path,
+              command("/bin/ps", ["-o", "ppid=", "-p", String(pid)])
+                .trimmingCharacters(in: .whitespacesAndNewlines) == "1" else { return false }
+        kill(pid, SIGTERM)
+        usleep(200_000)
+        return command(
+            "/usr/sbin/lsof",
+            ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
+        ).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func processPath(pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4_096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        let bytes = buffer.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }
+        return URL(fileURLWithPath: String(decoding: bytes, as: UTF8.self)).standardizedFileURL.path
+    }
+
+    private static func command(_ executable: String, _ arguments: [String]) -> String {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        let output = Pipe()
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return "" }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private func synchronized<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
     }
 }

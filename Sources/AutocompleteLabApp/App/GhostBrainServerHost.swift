@@ -1,258 +1,256 @@
 import AutocompleteLabCore
 import Foundation
+import Security
 
-/// Serves completions to the InlineGhostIME input method over a local unix socket.
-///
-/// The IME stays a thin, crash-proof pipe; this host answers its requests from the
-/// app's already-warm llama/Gemma engine. Wire protocol: one newline-delimited JSON request
-/// {"v":1,"context":"...","app":?} → a STREAM of newline-delimited JSON
-/// responses: zero or more {"suggestion":"...","partial":true} as the model
-/// generates, then a final {"suggestion":"..."} and close. Partials put the first
-/// words on screen near time-to-first-token instead of time-to-last-token.
-///
-/// Privacy: requests carry raw typed context. It is used only in-memory to build a
-/// `CompletionRequest` and is never logged or persisted. The socket lives in the
-/// user's own Application Support with owner-only permissions.
+/// Owner-only, final-response unix socket between Tilde and its input method.
+/// Typed context is used in memory and is never logged or persisted.
 final class GhostBrainServerHost: @unchecked Sendable {
-
     static let socketPath = NSString(
         string: "~/Library/Application Support/Tilde/ghost.sock"
     ).expandingTildeInPath
 
-    private let engineProvider: @MainActor () -> any CompletionEngine
+    private let runtime: LlamaServerProcessHost
+    private let engine: LlamaCompletionEngine
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
-    private var acceptSource: DispatchSourceRead?
-    // Only the instance that actually bound the socket may unlink it. A
-    // duplicate instance bowing out runs the same stop() on its way to
-    // terminate — without this flag it unlinked the LIVE socket of the
-    // healthy first instance, silently cutting the keyboard off from the brain.
-    private var ownsSocketFile = false
+    private var lockFD: Int32 = -1
+    private var source: DispatchSourceRead?
+    private var ownsSocket = false
 
-    init(engineProvider: @escaping @MainActor () -> any CompletionEngine) {
-        self.engineProvider = engineProvider
+    init(runtime: LlamaServerProcessHost) {
+        self.runtime = runtime
+        self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
     }
 
-    func start() {
-        queue.async { [weak self] in self?.bindAndListen() }
+    func start() -> Bool {
+        queue.sync { bindAndListen() }
     }
 
     func stop() {
-        queue.async { [weak self] in
-            guard let self else { return }
-            self.acceptSource?.cancel()
-            self.acceptSource = nil
-            if self.listenerFD >= 0 {
-                close(self.listenerFD)
-                self.listenerFD = -1
+        queue.sync {
+            source?.cancel()
+            source = nil
+            if listenerFD >= 0 { close(listenerFD) }
+            listenerFD = -1
+            if ownsSocket { unlink(Self.socketPath) }
+            ownsSocket = false
+            if lockFD >= 0 {
+                flock(lockFD, LOCK_UN)
+                close(lockFD)
             }
-            if self.ownsSocketFile {
-                unlink(Self.socketPath)
-                self.ownsSocketFile = false
-            }
+            lockFD = -1
         }
     }
 
-    /// True when a process is actively accepting on the socket path. A stale
-    /// file from a crashed instance refuses the connection; a live server
-    /// accepts it (we close immediately — no request is sent).
-    private static func socketIsAlive() -> Bool {
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathOK = socketPath.withCString { path -> Bool in
-            withUnsafeMutableBytes(of: &addr.sun_path) { raw in
-                guard strlen(path) < raw.count else { return false }
-                raw.baseAddress!.assumingMemoryBound(to: CChar.self)
-                    .update(from: path, count: strlen(path) + 1)
-                return true
-            }
-        }
-        guard pathOK else { return false }
-        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
-        return withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, size) == 0 }
-        }
-    }
-
-    // MARK: - Listener
-
-    private func bindAndListen() {
+    private func bindAndListen() -> Bool {
         let directory = (Self.socketPath as NSString).deletingLastPathComponent
-        try? FileManager.default.createDirectory(
-            atPath: directory, withIntermediateDirectories: true
-        )
-        // Never steal a live socket: if something is answering on the path,
-        // another brain instance is serving the keyboard — leave it alone.
-        // Only a stale file (crash leftover; connect refused) gets replaced.
-        if Self.socketIsAlive() {
-            DiagnosticsLog.shared.record("ghost-socket-live-abort", metadata: [:])
-            return
+        do {
+            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+            chmod(directory, 0o700)
+        } catch {
+            DiagnosticsLog.shared.record("ghost-socket-unavailable", metadata: ["reason": "directory"])
+            return false
         }
+        let lockPath = directory + "/runtime.lock"
+        let lockFD = open(lockPath, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
+            if lockFD >= 0 { close(lockFD) }
+            DiagnosticsLog.shared.record("ghost-socket-unavailable", metadata: ["reason": "already-running"])
+            return false
+        }
+        fchmod(lockFD, S_IRUSR | S_IWUSR)
+        self.lockFD = lockFD
         unlink(Self.socketPath)
 
-        // A peer can vanish between accept and write (the IME drops connections
-        // mid-stream whenever typing resumes). Without this, writing to the dead
-        // socket raises SIGPIPE and silently kills the whole app — no crash
-        // report. Ignore it process-wide; such writes then fail with EPIPE.
-        signal(SIGPIPE, SIG_IGN)
-
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let pathOK = Self.socketPath.withCString { path -> Bool in
-            withUnsafeMutableBytes(of: &addr.sun_path) { raw in
-                guard strlen(path) < raw.count else { return false }
-                raw.baseAddress!.assumingMemoryBound(to: CChar.self)
+        guard fd >= 0 else {
+            releaseLock()
+            return false
+        }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let pathOK = Self.socketPath.withCString { path in
+            withUnsafeMutableBytes(of: &address.sun_path) { bytes -> Bool in
+                guard strlen(path) < bytes.count else { return false }
+                bytes.baseAddress!.assumingMemoryBound(to: CChar.self)
                     .update(from: path, count: strlen(path) + 1)
                 return true
             }
         }
         let size = socklen_t(MemoryLayout<sockaddr_un>.size)
-        let bound = pathOK && withUnsafePointer(to: &addr) {
+        let bound = pathOK && withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, size) == 0 }
         }
         guard bound, listen(fd, 8) == 0 else {
             close(fd)
-            return
+            releaseLock()
+            return false
         }
         chmod(Self.socketPath, 0o600)
         listenerFD = fd
-        ownsSocketFile = true
-
+        ownsSocket = true
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in self?.acceptOne() }
         source.resume()
-        acceptSource = source
+        self.source = source
+        return true
+    }
+
+    private func releaseLock() {
+        if lockFD >= 0 {
+            flock(lockFD, LOCK_UN)
+            close(lockFD)
+        }
+        lockFD = -1
     }
 
     private func acceptOne() {
-        guard listenerFD >= 0 else { return }
         let connection = accept(listenerFD, nil, nil)
         guard connection >= 0 else { return }
-
-        var tv = timeval(tv_sec: 2, tv_usec: 0)
-        setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
-        setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         var noSigpipe: Int32 = 1
         setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
 
         Task.detached(priority: .userInitiated) { [weak self] in
             defer { close(connection) }
-            guard let self, let payload = Self.readPayload(connection) else { return }
-            // Config probe: the tuning-sweep driver asks "what are you running?"
-            // and verifies the expected override is live before quizzing. Echoes
-            // launch-time knobs only — never any typed content.
-            if payload.configProbe {
-                let env = ProcessInfo.processInfo.environment
-                Self.write([
-                    "scaffold_chat": env["TILDE_SCAFFOLD_CHAT_FILE"] ?? "builtin",
-                    "token_budget": env["TILDE_TOKEN_BUDGET"] ?? "default",
-                    "temperature": env["TILDE_TEMPERATURE"] ?? "0",
-                    "model_path": env["TILDE_MODEL_PATH"] ?? "default",
-                    "confidence": env["TILDE_CONFIDENCE"] ?? "0",
-                    "max_context_chars": env["TILDE_MAX_CONTEXT_CHARS"] ?? "3000",
-                    "top_p": env["TILDE_TOP_P"] ?? "default",
-                    "top_k": env["TILDE_TOP_K"] ?? "default",
-                    "min_p": env["TILDE_MIN_P"] ?? "default",
-                    "repeat_penalty": env["TILDE_REPEAT_PENALTY"] ?? "default",
-                ], to: connection)
+            guard let self else { return }
+            guard Self.authorizedPeer(connection) else {
+                _ = Self.write(.unavailable, to: connection)
                 return
             }
-            let engine = await self.engineProvider()
-            // The keyboard owns mid-word completion. Reject malformed or stale
-            // socket requests instead of creating a hidden second model path.
-            guard payload.context.last?.isWhitespace == true else {
-                Self.write(["suggestion": ""], to: connection)
+            guard case let .success(request) = Self.readRequest(connection) else {
+                _ = Self.write(.invalidRequest, to: connection)
                 return
             }
-            let request = CompletionRequest(
-                textBeforeCursor: payload.context,
-                appBundleIdentifier: payload.app,
-                mode: .phraseContinuation
+            guard self.runtime.isHealthy else {
+                _ = Self.write(.unavailable, to: connection)
+                return
+            }
+
+            let completion = Task {
+                try await self.engine.suggestion(for: CompletionRequest(
+                    textBeforeCursor: request.context,
+                    appBundleIdentifier: request.app,
+                    mode: .phraseContinuation
+                ))
+            }
+            let disconnect = DispatchSource.makeReadSource(
+                fileDescriptor: connection,
+                queue: .global(qos: .userInitiated)
             )
-            // Partial callbacks can fire from generation threads; serialize socket
-            // writes so JSON lines never interleave mid-message.
-            let writeLock = NSLock()
-            let send: @Sendable ([String: Any]) -> Void = { object in
-                writeLock.lock()
-                defer { writeLock.unlock() }
-                Self.write(object, to: connection)
+            disconnect.setEventHandler {
+                var byte: UInt8 = 0
+                let count = recv(connection, &byte, 1, MSG_PEEK | MSG_DONTWAIT)
+                if count == 0 || (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                    completion.cancel()
+                }
             }
-            let final = try? await engine.suggestion(for: request) { partial in
-                let text = Self.keyboardText(partial)
-                guard !text.isEmpty else { return }
-                send(["suggestion": text, "partial": true])
+            disconnect.resume()
+            let result = await completion.result
+            await withCheckedContinuation { continuation in
+                disconnect.setCancelHandler { continuation.resume() }
+                disconnect.cancel()
             }
-            send(["suggestion": final.map(Self.keyboardText) ?? ""])
-            // The end-to-end proof lane (script/real_app_smoke.sh) waits for
-            // this event: a real keystroke travelled keyboard → socket →
-            // engine → back. "Served", deliberately not "presented" — the IME
-            // may still drop a stale answer, and display isn't observable from
-            // this process. Bundle id and shape only — never content.
-            if let final, !Self.keyboardText(final).isEmpty {
-                DiagnosticsLog.shared.record("suggestion-served", metadata: [
-                    "app": payload.app ?? "unknown",
-                    "chars": String(Self.keyboardText(final).count)
-                ])
+            guard !completion.isCancelled else { return }
+
+            let response: GhostBrainResponse
+            switch result {
+            case let .success(suggestion):
+                let text = suggestion.map(Self.keyboardText) ?? ""
+                response = .suggestion(text)
+                if !text.isEmpty {
+                    DiagnosticsLog.shared.record("suggestion-served", metadata: [
+                        "app": request.app ?? "unknown",
+                        "chars": String(text.count),
+                    ])
+                }
+            case let .failure(error):
+                self.runtime.reportCompletionFailure()
+                response = (error as? URLError)?.code == .timedOut ? .timeout : .error
             }
+            _ = Self.write(response, to: connection)
         }
     }
 
-    // MARK: - Wire format
-
-    private struct RequestPayload {
-        let context: String
-        let app: String?
-        let configProbe: Bool
-    }
-
-    private static func readPayload(_ fd: Int32) -> RequestPayload? {
+    private static func readRequest(_ fd: Int32) -> Result<GhostBrainRequest, Error> {
         var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        while data.count < 65536 {
-            let n = read(fd, &buffer, buffer.count)
-            guard n > 0 else { break }
-            data.append(contentsOf: buffer[0..<n])
-            if buffer[0..<n].contains(0x0A) { break }
-            // Defensive framing: the protocol is newline-terminated JSON, but a
-            // client that forgets the terminator (several eval harnesses did)
-            // otherwise stalls here until the socket timeout — measured as a
-            // phantom 2s "latency" that sent us bug-hunting. Serve as soon as
-            // the payload parses complete.
-            if (try? JSONSerialization.jsonObject(with: data)) != nil { break }
-        }
-        if let newline = data.firstIndex(of: 0x0A) {
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while data.count < 16_384 {
+            let count = Darwin.read(fd, &buffer, min(buffer.count, 16_384 - data.count))
+            guard count > 0 else { return .failure(WireError.invalid) }
+            data.append(contentsOf: buffer[0..<count])
+            guard let newline = data.firstIndex(of: 0x0A) else { continue }
             data = data.prefix(upTo: newline)
+            guard let request = try? JSONDecoder().decode(GhostBrainRequest.self, from: data),
+                  request.v == GhostBrainRequest.version,
+                  !request.context.isEmpty,
+                  request.context.count <= 3_000,
+                  request.context.last?.isWhitespace == true,
+                  (request.app?.count ?? 0) <= 512 else {
+                return .failure(WireError.invalid)
+            }
+            return .success(request)
         }
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        if (object["config"] as? Bool) == true {
-            return RequestPayload(context: "", app: nil, configProbe: true)
-        }
-        guard let context = object["context"] as? String
-        else { return nil }
-        return RequestPayload(
-            context: context,
-            app: object["app"] as? String,
-            configProbe: false
-        )
+        return .failure(WireError.invalid)
     }
 
-    private static func write(_ object: [String: Any], to fd: Int32) {
-        guard var payload = try? JSONSerialization.data(withJSONObject: object) else { return }
-        payload.append(0x0A)
-        _ = payload.withUnsafeBytes { raw in
-            Darwin.write(fd, raw.baseAddress, raw.count)
+    private enum WireError: Error { case invalid }
+
+    private static func write(_ response: GhostBrainResponse, to fd: Int32) -> Bool {
+        guard var data = try? JSONEncoder().encode(response) else { return false }
+        data.append(0x0A)
+        var offset = 0
+        return data.withUnsafeBytes { bytes in
+            while offset < bytes.count {
+                let count = Darwin.write(fd, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                guard count > 0 else {
+                    if errno == EINTR { continue }
+                    return false
+                }
+                offset += count
+            }
+            return true
         }
     }
 
-    /// Completion suggestions include the separator needed by overlay insertion.
-    /// IMKit marked text is already placed after the typed boundary.
+    private static func authorizedPeer(_ fd: Int32) -> Bool {
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { return false }
+#if DEBUG
+        guard Bundle.main.bundleIdentifier == "bar.r3d.tilde" else { return true }
+#else
+        guard Bundle.main.bundleIdentifier == "bar.r3d.tilde" else { return false }
+#endif
+        var pid: pid_t = 0
+        var length = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 else { return false }
+        guard let peer = identity(pid: pid), peer.identifier == "bar.r3d.inputmethod.InlineGhost",
+              let own = identity(pid: getpid()) else { return false }
+        return own.team.map { peer.team == $0 } ?? true
+    }
+
+    private static func identity(pid: pid_t) -> (identifier: String, team: String?)? {
+        var code: SecCode?
+        guard SecCodeCopyGuestWithAttributes(
+            nil,
+            [kSecGuestAttributePid: pid] as CFDictionary,
+            [],
+            &code
+        ) == errSecSuccess, let code,
+              SecCodeCheckValidity(code, [], nil) == errSecSuccess else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
+              let staticCode else { return nil }
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, [], &information) == errSecSuccess,
+              let values = information as? [CFString: Any],
+              let identifier = values[kSecCodeInfoIdentifier] as? String else { return nil }
+        return (identifier, values[kSecCodeInfoTeamIdentifier] as? String)
+    }
+
     private static func keyboardText(_ suggestion: CompletionSuggestion) -> String {
         String(suggestion.visibleText.drop(while: \Character.isWhitespace))
     }
