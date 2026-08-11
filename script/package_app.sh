@@ -15,6 +15,7 @@ NOTARY_PROFILE=""
 VERSION="0.1.0"
 BUILD_NUMBER=""
 VERIFY_INPUTS_ONLY=0
+SELFTEST=0
 
 usage() {
   cat <<'EOF'
@@ -23,6 +24,7 @@ Usage: script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
   --notary-profile PROFILE [options]
        script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
   --model PATH --model-sha256 SHA256 --verify-inputs-only
+       script/package_app.sh --selftest
 
 Release inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
@@ -39,6 +41,8 @@ Options:
   --version VERSION         Release version (default: 0.1.0).
   --verify-inputs-only      Verify pinned inputs, then exit without building,
                             signing, notarizing, or uploading anything.
+  --selftest                Test Developer ID identity selection without using
+                            the keychain or performing release actions.
 
 This is intentionally fail-closed. It creates release artifacts only after the
 full test suite, isolated packaged-helper health/completion/socket observation,
@@ -68,6 +72,9 @@ while (($#)); do
       ;;
     --verify-inputs-only)
       VERIFY_INPUTS_ONLY=1
+      ;;
+    --selftest)
+      SELFTEST=1
       ;;
     -h|--help)
       usage
@@ -101,6 +108,82 @@ verify_sha256() {
     || { echo "$label SHA-256 mismatch: expected $expected, got $actual" >&2; return 1; }
 }
 
+developer_id_application_candidates() {
+  /usr/bin/sed -nE \
+    's/^[[:space:]]*[0-9]+\)[[:space:]]+([[:xdigit:]]{40})[[:space:]]+"(Developer ID Application:[^"]+)"[[:space:]]*$/\1|\2/p' \
+    <<<"$1"
+}
+
+resolve_developer_id_application() {
+  local details="$1"
+  local wanted="${2:-}"
+  local hash name selected="" count=0
+  while IFS='|' read -r hash name; do
+    [[ -n "$hash" ]] || continue
+    if [[ -z "$wanted" || "$wanted" == "$hash" || "$wanted" == "$name" ]]; then
+      selected="$hash"
+      count=$((count + 1))
+    fi
+  done < <(developer_id_application_candidates "$details")
+  [[ "$count" -gt 0 ]] || return 1
+  [[ "$count" -eq 1 ]] || return 2
+  printf '%s\n' "$selected"
+}
+
+run_identity_selftest() {
+  local real_hash="0123456789ABCDEF0123456789ABCDEF01234567"
+  local second_hash="89ABCDEF0123456789ABCDEF0123456789ABCDEF"
+  local fake_hash="FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+  local real_name="Developer ID Application: Real Person (ABCDE12345)"
+  local details selected status
+  details="$(printf '%s\n' \
+    "  1) $fake_hash \"Fake Developer ID Application: Lookalike (FAKE123456)\"" \
+    "  2) $real_hash \"$real_name\"" \
+    "  3) $second_hash Developer ID Application: unquoted" \
+    "     3 valid identities found")"
+  selected="$(resolve_developer_id_application "$details")" \
+    || { echo "selftest failed: unique real identity was not selected" >&2; return 1; }
+  [[ "$selected" == "$real_hash" ]] \
+    || { echo "selftest failed: lookalike identity was selected" >&2; return 1; }
+  if resolve_developer_id_application "$details" "$fake_hash" >/dev/null; then
+    echo "selftest failed: lookalike identity hash was accepted" >&2
+    return 1
+  fi
+  if selected="$(resolve_developer_id_application \
+    "  1) $fake_hash \"Fake Developer ID Application: Lookalike (FAKE123456)\"")"; then
+    echo "selftest failed: lookalike-only output selected $selected" >&2
+    return 1
+  else
+    status=$?
+  fi
+  [[ "$status" -eq 1 ]] \
+    || { echo "selftest failed: no real identity did not fail distinctly" >&2; return 1; }
+
+  details="$(printf '%s\n' \
+    "  1) $real_hash \"$real_name\"" \
+    "  2) $second_hash \"Developer ID Application: Other Person (ZYXWV98765)\"")"
+  if selected="$(resolve_developer_id_application "$details")"; then
+    echo "selftest failed: ambiguous identities selected $selected" >&2
+    return 1
+  else
+    status=$?
+  fi
+  [[ "$status" -eq 2 ]] \
+    || { echo "selftest failed: ambiguity did not fail distinctly" >&2; return 1; }
+  [[ "$(resolve_developer_id_application "$details" "$second_hash")" == "$second_hash" ]] \
+    || { echo "selftest failed: exact identity hash did not resolve" >&2; return 1; }
+
+  echo "selftest OK: Developer ID selection rejects lookalikes, absence, and ambiguity"
+}
+
+if [[ "$SELFTEST" == "1" ]]; then
+  [[ -z "$LLAMA_SERVER$LLAMA_SHA256$MODEL$MODEL_SHA256$SIGN_IDENTITY$NOTARY_PROFILE$BUILD_NUMBER" \
+    && "$VERIFY_INPUTS_ONLY" == "0" ]] \
+    || { echo "--selftest cannot be combined with release options" >&2; exit 2; }
+  run_identity_selftest
+  exit 0
+fi
+
 [[ -f "$LLAMA_SERVER" ]] || { echo "missing --llama-server file: $LLAMA_SERVER" >&2; exit 2; }
 [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server is not executable: $LLAMA_SERVER" >&2; exit 2; }
 [[ -s "$MODEL" ]] || { echo "missing --model file: $MODEL" >&2; exit 2; }
@@ -122,17 +205,21 @@ fi
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 [[ -n "$NOTARY_PROFILE" ]] || { echo "--notary-profile is required" >&2; exit 2; }
 
-if [[ -z "$SIGN_IDENTITY" ]]; then
-  SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-    | awk '/Developer ID Application/ { print $2; exit }')"
+IDENTITY_DETAILS="$(security find-identity -p codesigning -v 2>/dev/null)" \
+  || { echo "unable to list code-signing identities" >&2; exit 1; }
+if RESOLVED_IDENTITY="$(resolve_developer_id_application "$IDENTITY_DETAILS" "$SIGN_IDENTITY")"; then
+  SIGN_IDENTITY="$RESOLVED_IDENTITY"
+else
+  IDENTITY_STATUS=$?
+  if [[ "$IDENTITY_STATUS" -eq 2 ]]; then
+    echo "Developer ID Application signing identity is ambiguous; use --sign-identity with its exact hash" >&2
+  elif [[ -n "$SIGN_IDENTITY" ]]; then
+    echo "signing identity is unavailable or is not Developer ID Application: $SIGN_IDENTITY" >&2
+  else
+    echo "missing Developer ID Application signing identity" >&2
+  fi
+  exit 1
 fi
-[[ -n "$SIGN_IDENTITY" ]] \
-  || { echo "missing Developer ID Application signing identity" >&2; exit 1; }
-RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-  | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
-[[ -n "$RESOLVED_IDENTITY" ]] \
-  || { echo "signing identity is unavailable: $SIGN_IDENTITY" >&2; exit 1; }
-SIGN_IDENTITY="$RESOLVED_IDENTITY"
 
 echo "==> validating Apple notary credentials"
 xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --output-format json >/dev/null
