@@ -18,6 +18,18 @@ struct RuntimeBoundaryTests {
         #expect(LlamaRuntimeSnapshot.ready.restartReasonAfterExit == .processExited)
     }
 
+    @Test("Completion failure keeps proven health for restart backoff")
+    func completionFailureKeepsHealthForBackoff() {
+        var policy = LlamaRestartPolicy()
+        _ = policy.delay(wasHealthy: false, uptime: 1)
+        _ = policy.delay(wasHealthy: false, uptime: 1)
+
+        #expect(policy.delay(
+            wasHealthy: LlamaRuntimeSnapshot.retrying(.completionFailed).wasHealthyBeforeExit,
+            uptime: 120
+        ) == 2)
+    }
+
     @Test("Missing assets are a terminal failure, not endless starting")
     func missingAssetsFailTerminally() async throws {
         let runtime = LlamaServerProcessHost(port: 19_002, assetResolver: { nil })
