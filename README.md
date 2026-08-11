@@ -38,7 +38,7 @@ The project is a Swift 6.2 package with no Xcode project file.
 ```bash
 ./script/proof.sh fast
 ./script/build_and_run.sh
-./script/build_ime.sh --no-notarize --no-install
+./script/build_ime.sh --no-notarize
 ```
 
 `script/proof.sh fast` is the pre-merge gate. `script/package_app.sh` is the
