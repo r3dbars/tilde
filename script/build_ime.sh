@@ -19,7 +19,7 @@ Build and sign dist/InlineGhostIME.app without installing or notarizing it.
 Options:
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
-  --sign-identity IDENTITY  Sign with this exact identity; use - for explicit ad hoc signing.
+  --sign-identity SHA1      Sign with this exact SHA-1; use - for explicit ad hoc signing.
   -h, --help                Show this help.
 
 Without --sign-identity, the sole eligible Apple Development identity is used.
