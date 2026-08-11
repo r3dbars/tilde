@@ -36,11 +36,6 @@ public enum ContinuationRegister: String, Sendable {
     /// Suggested generation budget: chat wants shorter bursts; prose/email get
     /// room to finish the clause (cut-off fragments were the top quality wart).
     public var generatedTokenBudget: Int {
-        // Tuning-sweep override: TILDE_TOKEN_BUDGET forces the budget for
-        // all registers (the driver sweeps this against the frozen quiz).
-        if let value = RuntimeSetting.int("TOKEN_BUDGET"), value > 0 {
-            return value
-        }
         return self == .chat ? 14 : 20
     }
 }
@@ -50,15 +45,6 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public let contextEndedInWhitespace: Bool
 
     public static func scaffold(for register: ContinuationRegister) -> String {
-        // Tuning-sweep override: TILDE_SCAFFOLD_<REGISTER>_FILE points at a
-        // ready-made scaffold block (see script/mine_scaffolds.py). Lets the
-        // driver A/B example sets without rebuilding. Absent/unreadable → builtin.
-        let settingName = "SCAFFOLD_\(register.rawValue.uppercased())_FILE"
-        if let path = RuntimeSetting.string(settingName),
-           let contents = try? String(contentsOfFile: path, encoding: .utf8),
-           !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return contents
-        }
         switch register {
         case .chat:
             return """
