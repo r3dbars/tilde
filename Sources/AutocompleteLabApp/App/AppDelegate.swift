@@ -16,25 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Phrase continuations go to the llama/Gemma engine. Mid-word completion
     // belongs only to the keyboard's system spell-checker path.
-    private lazy var ghostBrainServerHost = GhostBrainServerHost(
-        engineProvider: { [weak self] in
-            guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
-            let llama = self.llamaServerHost
-            guard llama.isHealthy else {
-                return UnavailableCompletionEngine(reason: "llama engine unavailable")
-            }
-            return LlamaCompletionEngine(baseURL: llama.baseURL)
-        }
-    )
+    private lazy var ghostBrainServerHost = GhostBrainServerHost(runtime: llamaServerHost)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Two instances fight over the ghost socket and double the engine's
-        // memory — the older instance wins, this one bows out.
-        let me = NSRunningApplication.current
-        let twins = NSRunningApplication.runningApplications(
-            withBundleIdentifier: Bundle.main.bundleIdentifier ?? ""
-        ).filter { $0.processIdentifier != me.processIdentifier }
-        if !twins.isEmpty {
+        // The process-held runtime lock makes this the only socket/model owner.
+        guard ghostBrainServerHost.start() else {
             DiagnosticsLog.shared.record("duplicate-instance-exit", metadata: [:])
             NSApp.terminate(nil)
             return
@@ -45,7 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
         statusMenuHost.start()
-        ghostBrainServerHost.start()
         llamaServerHost.start()
         registerAsLoginItemIfNeeded()
         ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
@@ -62,8 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or the exit races the log queue and the line never lands.
         DiagnosticsLog.shared.record("shutdown", metadata: [:])
         DiagnosticsLog.shared.flush()
-        llamaServerHost.stop()
         ghostBrainServerHost.stop()
+        llamaServerHost.stop()
     }
 
     /// The keyboard's own defaults domain — the one channel the app and the
@@ -80,8 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard llamaServerHost.isHealthy else {
             return "Engine: starting…"
         }
-        let personal = RuntimeSetting.string("MODEL_PATH") != nil
-        return personal ? "Engine: Personal Gemma (ready)" : "Engine: Generic Gemma (ready)"
+        return "Engine: Gemma (ready)"
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login
