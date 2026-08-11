@@ -33,6 +33,12 @@ enum LlamaRuntimeSnapshot: Equatable, Sendable {
         if case let .retrying(reason) = self { return reason }
         return .processExited
     }
+
+    mutating func beginCompletionFailure() -> Bool {
+        guard self == .ready else { return false }
+        self = .retrying(.completionFailed)
+        return true
+    }
 }
 
 /// Owns the app's one llama-server child, health state, and restart policy.
@@ -55,6 +61,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var process: Process?
     private var healthTask: Task<Void, Never>?
     private var runtimeSnapshot = LlamaRuntimeSnapshot.starting
+    private var wasHealthyBeforeShutdown = false
     private var stopped = false
     private var preparing = false
     private var launchedAt = Date.distantPast
@@ -86,8 +93,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     /// usable model. Concurrent failures see the cleared health bit and stop.
     func reportCompletionFailure() {
         lifecycle.async { [weak self] in
-            guard let self, runtimeSnapshot == .ready, let process else { return }
-            runtimeSnapshot = .retrying(.completionFailed)
+            guard let self, let process, runtimeSnapshot.beginCompletionFailure() else { return }
+            wasHealthyBeforeShutdown = true
             Self.requestShutdown(process)
         }
     }
@@ -211,7 +218,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     private func handleExit(_ child: Process) {
         guard process === child else { return }
-        let wasHealthy = runtimeSnapshot == .ready
+        let wasHealthy = runtimeSnapshot == .ready || wasHealthyBeforeShutdown
+        wasHealthyBeforeShutdown = false
         let reason = runtimeSnapshot.restartReasonAfterExit
         let uptime = Date().timeIntervalSince(launchedAt)
         process = nil
