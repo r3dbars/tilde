@@ -10,6 +10,7 @@ RELEASE_INPUT_MODEL=""
 APP_BUNDLE_SET=0
 APP_BUNDLE="$ROOT_DIR/dist/Tilde.app"
 MIN_MODEL_BYTES=1500000000
+MAX_HELPER_MIN_MACOS=26.0
 SELFTEST_TMP_DIR=""
 
 fail() {
@@ -60,6 +61,42 @@ is_macho_execute() {
   ' <<<"$headers"
 }
 
+helper_platform_error() {
+  local architectures build_versions architecture
+  architectures="$(/usr/bin/lipo -archs "$1" 2>/dev/null)" \
+    || { printf 'llama-server architecture inspection failed'; return; }
+  for architecture in $architectures; do
+    [[ "$architecture" == "arm64" || "$architecture" == "arm64e" ]] && break
+  done
+  [[ "$architecture" == "arm64" || "$architecture" == "arm64e" ]] \
+    || { printf 'llama-server must include an arm64 or arm64e slice'; return; }
+
+  build_versions="$(/usr/bin/xcrun vtool -show-build "$1" 2>/dev/null)" \
+    || { printf 'llama-server build-version inspection failed'; return; }
+  /usr/bin/awk -v expected="$(/usr/bin/awk '{ print NF }' <<<"$architectures")" \
+    -v maximum="$MAX_HELPER_MIN_MACOS" '
+    function newer(version, limit, version_parts, limit_parts, part) {
+      split(version, version_parts, "."); split(limit, limit_parts, ".")
+      for (part = 1; part <= 3; part++) {
+        if ((version_parts[part] + 0) != (limit_parts[part] + 0))
+          return (version_parts[part] + 0) > (limit_parts[part] + 0)
+      }
+      return 0
+    }
+    $1 == "cmd" && ($2 == "LC_BUILD_VERSION" || $2 == "LC_VERSION_MIN_MACOSX") {
+      commands++; active = 1; legacy = ($2 == "LC_VERSION_MIN_MACOSX"); macos = legacy; next
+    }
+    active && $1 == "platform" { macos = ($2 == "MACOS"); next }
+    active && ((legacy && $1 == "version") || (!legacy && $1 == "minos")) {
+      if (!macos || newer($2, maximum)) invalid = 1
+      completed++; active = 0
+    }
+    END { exit !(commands == expected && completed == expected && !invalid) }
+  ' <<<"$build_versions" \
+    || printf 'every llama-server architecture must target macOS %s or earlier' \
+      "$MAX_HELPER_MIN_MACOS"
+}
+
 has_system_only_dependencies() {
   local dependencies
   dependencies="$(/usr/bin/otool -arch all -L "$1" 2>/dev/null)" || return 1
@@ -82,10 +119,11 @@ has_release_model_size() {
 }
 
 validate_release_inputs() {
-  local helper="$1"
-  local model="$2"
+  local helper="$1" model="$2" platform_error
   [[ -f "$helper" && -x "$helper" ]] || fail "missing executable llama-server: $helper"
   is_macho_execute "$helper" || fail "llama-server is not Mach-O filetype EXECUTE"
+  platform_error="$(helper_platform_error "$helper")"
+  [[ -z "$platform_error" ]] || fail "$platform_error"
   has_system_only_dependencies "$helper" \
     || fail "llama-server dependency inspection failed or found a non-system library"
   [[ -f "$model" ]] || fail "missing model: $model"
@@ -96,8 +134,8 @@ validate_release_inputs() {
 
 run_selftest() {
   local selftest_dir invalid_helper valid_model readme_model small_gguf
-  local fixture_source fixture_main invalid_dylib invalid_executable valid_slice
-  local mixed_filetype_helper mixed_dependency_helper
+  local fixture_source invalid_dylib invalid_executable valid_helper
+  local future_helper ios_helper mixed_filetype_helper mixed_dependency_helper rejection_output
   [[ "$(team_identifier_from_details $'Executable=/tmp/Tilde\nTeamIdentifier=ABCDE12345')" \
     == "ABCDE12345" ]] || return 1
   if team_identifier_from_details "Executable=/tmp/Tilde" >/dev/null; then return 1; fi
@@ -115,10 +153,11 @@ run_selftest() {
   readme_model="$selftest_dir/README"
   small_gguf="$selftest_dir/small.gguf"
   fixture_source="$selftest_dir/fixture.c"
-  fixture_main="$selftest_dir/main.c"
   invalid_dylib="$selftest_dir/invalid.dylib"
   invalid_executable="$selftest_dir/invalid-dependency"
-  valid_slice="$selftest_dir/valid-arm64e"
+  valid_helper="$selftest_dir/valid-helper"
+  future_helper="$selftest_dir/future-helper"
+  ios_helper="$selftest_dir/ios-helper"
   mixed_filetype_helper="$selftest_dir/mixed-filetype-helper"
   mixed_dependency_helper="$selftest_dir/mixed-dependency-helper"
 
@@ -131,27 +170,41 @@ run_selftest() {
   /bin/dd if=/dev/zero of="$readme_model" bs=1 seek="$((MIN_MODEL_BYTES - 1))" \
     count=1 conv=notrunc >/dev/null 2>&1
   printf 'GGUF' >"$small_gguf"
-  printf 'int tilde_selftest_dependency(void) { return 0; }\n' >"$fixture_source"
-  printf 'int tilde_selftest_dependency(void);\nint main(void) { return tilde_selftest_dependency(); }\n' \
-    >"$fixture_main"
+  printf '#if CLIENT\nint dependency(void); int main(void) { return dependency(); }\n#elif LIBRARY\nint dependency(void) { return 0; }\n#else\nint main(void) { return 0; }\n#endif\n' \
+    >"$fixture_source"
 
-  /usr/bin/xcrun clang -arch x86_64 -dynamiclib \
+  /usr/bin/xcrun clang -arch arm64 -mmacosx-version-min="$MAX_HELPER_MIN_MACOS" \
+    "$fixture_source" -o "$valid_helper" >/dev/null 2>&1
+  /usr/bin/xcrun vtool -set-build-version macos 27.0 27.0 -replace \
+    -output "$future_helper" "$valid_helper" >/dev/null 2>&1
+  /usr/bin/xcrun vtool -set-build-version ios 26.0 26.0 -replace \
+    -output "$ios_helper" "$valid_helper" >/dev/null 2>&1
+  /usr/bin/xcrun clang -arch x86_64 -mmacosx-version-min="$MAX_HELPER_MIN_MACOS" \
+    -DLIBRARY=1 -dynamiclib \
     -Wl,-install_name,@rpath/libtilde-selftest.dylib \
     "$fixture_source" -o "$invalid_dylib" >/dev/null 2>&1
-  /usr/bin/xcrun clang -arch x86_64 "$fixture_main" "$invalid_dylib" \
+  /usr/bin/xcrun clang -arch x86_64 -mmacosx-version-min="$MAX_HELPER_MIN_MACOS" \
+    -DCLIENT=1 "$fixture_source" "$invalid_dylib" \
     -o "$invalid_executable" >/dev/null 2>&1
-  /usr/bin/lipo /usr/bin/true -thin arm64e -output "$valid_slice"
-  /usr/bin/lipo -create "$valid_slice" "$invalid_dylib" -output "$mixed_filetype_helper"
-  /usr/bin/lipo -create "$valid_slice" "$invalid_executable" -output "$mixed_dependency_helper"
-  chmod +x "$mixed_filetype_helper" "$mixed_dependency_helper"
+  /usr/bin/lipo -create "$valid_helper" "$invalid_dylib" -output "$mixed_filetype_helper"
+  /usr/bin/lipo -create "$valid_helper" "$invalid_executable" -output "$mixed_dependency_helper"
+  chmod +x "$future_helper" "$ios_helper" "$mixed_filetype_helper" "$mixed_dependency_helper"
 
-  "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$valid_model" \
+  "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$valid_helper" "$valid_model" \
     >/dev/null 2>&1 || return 1
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$invalid_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
-  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$readme_model" \
+  if rejection_output="$("$ROOT_DIR/script/check_app_bundle.sh" \
+    --release-inputs "$invalid_executable" "$valid_model" 2>&1)"; then return 1; fi
+  [[ "$rejection_output" == *"llama-server must include an arm64 or arm64e slice"* ]] \
+    || return 1
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$future_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
-  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$small_gguf" \
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$ios_helper" "$valid_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$valid_helper" "$readme_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$valid_helper" "$small_gguf" \
     >/dev/null 2>&1; then return 1; fi
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$mixed_filetype_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
