@@ -150,6 +150,7 @@ run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "runtime egress harness self-test" python3 script/check_runtime_network_egress.py --selftest
 run_blocking "golden evaluator self-test" python3 script/golden_eval.py --selftest
 run_blocking "bundle signing parser self-test" bash script/check_app_bundle.sh --selftest
+run_blocking "development signing selector self-test" bash script/signing_identity.sh --selftest
 run_blocking "release-proof cleanup parser self-test" bash script/restart_app.sh --selftest
 run_swift
 

@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source "$ROOT_DIR/script/signing_identity.sh"
 
 CONFIGURATION="debug"
 SCRATCH_PATH="$ROOT_DIR/.build"
@@ -26,9 +27,11 @@ Options:
   --jobs COUNT              Limit Swift build jobs.
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
-  --sign-identity IDENTITY  Sign with this identity; use - for ad hoc signing.
+  --sign-identity IDENTITY  Sign with this exact identity; use - for explicit ad hoc signing.
 
-Without --sign-identity, local builds use an ad hoc signature.
+Without --sign-identity, the sole eligible Apple Development identity is used.
+Zero or multiple eligible identities fail loudly. Ad hoc bundles cannot exercise
+the authenticated app-to-IME runtime.
 EOF
 }
 
@@ -65,6 +68,7 @@ done
 if [[ -n "$JOBS" ]]; then
   [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo "jobs must be a positive integer" >&2; exit 2; }
 fi
+SIGN_IDENTITY="$(tilde_resolve_signing_identity "$SIGN_IDENTITY")"
 
 APP="$ROOT_DIR/dist/Tilde.app"
 CONTENTS="$APP/Contents"
@@ -120,19 +124,7 @@ cat >"$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if [[ "$SIGN_IDENTITY" == "-" ]]; then
-  codesign --force --options runtime --sign - "$APP" >/dev/null
-elif [[ -n "$SIGN_IDENTITY" ]]; then
-  RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-    | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
-  [[ -n "$RESOLVED_IDENTITY" ]] \
-    || { echo "signing identity is unavailable: $SIGN_IDENTITY" >&2; exit 1; }
-  SIGN_IDENTITY="$RESOLVED_IDENTITY"
-  codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP" >/dev/null
-else
-  codesign --force --options runtime --sign - "$APP" >/dev/null
-  echo "warning: no signing identity found; used an ad hoc signature" >&2
-fi
+codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP" >/dev/null
 
 "$ROOT_DIR/script/check_app_bundle.sh" "$APP"
 echo "Built app bundle without restarting Tilde: $APP"
