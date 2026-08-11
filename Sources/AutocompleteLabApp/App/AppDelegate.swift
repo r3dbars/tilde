@@ -55,15 +55,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         llamaServerHost.start()
         if launchMode.allowsDailyDriverMutation {
             registerAsLoginItemIfNeeded()
-            ghostKeyboardInstallerHost.installOrUpdateIfNeeded(allowMutation: true)
+            ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
             // Any production launch means the brain is wanted again: lift the
             // keyboard watchdog's stay-quiet flag from a deliberate quit.
-            UserDefaults(suiteName: Self.keyboardDefaultsSuite)?
+            UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
                 .removeObject(forKey: "GhostBrainQuietQuit")
         }
         DiagnosticsLog.shared.record(
-            "launch",
-            metadata: ["mode": launchMode == .production ? "production" : "release-proof"]
+            launchMode == .production ? "launch" : "release-proof-launch",
+            metadata: [:]
         )
     }
 
@@ -76,10 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launchMode == .production { ghostBrainServerHost.stop() }
         llamaServerHost.stop()
     }
-
-    /// The keyboard's own defaults domain — the one channel the app and the
-    /// IME process share.
-    static let keyboardDefaultsSuite = "bar.r3d.inputmethod.InlineGhost"
 
     /// One line for the status menu: which engine is answering. Honest by
     /// rule — the app may fail, but never silently. The personal/generic

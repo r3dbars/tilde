@@ -3,10 +3,9 @@ import Foundation
 /// Reads the keyboard's aggregate-only daily counters. No typed text, prompts,
 /// completions, app names, fields, or document identifiers cross this bridge.
 enum TildeStats {
-    private static let imeDomain = "bar.r3d.inputmethod.InlineGhost"
-
     private static func dayDict(_ key: String) -> [String: Int] {
-        UserDefaults(suiteName: imeDomain)?.dictionary(forKey: "stats.\(key)") as? [String: Int] ?? [:]
+        UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
+            .dictionary(forKey: "stats.\(key)") as? [String: Int] ?? [:]
     }
 
     private static var todayKey: String {
@@ -20,7 +19,7 @@ enum TildeStats {
     }
 
     static func lifetimeWordsAccepted() -> Int {
-        guard let suite = UserDefaults(suiteName: imeDomain) else { return 0 }
+        guard let suite = UserDefaults(suiteName: TildeSettings.keyboardSuiteName) else { return 0 }
         return sumWordsAccepted(in: suite.dictionaryRepresentation())
     }
 
