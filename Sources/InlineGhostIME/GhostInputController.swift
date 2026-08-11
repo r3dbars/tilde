@@ -42,9 +42,6 @@ final class GhostInputController: IMKInputController {
     /// are dropped instead of clobbering a newer ghost.
     private var generation = 0
     private var modelTask: Task<Void, Never>?
-    /// True right after an accept added a trailing space the user didn't type.
-    /// Typing punctuation next swallows that space (like iOS smart punctuation).
-    private var pendingAutoSpace = false
     /// What produced the ghost currently on screen (for per-source accept stats).
     private enum GhostSource: String { case fast, model }
     private var ghostSource: GhostSource = .fast
@@ -290,7 +287,6 @@ final class GhostInputController: IMKInputController {
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.
-            pendingAutoSpace = false
             clearGhost(client)
             if !typedFallback.isEmpty { typedFallback.removeLast() }
             // Keep an in-progress override phrase in sync so the training label
@@ -334,16 +330,7 @@ final class GhostInputController: IMKInputController {
                 flushPendingRejection()
             }
             clearGhost(client)
-            let swallowAutoSpace = pendingAutoSpace && ".,!?;:".contains(chars)
-            pendingAutoSpace = false
-            let selection = client.selectedRange()
-            if swallowAutoSpace, selection.location != NSNotFound, selection.location > 0 {
-                // "word ." → "word." — replace the auto-space with the punctuation.
-                client.insertText(chars, replacementRange: NSRange(location: selection.location - 1, length: 1))
-                if typedFallback.hasSuffix(" ") { typedFallback.removeLast() }
-            } else {
-                client.insertText(chars, replacementRange: Self.unset)
-            }
+            client.insertText(chars, replacementRange: Self.unset)
             typedFallback.append(chars)
             if typedFallback.count > 2000 { typedFallback.removeFirst(500) }
             if chars == " ", typedFallback.dropLast().last?.isLetter == true {
@@ -355,7 +342,6 @@ final class GhostInputController: IMKInputController {
         }
 
         // Return, arrows, anything else: drop the ghost and let the app handle it.
-        pendingAutoSpace = false
         clearGhost(client)
         if let chars = event.characters, chars.contains("\r") || chars.contains("\n") {
             typedFallback.append("\n")
@@ -897,10 +883,9 @@ final class GhostInputController: IMKInputController {
         ghost = ""
     }
 
-    /// Accept everything, then predict a fresh chain. A trailing space is added so
-    /// typing continues with the NEXT word instead of extending the accepted one.
+    /// Accept everything, then predict a fresh chain.
     private func acceptWholeGhost(_ client: IMKTextInput) {
-        var accepted = ghost
+        let accepted = ghost
         let acceptedForRecord = accepted
         let acceptedSource = usageSource
         let contextBeforeAccept = typedFallback
@@ -909,10 +894,6 @@ final class GhostInputController: IMKInputController {
         GhostPanel.candidates?.hide()
         ghost = ""
         inlineGhostVisible = false
-        if !accepted.hasSuffix(" ") {
-            accepted += " "
-            pendingAutoSpace = true
-        }
         client.insertText(accepted, replacementRange: Self.unset)
         typedFallback.append(accepted)
 
@@ -953,14 +934,8 @@ final class GhostInputController: IMKInputController {
         GhostPanel.candidates?.hide()
         ghost = ""
         inlineGhostVisible = false
-        var insertion = chunk
-        if remainder.isEmpty, !insertion.hasSuffix(" ") {
-            // Last word of the chain: auto-space so typing moves to the next word.
-            insertion += " "
-            pendingAutoSpace = true
-        }
-        client.insertText(insertion, replacementRange: Self.unset)
-        typedFallback.append(insertion)
+        client.insertText(chunk, replacementRange: Self.unset)
+        typedFallback.append(chunk)
 
         // Optional work happens only after the accepted text is in the document.
         flushPendingRejection()
