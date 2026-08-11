@@ -33,9 +33,9 @@ Release inputs:
 Full release only:
   --notary-profile PROFILE  Stored notarytool keychain profile.
   --build-number NUMBER     Required numeric bundle build number.
+  --sign-identity SHA1      Required Developer ID Application certificate hash.
 
 Options:
-  --sign-identity IDENTITY  Developer ID Application identity (auto-detected).
   --version VERSION         Release version (default: 0.1.0).
   --verify-inputs-only      Verify pinned inputs, then exit without building,
                             signing, notarizing, or uploading anything.
@@ -121,18 +121,17 @@ fi
 [[ -n "$BUILD_NUMBER" ]] || { echo "--build-number is required for a full release" >&2; exit 2; }
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 [[ -n "$NOTARY_PROFILE" ]] || { echo "--notary-profile is required" >&2; exit 2; }
-
-if [[ -z "$SIGN_IDENTITY" ]]; then
-  SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-    | awk '/Developer ID Application/ { print $2; exit }')"
-fi
-[[ -n "$SIGN_IDENTITY" ]] \
-  || { echo "missing Developer ID Application signing identity" >&2; exit 1; }
-RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-  | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
-[[ -n "$RESOLVED_IDENTITY" ]] \
-  || { echo "signing identity is unavailable: $SIGN_IDENTITY" >&2; exit 1; }
-SIGN_IDENTITY="$RESOLVED_IDENTITY"
+[[ -n "$SIGN_IDENTITY" ]] || { echo "--sign-identity is required for a full release" >&2; exit 2; }
+SIGN_IDENTITY="$(tr '[:lower:]' '[:upper:]' <<<"$SIGN_IDENTITY")"
+[[ "$SIGN_IDENTITY" =~ ^[[:xdigit:]]{40}$ ]] \
+  || { echo "--sign-identity must be an exact 40-character SHA-1" >&2; exit 2; }
+IDENTITY_DETAILS="$(security find-identity -p codesigning -v 2>/dev/null)" \
+  || { echo "unable to list code-signing identities" >&2; exit 1; }
+RESOLVED_IDENTITY="$(awk -v wanted="$SIGN_IDENTITY" \
+  '$2 == wanted && /"Developer ID Application:[^"]+"[[:space:]]*$/ { print $2; exit }' \
+  <<<"$IDENTITY_DETAILS")"
+[[ "$RESOLVED_IDENTITY" == "$SIGN_IDENTITY" ]] \
+  || { echo "Developer ID Application identity is unavailable: $SIGN_IDENTITY" >&2; exit 1; }
 
 echo "==> validating Apple notary credentials"
 xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --output-format json >/dev/null
