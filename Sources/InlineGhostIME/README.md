@@ -1,70 +1,34 @@
-# InlineGhostIME — Tilde's input method
+# InlineGhostIME
 
-Graduated from `spike/` on 2026-07-22 after the owner declared this the product
-direction. Built as the `InlineGhostIME` SwiftPM executable target; assembled,
-signed, notarized, installed, and registered by `script/build_ime.sh`.
+Tilde's keyboard is a small IMKit input method. It commits typed characters
+immediately and shows suggestions only as marked text in the focused editor.
+There is no overlay, candidate panel, Accessibility reader, OCR, or raw-text
+learning.
 
-A minimal macOS input method that renders inline autocomplete suggestions
-**inside the focused app's own text** via IMKit marked text — no overlay window,
-no caret geometry, no synthetic keystrokes. Validated end-to-end on macOS 26 in
-TextEdit, Notes, Obsidian (Electron), Chrome, and Atlas.
+## Keyboard behavior
 
-The owner declared this the new architecture direction for Tilde. The
-AX + overlay stack is now legacy pending this path maturing.
+- Plain `Tab` accepts the whole visible suggestion.
+- `Escape` dismisses it.
+- `Shift-Tab`, backtick, shortcuts, and navigation keys keep their normal app behavior.
+- Typing the next matching grapheme consumes that visible prefix in place. A
+  different grapheme hides the old suggestion, inserts normally, and schedules
+  a fresh suggestion.
+- A 3+ letter partial word gets one deferred `NSSpellChecker` suffix lookup.
+- A word boundary gets one request to Tilde's app-owned local model. There is no
+  Foundation Models fallback.
 
-## What it does
+Suggestions are bound to the IMKit client, host bundle, context fingerprint,
+and selection range. Late model output and stale Tab acceptance are dropped.
+Document context is read only after the immediate key callback returns.
 
-- Commits every printable keystroke immediately (`insertText`), then re-offers a
-  suggestion as marked text after the caret — typing feels instant.
-- Two prediction layers: an instant tiny predictor (document-vocabulary word
-  completion + document bigrams + common next-words) upgraded asynchronously by
-  Apple's on-device FoundationModels model (word boundaries only, ≤16 tokens,
-  prewarmed session, generation counter drops stale results).
-- Multi-word chains (up to 4 words): **Tab accepts one word and keeps the rest
-  of the chain marked — no re-rolling. Shift-Tab accepts everything. Esc
-  dismisses.** Backspace and shortcuts pass through untouched.
-- Context comes from `IMKTextInput.attributedSubstring(from:)` (real document
-  read) with a bounded keystroke buffer as fallback.
+## Deployment facts
 
-## Deployment facts (each cost us hours — do not rediscover)
+1. The bundle ID must contain `.inputmethod.`
+   (`bar.r3d.inputmethod.InlineGhost`).
+2. Notarization is required for the input method to appear in System Settings.
+3. Register with `TISRegisterInputSource`; `lsregister` alone is insufficient.
+4. Enabling the input method requires user consent in System Settings.
+5. Editors control marked-text styling; most render a composing underline.
 
-1. **The bundle ID must contain `.inputmethod.`** (`bar.r3d.inputmethod.InlineGhost`).
-   Without it, macOS never treats the bundle as an input method. Undocumented.
-2. **Notarization is mandatory.** Gatekeeper (`spctl -a -t exec`) must say
-   `accepted`; unnotarized IMEs are silently hidden from the System Settings
-   picker with no log message. Ad-hoc signatures are rejected outright.
-3. **Register with `TISRegisterInputSource`** (see `register.swift`);
-   `lsregister` alone is insufficient. Registration is wiped when
-   TextInputMenuAgent restarts — just re-run it. The very first appearance in
-   the picker additionally required a full restart.
-4. **Enabling requires user consent** in System Settings → Keyboard → Input
-   Sources (programmatic `TISEnableInputSource` reports success but does not
-   persist). macOS shows a "developer can access anything you type" warning.
-5. **Styling is app-controlled.** Grey ghost text is impossible for third
-   parties: custom attributes (`.foregroundColor`, `.underlineStyle: 0`,
-   `.underlineColor: .clear`) are ignored and all four TSM hilite presets render
-   identically — a composing underline. Accepted tradeoff.
-
-## Build & install
-
-```bash
-./script/build_ime.sh
-```
-
-One-time notarization setup (needs an app-specific password from
-account.apple.com):
-
-```bash
-xcrun notarytool store-credentials ghost-notary --apple-id <apple-id> --team-id XG6WL66WUQ
-```
-
-Then: System Settings → Keyboard → Input Sources → Edit → `+` → search
-"inline" → Add, and switch to it from the menu-bar input picker.
-
-## Next (engineering, not research)
-
-- Swap Apple's model for Tilde's MLX model — app hosts the engine, IME is
-  a thin local-IPC client with fallbacks.
-- Papercuts: caret clicks, undo, autocorrect coexistence, dead keys/accents,
-  key repeat, Tab's day job in forms/editors, IME crash recovery.
-- Onboarding flow that walks users through adding + switching keyboards.
+Build with `./script/build_ime.sh`. Then add Tilde under System Settings →
+Keyboard → Input Sources and select it from the keyboard menu.

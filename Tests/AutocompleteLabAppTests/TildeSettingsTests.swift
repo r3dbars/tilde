@@ -11,11 +11,10 @@ struct TildeSettingsTests {
         return (TildeSettings(keyboard: keyboard), keyboard)
     }
 
-    @Test("Fresh keyboard settings enable suggestions and sounds")
+    @Test("Fresh keyboard settings enable suggestions")
     func absentKeysUseProductDefaults() {
         let (settings, _) = makeSettings()
         #expect(settings.suggestionsEnabled)
-        #expect(settings.soundsEnabled)
         #expect(settings.pausedUntil == nil)
     }
 
@@ -23,10 +22,8 @@ struct TildeSettingsTests {
     func keyboardSettingsLandInKeyboardDomain() {
         let (settings, keyboard) = makeSettings()
         settings.suggestionsEnabled = false
-        settings.soundsEnabled = false
 
         #expect(keyboard.object(forKey: "GhostSuggestionsEnabled") as? Bool == false)
-        #expect(keyboard.object(forKey: "GhostSoundsEnabled") as? Bool == false)
     }
 
     @Test("Pause expires and resume clears it")
@@ -55,27 +52,21 @@ struct TildeSettingsTests {
         }
     }
 
-    @Test("Tab inserts before optional sound and stats work")
+    @Test("Tab inserts before aggregate stats work")
     func tabInsertionStaysFirst() throws {
         let source = try Self.keyboardSourceText()
-        for functionName in ["acceptWholeGhost", "acceptOneWord"] {
-            let function = try Self.functionBody(named: functionName, in: source)
-            let insertion = try #require(function.range(of: "client.insertText"))
-            let sound = try #require(function.range(of: "playAcceptSound"))
-            let stats = try #require(function.range(of: "recordAccept"))
-            #expect(insertion.lowerBound < sound.lowerBound)
-            #expect(insertion.lowerBound < stats.lowerBound)
-        }
+        let function = try Self.functionBody(named: "acceptSuggestion", in: source)
+        let insertion = try #require(function.range(of: "apply(effects"))
+        let stats = try #require(function.range(of: "GhostStats.recordAccepted"))
+        #expect(insertion.lowerBound < stats.lowerBound)
     }
 
     @Test("Tab defers fresh prediction instead of running it inline")
     func tabDefersFreshPrediction() throws {
         let source = try Self.keyboardSourceText()
-        for functionName in ["acceptWholeGhost", "acceptOneWord"] {
-            let function = try Self.functionBody(named: functionName, in: source)
-            #expect(function.contains("scheduleGhostAfterPause(client)"))
-            #expect(!function.contains("updateGhost(client)"))
-        }
+        let function = try Self.functionBody(named: "acceptSuggestion", in: source)
+        #expect(function.contains("apply(effects"))
+        #expect(!function.contains("updateSuggestion(for: client)"))
     }
 
     private static func keyboardSourceText() throws -> String {

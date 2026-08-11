@@ -26,8 +26,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     // Only the instance that actually bound the socket may unlink it. A
     // duplicate instance bowing out runs the same stop() on its way to
     // terminate — without this flag it unlinked the LIVE socket of the
-    // healthy first instance, silently cutting the keyboard off from the
-    // brain (the Apple-fallback persona leak, 2026-07-23).
+    // healthy first instance, silently cutting the keyboard off from the brain.
     private var ownsSocketFile = false
 
     init(engineProvider: @escaping @MainActor () -> any CompletionEngine) {
@@ -165,13 +164,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 return
             }
             let engine = await self.engineProvider()
-            // Mid-word contexts want the engine's word-completion mode; word
-            // boundaries want phrase continuation.
-            let midWord = payload.context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
+            // The keyboard owns mid-word completion. Reject malformed or stale
+            // socket requests instead of creating a hidden second model path.
+            guard payload.context.last?.isWhitespace == true else {
+                Self.write(["suggestion": ""], to: connection)
+                return
+            }
             let request = CompletionRequest(
                 textBeforeCursor: payload.context,
                 appBundleIdentifier: payload.app,
-                mode: midWord ? .wordCompletion : .phraseContinuation
+                mode: .phraseContinuation
             )
             // Partial callbacks can fire from generation threads; serialize socket
             // writes so JSON lines never interleave mid-message.
@@ -182,20 +184,20 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 Self.write(object, to: connection)
             }
             let final = try? await engine.suggestion(for: request) { partial in
-                let text = partial.visibleText
+                let text = Self.keyboardText(partial)
                 guard !text.isEmpty else { return }
                 send(["suggestion": text, "partial": true])
             }
-            send(["suggestion": final?.visibleText ?? ""])
+            send(["suggestion": final.map(Self.keyboardText) ?? ""])
             // The end-to-end proof lane (script/real_app_smoke.sh) waits for
             // this event: a real keystroke travelled keyboard → socket →
             // engine → back. "Served", deliberately not "presented" — the IME
             // may still drop a stale answer, and display isn't observable from
             // this process. Bundle id and shape only — never content.
-            if let visible = final?.visibleText, !visible.isEmpty {
+            if let final, !Self.keyboardText(final).isEmpty {
                 DiagnosticsLog.shared.record("suggestion-served", metadata: [
                     "app": payload.app ?? "unknown",
-                    "chars": String(visible.count)
+                    "chars": String(Self.keyboardText(final).count)
                 ])
             }
         }
@@ -247,5 +249,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
         _ = payload.withUnsafeBytes { raw in
             Darwin.write(fd, raw.baseAddress, raw.count)
         }
+    }
+
+    /// Completion suggestions include the separator needed by overlay insertion.
+    /// IMKit marked text is already placed after the typed boundary.
+    private static func keyboardText(_ suggestion: CompletionSuggestion) -> String {
+        String(suggestion.visibleText.drop(while: \Character.isWhitespace))
     }
 }
