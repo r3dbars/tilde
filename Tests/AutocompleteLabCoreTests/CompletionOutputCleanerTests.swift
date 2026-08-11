@@ -51,6 +51,16 @@ struct CompletionOutputCleanerTests {
         #expect(clamped?.visibleText.split(whereSeparator: { $0.isWhitespace }).count == 20)
     }
 
+    @Test("Repairs a dangling tail exposed by the display cap")
+    func repairsCapInducedDangler() {
+        let suggestion = CompletionOutputCleaner(maxVisibleWords: 8).clean(
+            "see if you had any thoughts on the details.",
+            after: nil
+        )
+
+        #expect(suggestion?.visibleText == " see if you had any thoughts")
+    }
+
     @Test("Rejects unsafe hidden and control characters")
     func rejectsUnsafeCharacters() {
         for output in ["safe\u{200B}text", "safe\u{200D}text", "safe\u{2060}text", "safe\ttext"] {

@@ -135,8 +135,8 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         return Self.repairDanglingTail(text)
     }
 
-    /// When a raw generation ends without terminal punctuation, trim trailing
-    /// function words that make the continuation feel cut off.
+    /// Apply this to raw output and to the display-capped suggestion: a cap can
+    /// expose a trailing function word from an otherwise complete sentence.
     public static func repairDanglingTail(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard let last = trimmed.last, last.isLetter || last.isNumber else {
