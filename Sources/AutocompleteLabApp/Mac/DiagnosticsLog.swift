@@ -43,22 +43,14 @@ final class DiagnosticsLog: @unchecked Sendable {
         let timestamp = timestampFormatter.string(from: Date())
         let fields = metadata
             .sorted { $0.key < $1.key }
-            .map {
-                "\($0.key)=\(DiagnosticsMetadataRedactor.logSafeValue(forKey: $0.key, value: $0.value))"
-            }
+            .map(DiagnosticsMetadataRedactor.logSafeField)
             .joined(separator: " ")
+        let safeEvent = DiagnosticsMetadataRedactor.logSafeEvent(event)
 
         if fields.isEmpty {
-            return "\(timestamp) \(sanitize(event))\n"
+            return "\(timestamp) \(safeEvent)\n"
         }
 
-        return "\(timestamp) \(sanitize(event)) \(fields)\n"
-    }
-
-    private func sanitize(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "\t", with: " ")
+        return "\(timestamp) \(safeEvent) \(fields)\n"
     }
 }
