@@ -140,10 +140,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
 
             let completion = Task {
-                try await self.engine.suggestion(for: CompletionRequest(
+                try await self.engine.suggestion(
                     textBeforeCursor: request.context,
                     appBundleIdentifier: request.app
-                ))
+                )
             }
             let disconnect = DispatchSource.makeReadSource(
                 fileDescriptor: connection,
@@ -167,7 +167,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let response: GhostBrainResponse
             switch result {
             case let .success(suggestion):
-                let text = suggestion.map(Self.keyboardText) ?? ""
+                let text = suggestion.map {
+                    String($0.visibleText.drop(while: \Character.isWhitespace))
+                } ?? ""
                 response = .suggestion(text)
                 if !text.isEmpty {
                     DiagnosticsLog.shared.record("suggestion-served", metadata: [
@@ -302,7 +304,4 @@ final class GhostBrainServerHost: @unchecked Sendable {
             && info.st_mode & 0o777 == 0o600
     }
 
-    private static func keyboardText(_ suggestion: CompletionSuggestion) -> String {
-        String(suggestion.visibleText.drop(while: \Character.isWhitespace))
-    }
 }
