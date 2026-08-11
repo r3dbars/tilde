@@ -5,7 +5,7 @@ import Foundation
 /// The keyboard is a separate process, so its settings must be written to the
 /// InlineGhost settings shared with the keyboard process.
 struct TildeSettings {
-    enum KeyboardKey: String, CaseIterable {
+    enum KeyboardKey: String {
         case suggestions = "GhostSuggestionsEnabled"
         case pausedUntil = "GhostPausedUntil"
     }
