@@ -86,7 +86,7 @@ struct InlineSuggestionStateTests {
         _ = state.reduce(.present(" world", current))
 
         #expect(state.reduce(.type("!", current: current, advanced: current.advancing(with: "!"))) == [
-            .hide, .insert("!"), .schedule,
+            .hide, .insert("!"), .schedule(afterTyping: "!"),
         ])
     }
 
