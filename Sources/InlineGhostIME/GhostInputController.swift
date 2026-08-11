@@ -9,8 +9,15 @@ final class GhostInputController: IMKInputController {
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
     private static let contextLimit = 3_000
 
+    private struct FallbackOwner: Equatable {
+        let client: String
+        let bundle: String
+        let caret: Int
+    }
+
     private var state = InlineSuggestionState()
     private var typedFallback = ""
+    private var fallbackOwner: FallbackOwner?
     private var scheduleRevision = 0
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
@@ -24,8 +31,10 @@ final class GhostInputController: IMKInputController {
         let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
         guard suggestionsEnabled, !paused else {
             dismiss(client)
+            resetFallback()
             return false
         }
+        synchronizeFallback(with: client)
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers.contains(.command)
@@ -33,6 +42,7 @@ final class GhostInputController: IMKInputController {
             || modifiers.contains(.function)
             || modifiers.contains(.option) {
             dismiss(client)
+            resetFallback()
             return false
         }
 
@@ -49,10 +59,9 @@ final class GhostInputController: IMKInputController {
             dismiss(client)
             return wasVisible
 
-        case 51: // Let the host perform deletion, then inspect the settled field.
+        case 51: // The host owns deletion; wait for the next typed character.
             dismiss(client)
-            if !typedFallback.isEmpty { typedFallback.removeLast() }
-            scheduleSuggestion(for: client)
+            resetFallback()
             return false
 
         default:
@@ -60,20 +69,17 @@ final class GhostInputController: IMKInputController {
         }
 
         if let grapheme = printableGrapheme(from: event) {
-            cancelPendingWork()
             let current = matchingVisibleTicket(for: client)
+            cancelPendingWork()
             let advanced = current?.advancing(with: grapheme)
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
-            appendFallback(grapheme)
+            appendFallback(grapheme, for: client)
             return true
         }
 
         dismiss(client)
-        if let characters = event.characters,
-           characters.contains("\r") || characters.contains("\n") {
-            appendFallback("\n")
-        }
+        resetFallback()
         return false
     }
 
@@ -85,7 +91,7 @@ final class GhostInputController: IMKInputController {
     override func deactivateServer(_ sender: Any!) {
         GhostStats.flush(force: true)
         if let client = sender as? IMKTextInput { dismiss(client) }
-        typedFallback = ""
+        resetFallback()
         super.deactivateServer(sender)
     }
 
@@ -99,11 +105,43 @@ final class GhostInputController: IMKInputController {
         return characters
     }
 
-    private func appendFallback(_ text: String) {
+    private func appendFallback(_ text: String, for client: IMKTextInput) {
         typedFallback.append(text)
         if typedFallback.count > Self.contextLimit {
             typedFallback.removeFirst(typedFallback.count - Self.contextLimit)
         }
+        guard let owner = fallbackOwner else { return }
+        fallbackOwner = FallbackOwner(
+            client: owner.client,
+            bundle: owner.bundle,
+            caret: owner.caret + text.utf16.count
+        )
+    }
+
+    private func synchronizeFallback(with client: IMKTextInput) {
+        guard let current = fallbackOwner(for: client) else {
+            resetFallback()
+            return
+        }
+        if fallbackOwner != current {
+            typedFallback = ""
+            fallbackOwner = current
+        }
+    }
+
+    private func resetFallback() {
+        typedFallback = ""
+        fallbackOwner = nil
+    }
+
+    private func fallbackOwner(for client: IMKTextInput) -> FallbackOwner? {
+        let selection = client.selectedRange()
+        guard selection.location != NSNotFound, selection.length == 0 else { return nil }
+        return FallbackOwner(
+            client: clientIdentifier(client),
+            bundle: client.bundleIdentifier() ?? "",
+            caret: selection.location
+        )
     }
 
     private func apply(_ effects: [InlineSuggestionState.Effect], to client: IMKTextInput) {
@@ -137,8 +175,9 @@ final class GhostInputController: IMKInputController {
     }
 
     private func acceptSuggestion(_ client: IMKTextInput) -> Bool {
+        let current = matchingVisibleTicket(for: client)
         cancelPendingWork()
-        let effects = state.reduce(.accept(matchingVisibleTicket(for: client)))
+        let effects = state.reduce(.accept(current))
         guard case let .insert(accepted)? = effects.first(where: {
             if case .insert = $0 { return true }
             return false
@@ -147,7 +186,7 @@ final class GhostInputController: IMKInputController {
             return false
         }
         apply(effects, to: client)
-        appendFallback(accepted)
+        appendFallback(accepted, for: client)
         GhostStats.recordAccepted(accepted)
         return true
     }
@@ -170,31 +209,25 @@ final class GhostInputController: IMKInputController {
         )
     }
 
-    /// Acceptance stays cheap: identity/range are checked in the key callback;
-    /// raw document context is read only by the deferred suggestion task.
+    /// Re-read the bounded context on acceptance so a same-range field change
+    /// cannot commit a stale suggestion.
     private func matchingVisibleTicket(for client: IMKTextInput) -> InlineSuggestionTicket? {
         guard let visible = state.visibleTicket else { return nil }
-        let selection = client.selectedRange()
-        let location = selection.location == NSNotFound ? -1 : selection.location
-        let length = selection.length == NSNotFound ? -1 : selection.length
-        guard visible.clientIdentifier == clientIdentifier(client),
-              visible.bundleIdentifier == (client.bundleIdentifier() ?? ""),
-              visible.selectionLocation == location,
-              visible.selectionLength == length
-        else { return nil }
-        return visible
+        let current = ticket(for: client, context: contextBeforeCaret(client))
+        return current == visible ? visible : nil
     }
 
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
         let selection = client.selectedRange()
-        if selection.location != NSNotFound, selection.location > 0 {
+        guard selection.location != NSNotFound, selection.length == 0 else { return "" }
+        if selection.location > 0 {
             let start = max(0, selection.location - Self.contextLimit)
             let range = NSRange(location: start, length: selection.location - start)
             if let text = client.attributedSubstring(from: range)?.string, !text.isEmpty {
                 return text
             }
         }
-        return typedFallback
+        return fallbackOwner(for: client) == fallbackOwner ? typedFallback : ""
     }
 
     // MARK: - Suggestion paths
@@ -220,6 +253,12 @@ final class GhostInputController: IMKInputController {
     }
 
     private func updateSuggestion(for client: IMKTextInput) {
+        let selection = client.selectedRange()
+        guard selection.location != NSNotFound, selection.length == 0 else {
+            dismiss(client)
+            resetFallback()
+            return
+        }
         let context = contextBeforeCaret(client)
         guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: typedFallback) else {
             dismiss(client)
