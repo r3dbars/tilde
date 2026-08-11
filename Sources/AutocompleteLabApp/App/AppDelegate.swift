@@ -92,10 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath) else {
             return "⚠️ Brain socket missing — quit and reopen"
         }
-        guard llamaServerHost.isHealthy else {
-            return "Engine: starting…"
-        }
-        return "Engine: Gemma (ready)"
+        return llamaServerHost.snapshot.menuLine
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login
