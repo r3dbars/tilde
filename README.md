@@ -49,6 +49,9 @@ model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
 open-socket observation checks. Run `./script/package_app.sh --help` for its
 required release inputs.
 
+For private, aggregate-only model comparisons, see the
+[evaluation guide](docs/evaluation.md).
+
 Production code has three parts:
 
 - `Sources/AutocompleteLabCore`: pure, deterministic suggestion policy

@@ -47,10 +47,10 @@ folder as user-owned source data, not as an application cache.
 
 ## Network behavior
 
-Autocomplete does not need the network. Distributed builds contain the model
-and a static `llama-server` helper inside the signed app. Tilde does not
-download a model at runtime and does not send autocomplete requests to a cloud
-service.
+Autocomplete does not need internet access. Distributed builds contain the
+model and a self-contained `llama-server` helper inside the signed app. Tilde
+does not download a model at runtime and does not send autocomplete requests to
+a cloud service.
 
 The release gate observes the running app, input method, and exact helper
 child's open sockets while sending a fixed synthetic prompt directly to that
@@ -59,12 +59,17 @@ open-socket observation, not packet capture or a real-editor round trip.
 
 ## Control and removal
 
-- Pause suggestions or quit Tilde from its menu.
+- Pause suggestions from Tilde's menu. Quitting stops the menu and model app,
+  but the selected input method remains active.
 - Switch to another input source when you do not want Tilde handling typing.
 - Remove Tilde from System Settings → Keyboard → Input Sources.
-- Delete the Tilde app, `~/Library/Input Methods/InlineGhostIME.app`,
-  `~/Library/Application Support/Tilde`, and `~/Library/Logs/Tilde` for a full
-  local removal. Review the older-version locations above separately.
+- Turn off Tilde in System Settings → General → Login Items.
+- To remove current local data, delete the Tilde app,
+  `~/Library/Input Methods/InlineGhostIME.app`,
+  `~/Library/Application Support/Tilde`, `~/Library/Logs/Tilde`,
+  `~/Library/Preferences/bar.r3d.tilde.plist`, and
+  `~/Library/Preferences/bar.r3d.inputmethod.InlineGhost.plist`. Review the
+  older-version locations above separately.
 
 The [threat model](docs/security/threat-model.md) describes the trust granted to
 a macOS input method and the remaining local-process risks.
