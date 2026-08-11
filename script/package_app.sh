@@ -41,8 +41,10 @@ Options:
                             signing, notarizing, or uploading anything.
 
 This is intentionally fail-closed. It creates release artifacts only after the
-full test suite, non-mutating packaged-helper health/completion/socket
-observation, Apple notarization, stapling, and Gatekeeper assessment all pass.
+full test suite, isolated packaged-helper health/completion/socket observation,
+Apple notarization, stapling, and Gatekeeper assessment all pass. The proof may
+append privacy-safe diagnostics but leaves the daily driver and input method
+untouched.
 EOF
 }
 
@@ -220,6 +222,7 @@ RELEASE_PROOF_ACTIVE=1
 ./script/restart_app.sh --release-proof
 python3 script/check_runtime_network_egress.py \
   --app-binary "$APP/Contents/MacOS/Tilde" \
+  --port 17873 \
   --synthetic-helper-proof \
   --proof-out "$PROOF_DIR/runtime-socket-observation.json"
 ./script/restart_app.sh --release-proof --cleanup

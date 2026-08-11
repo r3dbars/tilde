@@ -4,6 +4,13 @@ import Testing
 
 @Suite("Runtime boundaries")
 struct RuntimeBoundaryTests {
+    @Test("Runtime base URL uses the injected port")
+    func injectedPort() {
+        let runtime = LlamaServerProcessHost(port: 19_001)
+
+        #expect(runtime.baseURL == URL(string: "http://127.0.0.1:19001"))
+    }
+
     @Test("Localhost requests never follow redirects")
     func redirectsAreRejected() async throws {
         let local = try #require(URL(string: "http://127.0.0.1:17872/completion"))

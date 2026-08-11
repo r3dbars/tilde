@@ -14,6 +14,13 @@ enum TildeLaunchMode: Equatable {
     }
 
     var allowsDailyDriverMutation: Bool { self == .production }
+
+    var llamaServerPort: Int {
+        switch self {
+        case .production: 17_872
+        case .releaseProof: 17_873
+        }
+    }
 }
 
 /// Tilde's brain-caretaker. The product is the InlineGhostIME input
@@ -25,7 +32,7 @@ enum TildeLaunchMode: Equatable {
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let launchMode: TildeLaunchMode
-    private let llamaServerHost = LlamaServerProcessHost()
+    private let llamaServerHost: LlamaServerProcessHost
     private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
@@ -35,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     init(launchMode: TildeLaunchMode = .production) {
         self.launchMode = launchMode
+        self.llamaServerHost = LlamaServerProcessHost(port: launchMode.llamaServerPort)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

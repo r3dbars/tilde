@@ -340,9 +340,19 @@ def selftest() -> None:
     assert not owns_exact_loopback_listener(0, "p4242\nn0.0.0.0:17872\n", 4242, 17872)
     assert not owns_exact_loopback_listener(0, "p4242\nn[::1]:17872\n", 4242, 17872)
     assert not owns_exact_loopback_listener(1, exact_listener, 4242, 17872)
+    proof_port = 17873
+    proof_server = ProcessRow(
+        4343,
+        4000,
+        f"/tmp/App With Spaces/llama-server --host 127.0.0.1 --port {proof_port}",
+    )
+    assert option_values(proof_server, "--port") == [str(proof_port)]
+    proof_listener = f"p4343\nn127.0.0.1:{proof_port}\n"
+    assert owns_exact_loopback_listener(0, proof_listener, 4343, proof_port)
+    assert not owns_exact_loopback_listener(0, exact_listener, 4242, proof_port)
     proof_app = ProcessRow(8, 1, "/tmp/Tilde.app/Contents/MacOS/Tilde --release-proof")
     assert proof_app.arguments == ["--release-proof"]
-    print("selftest OK: fixed request, strict argv, and exact loopback listener")
+    print("selftest OK: fixed request, strict argv, and configurable exact loopback listener")
 
 
 def observe(
@@ -439,7 +449,7 @@ def main() -> int:
     ]
     input_method_observation = "matching running input method observed"
     if args.synthetic_helper_proof:
-        input_method_observation = "not performed in non-mutating release-proof mode"
+        input_method_observation = "not performed in isolated release-proof mode"
         does_not_prove.insert(1, "input-method installation, execution, or authentication")
     else:
         proves[0] += " with a matching running input method"

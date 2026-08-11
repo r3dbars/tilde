@@ -202,6 +202,7 @@ struct TildeLaunchModeTests {
         let mode = TildeLaunchMode(arguments: ["Tilde"])
         #expect(mode == .production)
         #expect(mode?.allowsDailyDriverMutation == true)
+        #expect(mode?.llamaServerPort == 17_872)
     }
 
     @Test("Release proof mode forbids daily-driver mutation")
@@ -209,6 +210,7 @@ struct TildeLaunchModeTests {
         let mode = TildeLaunchMode(arguments: ["Tilde", "--release-proof"])
         #expect(mode == .releaseProof)
         #expect(mode?.allowsDailyDriverMutation == false)
+        #expect(mode?.llamaServerPort == 17_873)
     }
 
     @Test("Unknown or combined modes fail closed")
