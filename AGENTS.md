@@ -1,50 +1,50 @@
 # Tilde Agent Guide
 
-Open-source macOS autocomplete app; the owner daily-drives it. The bar for
-every change: does it make the app feel faster, more accurate, or simpler? If
-a change adds process instead of product, don't.
+Tilde is an open-source macOS input method for quiet, local autocomplete. The
+owner daily-drives it. Every change should make suggestions faster, more useful,
+safer, or simpler.
 
-## Product stance
+## Product rules
 
-- The test is simple: does inline help make writing feel easier, or does it get
-  annoying? A suggestion that never appears fails that test just as hard as an
-  annoying one.
-- Privacy is a hard requirement. Never store or transmit raw typed text,
-  prompts, model output, accepted text, or screenshots unless the user
-  explicitly opts in. Never print them in scripts or logs.
-- Keep the model runtime app-owned. Users must never need Ollama, llama.cpp,
-  Python, or any separate server. Mock engines are for dev/tests only.
-- Fail loudly, not silently. If the app can't suggest (no permission, no model,
-  broken field), the user should be able to see why.
+- Suggestions must help more than they interrupt. Silence and noise are both
+  failures.
+- Privacy is a hard requirement. Never store or print raw typed text, prompts,
+  model output, or accepted text, and never transmit them off-device.
+- The product is the input method. Render with IMKit marked text in the focused
+  app; do not add an Accessibility/overlay insertion path.
+- Inference is app-owned and bundled. Users must not install Ollama, llama.cpp,
+  Python, or a separate model server.
+- Do not add OCR, Screen Recording, screenshots, raw learning, writing history,
+  cloud sync, accept sounds, or hidden telemetry.
+- Show app, helper, and model status in the menu, and record input-method and
+  runtime failures in privacy-safe diagnostics.
 
-## Architecture rules
+## Architecture
 
-- `Sources/AutocompleteLabCore` — pure, deterministic Swift. All autocomplete
-  *decisions* live here as small policy types with focused tests. No AppKit,
-  Accessibility, MLX, or process management.
-- `Sources/AutocompleteLabApp` — the native shell: Accessibility, event taps,
-  insertion, overlay UI, MLX runtime. As little decision logic as possible.
-  `AppDelegate.swift` is oversized and being decomposed — shrink it, never
-  grow it.
-- Prefer deleting or merging policies over adding new ones. Before adding a
-  gate/suppressor/cooldown, check whether an existing one already covers it —
-  compounding independent thresholds is how this app once became silent.
-- Add or update tests with each behavior change.
+- `Sources/AutocompleteLabCore` is pure deterministic Swift. Suggestion
+  decisions belong here with focused tests. It has no AppKit, IMKit, process,
+  socket, or file-system work.
+- `Sources/InlineGhostIME` owns keystrokes, bounded document context, marked
+  text, and acceptance. Keep it responsive and thin.
+- `Sources/AutocompleteLabApp` owns the local Unix socket, bundled llama helper
+  and model lifecycle, input-method installation, menu, and redacted
+  diagnostics. It must never persist request or response text.
+- Prefer deleting or merging policy over adding another gate. Independent
+  thresholds compound into a silent product.
+- Add or update tests with every behavior change.
 
-## Keeping main green
+## Proof
 
-- Pre-merge gate: `./script/proof.sh fast` — whitespace, python byte-compile,
-  complexity budgets, harness self-tests, core `swift test`. CI runs exactly this
-  (`.github/workflows/fast-proof.yml`); enable locally on push with
-  `git config core.hookspath .githooks`.
-- `script/check_complexity_budget.sh` reports production Swift LOC,
-  `AppDelegate.swift` LOC, largest production files, scripts, and docs. For a
-  structural/refactor PR, run
-  `PROOF_STRUCTURAL_CHANGE=1 PROOF_DIFF_BASE=origin/main ./script/proof.sh fast`;
-  production Swift LOC must be net-negative. A justified exception requires
-  `PROOF_STRUCTURAL_LOC_EXCEPTION=1` and the same explanation in the PR
-  description.
-- Release gate (macOS, manual): `./script/release_check.sh` — bundle checks,
-  model asset, and the live network-egress privacy proof. All lanes blocking.
-- No new scripts without a consumer; no docs nothing reads; no per-folder
-  guide files (this file and CLAUDE.md at the root are the only two).
+- Pre-merge: `./script/proof.sh fast`
+- Structural change:
+  `PROOF_STRUCTURAL_CHANGE=1 PROOF_DIFF_BASE=origin/main ./script/proof.sh fast`
+- Release, on macOS: `./script/package_app.sh` with the pinned inputs shown by
+  `./script/package_app.sh --help`
+
+The release driver's bundle, embedded model, runtime, signing, notarization,
+Gatekeeper, and open-socket observation lanes are blocking. Open-socket
+observation is not packet capture. Keep deterministic proof separate from
+manual editor compatibility proof.
+
+Do not add a script without a real caller or a document without a durable
+reader. Root `AGENTS.md` and `CLAUDE.md` are the only agent guides.

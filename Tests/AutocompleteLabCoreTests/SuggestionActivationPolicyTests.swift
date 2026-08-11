@@ -15,6 +15,14 @@ struct SuggestionActivationPolicyTests {
         #expect(!SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: "y e"))
     }
 
+    @Test("Existing document text does not count as newly typed intent")
+    func existingDocumentDoesNotBypassSessionGate() {
+        let existingDocument = "A long document already at the caret"
+        #expect(existingDocument.count > SuggestionActivationPolicy.minimumTypedCharacters)
+        #expect(!SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: " "))
+        #expect(!SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: " a"))
+    }
+
     @Test("Three meaningful characters allow suggestions")
     func groundedInputAllowsSuggestions() {
         #expect(SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: "yes"))

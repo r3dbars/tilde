@@ -3,421 +3,169 @@ import Testing
 
 @Suite("Completion output cleaner")
 struct CompletionOutputCleanerTests {
-    @Test("Adds a leading space so insertion continues the sentence")
-    func addsLeadingSpace() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 3)
-        let suggestion = cleaner.clean("keep moving today")
+    private let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
-        #expect(suggestion?.visibleText == " keep moving today")
+    private func clean(
+        _ output: String,
+        after context: String? = nil
+    ) -> CompletionSuggestion? {
+        cleaner.cleanWithReason(output, after: context).suggestion
     }
 
-    @Test("Allows twenty visible words when the slider requests them")
-    func allowsTwentyVisibleWordsWhenSliderRequestsThem() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 20)
-        let suggestion = cleaner.clean(
-            "keep this sentence going with enough concrete words that the slider can show twenty useful words at once today now"
-        )
-
-        #expect(suggestion?.visibleWordCount == 20)
-        #expect(suggestion?.visibleText.hasSuffix("today now") == true)
+    private func reason(
+        _ output: String,
+        after context: String? = nil
+    ) -> CompletionCleanRejectionReason? {
+        cleaner.cleanWithReason(output, after: context).rejectionReason
     }
 
-    @Test("Removes thinking tags")
-    func removesThinkingTags() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 4)
-        let suggestion = cleaner.clean("<think>I should explain</think>keep it tiny")
+    @Test("Normalizes thinking, labels, spacing, and lines")
+    func normalizesOutputShape() {
+        let cases: [(String, String?, String)] = [
+            ("keep moving today", nil, " keep moving today"),
+            ("<think>I should explain</think>keep it tiny", nil, " keep it tiny"),
+            ("<think>keep moving", nil, " keep moving"),
+            ("ship this today\nbecause here is why", nil, " ship this today"),
+            ("Next words: keep moving today", "Let's", " keep moving today"),
+            ("candidate 1: keep moving today", "Let's", " keep moving today"),
+            (" ready now", "Already ", "ready now"),
+        ]
 
-        #expect(suggestion?.visibleText == " keep it tiny")
+        for (output, context, expected) in cases {
+            #expect(clean(output, after: context)?.visibleText == expected)
+        }
     }
 
-    @Test("Removes stray thinking markers")
-    func removesStrayThinkingMarkers() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 6)
+    @Test("Caps visible output once in CompletionSuggestion")
+    func capsVisibleOutput() {
+        let wordCapped = CompletionOutputCleaner(maxVisibleWords: 3).cleanWithReason(
+            "one two three four five",
+            after: nil
+        ).suggestion
+        let clamped = CompletionOutputCleaner(maxVisibleWords: 200).cleanWithReason(
+            (1...24).map { "word\($0)" }.joined(separator: " "),
+            after: nil
+        ).suggestion
 
-        #expect(cleaner.clean("<think> and I would like to see")?.visibleText == " and I would like to see")
-        #expect(cleaner.clean("make sure <think>")?.visibleText == " make sure")
+        #expect(wordCapped?.visibleText == " one two three")
+        #expect(clamped?.visibleText.split(whereSeparator: { $0.isWhitespace }).count == 20)
     }
 
-    @Test("Suppresses assistant meta text")
-    func suppressesAssistantMetaText() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+    @Test("Repairs a dangling tail exposed by the display cap")
+    func repairsCapInducedDangler() {
+        let suggestion = CompletionOutputCleaner(maxVisibleWords: 8).cleanWithReason(
+            "see if you had any thoughts on the details.",
+            after: nil
+        ).suggestion
 
-        #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
-        #expect(cleaner.clean("Okay, the user wants the next few words") == nil)
-        #expect(cleaner.clean("The user is trying to write a sentence") == nil)
-        #expect(cleaner.clean(
-            "1. **Analyze the Request",
-            after: "I am trying to say this in a way that feels"
-        ) == nil)
-        #expect(cleaner.clean("Thinking Process: analyze the request") == nil)
-        #expect(cleaner.clean("As an AI, I can help with that") == nil)
-        #expect(cleaner.clean("Here is a possible continuation") == nil)
-        #expect(cleaner.clean("It sounds like you want to keep going") == nil)
-        #expect(cleaner.clean("You could try another option") == nil)
+        #expect(suggestion?.visibleText == " see if you had any thoughts")
     }
 
-    @Test("Suppresses recommendation rewrite and next action candidates")
-    func suppressesRecommendationRewriteAndNextActionCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("Recommendation: keep this smaller", after: "Can we") == nil)
-        #expect(cleaner.clean("Rewrite: keep this smaller", after: "Can we") == nil)
-        #expect(cleaner.clean("Next action: open the logs", after: "Can we") == nil)
-        #expect(cleaner.clean("return the exact same question", after: "Can we") == nil)
-        #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
-        #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
-        #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
-        #expect(cleaner.clean("I'd recommend keeping this smaller", after: "Can we") == nil)
-        #expect(cleaner.clean("I would suggest opening the logs", after: "Can we") == nil)
-        #expect(cleaner.clean("you should open the logs", after: "Can we") == nil)
-        #expect(cleaner.clean("we need to make a plan", after: "Can we") == nil)
-        #expect(cleaner.clean("make sure to save the file", after: "Can we") == nil)
-        #expect(cleaner.clean("what I would do next is open the logs", after: "Can we") == nil)
-        #expect(cleaner.clean("one option is to rewrite the prompt", after: "Can we") == nil)
-        #expect(cleaner.clean("the next step would be to submit it", after: "Can we") == nil)
-        #expect(cleaner.clean("I think we should make a plan", after: "Can we") == nil)
-        #expect(cleaner.clean("keep this smaller", after: "Can we")?.visibleText == " keep this smaller")
+    @Test("Rejects unsafe hidden and control characters")
+    func rejectsUnsafeCharacters() {
+        for output in [
+            "safe\u{200B}text", "safe\u{200C}text", "safe\u{200D}text",
+            "safe\u{2060}text", "safe\u{FEFF}text", "safe\ttext",
+        ] {
+            #expect(reason(output) == .unsafeHiddenOrControlCharacter)
+        }
     }
 
-    @Test("Suppresses generic chat filler")
-    func suppressesGenericChatFiller() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+    @Test("Rejects empty and no-suggestion output")
+    func rejectsEmptyAndSentinel() {
+        let empty = ["", "   ", "<think>nothing useful</think>", "Next words:"]
+        let sentinels = [
+            "<NO_SUGGESTION>", "`<no_suggestion>`", "Next words: <NO_SUGGESTION>",
+            "Suffix: '<no_suggestion>'",
+        ]
 
-        #expect(cleaner.clean("That makes a lot of sense I would") == nil)
-        #expect(cleaner.clean("Absolutely, I can help with that") == nil)
-        #expect(cleaner.clean("comes to life", after: "The draft feels calmer when it") == nil)
-        #expect(cleaner.clean("the key features and benefits", after: "The review should focus on") == nil)
-        #expect(cleaner.clean("implement a comprehensive recovery plan", after: "The next step is to") == nil)
-        #expect(cleaner.clean("to acknowledge the user's point", after: "A good reply here would be") == nil)
-        #expect(cleaner.clean("Of course, here is a cleaner version") == nil)
-        #expect(cleaner.clean("I would like to help with that") == nil)
-        #expect(cleaner.clean("I will do that now.") == nil)
-        #expect(cleaner.clean("Let me know when it's done.") == nil)
-        #expect(cleaner.clean("integrate it seamlessly.") == nil)
-        #expect(cleaner.clean("enhance the experience") == nil)
-        #expect(cleaner.clean("boost productivity across the team") == nil)
-        #expect(cleaner.clean("like a formal announcement") == nil)
-        #expect(cleaner.clean("streamline the workflow for everyone") == nil)
-        #expect(cleaner.clean("unlock efficiency at scale") == nil)
-        #expect(cleaner.clean("make users more productive") == nil)
-        #expect(cleaner.clean("save time and effort") == nil)
+        for output in empty { #expect(reason(output) == .emptyOutput) }
+        for output in sentinels { #expect(reason(output) == .noSuggestionSentinel) }
     }
 
-    @Test("Suppresses unsafe prompt action suggestions")
-    func suppressesUnsafePromptActionSuggestions() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+    @Test("Rejects current scaffold, persona, and reasoning leaks")
+    func rejectsInstructionLeaks() {
+        let leaks = [
+            "The following are real chat messages being written by their authors, continued naturally.",
+            "The following are real emails being written by their authors, continued naturally.",
+            "The following are real documents being written by their authors, continued naturally.",
+            "System: continue this", "Assistant: here is the answer",
+            "Thinking Process: analyze the request", "Okay, let's see what comes next",
+            "Okay, the user is trying to write",
+            "I'm sorry, but as an AI chatbot developed", "I cannot assist with that request",
+            "As a language model I cannot say", "I am an AI language model",
+            "I'm an AI assistant",
+            "candidate 1", "Next 3-8 words, or <NO_SUGGESTION>",
+        ]
 
-        #expect(cleaner.clean("Press Enter to send the prompt", after: "Now") == nil)
-        #expect(cleaner.clean("and press Enter to send", after: "Now wait") == nil)
-        #expect(cleaner.clean("press Tab to accept the whole suggestion", after: "Then") == nil)
-        #expect(cleaner.clean("press Shift-Tab to accept all visible text", after: "Then") == nil)
-        #expect(cleaner.clean("press Option-Tab to accept all visible text", after: "Then") == nil)
-        #expect(cleaner.clean("use Backtick to accept all visible text", after: "Then") == nil)
-        #expect(cleaner.clean("accept the terms", after: "For the manual smoke row, press Tab and confirm") == nil)
-        #expect(cleaner.clean("and accept the change", after: "For the manual smoke row, press Tab and confirm") == nil)
-        #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
-        #expect(cleaner.clean("then submit it", after: "Check once") == nil)
-        #expect(cleaner.clean("click send", after: "Next") == nil)
-        #expect(cleaner.clean("run this command in Claude Code", after: "Please") == nil)
-        #expect(cleaner.clean("/review this", after: "Can you") == nil)
-        #expect(cleaner.clean("@file", after: "Attach") == nil)
-        #expect(cleaner.clean("!shell", after: "Now") == nil)
-        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
-        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
-        #expect(cleaner.clean("approve", after: "Permission") == nil)
-        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
-        #expect(cleaner.clean("keep the public fixture local", after: "Now")?.visibleText == " keep the public fixture local")
-        #expect(cleaner.clean("/review this", after: "Can you") == nil)
-        #expect(cleaner.clean("@file", after: "Attach") == nil)
-        #expect(cleaner.clean("!shell", after: "Now") == nil)
-        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
-        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
-        #expect(cleaner.clean("approve", after: "Permission") == nil)
-        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
+        for output in leaks { #expect(reason(output, after: "Can we") == .promptInstructionEcho) }
+        #expect(clean("I'm sorry about the delay", after: "Hey") != nil)
+        #expect(clean("suffixes are common in English", after: "Grammar note: ") != nil)
     }
 
-    @Test("Suppresses visible OCR chrome suggestions")
-    func suppressesVisibleOCRChromeSuggestions() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+    @Test("Trims exact and partial typed-prefix overlap")
+    func trimsTypedPrefixOverlap() {
+        let cases: [(String, String, String?)] = [
+            ("Hey there friend.", "Hey", " there friend."),
+            ("hello and welcome", "hello and w", "elcome"),
+            ("I want this to feel smoother", "I want this", " to feel smoother"),
+            ("Know you are", "I know you are", nil),
+        ]
 
-        #expect(cleaner.clean("Untitled 13", after: "Can I do the things that") == nil)
-        #expect(cleaner.clean("New chat Search Plugins", after: "I want this to") == nil)
-        #expect(cleaner.clean("Helvetica Regular", after: "Make the text") == nil)
-        #expect(cleaner.clean("**Ep quadrant**", after: "We need to keep iterating") == nil)
-        #expect(cleaner.clean("Ep claudebrain", after: "We need to keep iterating") == nil)
-        #expect(cleaner.clean("next to the cursor", after: "I want this to show")?.visibleText == " next to the cursor")
+        for (output, context, expected) in cases {
+            #expect(clean(output, after: context)?.visibleText == expected)
+        }
     }
 
-    @Test("Suppresses assistant replies when user is drafting an agent request")
-    func suppressesAssistantRepliesForAgentRequests() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("I'll inspect the file now", after: "Can you") == nil)
-        #expect(cleaner.clean("First, open the logs", after: "Please debug this") == nil)
-        #expect(cleaner.clean("we need to check the trace", after: "Could you look at") == nil)
-        #expect(cleaner.clean("I'll bring snacks", after: "Tomorrow")?.visibleText == " I'll bring snacks")
+    @Test("Does not invent an overlap for an empty trailing fragment")
+    func preservesSuggestionAfterPunctuation() {
+        #expect(clean("apple", after: ".")?.visibleText == " apple")
+        #expect(clean("hello", after: "hello.")?.visibleText == " hello")
     }
 
-    @Test("Uses only first line")
-    func usesOnlyFirstLine() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-        let suggestion = cleaner.clean("ship this today\nbecause here is why")
-
-        #expect(suggestion?.visibleText == " ship this today")
-    }
-
-    @Test("Suppresses candidates that start another sentence")
-    func suppressesCandidatesThatStartAnotherSentence() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("ready. Then we can send it", after: "The draft is") == nil)
-        #expect(cleaner.clean("ready.", after: "The draft is")?.visibleText == " ready.")
-    }
-
-    @Test("Suppresses repeated list marker candidates")
-    func suppressesRepeatedListMarkerCandidates() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("[ ] Review all reports", after: "- [ ] Keep every quality check") == nil)
-        #expect(cleaner.clean("Review all reports", after: "- [ ] Keep every quality check")?.visibleText == " Review all reports")
-    }
-
-    @Test("Strips echoed prompt labels")
-    func stripsEchoedPromptLabels() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
-        #expect(cleaner.clean("candidate 1: keep moving today", after: "Let's")?.visibleText == " keep moving today")
-        #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        // A word completion that runs past the word boundary keeps its first
-        // word instead of vanishing (rejecting these swallowed nearly every
-        // mid-word final live — partials showed, finals disappeared).
-        #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        // Full-word restatement with trailing continuation: the prefix trimmer
-        // converts " dictation" to the suffix, the word-scope keeps only it.
-        #expect(cleaner.clean(" dictation is fun", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        // A completion that starts a NEW common word instead of finishing the
-        // fragment is still rejected (would render as glued-together garbage).
-        #expect(cleaner.clean("hello there", after: "walki", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean(
-            "occured -> occurred",
-            after: "Correct this spelling: occured ->"
-        )?.visibleText == " occurred")
-        #expect(cleaner.clean("Next words:", after: "Let's") == nil)
-    }
-
-    @Test("Suppresses prompt instruction echoes")
-    func suppressesPromptInstructionEchoes() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("Before cursor: hello and w", after: "hello and w") == nil)
-        #expect(cleaner.clean("before cursor", after: "Can we") == nil)
-        #expect(cleaner.clean("candidate 1", after: "Can we") == nil)
-        #expect(cleaner.clean("Inline autocomplete. Return only the continuation.", after: "Can we") == nil)
-        #expect(cleaner.clean("Return only the next few words.", after: "Can we") == nil)
-        #expect(cleaner.clean("No spaces or punctuation.", after: "hel", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("Continue the current sentence naturally.", after: "Can we") == nil)
-        #expect(cleaner.clean("Start the next sentence if needed.", after: "We shipped it.") == nil)
-    }
-
-    @Test("Suppresses bare answer-label echoes without colons")
-    func suppressesBareAnswerLabelEchoes() {
-        // Models sometimes reply with the literal name of the answer field
-        // ("Suffix" appeared as a ghost during dogfood). Colon-less echoes slip
-        // past prefix stripping, so a whole-output label match must reject.
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("Suffix", after: "it is intere", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("suffix", after: "it is intere", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("Next words", after: "Can we") == nil)
-        #expect(cleaner.clean("Next 3-8 words, or <NO_SUGGESTION>", after: "Can we") == nil)
-        // Real completions that merely CONTAIN a label word still pass.
-        #expect(cleaner.clean("sting", after: "it is intere", mode: .wordCompletion) != nil)
-        #expect(cleaner.clean("suffixes are common in English", after: "Grammar note: ") != nil)
-    }
-
-    @Test("Suppresses assistant-persona leaks")
-    func suppressesAssistantPersonaLeaks() {
-        // Seen live: with an AI conversation on screen, the model slipped into
-        // chatbot persona ("I'm sorry, but as an AI chatbot developed"). Persona
-        // markers anywhere in a candidate must kill it; plain human apologies
-        // remain legitimate continuations.
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("I'm sorry, but as an AI chatbot developed", after: "the message you gave us? ") == nil)
-        #expect(cleaner.clean("As a language model I cannot say", after: "what do you think? ") == nil)
-        #expect(cleaner.clean("I cannot assist with that request", after: "can you help ") == nil)
-        #expect(cleaner.clean("I'm sorry about the delay", after: "Hey, I missed the meeting. ") != nil)
-    }
-
-    @Test("Suppresses no suggestion sentinel outputs")
-    func suppressesNoSuggestionSentinelOutputs() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("<NO_SUGGESTION>", after: "Can we") == nil)
-        #expect(cleaner.clean("<no_suggestion>", after: "Can we") == nil)
-        #expect(cleaner.clean("`<NO_SUGGESTION>`", after: "Can we") == nil)
-        #expect(cleaner.clean("Next words: <NO_SUGGESTION>", after: "Can we") == nil)
-        #expect(cleaner.clean("Suffix: '<no_suggestion>'", after: "dic", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("<think>no confident suffix</think><NO_SUGGESTION>", after: "dic", mode: .wordCompletion) == nil)
-    }
-
-    @Test("Trims repeated typed prefix from real model output")
-    func trimsRepeatedTypedPrefix() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("Hey there friend.", after: "Hey")?.visibleText == " there friend.")
-        #expect(cleaner.clean("Know you are", after: "I know you are") == nil)
-        #expect(cleaner.clean("hello and welcome", after: "hello and w")?.visibleText == "elcome")
-    }
-
-    @Test("Allows one word phrase completions for snappy mode")
-    func allowsOneWordPhraseCompletionsForSnappyMode() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("there.", after: "Hey")?.visibleText == " there.")
-        #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
-    }
-
-    @Test("Suppresses completions that restart the current sentence")
-    func suppressesCurrentSentenceRestarts() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean(
-            "I want this app to feel smoother",
-            after: "I want this to feel"
-        ) == nil)
-        #expect(cleaner.clean(
-            "I want this to feel smoother",
-            after: "I want this"
-        )?.visibleText == " to feel smoother")
-        #expect(cleaner.clean(
-            "I want smoother",
-            after: "I want this"
-        ) == nil)
-        #expect(cleaner.clean(
-            "the launch plan",
-            after: "We should keep the launch small"
-        ) == nil)
-        #expect(cleaner.clean(
-            "launch small enough",
-            after: "We should keep the launch small"
-        )?.visibleText == " enough")
-    }
-
-    @Test("Suppresses one word twitch completions")
-    func suppressesLowValueOneWordPhraseCompletions() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("it", after: "I think") == nil)
-        #expect(cleaner.clean("I", after: "Today") == nil)
-        #expect(cleaner.clean("we.", after: "I think") == nil)
-        #expect(cleaner.clean("you", after: "Can") == nil)
-        #expect(cleaner.clean("is.", after: "The answer") == nil)
-        #expect(cleaner.clean("the", after: "This is") == nil)
-        #expect(cleaner.clean("ready.", after: "I know you are")?.visibleText == " ready.")
-    }
-
-    @Test("Allows single token word completion suffixes")
-    func allowsSingleTokenWordCompletionSuffixes() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        // Runs past the word boundary → first word kept, not swallowed.
-        #expect(cleaner.clean("tation next", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-    }
-
-    @Test("Suppresses unrelated whole words in word completion mode")
-    func suppressesUnrelatedWholeWordsInWordCompletionMode() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("different", after: "dic", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("the", after: "dic", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("dictation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-        #expect(cleaner.clean("tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
-    }
-
-    @Test("Suppresses punctuation in word completion suffixes")
-    func suppressesPunctuationInWordCompletionSuffixes() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.clean("ing.", after: "walk", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("ing,", after: "walk", mode: .wordCompletion) == nil)
-        #expect(cleaner.clean("ing", after: "walk", mode: .wordCompletion)?.visibleText == "ing")
-    }
-
-    @Test("Suppresses suggestions that parrot earlier field text")
-    func suppressesSuggestionsThatParrotEarlierFieldText() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-        let context = """
-        I know you are
+    @Test("Rejects obvious current and earlier context replay")
+    func rejectsContextReplay() {
+        let earlier = """
+        I know you are ready to help
 
         Hey how are you
         """
+        let current = "Intelligence of a person is interesting and something that I value"
 
-        #expect(cleaner.clean("know you are ready", after: context) == nil)
+        #expect(reason("know you are ready", after: earlier) == .replaysContext)
+        #expect(reason("Intelligence of a person can vary", after: current) == .replaysContext)
+        #expect(clean("the way they connect ideas", after: current)?.visibleText == " the way they connect ideas")
     }
 
-    @Test("Suppresses model continuations that replay the current sentence")
-    func suppressesModelContinuationsThatReplayTheCurrentSentence() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-        let context = "Intelligence of a person is interesting and something that I base intelligence off"
+    @Test("Allows ordinary prose instead of judging style")
+    func allowsFormerSubjectiveBlacklistPhrases() {
+        let ordinaryProse = [
+            "Absolutely, I can help with that", "You should open the logs",
+            "Press Enter to send the prompt", "the key features and benefits",
+            "I think we should make a plan", "it",
+            "ready. Then we can send it", "- review all reports",
+            "The user asked for a clearer report", "User is the subject of this paragraph",
+            "The language model section needs edits", "Our AI assistant demo starts tomorrow",
+            "Research on an AI chatbot is moving quickly",
+            "We describe Tilde as an AI assistant for writers",
+            "As an airline, we publish the schedule", "As an assistant, I scheduled the meeting",
+            "As an AI assistant, Tilde predicts a short continuation",
+            "As an AI-powered tool, Tilde runs locally",
+            "Before cursor movement, save the selection", "Return only one file to the shelf",
+        ]
 
-        #expect(cleaner.clean(
-            "Intelligence of a person is interesting and something that I base intelligence of",
-            after: context
-        ) == nil)
-        #expect(cleaner.clean(
-            "something that I base intelligence of Intelligence",
-            after: context
-        ) == nil)
-        #expect(cleaner.clean(
-            "the way they connect ideas",
-            after: context
-        )?.visibleText == " the way they connect ideas")
+        for output in ordinaryProse { #expect(clean(output, after: "Now") != nil) }
     }
 
-    @Test("Allows normal continuations even when earlier context exists")
-    func allowsNormalContinuationsWithEarlierContext() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-        let context = """
-        I know you are
+    @Test("Reports privacy-safe rejection reasons without candidate text")
+    func reportsReasons() {
+        let result = cleaner.cleanWithReason(
+            "private\u{200B}text",
+            after: "private typed text"
+        )
 
-        Can we make this feel
-        """
-
-        #expect(cleaner.clean("instant and calm", after: context)?.visibleText == " instant and calm")
-    }
-
-    @Test("Returns nil for empty output")
-    func nilForEmptyOutput() {
-        let cleaner = CompletionOutputCleaner()
-
-        #expect(cleaner.clean("   ") == nil)
-    }
-
-    @Test("Reports privacy-safe output rejection reasons")
-    func reportsOutputRejectionReasons() {
-        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
-
-        #expect(cleaner.cleanWithReason("   ") == .rejected(.emptyOutput))
-        #expect(cleaner.cleanWithReason("<NO_SUGGESTION>") == .rejected(.noSuggestionSentinel))
-        #expect(cleaner.cleanWithReason("press Enter to send", after: "Now") == .rejected(.unsafePromptAction))
-        #expect(cleaner.cleanWithReason("dictation", after: "dic", mode: .wordCompletion).suggestion?.visibleText == "tation")
-    }
-
-    @Test("Cleaner result exposes redacted trace metadata")
-    func cleanerResultExposesRedactedTraceMetadata() {
-        let rejected = CompletionCleanResult.rejected(.lowSignalPhrase)
-        let accepted = CompletionCleanResult.accepted(CompletionSuggestion(text: " ready now"))
-
-        #expect(rejected.traceMetadata == [
-            "completionCleanResult": "rejected",
-            "completionCleanRejectionReason": "lowSignalPhrase"
-        ])
-        #expect(accepted.traceMetadata == ["completionCleanResult": "accepted"])
-        #expect(!rejected.traceMetadata.values.contains("private typed text"))
+        #expect(result.rejectionReason == .unsafeHiddenOrControlCharacter)
+        #expect(result.suggestion == nil)
+        #expect(result.rejectionReason?.rawValue == "unsafeHiddenOrControlCharacter")
     }
 }

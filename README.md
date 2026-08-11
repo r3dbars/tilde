@@ -2,66 +2,80 @@
 
 ![Tilde cover](Assets/GitHub/tilde-cover.png)
 
-Tilde is an open-source macOS menu bar app for quiet, local inline writing
-suggestions. It watches the focused text field through Accessibility, shows a
-short ghost-text suggestion near the caret, and inserts text only when you
-accept it. All inference runs on-device with MLX on Apple Silicon — no cloud,
-no telemetry, no separate model server.
+Tilde is an open-source macOS input method that offers quiet inline writing
+suggestions. Type normally, then use:
 
-- `Tab` accepts the next word
-- `Shift-Tab` accepts the whole visible suggestion
-- `Esc` dismisses
+- `Tab` to accept the whole suggestion
+- `Esc` to dismiss
 
-## Status
+Suggestions are IMKit marked text inside the app where you are writing. Tilde
+does not use an overlay, Accessibility, Screen Recording, OCR, or synthetic
+paste events.
 
-Beta, and honestly labeled as such. It works best in TextEdit, Apple Notes,
-Obsidian, and browser text areas; other apps go through a generic Accessibility
-path and can be paused individually when placement or insertion misbehaves.
-Prompt surfaces stay conservative (one word, fail-closed); terminal emulators,
-secure fields, and sensitive fields are hard-blocked.
+## How it works
 
-## Requirements
+Tilde ships as one self-contained, signed package:
 
-- Apple Silicon Mac, macOS 26+
-- Xcode 26 toolchain (SwiftPM package, no project file)
-- ~4 GB disk for the local model asset
+1. `InlineGhostIME` handles keystrokes and marked-text display.
+2. The Tilde menu-bar app receives bounded context over an owner-only local
+   Unix socket.
+3. The app runs its bundled `llama-server` helper and bundled GGUF model as a
+   child process. Users do not install or run a model server.
 
-## Build and run
+Typed context and model output stay in memory. Tilde has no cloud inference,
+analytics, raw-text learning, screenshots, or accept sounds.
 
-```bash
-git clone https://github.com/r3dbars/tilde
-cd tilde
-./script/build_and_run.sh          # builds the bundle and launches it
-```
+## Status and requirements
 
-The app asks for Accessibility permission on first launch, and opens Settings
-to install the local model if the asset is missing. `build_and_run.sh --verify`
-builds and validates without launching.
+Tilde is beta software for Apple Silicon Macs running macOS 26 or newer. The
+input method must be enabled once in System Settings. IMKit behavior varies by
+editor; see the [compatibility guide](docs/compatibility/app-compatibility-runbook.md).
 
 ## Development
 
+The project is a Swift 6.2 package with no Xcode project file.
+
 ```bash
-./script/proof.sh fast             # the pre-merge gate (CI runs exactly this)
-swift test --jobs 1                # full suite
-./script/smoke_test.sh             # full suite + bundle verify (macOS)
-./script/release_check.sh          # release gate incl. live network-egress proof
+./script/proof.sh fast
+./script/build_and_run.sh
+./script/build_ime.sh
 ```
 
-Enable the pre-push hook once with `git config core.hookspath .githooks`.
+The two build scripts create development bundles; they do not contain the
+release model or helper. By default, both require the one eligible Apple
+Development identity in the keychain, so the app and IME receive matching,
+non-empty Team IDs. If multiple identities exist, pass the same exact SHA-1 to
+both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles,
+which cannot exercise the authenticated app-to-IME runtime.
+`script/proof.sh fast` is the pre-merge gate.
+`script/package_app.sh` is the single manual release driver; it requires exact
+SHA-256 pins for the helper and
+model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
+open-socket observation checks. Run `./script/package_app.sh --help` for its
+required release inputs. Its isolated runtime lane observes only the exact
+packaged app and helper on a dedicated port. It may append privacy-safe
+diagnostics, but it does not quit or change the daily driver or input method;
+IME/editor/authenticated-socket proof stays manual.
+The pins must come from human review: matching bytes and valid file shapes do
+not prove where a helper or model came from.
 
-Architecture in one paragraph: `Sources/AutocompleteLabCore` is pure,
-deterministic Swift — every decision about when to request, show, accept, or
-suppress a suggestion lives there as a small tested policy type.
-`Sources/AutocompleteLabApp` is the native shell — Accessibility reading,
-keyboard event tap, text insertion, the overlay panel, and the MLX runtime.
-See `AGENTS.md` for the working rules.
+For private, aggregate-only model comparisons, see the
+[evaluation guide](docs/evaluation.md).
+
+Production code has three parts:
+
+- `Sources/AutocompleteLabCore`: pure, deterministic suggestion policy
+- `Sources/InlineGhostIME`: IMKit input and marked-text presentation
+- `Sources/AutocompleteLabApp`: local socket, app-owned llama lifecycle, menu,
+  installation, and redacted diagnostics
+
+Read [AGENTS.md](AGENTS.md) before changing behavior.
 
 ## Privacy
 
-Local-first is a hard product requirement. Typed text, context, prompts, model
-output, and screenshots never leave the machine; diagnostics are redacted by
-default; and the release gate includes a live check that the running app opens
-no unexpected network sockets. Details in [PRIVACY.md](PRIVACY.md).
+Tilde processes writing locally and does not retain raw typed text, prompts,
+model output, or accepted text. See [PRIVACY.md](PRIVACY.md) and the current
+[threat model](docs/security/threat-model.md).
 
 ## License
 

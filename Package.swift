@@ -8,10 +8,6 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
-        .library(
-            name: "AutocompleteLabCore",
-            targets: ["AutocompleteLabCore"]
-        ),
         .executable(
             name: "Tilde",
             targets: ["AutocompleteLabApp"]
@@ -21,7 +17,6 @@ let package = Package(
             targets: ["InlineGhostIME"]
         )
     ],
-    dependencies: [],
     targets: [
         .target(
             name: "AutocompleteLabCore"
@@ -29,16 +24,14 @@ let package = Package(
         .executableTarget(
             name: "InlineGhostIME",
             dependencies: ["AutocompleteLabCore"],
-            exclude: ["Info.plist", "README.md"],
+            exclude: ["Info.plist"],
             // IMKit's un-annotated types fight Swift 6 strict concurrency; the IME
             // stays in Swift 5 mode until the controller is modernized.
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
             name: "AutocompleteLabApp",
-            dependencies: [
-                "AutocompleteLabCore",
-            ]
+            dependencies: ["AutocompleteLabCore"]
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
@@ -46,7 +39,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AutocompleteLabAppTests",
-            dependencies: ["AutocompleteLabApp"]
+            dependencies: ["AutocompleteLabApp", "InlineGhostIME"]
         )
     ]
 )

@@ -1,17 +1,25 @@
-name: Fast proof gate (manual hosted)
-
-# The authoritative Fast Proof is local: ./script/proof.sh fast. This hosted
-# copy is manual-only so runner availability, billing, and spending limits
-# cannot turn an otherwise locally proven PR into a branch or PR gate.
-# Deterministic local proof and manual app proof remain separate from this
-# optional hosted observation lane.
-#
-# The byte-compile and self-test steps live inside proof.sh, so developers have
-# the same local source of truth before pushing.
+name: Fast proof gate
 
 on:
-  # Intentionally no pull_request or push trigger. A manual run is useful when
-  # hosted runners are available, but it is never a required PR check.
+  pull_request:
+    paths:
+      - "Sources/**"
+      - "Tests/**"
+      - "Assets/**"
+      - "script/**"
+      - "Package.swift"
+      - "Package.resolved"
+      - ".github/workflows/fast-proof.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Sources/**"
+      - "Tests/**"
+      - "Assets/**"
+      - "script/**"
+      - "Package.swift"
+      - "Package.resolved"
+      - ".github/workflows/fast-proof.yml"
   workflow_dispatch:
 
 permissions:
@@ -22,68 +30,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  manual-fast-proof:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Full history keeps the manual run's checkout suitable for diff checks.
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Fast proof tier (script/proof.sh fast)
-        run: bash script/proof.sh fast
-        env:
-          # The Swift suite needs macOS + Apple Silicon + the MLX runtime, and
-          # even the core filter has to resolve the MLX-laden package graph, so
-          # skip it on the Linux runner (it has a swift toolchain, but can't run
-          # this package). Swift still runs locally and in the pre-push hook.
-          PROOF_SKIP_SWIFT: "1"
-          # Compare every manual run with the current default branch.
-          PROOF_DIFF_BASE: origin/main
-
-  manual-fast-proof-macos:
+  fast-proof:
     runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history keeps the manual run's checkout suitable for diff checks.
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Select newest Xcode
-        run: |
-          sudo xcode-select --switch /Applications/Xcode_26.6.app
-          xcodebuild -version
+      - name: Toolchain
+        run: xcodebuild -version
 
-      - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/org.swift.swiftpm
-            .build
-          # .build contains the patched dependency checkout. Keep this exact so a
-          # changed patch or patch script can never restore already-patched stale code.
-          key: macos-26-swiftpm-${{ hashFiles('Package.resolved', 'patches/mlx-swift-lm/**', 'script/patch_mlx_swift_lm.sh') }}
-
-      - name: Resolve Swift package graph
-        run: swift package resolve
-
-      - name: Patch resolved MLX Swift LM dependency
-        run: ./script/patch_mlx_swift_lm.sh
-
-      - name: Fast proof tier with Swift tests (script/proof.sh fast)
+      - name: Full proof
         run: bash script/proof.sh fast
         env:
-          # This lane exists to exercise Swift. Never allow proof.sh's generic
-          # no-toolchain fallback to turn the Swift test into a successful skip.
-          PROOF_REQUIRE_SWIFT: "1"
-          # Compare every manual run with the current default branch.
           PROOF_DIFF_BASE: origin/main

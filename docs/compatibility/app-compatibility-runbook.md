@@ -1,98 +1,69 @@
-# App Compatibility Runbook
+# App Compatibility Guide
 
-This runbook defines what "works" means for the Mac tilde.
+Tilde is a macOS input method. Compatibility depends on how each app implements
+IMKit marked text and routes `Tab` and `Esc`. It does not depend on
+Accessibility roles, caret geometry, overlays, the clipboard, or synthetic
+insertion.
 
-The MVP goal is not broad support. It is a small allowlist that proves the writing loop feels helpful and does not break trust.
+## Before testing
 
-## Ground Rules
+1. Install a signed and notarized `InlineGhostIME.app`.
+2. Add Tilde in System Settings → Keyboard → Input Sources.
+3. Switch to Tilde from the input menu.
+4. Run the Tilde app and confirm its bundled model is ready.
+5. Start with a disposable TextEdit document before testing another editor.
 
-- Keep the app allowlisted while testing.
-- Use the bundle ID, not the visible app name, as the support key.
-- Never show suggestions in secure or password-like fields.
-- Do not store or send typed text unless the user explicitly turns that on.
-- Do not require Ollama, llama.cpp, or another user-managed model server.
-- Weird editors should start blocked or detect-only until there is clear evidence they behave well.
+Never test with private writing. Do not capture or attach typed text or
+screenshots.
 
-## Compatibility Ladder
+With the packaged app in `dist/`, restart it deliberately, then run the
+disposable TextEdit and Chrome smoke lanes:
 
-| Rung | Name | Meaning | Promotion Gate |
-| --- | --- | --- | --- |
-| 0 | Blocked | The app should not request or show suggestions. | Default for unknown, secure, or unsafe surfaces. |
-| 1 | Detect | The lab can identify the frontmost app, focused editable element, nearby text, and caret rectangle. | No raw text leakage in logs, and no suggestions in the wrong app. |
-| 2 | Suggest | A local suggestion appears near the caret and dismisses cleanly. | `Esc`, continued typing, and app switch all remove the suggestion. |
-| 3 | Accept | The user can accept text without breaking the editor. | `Tab` accepts the next word, `Shift-Tab` accepts the visible suggestion, backtick stays normal typed text, and no literal tab is inserted. |
-| 4 | Stable Beta | The app survives normal writing in that editor. | 15 minutes of typing with no stuck panel, wrong-field insert, clipboard damage, crash, or focus theft. |
-| 5 | Supported Candidate | The editor is safe enough to consider default support. | Two testers pass Rung 4 on separate machines and report that suggestions help more than they annoy. |
-
-TextEdit should reach Rung 4 first. Notes, Obsidian, and Mail should reach Rung 3 before adding more apps.
-
-## Target App Matrix
-
-| Priority | App | Bundle ID | Current Policy | Target Rung | Pass Focus |
-| --- | --- | --- | --- | --- | --- |
-| P0 | TextEdit | `com.apple.TextEdit` | MVP allowlist | 4 | Baseline plain/rich text writing loop. |
-| P0 | Notes | `com.apple.Notes` | MVP allowlist | 3 | Rich text field detection, clean dismiss, safe insertion. |
-| P0 | Obsidian | `md.obsidian` | MVP allowlist | 3 | Electron editor caret geometry and key handling. |
-| P0 | Mail | `com.apple.mail` | MVP allowlist | 3 | Compose body only; avoid recipient, search, and account fields. |
-| P1 | Safari | `com.apple.Safari` | Not allowlisted | 1 | Web editor detection only; do not broaden until MVP apps pass. |
-| P1 | Chrome | `com.google.Chrome` | Not allowlisted | 1 | Web editor detection only; expect per-site variation. |
-| P2 | VS Code | `com.microsoft.VSCode` | Not allowlisted | 1 | Treat as a weird editor because custom text surfaces and keybindings can fight insertion. |
-
-Capture any new bundle ID before adding it to the matrix:
-
-```sh
-osascript -e 'id of app "TextEdit"'
-defaults read /Applications/Obsidian.app/Contents/Info CFBundleIdentifier
+```bash
+./script/restart_app.sh
+./script/real_app_smoke.sh textedit
+./script/real_app_smoke.sh chrome --fixture textarea
 ```
 
-## Pass Criteria
+They require permission for the invoking terminal to automate the fixture app.
+They prove a request was served, not that marked text rendered correctly; the
+visual and key-routing checks below remain manual.
 
-An app passes its rung only when all criteria below that rung also pass.
+## Pass criteria
 
-- The lab sees the correct frontmost app bundle ID.
-- Suggestions only appear after enough typed context.
-- Suggestions do not appear in empty, secure, password, recipient, search, or non-writing fields.
-- The suggestion appears close to the caret and does not cover the text being typed.
-- Warm suggestion latency usually stays under 700ms.
-- `Esc` dismisses without inserting text.
-- Continued typing refreshes or dismisses without leaving a stale suggestion.
-- `Tab` accepts the next word only while a suggestion is visible.
-- `Shift-Tab` accepts the whole visible suggestion only while a suggestion is visible.
-- Backtick/tilde stays normal typed text, including in Markdown editors.
-- Clipboard fallback preserves the user's clipboard.
-- Switching apps or losing focus clears the suggestion.
-- Local logs do not contain raw typed text.
+An editor is compatible only when all of these hold:
 
-## Fail Criteria
+- Printable keys appear immediately and exactly once.
+- A suggestion appears as marked text after enough context.
+- Continued typing replaces or dismisses stale marked text cleanly.
+- `Tab` accepts the full visible suggestion only while it is visible.
+- `Shift-Tab` keeps the host app's normal behavior.
+- `Esc` dismisses without changing committed text.
+- Backspace, arrows, shortcuts, undo, dead keys, accents, and key repeat keep
+  their normal jobs.
+- Switching fields, windows, apps, or input sources clears stale suggestions.
+- Form navigation still works when no suggestion is visible.
+- Fifteen minutes of normal typing causes no duplicate text, lost text, focus
+  change, stuck composition, crash, or meaningful input lag.
 
-Stop the test and drop the app back one rung if any of these happen:
+Treat each app and major app version as separate evidence. TextEdit passing does
+not prove a browser, Electron editor, or custom canvas.
 
-- Text is inserted into the wrong app or wrong field.
-- A secure or password-like field shows a suggestion.
-- `Tab` is swallowed when no suggestion is visible.
-- A literal tab appears when accepting a suggestion.
-- The panel stays visible after focus changes.
-- The editor crashes, hangs, or loses user text.
-- The clipboard is not restored after insertion fallback.
-- The bundle ID cannot be reliably captured.
+## Stop conditions
 
-## Weird Editor Escalation
+Stop and mark the editor unsupported if Tilde:
 
-Use this path for editors with custom canvases, web views, terminals, code editors, or strange Accessibility behavior.
+- changes or loses committed text,
+- inserts a suggestion without explicit acceptance,
+- consumes `Tab` or `Esc` with no visible suggestion,
+- leaves marked text in the wrong field or app,
+- breaks composition, autocorrect, password entry, or another input source, or
+- requires Accessibility, Screen Recording, a manual model server, or a
+  per-editor insertion adapter.
 
-1. Reproduce the same prompt in TextEdit. If TextEdit fails too, fix the general loop first.
-2. Record app name, app version, bundle ID, macOS version, rung attempted, and the smallest prompt that fails.
-3. Classify the failure:
-   - Missing focused element, text, or caret rectangle: keep blocked or detect-only.
-   - Wrong panel position: geometry issue.
-   - `Tab` conflict or literal tab: key routing or insertion issue.
-   - Wrong-field insert: privacy and focus issue.
-   - Clipboard damage: insertion fallback issue.
-   - Browser or Electron mismatch: possible per-app adapter, not broad support.
-4. Pick one outcome:
-   - Promote if the app passes the target rung cleanly.
-   - Keep detect-only if suggestions are useful but insertion is risky.
-   - Block if privacy, focus, or secure-field behavior is unsafe.
-   - Defer if support needs editor-specific work that would distract from the MVP allowlist.
+## Reporting a compatibility bug
 
-Do not add special handling for a weird editor until the failing behavior is written down and the MVP allowlist is still healthy.
+Report the Tilde build, macOS version, Mac model, host app and version, input
+source state, the key that failed, expected behavior, and a reproduction using
+disposable text. Privacy-safe diagnostics may include counts, timings, and
+failure labels; never include the writing itself.

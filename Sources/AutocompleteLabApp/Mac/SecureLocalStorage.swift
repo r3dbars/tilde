@@ -3,94 +3,87 @@ import Foundation
 /// Creates and tightens Tilde's local on-disk artifacts to owner-only permissions
 /// (directories `0700`, files `0600`).
 ///
-/// Tilde writes derived-from-user data under `~/Library` — diagnostic traces (which can
-/// hold raw text while raw-content dogfood tracing is opted in), the Personal Capture journal
-/// (verbatim typed text), caret-region screenshots, and the downloaded model asset. macOS
-/// currently keeps `~/Library` itself at `0700`, but these files must not *depend* on a parent
-/// directory's mode to stay private: they are copied into backups, synced folders, and support
-/// bundles, and the privacy guarantee should travel with the file. Default `FileManager`
-/// creation honors the process umask (typically `022`), producing world-readable `0644` files
-/// and `0755` directories — see `docs/security/threat-model.md` (F2). This helper makes the
-/// permissions explicit instead.
+/// Tilde writes its privacy-safe diagnostic log under `~/Library`. The file must
+/// not depend on a parent directory's mode to stay private, so this helper makes
+/// owner-only permissions explicit.
 ///
-/// The create helpers also *tighten existing* artifacts, so the first write after upgrading
+/// Opening also tightens existing artifacts, so the first write after upgrading
 /// migrates files that were created world-readable by an earlier build.
 enum SecureLocalStorage {
-    /// Owner-only directory permissions (`rwx------`).
-    static let directoryPermissions = NSNumber(value: Int16(0o700))
-    /// Owner-only file permissions (`rw-------`).
-    static let filePermissions = NSNumber(value: Int16(0o600))
+    /// Creates and validates the owner-only parent, then opens the exact owner-only regular file.
+    /// The parent remains open while `openat` resolves the leaf, so replacing it with a symlink
+    /// cannot redirect the write.
+    static func openFileForAppending(at file: URL) -> FileHandle? {
+        let directory = file.deletingLastPathComponent()
+        guard let directoryDescriptor = secureDirectoryDescriptor(at: directory),
+              !file.lastPathComponent.isEmpty else { return nil }
+        defer { close(directoryDescriptor) }
 
-    /// Create `directory` (and any missing intermediates) owner-only, tightening it if it
-    /// already exists. Returns `true` when the directory exists with the intended mode.
-    @discardableResult
-    static func createDirectory(at directory: URL, fileManager: FileManager = .default) -> Bool {
-        do {
-            try fileManager.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: directoryPermissions]
-            )
-            // `createDirectory` only applies `attributes` to directories it actually creates;
-            // tighten an already-existing leaf directory defensively (best effort).
-            try? fileManager.setAttributes(
-                [.posixPermissions: directoryPermissions],
-                ofItemAtPath: directory.path
-            )
-            return true
-        } catch {
-            return false
+        let descriptor = openat(
+            directoryDescriptor,
+            file.lastPathComponent,
+            O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK,
+            0o600
+        )
+        guard descriptor >= 0 else { return nil }
+
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              fchmod(descriptor, 0o600) == 0,
+              fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o7777 == 0o600 else {
+            close(descriptor)
+            return nil
         }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
-    /// Ensure an empty owner-only file exists at `file` (creating it if needed), tightening an
-    /// existing file's permissions. Returns `true` when the file exists with the intended mode.
-    @discardableResult
-    static func ensureFile(at file: URL, fileManager: FileManager = .default) -> Bool {
-        if fileManager.fileExists(atPath: file.path) {
-            try? fileManager.setAttributes(
-                [.posixPermissions: filePermissions],
-                ofItemAtPath: file.path
-            )
-            return true
-        }
+    private static func secureDirectoryDescriptor(at directory: URL) -> Int32? {
+        let components = directory.path.split(separator: "/").map(String.init)
+        guard directory.isFileURL, !components.isEmpty,
+              !components.contains(where: { $0 == "." || $0 == ".." }) else { return nil }
 
-        return fileManager.createFile(
-            atPath: file.path,
-            contents: nil,
-            attributes: [.posixPermissions: filePermissions]
-        )
+        var parent = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard parent >= 0 else { return nil }
+
+        for (index, component) in components.enumerated() {
+            var child = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            var wasMissing = false
+            if child < 0, errno == ENOENT {
+                wasMissing = true
+                guard mkdirat(parent, component, 0o700) == 0 || errno == EEXIST else {
+                    close(parent)
+                    return nil
+                }
+                child = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            }
+            close(parent)
+            guard child >= 0 else { return nil }
+
+            let isLeaf = index == components.count - 1
+            let mustTighten = wasMissing || isLeaf
+            var info = stat()
+            guard fstat(child, &info) == 0,
+                  info.st_mode & S_IFMT == S_IFDIR,
+                  !mustTighten || tightenDirectory(child, info: &info) else {
+                close(child)
+                return nil
+            }
+            parent = child
+        }
+        return parent
     }
 
-    /// Ensure an owner-only file exists at `file` seeded with `contents` when it does not yet
-    /// exist; tighten an existing file's permissions without overwriting its contents.
-    @discardableResult
-    static func ensureFile(
-        at file: URL,
-        seededWith contents: Data,
-        fileManager: FileManager = .default
-    ) -> Bool {
-        if fileManager.fileExists(atPath: file.path) {
-            try? fileManager.setAttributes(
-                [.posixPermissions: filePermissions],
-                ofItemAtPath: file.path
-            )
-            return true
-        }
-
-        return fileManager.createFile(
-            atPath: file.path,
-            contents: contents,
-            attributes: [.posixPermissions: filePermissions]
-        )
-    }
-
-    /// Tighten an existing file's permissions to owner-only. Used after an external writer
-    /// (e.g. `/usr/sbin/screencapture`, atomic `Data.write`) creates the file with default mode.
-    static func restrictFile(at file: URL, fileManager: FileManager = .default) {
-        try? fileManager.setAttributes(
-            [.posixPermissions: filePermissions],
-            ofItemAtPath: file.path
-        )
+    private static func tightenDirectory(_ descriptor: Int32, info: inout stat) -> Bool {
+        guard info.st_uid == getuid(),
+              fchmod(descriptor, 0o700) == 0,
+              fstat(descriptor, &info) == 0 else { return false }
+        return info.st_mode & S_IFMT == S_IFDIR
+            && info.st_uid == getuid()
+            && info.st_mode & 0o7777 == 0o700
     }
 }

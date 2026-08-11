@@ -1,61 +1,80 @@
 # Tilde Privacy
 
-Tilde is local-first. That is a product requirement, not a preference.
+Tilde is local-only by design.
 
-## What Accessibility is used for
+## What Tilde reads
 
-The app asks for Accessibility so it can:
+While Tilde is the active input method, IMKit gives it keystrokes and access to
+the current text-input session. Tilde uses a bounded amount of text before the
+cursor to ask its local model for a continuation. It inserts text only when you
+accept a visible suggestion.
 
-- find the active app and focused text field,
-- read nearby text around the cursor,
-- read cursor and field bounds for placement,
-- insert only text you explicitly accept.
+The input method sends that bounded context to the Tilde app through an
+owner-only Unix socket on this Mac. The app passes it to its bundled model and
+returns the suggestion. Context and output are used in memory for that request
+and are not saved.
 
-Suggestions stay off when Accessibility is denied or the focused field is not
-safe to inspect. Secure fields (passwords, sensitive inputs) are hard-blocked.
+Tilde does not use Accessibility, Screen Recording, OCR, screenshots, the
+clipboard, or synthetic key events for autocomplete.
 
-Normal setup does not need Screen Recording. Screen Recording is only used for
-explicit, local, opt-in placement debugging.
+When macOS Secure Event Input is active, Tilde clears any fallback context,
+cancels pending work, and does not read, request, or display a suggestion. IMKit
+does not expose a general field-sensitivity flag, so custom secret fields must
+enable the macOS secure-input signal to receive this protection.
 
-## What stays on this Mac
+## What is stored
 
-By default, typed text, nearby context, prompts, model output, accepted text,
-screenshots, document names, URLs, recipients, and subject lines stay on this
-Mac.
+Tilde stores only settings and privacy-safe diagnostics such as event names,
+timings, counts, lengths, app identifiers, and failure labels. Diagnostics do
+not contain typed text, prompts, model output, or accepted text.
 
-Default diagnostics are local and redacted. They can include app bundle IDs,
-field kind, render mode, insertion mode, request mode, timing, counters,
-failure labels, and text lengths — never raw text.
+There is no writing history, raw trace, personal learning store, screenshot
+store, analytics SDK, crash-reporting SDK, or cloud sync path.
 
-## What is never uploaded by default
+### Data left by older builds
 
-The app must not upload typed text, nearby context, screenshots, window titles,
-prompts, model output, accepted text, or retained diagnostics by default.
+Updating does not silently delete data a user previously chose to collect.
+Current Tilde does not read or migrate the old learning, trace, or evaluation
+stores, but they may still contain writing or screenshots at:
 
-There is no remote crash reporting, analytics, or behavior telemetry path in
-this repo. The model is downloaded once from a pinned source; after that,
-autocomplete runs with no network egress. That claim is enforced by
-`script/check_runtime_network_egress.py`, a mandatory lane of
-`script/release_check.sh`, which observes the running app's sockets.
+- `~/Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage`
+- `~/Library/Application Support/Tilde` and `~/Library/Logs/Tilde`
+- `~/Library/Application Support/AutocompleteLab` and `~/Library/Logs/AutocompleteLab`
+- `~/.cache/tilde-eval`
 
-## Optional sharing paths
+Review those locations before removing them. In particular, treat the iCloud
+folder as user-owned source data, not as an application cache.
 
-Raw text traces and placement screenshots are debug opt-ins. Use them only for
-an explicit local debug session, and turn them off afterward. Delete local
-traces at any time with `script/delete_local_traces.sh` or from the app.
+## Network behavior
 
-## Pause, quit, disable, and delete
+Autocomplete does not need internet access. Distributed builds contain the
+model and a self-contained `llama-server` helper inside the signed app. Tilde
+does not download a model at runtime and does not send autocomplete requests to
+a cloud service.
 
-- Pause suggestions from the menu bar.
-- Pause the current app from the menu bar.
-- Turn off optional local capture features from Settings if enabled.
-- Delete local traces from Diagnostics or `script/delete_local_traces.sh`.
-- Quit from the menu bar when you do not want the app watching typing.
-- Full removal: delete the app bundle, `~/Library/Application Support/Tilde`,
-  and `~/Library/Logs/Tilde`.
+The release gate starts an isolated proof-mode app on a dedicated local port and
+observes that app and its exact helper child's open sockets while sending a
+fixed synthetic prompt directly to the helper. It may append privacy-safe
+diagnostics, but it does not quit or change the daily driver. The proof reads
+process-table metadata to identify the exact proof app and helper and avoid
+other processes; it does not validate or observe sockets of the input method,
+or install, launch, or terminate it. Any unexpected remote connection is a
+release blocker. This is open-socket observation, not packet capture,
+authenticated-socket proof, or a real-editor round trip.
 
-## Dependencies
+## Control and removal
 
-Swift package dependencies are MLX and Hugging Face libraries for local model
-loading. The app must not add analytics or crash SDKs without updating this
-document, and any remote reporting must be opt-in.
+- Pause suggestions from Tilde's menu. Quitting stops the menu and model app,
+  but the selected input method remains active.
+- Switch to another input source when you do not want Tilde handling typing.
+- Remove Tilde from System Settings → Keyboard → Input Sources.
+- Turn off Tilde in System Settings → General → Login Items.
+- To remove current local data, delete the Tilde app,
+  `~/Library/Input Methods/InlineGhostIME.app`,
+  `~/Library/Application Support/Tilde`, `~/Library/Logs/Tilde`,
+  `~/Library/Preferences/bar.r3d.tilde.plist`, and
+  `~/Library/Preferences/bar.r3d.inputmethod.InlineGhost.plist`. Review the
+  older-version locations above separately.
+
+The [threat model](docs/security/threat-model.md) describes the trust granted to
+a macOS input method and the remaining local-process risks.

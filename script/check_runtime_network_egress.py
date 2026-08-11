@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Fail-closed runtime socket observation for a disposable Tilde completion.
+
+This observes open sockets with lsof. It is deliberately not described as a
+packet capture: a clean result means no non-loopback socket was visible during
+the observation window, not that packet-level absence was proven.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -6,260 +13,238 @@ import datetime as dt
 import hashlib
 import ipaddress
 import json
-import os
-import re
-import shlex
+import shutil
 import subprocess
 import sys
+import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_PROCESS_NAME = "Tilde"
-DEFAULT_PROOF_DIR = ROOT_DIR / "docs" / "diagnostics" / "runs"
-MODEL_SETUP_PHASES = {"model-setup", "model-download", "model-update"}
-ALLOWED_MODEL_REMOTE_SUFFIXES = (
-    "huggingface.co",
-    ".huggingface.co",
-    "hf.co",
-    ".hf.co",
-)
+DEFAULT_APP_BINARY = ROOT_DIR / "dist/Tilde.app/Contents/MacOS/Tilde"
+DEFAULT_PROOF = ROOT_DIR / "dist/release-proof/runtime-socket-observation.json"
+LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+SYNTHETIC_CONTEXT = "The architecture of the system means that we "
+PROSE_SCAFFOLD = """The following are real documents being written by their authors, continued naturally.
+
+Text: I wanted to follow up on our call from
+Continuation: yesterday afternoon about the launch timeline.
+
+Text: honestly the new setup is working better
+Continuation: than I expected, we should keep it.
+
+Text: The results suggest two things. First, the approach
+Continuation: scales well beyond the original design load.
+
+
+"""
+PRODUCTION_CONTEXT_CHARACTERS = 3_000
 
 
 @dataclass(frozen=True)
-class Endpoint:
-    protocol: str
-    local: str
-    remote: str
-    state: str
-    sample_index: int
+class ProcessRow:
+    pid: int
+    ppid: int
+    command: str
 
     @property
-    def remote_host(self) -> str:
-        return split_host_port(self.remote)[0]
+    def executable(self) -> str:
+        # macOS `ps args` does not quote executable paths, and the installed
+        # input method lives under "Input Methods". Slice at the known binary
+        # name so spaces in the path do not corrupt process identity.
+        for name in ("InlineGhostIME", "llama-server", "Tilde"):
+            marker = f"/{name}"
+            marker_index = self.command.rfind(marker)
+            if marker_index < 0:
+                continue
+            end = marker_index + len(marker)
+            if end == len(self.command) or self.command[end].isspace():
+                return self.command[:end]
+        return self.command.split(maxsplit=1)[0] if self.command else ""
 
     @property
-    def safe_remote(self) -> str:
-        host, port = split_host_port(self.remote)
-        if not host:
-            return "<none>"
-        if port:
-            return f"{host}:{port}"
-        return host
+    def arguments(self) -> list[str]:
+        executable = self.executable
+        if not executable or not self.command.startswith(executable):
+            return []
+        # `ps args` is already flattened on macOS. The options validated here
+        # have no whitespace-bearing values, so token splitting is intentional.
+        return self.command[len(executable) :].split()
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Observe Tilde network sockets and prove local-only "
-            "autocomplete has no unexpected runtime egress."
-        )
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--duration", type=float, default=20.0)
+    parser.add_argument("--interval", type=float, default=0.25)
+    parser.add_argument("--min-samples", type=int, default=2)
+    parser.add_argument("--port", type=int, default=17872)
+    parser.add_argument("--app-binary", type=Path, default=DEFAULT_APP_BINARY)
+    parser.add_argument("--proof-out", type=Path, default=DEFAULT_PROOF)
     parser.add_argument(
-        "--pid",
-        action="append",
-        type=int,
-        default=[],
-        help="Process ID to observe. Can be passed more than once.",
-    )
-    parser.add_argument(
-        "--process-name",
-        default=DEFAULT_PROCESS_NAME,
-        help="Process name used when --pid is omitted.",
-    )
-    parser.add_argument(
-        "--phase",
-        choices=["autocomplete", "model-setup", "model-download", "model-update"],
-        default="autocomplete",
-        help=(
-            "autocomplete fails on any non-loopback remote endpoint. "
-            "model-* phases record remote egress as allowed setup/update traffic."
-        ),
-    )
-    parser.add_argument(
-        "--duration",
-        type=float,
-        default=20,
-        help="Seconds to observe a live process.",
-    )
-    parser.add_argument(
-        "--interval",
-        type=float,
-        default=1,
-        help="Seconds between live lsof samples.",
-    )
-    parser.add_argument(
-        "--sample",
-        type=Path,
-        action="append",
-        default=[],
-        help="Read one or more saved lsof samples instead of observing a live process.",
-    )
-    parser.add_argument(
-        "--proof-out",
-        type=Path,
-        help="Markdown proof path. Defaults to docs/diagnostics/runs when observing live.",
-    )
-    parser.add_argument(
-        "--json-out",
-        type=Path,
-        help="Optional machine-readable proof path.",
-    )
-    parser.add_argument(
-        "--no-proof",
+        "--synthetic-helper-proof",
         action="store_true",
-        help="Do not write a Markdown proof artifact.",
+        help="require release-proof mode and omit all input-method observation",
     )
-    parser.add_argument(
-        "--activity-note",
-        default="",
-        help="Short privacy-safe note about what was happening during the observation.",
-    )
-    parser.add_argument(
-        "--validate-proof",
-        type=Path,
-        help="Validate an existing JSON or Markdown no-egress proof instead of observing a process.",
-    )
-    parser.add_argument(
-        "--max-proof-age-seconds",
-        type=float,
-        default=0,
-        help="When validating, fail if generated_at is older than this many seconds. 0 disables age checks.",
-    )
-    parser.add_argument(
-        "--now",
-        default="",
-        help="UTC timestamp used for validation tests. Defaults to the current time.",
-    )
-    parser.add_argument(
-        "--diagnostics-log",
-        type=Path,
-        help="Diagnostics log used to reject no-egress proof captured before the latest app launch.",
-    )
-    parser.add_argument(
-        "--require-newer-than-latest-launch",
-        action="store_true",
-        help="When validating, require generated_at to be newer than the latest diagnostics launch line.",
-    )
-    parser.add_argument(
-        "--min-samples",
-        type=int,
-        default=1,
-        help="When validating, require at least this many socket samples.",
-    )
-    parser.add_argument(
-        "--expected-executable-sha256",
-        default="",
-        help="When validating, require the proof to contain this executable SHA-256.",
-    )
-    parser.add_argument(
-        "--app-binary",
-        type=Path,
-        help="When validating, hash this app binary and require the proof to match it.",
-    )
+    parser.add_argument("--selftest", action="store_true")
     return parser.parse_args()
 
 
-def split_host_port(endpoint: str) -> tuple[str, str]:
-    value = endpoint.strip()
-    value = re.sub(r"\s+\([^)]*\)$", "", value)
-    if not value or value == "*":
-        return "", ""
-
-    if value.startswith("["):
-        match = re.match(r"^\[([^\]]+)\](?::([^:]+))?$", value)
-        if match:
-            return match.group(1), match.group(2) or ""
-
-    if value.count(":") == 1:
-        host, port = value.rsplit(":", 1)
-        return host.strip("[]"), port
-
-    return value.strip("[]"), ""
-
-
-def is_loopback_or_wildcard(host: str) -> bool:
-    normalized = host.strip().strip("[]").lower()
-    if normalized in {"", "*", "localhost", "ip6-localhost"}:
-        return True
-    try:
-        ip = ipaddress.ip_address(normalized)
-    except ValueError:
-        return False
-    return ip.is_loopback or ip.is_unspecified
-
-
-def parse_lsof_samples(sample_texts: list[str]) -> list[Endpoint]:
-    endpoints: list[Endpoint] = []
-    for sample_index, text in enumerate(sample_texts, start=1):
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("COMMAND "):
-                continue
-
-            protocol_match = re.search(r"\b(TCP|UDP)\b\s+(.+)$", stripped)
-            if not protocol_match:
-                continue
-
-            protocol = protocol_match.group(1)
-            name = protocol_match.group(2).strip()
-            state_match = re.search(r"\(([^)]*)\)\s*$", name)
-            state = state_match.group(1) if state_match else ""
-            endpoint_text = re.sub(r"\s+\([^)]*\)$", "", name).strip()
-
-            if "->" not in endpoint_text:
-                continue
-
-            local, remote = endpoint_text.split("->", 1)
-            endpoints.append(
-                Endpoint(
-                    protocol=protocol,
-                    local=local.strip(),
-                    remote=remote.strip(),
-                    state=state,
-                    sample_index=sample_index,
-                )
-            )
-    return endpoints
-
-
-def remote_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
-    return [
-        endpoint
-        for endpoint in endpoints
-        if not is_loopback_or_wildcard(endpoint.remote_host)
-    ]
-
-
-def is_allowed_model_remote(endpoint: Endpoint) -> bool:
-    host = endpoint.remote_host.lower().strip(".")
-    return any(
-        host == suffix.lstrip(".") or host.endswith(suffix)
-        for suffix in ALLOWED_MODEL_REMOTE_SUFFIXES
+def process_table() -> dict[int, ProcessRow]:
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,ppid=,args="],
+        text=True,
+        capture_output=True,
+        check=True,
     )
-
-
-def find_pids(process_name: str) -> list[int]:
-    candidates: set[int] = set()
-    commands = [
-        ["pgrep", "-x", process_name],
-        ["pgrep", "-f", f"/{process_name}.app/Contents/MacOS/{process_name}"],
-    ]
-    for command in commands:
-        result = subprocess.run(command, text=True, capture_output=True, check=False)
-        if result.returncode not in {0, 1}:
+    rows: dict[int, ProcessRow] = {}
+    for raw in result.stdout.splitlines():
+        fields = raw.strip().split(maxsplit=2)
+        if len(fields) != 3 or not fields[0].isdigit() or not fields[1].isdigit():
             continue
-        for line in result.stdout.splitlines():
-            try:
-                candidates.add(int(line.strip()))
-            except ValueError:
-                continue
-    return sorted(candidates)
+        row = ProcessRow(int(fields[0]), int(fields[1]), fields[2])
+        rows[row.pid] = row
+    return rows
 
 
-def capture_lsof(pid: int) -> str:
+def same_file(left: str, right: Path) -> bool:
+    try:
+        return Path(left).resolve() == right.resolve()
+    except OSError:
+        return False
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def option_values(row: ProcessRow, option: str) -> list[str]:
+    values: list[str] = []
+    for index, token in enumerate(row.arguments):
+        if token == option:
+            values.append(row.arguments[index + 1] if index + 1 < len(row.arguments) else "")
+        elif token.startswith(option + "="):
+            values.append(token[len(option) + 1 :])
+    return values
+
+
+def listener_endpoints(output: str) -> dict[int, set[str]]:
+    listeners: dict[int, set[str]] = {}
+    current_pid: int | None = None
+    for field in output.splitlines():
+        if field.startswith("p") and field[1:].isdigit():
+            current_pid = int(field[1:])
+            listeners.setdefault(current_pid, set())
+        elif field.startswith("n") and current_pid is not None:
+            listeners[current_pid].add(field[1:])
+    return listeners
+
+
+def owns_exact_loopback_listener(returncode: int, output: str, pid: int, port: int) -> bool:
+    return returncode == 0 and listener_endpoints(output) == {
+        pid: {f"127.0.0.1:{port}"}
+    }
+
+
+def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, ProcessRow]:
+    rows = process_table()
+    app_matches = [row for row in rows.values() if same_file(row.executable, app_binary)]
+    if len(app_matches) != 1:
+        raise RuntimeError(
+            f"expected exactly one running Tilde from {app_binary}; found {len(app_matches)}"
+        )
+    app = app_matches[0]
+
+    servers = [
+        row
+        for row in rows.values()
+        if Path(row.executable).name == "llama-server" and row.ppid == app.pid
+    ]
+    if len(servers) != 1:
+        raise RuntimeError(
+            f"expected exactly one direct llama-server child of Tilde pid {app.pid}; found {len(servers)}"
+        )
+    server = servers[0]
+    expected_server = app_binary.parent.parent / "Helpers/llama-server"
+    if not same_file(server.executable, expected_server):
+        raise RuntimeError(
+            f"llama-server child is not the packaged helper at {expected_server}"
+        )
+    if option_values(server, "--port") != [str(port)]:
+        raise RuntimeError(f"llama-server child is not configured for port {port}")
+    if option_values(server, "--host") != ["127.0.0.1"]:
+        raise RuntimeError("llama-server child is not configured for loopback only")
+    listener = subprocess.run(
+        [
+            "lsof", "-nP", "-a", "-p", str(server.pid),
+            f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpn",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if not owns_exact_loopback_listener(
+        listener.returncode, listener.stdout, server.pid, port
+    ):
+        raise RuntimeError("packaged llama-server does not own the exact IPv4 loopback listener")
+    return app, server
+
+
+def require_processes(args: argparse.Namespace) -> tuple[ProcessRow, ProcessRow, list[ProcessRow]]:
+    app, server = require_owned_model(args.app_binary, args.port)
+    if args.synthetic_helper_proof:
+        if app.arguments != ["--release-proof"]:
+            raise RuntimeError("synthetic helper proof requires the app's exact --release-proof mode")
+        return app, server, []
+    rows = process_table()
+
+    imes = [row for row in rows.values() if Path(row.executable).name == "InlineGhostIME"]
+    if not imes:
+        raise RuntimeError("InlineGhostIME is not running; select the input source and retry")
+    packaged_ime = (
+        args.app_binary.parent.parent
+        / "Library/InlineGhostIME.app/Contents/MacOS/InlineGhostIME"
+    )
+    if not packaged_ime.is_file():
+        raise RuntimeError(f"packaged InlineGhostIME is missing: {packaged_ime}")
+    packaged_ime_sha = sha256(packaged_ime)
+    mismatches = [
+        row.executable
+        for row in imes
+        if not Path(row.executable).is_file() or sha256(Path(row.executable)) != packaged_ime_sha
+    ]
+    if mismatches:
+        raise RuntimeError("running InlineGhostIME does not match the packaged input method")
+    return app, server, imes
+
+
+def remote_host(endpoint: str) -> str:
+    value = endpoint.strip().split(" ", 1)[0]
+    if value.startswith("[") and "]" in value:
+        return value[1 : value.index("]")]
+    if value.count(":") == 1:
+        return value.rsplit(":", 1)[0]
+    return value
+
+
+def is_non_loopback(endpoint: str) -> bool:
+    host = remote_host(endpoint).strip("[]").lower()
+    if host in {"", "*", "localhost"}:
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return not (address.is_loopback or address.is_unspecified)
+
+
+def lsof_remote_endpoints(pid: int) -> set[str]:
     result = subprocess.run(
         ["lsof", "-nP", "-a", "-p", str(pid), "-i"],
         text=True,
@@ -268,423 +253,251 @@ def capture_lsof(pid: int) -> str:
     )
     if result.returncode not in {0, 1}:
         raise RuntimeError(result.stderr.strip() or f"lsof failed for pid {pid}")
-    return result.stdout
+    remotes: set[str] = set()
+    for line in result.stdout.splitlines():
+        if "->" not in line:
+            continue
+        endpoint = line.split("->", 1)[1].split(" ", 1)[0]
+        if is_non_loopback(endpoint):
+            remotes.add(endpoint)
+    return remotes
 
 
-def process_exists(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+def health_check(port: int) -> None:
+    with LOCAL_HTTP.open(f"http://127.0.0.1:{port}/health", timeout=5) as response:
+        payload = json.loads(response.read())
+    if payload.get("status") != "ok":
+        raise RuntimeError(f"llama-server health was not ok: {payload!r}")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def parse_iso_datetime(value: object) -> dt.datetime:
-    raw = str(value or "").strip().strip("`")
-    if not raw:
-        raise ValueError("missing timestamp")
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    parsed = dt.datetime.fromisoformat(raw)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed.astimezone(dt.timezone.utc)
-
-
-def string_summary(value: str) -> str:
-    return f"String({len(value)} chars)"
-
-
-def process_details(pids: list[int]) -> list[dict[str, object]]:
-    details: list[dict[str, object]] = []
-    for pid in pids:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        command = result.stdout.strip() if result.returncode == 0 else ""
-        executable = ""
-        executable_sha256 = ""
-        if command:
-            try:
-                executable = shlex.split(command)[0]
-            except ValueError:
-                executable = command.split(" ", 1)[0]
-            executable_path = Path(executable)
-            if executable_path.is_file():
-                executable_sha256 = sha256_file(executable_path)
-        details.append({
-            "pid": pid,
-            "command_redacted": bool(command),
-            "command_summary": string_summary(command) if command else "",
-            "executable_name": Path(executable).name if executable else "",
-            "executable_sha256": executable_sha256,
-        })
-    return details
-
-
-def observe_live(pids: list[int], duration: float, interval: float) -> list[str]:
-    if not pids:
-        raise RuntimeError("no Tilde process found; launch the app or pass --pid")
-
-    samples: list[str] = []
-    deadline = time.monotonic() + max(0.1, duration)
-    while True:
-        sample_parts = []
-        for pid in pids:
-            if not process_exists(pid):
-                raise RuntimeError(f"observed process exited before proof completed: pid {pid}")
-            sample_parts.append(capture_lsof(pid))
-        samples.append("\n".join(sample_parts))
-        if time.monotonic() >= deadline:
-            break
-        time.sleep(max(0.1, interval))
-    return samples
-
-
-def proof_path(args: argparse.Namespace) -> Path | None:
-    if args.no_proof:
-        return None
-    if args.proof_out:
-        return args.proof_out
-    if args.sample:
-        return None
-    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return DEFAULT_PROOF_DIR / f"runtime-network-egress-{timestamp}.md"
-
-
-def build_summary(
-    *,
-    args: argparse.Namespace,
-    pids: list[int],
-    endpoints: list[Endpoint],
-    unexpected: list[Endpoint],
-    allowed_model: list[Endpoint],
-    sample_count: int,
-    passed: bool,
-) -> dict[str, object]:
+def model_request(context: str) -> dict[str, object]:
+    bounded_context = context[-PRODUCTION_CONTEXT_CHARACTERS:].rstrip()
     return {
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "phase": args.phase,
-        "result": "pass" if passed else "fail",
-        "process_name": args.process_name,
-        "pids": pids,
-        "processes": process_details(pids),
-        "samples": sample_count,
-        "network_assertion": (
-            "No non-loopback remote endpoints during autocomplete."
-            if args.phase == "autocomplete"
-            else "Only allowlisted model setup/update endpoints are permitted."
-        ),
-        "remote_endpoint_count": len(remote_endpoints(endpoints)),
-        "unexpected_remote_endpoint_count": len(unexpected),
-        "allowed_model_endpoint_count": len(allowed_model),
-        "unexpected_remote_endpoints": [endpoint.safe_remote for endpoint in unexpected],
-        "allowed_model_endpoints": sorted({endpoint.safe_remote for endpoint in allowed_model}),
-        "activity_note": string_summary(args.activity_note) if args.activity_note else "",
-        "activity_note_chars": len(args.activity_note),
-        "privacy_note": "No typed text, prompts, model output, screenshots, URLs, document names, or trace lines are captured.",
+        "prompt": PROSE_SCAFFOLD + "Text: " + bounded_context + "\nContinuation:",
+        "n_predict": 20,
+        "temperature": 0,
+        "cache_prompt": True,
+        "stop": ["\n"],
+        "stream": False,
     }
 
 
-def write_markdown(path: Path, summary: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [
-        "# Runtime Network Egress Proof",
-        "",
-        f"- Generated at: `{summary['generated_at']}`",
-        f"- Phase: `{summary['phase']}`",
-        f"- Result: `{summary['result']}`",
-        f"- Process: `{summary['process_name']}`",
-        f"- PIDs: `{', '.join(map(str, summary['pids'])) if summary['pids'] else 'sample-file'}`",
-        f"- Samples: `{summary['samples']}`",
-        f"- Assertion: {summary['network_assertion']}",
-        f"- Remote endpoints observed: `{summary['remote_endpoint_count']}`",
-        f"- Unexpected remote endpoints: `{summary['unexpected_remote_endpoint_count']}`",
-        f"- Allowed model setup/update endpoints: `{summary['allowed_model_endpoint_count']}`",
-    ]
-    if summary["activity_note"]:
-        lines.append(f"- Activity note: {summary['activity_note']}")
-    processes = summary["processes"]
-    if processes:
-        for process in processes:
-            if process["executable_name"]:
-                lines.append(f"- Executable name: `{process['executable_name']}`")
-            if process["executable_sha256"]:
-                lines.append(f"- Executable SHA-256: `{process['executable_sha256']}`")
-            if process["command_summary"]:
-                lines.append(f"- Command line: `{process['command_summary']}`")
-    lines.extend([
-        "",
-        "Privacy note: this proof stores only process/socket metadata. It does not store typed text, prompts, model output, screenshots, document names, URLs, or trace lines.",
-    ])
-
-    unexpected = summary["unexpected_remote_endpoints"]
-    if unexpected:
-        lines.extend(["", "Unexpected remote endpoints:", ""])
-        lines.extend(f"- `{endpoint}`" for endpoint in unexpected)
-
-    allowed_model = summary["allowed_model_endpoints"]
-    if allowed_model:
-        lines.extend(["", "Allowed model setup/update endpoints:", ""])
-        lines.extend(f"- `{endpoint}`" for endpoint in allowed_model)
-
-    path.write_text("\n".join(lines) + "\n")
+def disposable_completion(port: int) -> int:
+    body = json.dumps(model_request(SYNTHETIC_CONTEXT), separators=(",", ":")).encode()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/completion",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with LOCAL_HTTP.open(request, timeout=60) as response:
+        if response.status != 200:
+            raise RuntimeError(f"llama-server completion returned HTTP {response.status}")
+        payload = json.loads(response.read())
+    completion = payload.get("content")
+    if not isinstance(completion, str) or not completion.strip():
+        raise RuntimeError("direct synthetic model completion was empty or malformed")
+    return len(completion)
 
 
-def parse_markdown_proof(path: Path) -> dict[str, object]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
-
-    def field(label: str) -> str:
-        pattern = rf"^- {re.escape(label)}:\s*`?([^`\n]+)`?"
-        match = re.search(pattern, text, re.MULTILINE)
-        return match.group(1).strip() if match else ""
-
-    executable_hashes = re.findall(r"^- Executable SHA-256:\s*`?([0-9a-fA-F]+)`?", text, re.MULTILINE)
-    unexpected = field("Unexpected remote endpoints")
-    allowed_model = field("Allowed model setup/update endpoints")
-    samples = field("Samples")
-    return {
-        "generated_at": field("Generated at"),
-        "phase": field("Phase"),
-        "result": field("Result"),
-        "process_name": field("Process"),
-        "samples": int(samples) if samples.isdigit() else 0,
-        "unexpected_remote_endpoint_count": int(unexpected) if unexpected.isdigit() else 0,
-        "allowed_model_endpoint_count": int(allowed_model) if allowed_model.isdigit() else 0,
-        "processes": [{"executable_sha256": item.lower()} for item in executable_hashes],
-    }
-
-
-def load_proof_summary(path: Path) -> dict[str, object]:
-    if not path.is_file():
-        raise FileNotFoundError(f"missing no-egress proof: {path}")
-    if path.suffix.lower() == ".json":
-        return json.loads(path.read_text(encoding="utf-8"))
-    return parse_markdown_proof(path)
-
-
-def latest_launch_timestamp(path: Path, expected_executable_sha256: str = "") -> dt.datetime:
-    if not path.is_file():
-        raise FileNotFoundError(f"missing diagnostics log: {path}")
-
-    expected_hash = expected_executable_sha256.strip().lower()
-    latest_any = ""
-    latest_matching = ""
-    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        if "launch accessibility=" in line:
-            timestamp = line.split(maxsplit=1)[0]
-            latest_any = timestamp
-            if expected_hash:
-                match = re.search(r"(?:^|\s)executableSHA256=([0-9a-fA-F]+)(?:\s|$)", line)
-                if match and match.group(1).lower() == expected_hash:
-                    latest_matching = timestamp
-            else:
-                latest_matching = timestamp
-
-    if expected_hash and latest_any and not latest_matching:
-        raise ValueError(
-            "no launch accessibility= line matched the expected executable SHA-256 "
-            f"{expected_hash} in diagnostics log: {path}"
-        )
-
-    latest = latest_matching or latest_any
-    if not latest:
-        raise ValueError(f"no launch accessibility= line found in diagnostics log: {path}")
-    return parse_iso_datetime(latest)
+def selftest() -> None:
+    request = model_request(SYNTHETIC_CONTEXT)
+    assert request["stream"] is False
+    assert request["temperature"] == 0
+    assert request["stop"] == ["\n"]
+    assert request["n_predict"] == 20
+    assert request["prompt"].endswith(
+        "Text: The architecture of the system means that we\nContinuation:"
+    )
+    long_request = model_request("EARLY_SENTINEL " + "x" * PRODUCTION_CONTEXT_CHARACTERS)
+    assert "EARLY_SENTINEL" not in long_request["prompt"]
+    assert not is_non_loopback("127.0.0.1:17872")
+    assert not is_non_loopback("[::1]:17872")
+    assert is_non_loopback("203.0.113.1:443")
+    server = ProcessRow(
+        4242,
+        4000,
+        "/tmp/App With Spaces/llama-server --host=127.0.0.1 --port 17872",
+    )
+    assert server.executable == "/tmp/App With Spaces/llama-server"
+    assert option_values(server, "--host") == ["127.0.0.1"]
+    assert option_values(server, "--port") == ["17872"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --port 17872 --port 9999"),
+        "--port",
+    ) != ["17872"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --host 127.0.0.1 --host 0.0.0.0"),
+        "--host",
+    ) != ["127.0.0.1"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --port 178720"),
+        "--port",
+    ) != ["17872"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --note=--port=17872"),
+        "--port",
+    ) == []
+    exact_listener = "p4242\nn127.0.0.1:17872\n"
+    assert owns_exact_loopback_listener(0, exact_listener, 4242, 17872)
+    assert not owns_exact_loopback_listener(0, "p4242\nn*:17872\n", 4242, 17872)
+    assert not owns_exact_loopback_listener(0, "p4242\nn0.0.0.0:17872\n", 4242, 17872)
+    assert not owns_exact_loopback_listener(0, "p4242\nn[::1]:17872\n", 4242, 17872)
+    assert not owns_exact_loopback_listener(1, exact_listener, 4242, 17872)
+    proof_port = 17873
+    proof_server = ProcessRow(
+        4343,
+        4000,
+        f"/tmp/App With Spaces/llama-server --host 127.0.0.1 --port {proof_port}",
+    )
+    assert option_values(proof_server, "--port") == [str(proof_port)]
+    proof_listener = f"p4343\nn127.0.0.1:{proof_port}\n"
+    assert owns_exact_loopback_listener(0, proof_listener, 4343, proof_port)
+    assert not owns_exact_loopback_listener(0, exact_listener, 4242, proof_port)
+    proof_app = ProcessRow(8, 1, "/tmp/Tilde.app/Contents/MacOS/Tilde --release-proof")
+    assert proof_app.arguments == ["--release-proof"]
+    print("selftest OK: fixed request, strict argv, and configurable exact loopback listener")
 
 
-def proof_executable_hashes(summary: dict[str, object]) -> set[str]:
-    hashes: set[str] = set()
-    raw_processes = summary.get("processes", [])
-    if isinstance(raw_processes, list):
-        for process in raw_processes:
-            if isinstance(process, dict):
-                value = str(process.get("executable_sha256", "")).strip().lower()
-                if value:
-                    hashes.add(value)
-    direct = str(summary.get("executable_sha256", "")).strip().lower()
-    if direct:
-        hashes.add(direct)
-    return hashes
-
-
-def validate_proof(args: argparse.Namespace) -> int:
+def observe(
+    pids: list[int], minimum_duration: float, interval: float, activity_done: threading.Event
+) -> tuple[int, set[str], list[str]]:
+    sample_count = 0
+    remotes: set[str] = set()
     failures: list[str] = []
-    path = args.validate_proof
-    assert path is not None
-
-    try:
-        summary = load_proof_summary(path)
-    except (OSError, ValueError, json.JSONDecodeError) as error:
-        print("Runtime network egress proof validation: FAIL", file=sys.stderr)
-        print(f"- {error}", file=sys.stderr)
-        return 1
-
-    phase = str(summary.get("phase", "")).lower()
-    result = str(summary.get("result", "")).lower()
-    try:
-        unexpected = int(summary.get("unexpected_remote_endpoint_count", 0))
-    except (TypeError, ValueError):
-        unexpected = -1
-    try:
-        samples = int(summary.get("samples", 0))
-    except (TypeError, ValueError):
-        samples = 0
-
-    if phase != "autocomplete":
-        failures.append(f"phase={phase or 'missing'} does not prove autocomplete no-egress")
-    if result != "pass":
-        failures.append(f"result={result or 'missing'} is not pass")
-    if unexpected != 0:
-        failures.append(f"unexpectedRemoteEndpoints={unexpected}")
-    if samples < args.min_samples:
-        failures.append(f"samples={samples} is below required minimum {args.min_samples}")
-
-    generated_at: dt.datetime | None = None
-    try:
-        generated_at = parse_iso_datetime(summary.get("generated_at", ""))
-    except ValueError as error:
-        failures.append(f"generated_at is invalid: {error}")
-
-    now = dt.datetime.now(dt.timezone.utc)
-    if args.now:
+    deadline = time.monotonic() + max(minimum_duration, 0.25)
+    while time.monotonic() < deadline or not activity_done.is_set():
         try:
-            now = parse_iso_datetime(args.now)
-        except ValueError as error:
-            failures.append(f"--now is invalid: {error}")
-
-    if generated_at is not None and args.max_proof_age_seconds > 0:
-        age_seconds = (now - generated_at).total_seconds()
-        if age_seconds < -300:
-            failures.append(f"generated_at is in the future by {int(abs(age_seconds))}s")
-        elif age_seconds > args.max_proof_age_seconds:
-            failures.append(
-                f"no-egress proof is stale: ageSeconds={int(age_seconds)} "
-                f"maxAgeSeconds={int(args.max_proof_age_seconds)}"
-            )
-
-    expected_hash = args.expected_executable_sha256.strip().lower()
-    if args.app_binary:
-        if args.app_binary.is_file():
-            expected_hash = sha256_file(args.app_binary)
-        else:
-            failures.append(f"missing app binary for executable hash check: {args.app_binary}")
-
-    if args.require_newer_than_latest_launch:
-        if not args.diagnostics_log:
-            failures.append("--require-newer-than-latest-launch needs --diagnostics-log")
-        elif generated_at is not None:
-            try:
-                latest_launch = latest_launch_timestamp(args.diagnostics_log, expected_hash)
-                if generated_at < latest_launch:
-                    failures.append(
-                        "no-egress proof is older than latest runtime launch "
-                        f"(proofGeneratedAt={generated_at.isoformat(timespec='seconds')}; "
-                        f"latestLaunch={latest_launch.isoformat(timespec='seconds')})"
-                    )
-            except (OSError, ValueError) as error:
-                failures.append(str(error))
-
-    if expected_hash:
-        proof_hashes = proof_executable_hashes(summary)
-        if expected_hash not in proof_hashes:
-            failures.append("proof executable SHA-256 does not match the expected app binary")
-
-    if failures:
-        print("Runtime network egress proof validation: FAIL", file=sys.stderr)
-        print(f"Proof: {path}", file=sys.stderr)
-        for failure in failures:
-            print(f"- {failure}", file=sys.stderr)
-        return 1
-
-    print("Runtime network egress proof validation: PASS")
-    print(f"Proof: {path}")
-    print(f"Generated at: {summary.get('generated_at', '')}")
-    print(f"Samples: {samples}")
-    print("Autocomplete no-egress proof is fresh enough for the current gate.")
-    return 0
+            current = process_table()
+            for pid in pids:
+                if pid not in current:
+                    raise RuntimeError(f"observed process exited: pid {pid}")
+                remotes.update(lsof_remote_endpoints(pid))
+            sample_count += 1
+        except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+            failures.append(str(error))
+            break
+        time.sleep(max(interval, 0.05))
+    return sample_count, remotes, failures
 
 
 def main() -> int:
     args = parse_args()
+    if args.selftest:
+        selftest()
+        return 0
+    failures: list[str] = []
+    completion_chars = 0
+    health_ok = False
+    samples = 0
+    remotes: set[str] = set()
 
-    if args.validate_proof:
-        return validate_proof(args)
+    if shutil.which("lsof") is None:
+        failures.append("lsof is unavailable; socket observation cannot run")
 
     try:
-        if args.sample:
-            sample_texts = [path.read_text() for path in args.sample]
-            pids = args.pid
-        else:
-            pids = args.pid or find_pids(args.process_name)
-            sample_texts = observe_live(pids, args.duration, args.interval)
-    except OSError as error:
-        print(f"runtime network egress proof failed: {error}", file=sys.stderr)
-        return 2
-    except RuntimeError as error:
-        print(f"runtime network egress proof failed: {error}", file=sys.stderr)
-        return 2
+        app, server, imes = require_processes(args)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+        failures.append(str(error))
+        app = ProcessRow(0, 0, "")
+        server = ProcessRow(0, 0, "")
+        imes = []
 
-    endpoints = parse_lsof_samples(sample_texts)
-    remotes = remote_endpoints(endpoints)
-    if args.phase in MODEL_SETUP_PHASES:
-        allowed_model = [endpoint for endpoint in remotes if is_allowed_model_remote(endpoint)]
-        unexpected = [endpoint for endpoint in remotes if not is_allowed_model_remote(endpoint)]
+    if not failures:
+        result: list[tuple[int, set[str], list[str]]] = []
+        activity_done = threading.Event()
+
+        def run_observation() -> None:
+            result.append(
+                observe(
+                    [app.pid, server.pid, *(row.pid for row in imes)],
+                    args.duration,
+                    args.interval,
+                    activity_done,
+                )
+            )
+
+        observer = threading.Thread(target=run_observation, daemon=True)
+        observer.start()
+        try:
+            health_check(args.port)
+            health_ok = True
+            completion_chars = disposable_completion(args.port)
+        except (OSError, TimeoutError, ValueError, json.JSONDecodeError, RuntimeError) as error:
+            failures.append(str(error))
+        finally:
+            activity_done.set()
+        observer.join()
+        if result:
+            samples, remotes, observation_failures = result[0]
+            failures.extend(observation_failures)
+        else:
+            failures.append("socket observation did not complete")
+
+    if samples < args.min_samples:
+        failures.append(
+            f"captured {samples} socket samples; require at least {args.min_samples}"
+        )
+    if remotes:
+        failures.append("non-loopback sockets observed: " + ", ".join(sorted(remotes)))
+
+    proves = [
+        "the exact packaged Tilde process and its exact helper child were observed",
+        "the helper returned a nonempty completion for the fixed synthetic prompt",
+        "no non-loopback open socket was visible for the observed processes during the window",
+    ]
+    does_not_prove = [
+        "packet-level absence of network traffic",
+        "a Tilde-to-input-method Unix-socket request round trip",
+        "inline rendering or acceptance in a real editor",
+    ]
+    input_method_observation = "matching running input method observed"
+    if args.synthetic_helper_proof:
+        input_method_observation = "not performed in isolated release-proof mode"
+        does_not_prove.insert(1, "input-method installation, execution, or authentication")
     else:
-        allowed_model = []
-        unexpected = remotes
-    passed = not unexpected
+        proves[0] += " with a matching running input method"
 
-    summary = build_summary(
-        args=args,
-        pids=pids,
-        endpoints=endpoints,
-        unexpected=unexpected,
-        allowed_model=allowed_model,
-        sample_count=len(sample_texts),
-        passed=passed,
-    )
+    summary = {
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "result": "fail" if failures else "pass",
+        "observation_kind": "open-socket metadata via lsof; not packet capture",
+        "app_pid": app.pid,
+        "llama_server_pid": server.pid,
+        "inline_ghost_ime_pids": [row.pid for row in imes],
+        "input_method_observation": input_method_observation,
+        "samples": samples,
+        "health_ok": health_ok,
+        "direct_synthetic_model_completion_nonempty": completion_chars > 0,
+        "direct_synthetic_model_completion_chars": completion_chars,
+        "non_loopback_endpoints": sorted(remotes),
+        "failures": failures,
+        "stimulation": (
+            "direct POST to the exact packaged llama-server child over loopback "
+            "using a fixed synthetic prompt"
+        ),
+        "proves": proves,
+        "does_not_prove": does_not_prove,
+        "privacy": "Only process/socket metadata and synthetic completion length are saved.",
+    }
+    args.proof_out.parent.mkdir(parents=True, exist_ok=True)
+    args.proof_out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 
-    out_path = proof_path(args)
-    if out_path is not None:
-        write_markdown(out_path, summary)
-        summary["proof_artifact"] = out_path.name
-
-    if args.json_out:
-        args.json_out.parent.mkdir(parents=True, exist_ok=True)
-        args.json_out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-
-    print(f"Runtime network egress proof: {'PASS' if passed else 'FAIL'}")
-    print(f"Phase: {args.phase}")
-    print(f"Samples: {len(sample_texts)}")
-    print(f"Remote endpoints observed: {summary['remote_endpoint_count']}")
-    print(f"Unexpected remote endpoints: {summary['unexpected_remote_endpoint_count']}")
-    print(f"Allowed model setup/update endpoints: {summary['allowed_model_endpoint_count']}")
-    if out_path is not None:
-        print(f"Proof artifact: {out_path}")
-
-    if unexpected:
-        if args.phase in MODEL_SETUP_PHASES:
-            print("Unexpected model setup/update egress:", file=sys.stderr)
-        else:
-            print("Unexpected autocomplete-time egress:", file=sys.stderr)
-        for endpoint in unexpected:
-            print(f"- {endpoint.safe_remote}", file=sys.stderr)
+    if failures:
+        print("Runtime socket observation: FAIL (not packet capture)", file=sys.stderr)
+        for failure in failures:
+            print(f"- {failure}", file=sys.stderr)
+        print(f"Proof: {args.proof_out}", file=sys.stderr)
         return 1
 
+    print("Runtime socket observation: PASS (not packet capture)")
+    if args.synthetic_helper_proof:
+        print(f"Observed release-proof Tilde {app.pid} and llama-server {server.pid}; input method untouched")
+    else:
+        print(f"Observed Tilde {app.pid}, llama-server {server.pid}, InlineGhostIME {[row.pid for row in imes]}")
+    print(f"Health: ok; direct synthetic model completion: nonempty ({completion_chars} chars)")
+    print(f"Socket samples: {samples}; non-loopback endpoints: 0")
+    print(f"Proof: {args.proof_out}")
     return 0
 
 

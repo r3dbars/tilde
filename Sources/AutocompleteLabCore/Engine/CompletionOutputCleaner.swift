@@ -1,1084 +1,208 @@
 import Foundation
 
-public enum CompletionCleanRejectionReason: String, Codable, Equatable, Sendable {
+public enum CompletionCleanRejectionReason: String, Sendable {
     case unsafeHiddenOrControlCharacter
     case emptyOutput
     case noSuggestionSentinel
     case promptInstructionEcho
-    case repeatedListMarker
-    case assistantMeta
-    case genericChatFiller
-    case unsafePromptAction
-    case startsSecondSentence
-    case visibleUIChrome
-    case assistantResponseToPrompt
-    case restartsCurrentSentence
-    case replaysCurrentSentence
-    case adviceOrToneDrift
     case emptyAfterPrefixTrimming
-    case duplicatesVisibleTypedWords
-    case repeatsEarlierContext
-    case belowMinimumVisibleWords
-    case invalidWordCompletion
-    case lowValueSingleWordPhrase
-    case lowSignalPhrase
-    case duplicateCandidate
+    case replaysContext
 }
 
-public enum CompletionCleanResult: Equatable, Sendable {
+public enum CompletionCleanResult: Sendable {
     case accepted(CompletionSuggestion)
     case rejected(CompletionCleanRejectionReason)
 
     public var suggestion: CompletionSuggestion? {
-        guard case let .accepted(suggestion) = self else {
-            return nil
-        }
+        guard case let .accepted(suggestion) = self else { return nil }
         return suggestion
     }
 
     public var rejectionReason: CompletionCleanRejectionReason? {
-        guard case let .rejected(reason) = self else {
-            return nil
-        }
+        guard case let .rejected(reason) = self else { return nil }
         return reason
-    }
-
-    public var traceMetadata: [String: String] {
-        switch self {
-        case .accepted:
-            return ["completionCleanResult": "accepted"]
-        case let .rejected(reason):
-            return [
-                "completionCleanResult": "rejected",
-                "completionCleanRejectionReason": reason.rawValue
-            ]
-        }
     }
 }
 
-public struct CompletionOutputCleaner: Equatable, Sendable {
-    private static let noSuggestionToken = "<no_suggestion>"
+public struct CompletionOutputCleaner: Sendable {
+    private static let noSuggestion = "<no_suggestion>"
+    private static let wrappers = CharacterSet(charactersIn: "\"'`")
+    private static let unsafeScalars: Set<Unicode.Scalar> = [
+        "\u{200B}", "\u{200C}", "\u{200D}", "\u{2060}", "\u{FEFF}",
+    ]
+    private static let instructionPrefixes = [
+        "the following are real chat messages being written by their authors",
+        "the following are real emails being written by their authors",
+        "the following are real documents being written by their authors",
+        "system:", "assistant:",
+        "thinking process", "analyze the request", "okay, let's see", "okay, the user",
+    ]
+    private static let refusalMarkers = [
+        "i cannot assist", "i can't assist", "cannot help with that",
+    ]
 
-    public let minimumVisibleWords: Int
-    public let maxVisibleWords: Int
+    private let maxVisibleWords: Int
 
-    public init(
-        minimumVisibleWords: Int = CompletionModelPolicy.minimumVisibleWords,
-        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords
-    ) {
-        self.minimumVisibleWords = max(1, minimumVisibleWords)
-        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
-    }
-
-    public func clean(_ rawOutput: String) -> CompletionSuggestion? {
-        cleanWithReason(rawOutput).suggestion
-    }
-
-    public func clean(_ rawOutput: String, after textBeforeCursor: String?) -> CompletionSuggestion? {
-        cleanWithReason(rawOutput, after: textBeforeCursor).suggestion
-    }
-
-    public func clean(
-        _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode
-    ) -> CompletionSuggestion? {
-        cleanWithReason(rawOutput, after: textBeforeCursor, mode: mode).suggestion
-    }
-
-    public func cleanWithReason(_ rawOutput: String) -> CompletionCleanResult {
-        cleanWithReason(rawOutput, after: nil)
+    public init(maxVisibleWords: Int = CompletionSuggestion.defaultMaxVisibleWords) {
+        self.maxVisibleWords = CompletionSuggestion.clampedVisibleWords(maxVisibleWords)
     }
 
     public func cleanWithReason(
         _ rawOutput: String,
         after textBeforeCursor: String?
     ) -> CompletionCleanResult {
-        cleanWithReason(rawOutput, after: textBeforeCursor, mode: .phraseContinuation)
-    }
-
-    public func cleanWithReason(
-        _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode
-    ) -> CompletionCleanResult {
-        guard !containsUnsafePromptHiddenOrControlCharacter(rawOutput) else {
+        guard !containsUnsafeCharacter(rawOutput) else {
             return .rejected(.unsafeHiddenOrControlCharacter)
         }
 
-        let withoutThinking = rawOutput
-            .replacingOccurrences(
-                of: #"<think>[\s\S]*?</think>"#,
-                with: "",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: #"</?think>"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+        var candidate = rawOutput
+            .replacingOccurrences(of: #"(?is)<think>.*?</think>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)</?think>"#, with: "", options: .regularExpression)
+            .components(separatedBy: .newlines)[0]
+        candidate = unwrapped(candidate)
 
-        guard !withoutThinking.isEmpty else {
-            return .rejected(.emptyOutput)
-        }
+        guard !candidate.isEmpty else { return .rejected(.emptyOutput) }
+        guard !isNoSuggestion(candidate) else { return .rejected(.noSuggestionSentinel) }
 
-        guard !isNoSuggestionSentinel(withoutThinking) else {
-            return .rejected(.noSuggestionSentinel)
-        }
+        candidate = unwrapped(strippingAnswerLabel(from: candidate))
+        guard !candidate.isEmpty else { return .rejected(.emptyOutput) }
+        guard !isNoSuggestion(candidate) else { return .rejected(.noSuggestionSentinel) }
+        guard !isInstructionLeak(candidate) else { return .rejected(.promptInstructionEcho) }
 
-        let singleLine = withoutThinking
-            .components(separatedBy: .newlines)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        guard !singleLine.isEmpty else {
-            return .rejected(.emptyOutput)
-        }
-
-        guard !looksLikePromptInstructionEcho(singleLine) else {
-            return .rejected(.promptInstructionEcho)
-        }
-
-        let withoutPromptEchoLabel = strippingPromptEchoLabel(from: singleLine)
-
-        guard !withoutPromptEchoLabel.isEmpty else {
-            return .rejected(.emptyOutput)
-        }
-
-        guard !isBareAnswerLabelEcho(withoutPromptEchoLabel) else {
-            return .rejected(.promptInstructionEcho)
-        }
-
-        guard !isAssistantPersonaLeak(withoutPromptEchoLabel) else {
-            return .rejected(.promptInstructionEcho)
-        }
-
-        guard !isNoSuggestionSentinel(withoutPromptEchoLabel) else {
-            return .rejected(.noSuggestionSentinel)
-        }
-
-        guard !looksLikePromptInstructionEcho(withoutPromptEchoLabel) else {
-            return .rejected(.promptInstructionEcho)
-        }
-
-        let candidateText = strippingCorrectionArrowEcho(
-            from: withoutPromptEchoLabel,
-            after: textBeforeCursor
-        )
-
-        guard !candidateText.isEmpty else {
-            return .rejected(.emptyOutput)
-        }
-
-        if mode.isContinuation,
-           looksLikeRepeatedListMarker(candidateText) {
-            return .rejected(.repeatedListMarker)
-        }
-
-        guard !looksLikeAssistantMeta(candidateText) else {
-            return .rejected(.assistantMeta)
-        }
-
-        guard !looksLikeGenericChatFiller(candidateText) else {
-            return .rejected(.genericChatFiller)
-        }
-
-        guard !looksLikeUnsafePromptAction(candidateText) else {
-            return .rejected(.unsafePromptAction)
-        }
-
-        if mode.isContinuation,
-           startsSecondSentence(candidateText) {
-            return .rejected(.startsSecondSentence)
-        }
-
-        guard !looksLikeVisibleUIChromeCandidate(candidateText, mode: mode) else {
-            return .rejected(.visibleUIChrome)
-        }
-
-        if let textBeforeCursor,
-           looksLikeAssistantResponseToPrompt(candidateText, after: textBeforeCursor) {
-            return .rejected(.assistantResponseToPrompt)
-        }
-
-        if let textBeforeCursor,
-           restartsCurrentSentence(candidateText, after: textBeforeCursor) {
-            return .rejected(.restartsCurrentSentence)
-        }
-
-        if let textBeforeCursor,
-           replaysCurrentSentenceSpan(candidateText, after: textBeforeCursor) {
-            return .rejected(.replaysCurrentSentence)
-        }
-
-        guard !isAdviceOrToneDriftPhrase(candidateText) else {
-            return .rejected(.adviceOrToneDrift)
-        }
-
-        let normalizedSuggestion = mode == .wordCompletion ? candidateText : ensureLeadingSpace(candidateText)
-        var trimmedSuggestion: String
+        var continuation = candidate.first?.isWhitespace == true ? candidate : " " + candidate
         if let textBeforeCursor {
-            trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
-        } else {
-            trimmedSuggestion = normalizedSuggestion
+            continuation = trimTypedPrefix(continuation, after: textBeforeCursor)
         }
-        // Mid-word finals arrive as full continuations ("ng home soon") because
-        // the model runs past the word boundary. The word being finished is the
-        // payload — keep it, drop the rest. Rejecting multi-word outputs here
-        // swallowed nearly every mid-word final live (partials showed, finals
-        // vanished; midword_eval spoke-rate 0-4%).
-        if mode == .wordCompletion {
-            trimmedSuggestion = String(
-                trimmedSuggestion.drop(while: \.isWhitespace).prefix(while: { !$0.isWhitespace })
-            )
-        }
-
-        guard !trimmedSuggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !continuation.trimmingCharacters(in: .whitespaces).isEmpty else {
             return .rejected(.emptyAfterPrefixTrimming)
         }
-
-        if mode.isContinuation,
-           let textBeforeCursor,
-           duplicatesVisibleTypedWords(trimmedSuggestion, after: textBeforeCursor) {
-            return .rejected(.duplicatesVisibleTypedWords)
+        if let textBeforeCursor, replaysContext(continuation, context: textBeforeCursor) {
+            return .rejected(.replaysContext)
         }
 
-        if mode.isContinuation,
-           let textBeforeCursor,
-           replaysCurrentSentenceSpan(trimmedSuggestion, after: textBeforeCursor) {
-            return .rejected(.replaysCurrentSentence)
-        }
-
-        if let textBeforeCursor,
-           repeatsEarlierContext(trimmedSuggestion, after: textBeforeCursor) {
-            return .rejected(.repeatsEarlierContext)
-        }
-
-        let suggestion = CompletionSuggestion(text: trimmedSuggestion, maxVisibleWords: maxVisibleWords)
-        guard mode == .wordCompletion || suggestion.visibleWordCount >= minimumVisibleWords else {
-            return .rejected(.belowMinimumVisibleWords)
-        }
-
-        if mode == .wordCompletion,
-           !isValidWordCompletion(
-                suggestion.visibleText,
-                rawCandidate: candidateText,
-                after: textBeforeCursor
-           ) {
-            return .rejected(.invalidWordCompletion)
-        }
-
-        if mode.isContinuation,
-           isLowValueSingleWordPhrase(suggestion.visibleText) {
-            return .rejected(.lowValueSingleWordPhrase)
-        }
-
-        if mode.isContinuation,
-           isLowSignalPhrase(suggestion.visibleText) {
-            return .rejected(.lowSignalPhrase)
-        }
-
-        if mode.isContinuation,
-           isAdviceOrToneDriftPhrase(suggestion.visibleText) {
-            return .rejected(.adviceOrToneDrift)
-        }
-
-        if looksLikeVisibleUIChromeCandidate(suggestion.visibleText, mode: mode) {
-            return .rejected(.visibleUIChrome)
-        }
-
-        return .accepted(suggestion)
+        return .accepted(CompletionSuggestion(text: continuation, maxVisibleWords: maxVisibleWords))
     }
 
-    private func candidateLines(from rawOutput: String) -> [String] {
-        let withoutThinking = rawOutput
-            .replacingOccurrences(
-                of: #"<think>[\s\S]*?</think>"#,
-                with: "",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: #"</?think>"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-
-        let lines = withoutThinking
-            .components(separatedBy: .newlines)
-            .map(strippingCandidatePrefix)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-        return lines.isEmpty ? [withoutThinking] : lines
+    private func unwrapped(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: Self.wrappers)
     }
 
-    private func strippingCandidatePrefix(from text: String) -> String {
-        text
-            .replacingOccurrences(
-                of: #"^\s*candidate\s+\d+\s*[\).:-]?\s*"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .replacingOccurrences(
-                of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
-                with: "",
-                options: .regularExpression
-            )
+    private func isNoSuggestion(_ text: String) -> Bool {
+        unwrapped(text).lowercased() == Self.noSuggestion
     }
 
-    private func normalizedCandidateKey(_ text: String) -> String {
-        text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-    }
-
-    private func isNoSuggestionSentinel(_ text: String) -> Bool {
-        let trimmed = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: Self.noSuggestionWrapperCharacters)
-
-        return trimmed.lowercased() == Self.noSuggestionToken
-    }
-
-    private func looksLikeAssistantMeta(_ text: String) -> Bool {
-        let normalized = text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return normalized.hasPrefix("okay, let's see")
-            || normalized.hasPrefix("okay, the user")
-            || normalized.hasPrefix("let's see")
-            || normalized.hasPrefix("analyze the request")
-            || normalized.hasPrefix("as an ai")
-            || normalized.hasPrefix("happy to")
-            || normalized.hasPrefix("here's")
-            || normalized.hasPrefix("here is")
-            || normalized.hasPrefix("i can help")
-            || normalized.hasPrefix("i can't")
-            || normalized.hasPrefix("i cannot")
-            || normalized.hasPrefix("i can’t")
-            || normalized.hasPrefix("i'm here")
-            || normalized.hasPrefix("i am here")
-            || normalized.hasPrefix("it sounds like")
-            || normalized.hasPrefix("no problem")
-            || normalized.hasPrefix("the user ")
-            || normalized.hasPrefix("the user is ")
-            || normalized.hasPrefix("user is ")
-            || normalized.hasPrefix("would you like")
-            || normalized.hasPrefix("you can ")
-            || normalized.hasPrefix("you could ")
-            || normalized.hasPrefix("you might ")
-            || normalized.hasPrefix("assistant:")
-            || normalized.hasPrefix("system:")
-            || normalized.range(of: #"^\d+[\.\)]\s*[*_]*\s*analy[sz]e\b"#, options: .regularExpression) != nil
-            || normalized.hasPrefix("thinking process")
-    }
-
-    private func looksLikePromptInstructionEcho(_ text: String) -> Bool {
-        let normalized = text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return normalized.hasPrefix("before cursor:")
-            || normalized == "before cursor"
-            || normalized.hasPrefix("before cursor ")
-            || normalized.hasPrefix("after cursor:")
-            || normalized == "after cursor"
-            || normalized.hasPrefix("after cursor ")
-            || normalized.hasPrefix("action:")
-            || normalized.range(of: #"^candidate\s+\d+\s*[\).:-]?\s*$"#, options: .regularExpression) != nil
-            || normalized.hasPrefix("inline autocomplete")
-            || normalized.hasPrefix("inline word completion")
-            || normalized.hasPrefix("next action:")
-            || normalized.hasPrefix("recommendation:")
-            || normalized.hasPrefix("return only")
-            || normalized.hasPrefix("return exactly")
-            || normalized.hasPrefix("return the exact")
-            || normalized.hasPrefix("return the same")
-            || normalized.hasPrefix("rewrite:")
-            || normalized.hasPrefix("no spaces")
-            || normalized.hasPrefix("continue the current sentence")
-            || normalized.hasPrefix("start the next sentence")
-    }
-
-    /// Chat-tuned models sometimes slip into the assistant persona — refusing,
-    /// apologizing "as an AI", or answering instead of continuing (seen live:
-    /// "I'm sorry, but as an AI chatbot developed"). Any persona marker anywhere
-    /// in a candidate kills it. Plain apologies ("I'm sorry about the delay")
-    /// remain legitimate continuations and pass.
-    private func isAssistantPersonaLeak(_ text: String) -> Bool {
-        let normalized = text.lowercased()
-        let markers = [
-            "as an ai",
-            "as a language model",
-            "as an assistant",
-            "ai chatbot",
-            "ai assistant",
-            "language model",
-            "i cannot assist",
-            "i can't assist",
-            "cannot help with that",
-            "i'm not able to help",
-        ]
-        return markers.contains { normalized.contains($0) }
-    }
-
-    /// Models occasionally answer with the literal name of the answer field —
-    /// "Suffix", "Next words" — instead of a completion. Colon-less echoes slip
-    /// past the prefix-stripping above, so an output that IS a label is rejected.
-    private func isBareAnswerLabelEcho(_ text: String) -> Bool {
-        var normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.hasSuffix(":") { normalized.removeLast() }
-        if ["suffix", "next words", "next word", "continuation", "completion", "suggestion"].contains(normalized) {
-            return true
-        }
-        return normalized.range(
-            of: #"^next \d+-\d+ words(, or .*)?$"#,
-            options: .regularExpression
-        ) != nil
-    }
-
-    private func strippingPromptEchoLabel(from text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let withoutCandidateLabel = trimmed.replacingOccurrences(
-            of: #"^\s*candidate\s+\d+\s*[\).:-]\s*"#,
+    private func strippingAnswerLabel(from text: String) -> String {
+        text.replacingOccurrences(
+            of: #"^(?:candidate\s+\d+\s*[\).:-]\s*|(?:next words?|continuation|completion|suggestion|suffix)\s*:\s*)"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
-
-        if withoutCandidateLabel != trimmed {
-            return withoutCandidateLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        for label in Self.promptEchoLabels {
-            guard trimmed.lowercased().hasPrefix(label) else {
-                continue
-            }
-
-            return String(trimmed.dropFirst(label.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        return trimmed
     }
 
-    private func strippingCorrectionArrowEcho(from text: String, after textBeforeCursor: String?) -> String {
-        guard let textBeforeCursor,
-              textBeforeCursor.contains("->"),
-              text.contains("->"),
-              let tail = text.components(separatedBy: "->").last?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !tail.isEmpty,
-              tail.range(
-                of: #"^[A-Za-z][A-Za-z'-]*[.!?]?$"#,
-                options: .regularExpression
-              ) != nil else {
-            return text
-        }
-
-        return tail
-    }
-
-    private func looksLikeGenericChatFiller(_ text: String) -> Bool {
-        let normalized = text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return Self.genericFillerPrefixes.contains { normalized.hasPrefix($0) }
-    }
-
-    private func looksLikeRepeatedListMarker(_ text: String) -> Bool {
-        text.range(
-            of: #"^\s*(?:[-*+]|\d+[\.\)]|\[[ xX]\])\s+"#,
+    private func isInstructionLeak(_ text: String) -> Bool {
+        let normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.range(
+            of: #"^(?:(?:i(?:['’]m| am) sorry,\s*(?:but\s+)?)as (?:an ai(?: assistant| chatbot| language model)?|a language model)\b|as (?:an ai(?: assistant| chatbot| language model)?|a language model)\b[,\s]+(?:i|my)\b|i(?:['’]m| am) (?:an ai(?: assistant| chatbot| language model)?|a language model)\b)"#,
             options: .regularExpression
-        ) != nil
-    }
-
-    private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
-        if containsUnsafePromptHiddenOrControlCharacter(text) {
+        ) != nil {
             return true
         }
-
-        let normalized = text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if Self.unsafePromptCommandPrefixes.contains(where: { normalized.hasPrefix($0) }) {
+        if normalized.range(
+            of: #"^(?:candidate\s+\d+|next(?:\s+\d+-\d+)? words?|continuation|completion|suggestion|suffix)\s*:?(?:,\s*or\s*<no_suggestion>)?$"#,
+            options: .regularExpression
+        ) != nil {
             return true
         }
-
-        if normalized.hasPrefix("```") || normalized.hasPrefix("$ ") || normalized.hasPrefix("> ") {
-            return true
-        }
-
-        return containsUnsafePromptActionPhrase(normalized)
-            || normalized.hasPrefix("press enter")
-            || normalized.hasPrefix("press return")
-            || normalized.hasPrefix("press tab")
-            || normalized.hasPrefix("press shift-tab")
-            || normalized.hasPrefix("press option-tab")
-            || normalized.hasPrefix("use backtick")
-            || normalized.hasPrefix("hit enter")
-            || normalized.hasPrefix("hit return")
-            || normalized.hasPrefix("send the prompt")
-            || normalized.hasPrefix("submit the prompt")
-            || normalized.hasPrefix("click send")
-            || normalized.hasPrefix("run this command")
-            || normalized.hasPrefix("execute this command")
-            || normalized.hasPrefix("execute the command")
-            || normalized.hasPrefix("accept all visible")
-            || normalized.hasPrefix("accept the whole suggestion")
-            || Self.unsafePromptActionWords.contains(normalized)
+        return Self.instructionPrefixes.contains(where: normalized.hasPrefix)
+            || Self.refusalMarkers.contains(where: normalized.contains)
     }
 
-    private func containsUnsafePromptActionPhrase(_ normalized: String) -> Bool {
-        Self.unsafePromptActionPhrases.contains { phrase in
-            normalized.range(
-                of: #"(?<![a-z0-9])\#(NSRegularExpression.escapedPattern(for: phrase))(?![a-z0-9])"#,
-                options: .regularExpression
-            ) != nil
-        }
-    }
-
-    private func containsUnsafePromptHiddenOrControlCharacter(_ text: String) -> Bool {
+    private func containsUnsafeCharacter(_ text: String) -> Bool {
         text.unicodeScalars.contains { scalar in
-            if Self.unsafePromptHiddenScalars.contains(scalar) {
-                return true
-            }
-            if scalar == "\n" || scalar == "\r" {
-                return false
-            }
-            return CharacterSet.controlCharacters.contains(scalar)
+            Self.unsafeScalars.contains(scalar)
+                || (scalar != "\n" && scalar != "\r" && CharacterSet.controlCharacters.contains(scalar))
         }
     }
 
-    private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
-        let normalizedCandidate = text
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard Self.assistantResponsePrefixes.contains(where: { normalizedCandidate.hasPrefix($0) }) else {
-            return false
+    private func trimTypedPrefix(_ suggestion: String, after context: String) -> String {
+        if context.last?.isWhitespace == true {
+            return String(suggestion.drop(while: \.isWhitespace))
         }
+        // A punctuation-only trailing token has no fragment. Treating its
+        // normalized empty string as a prefix used to drop the first character.
+        guard context.last?.isLetter == true else { return suggestion }
 
-        let nearbyContext = String(textBeforeCursor.suffix(180)).lowercased()
-        return Self.promptRequestMarkers.contains(where: { nearbyContext.contains($0) })
-    }
+        let contextWords = normalizedWords(in: context)
+        let suggestionRanges = wordRanges(in: suggestion)
+        let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
+        guard !contextWords.isEmpty, !suggestionWords.isEmpty else { return suggestion }
 
-    private func ensureLeadingSpace(_ text: String) -> String {
-        guard let first = text.first, !first.isWhitespace else {
-            return text
-        }
-
-        return " " + text
-    }
-
-    private func isValidWordCompletion(
-        _ text: String,
-        rawCandidate: String,
-        after textBeforeCursor: String?
-    ) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              !trimmed.contains(where: { $0.isWhitespace }) else {
-            return false
-        }
-
-        guard trimmed.allSatisfy({ $0.isLetter }) else {
-            return false
-        }
-
-        guard let textBeforeCursor,
-              let fragment = trailingWordFragment(in: textBeforeCursor) else {
-            return true
-        }
-
-        let normalizedFragment = fragment.lowercased()
-        // The raw candidate may run past the word boundary ("walking home
-        // soon" for fragment "walki") — the fragment rules apply to its FIRST
-        // word, which is the word being completed.
-        let normalizedRawFirstWord = rawCandidate
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .prefix(while: { !$0.isWhitespace })
-
-        guard !normalizedFragment.isEmpty,
-              !normalizedRawFirstWord.isEmpty,
-              normalizedRawFirstWord.allSatisfy({ $0.isLetter }) else {
-            return true
-        }
-
-        if normalizedRawFirstWord.hasPrefix(normalizedFragment) {
-            return normalizedRawFirstWord.count > normalizedFragment.count
-        }
-
-        return !Self.commonWholeWords.contains(String(normalizedRawFirstWord))
-    }
-
-    private func isLowValueSingleWordPhrase(_ text: String) -> Bool {
-        let words = normalizedWords(in: text)
-        guard words.count == 1,
-              let word = words.first else {
-            return false
-        }
-
-        return Self.lowValueSingleWordPhrases.contains(word)
-    }
-
-    private func isLowSignalPhrase(_ text: String) -> Bool {
-        let words = normalizedWords(in: text)
-        guard words.count >= 2 else {
-            return false
-        }
-
-        if Self.lowSignalPhraseStarters.contains(Array(words.prefix(2)).joined(separator: " ")) {
-            return true
-        }
-
-        return words.allSatisfy { Self.lowSignalWords.contains($0) }
-    }
-
-    private func isAdviceOrToneDriftPhrase(_ text: String) -> Bool {
-        let words = normalizedWords(in: text)
-        guard words.count >= 2 else {
-            return false
-        }
-
-        return Self.adviceOrToneDriftStarters.contains { starter in
-            words.starts(with: starter)
-        }
-    }
-
-    private func startsSecondSentence(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        for index in trimmed.indices where ".!?".contains(trimmed[index]) {
-            let afterBoundary = trimmed.index(after: index)
-            guard afterBoundary < trimmed.endIndex else {
-                continue
+        for count in stride(from: min(contextWords.count, suggestionWords.count), through: 1, by: -1) {
+            let typed = Array(contextWords.suffix(count))
+            let offered = Array(suggestionWords.prefix(count))
+            if typed == offered {
+                guard count < suggestionRanges.count else { return "" }
+                return " " + suggestion[suggestionRanges[count].lowerBound...]
             }
 
-            let remaining = trimmed[afterBoundary...]
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !remaining.isEmpty {
-                return true
-            }
+            guard typed.dropLast() == offered.dropLast(),
+                  let typedLast = typed.last,
+                  let offeredLast = offered.last,
+                  !typedLast.isEmpty,
+                  offeredLast.hasPrefix(typedLast),
+                  typedLast.count < offeredLast.count else { continue }
+            let range = suggestionRanges[count - 1]
+            guard let start = suggestion.index(
+                range.lowerBound,
+                offsetBy: typedLast.count,
+                limitedBy: range.upperBound
+            ) else { continue }
+            return String(suggestion[start...])
         }
-
-        return false
+        return suggestion
     }
 
-    private func looksLikeVisibleUIChromeCandidate(_ text: String, mode: CompletionRequestMode) -> Bool {
-        guard mode.isContinuation else {
-            return false
-        }
+    private func replaysContext(_ suggestion: String, context: String) -> Bool {
+        let offered = normalizedWords(in: suggestion)
+        let typed = normalizedWords(in: context)
+        guard offered.count >= 3, typed.count >= 3 else { return false }
 
-        let words = normalizedWords(in: text)
-        guard !words.isEmpty else {
-            return false
+        for size in stride(from: min(4, offered.count), through: 3, by: -1) {
+            if contains(Array(offered.prefix(size)), in: typed) { return true }
         }
-
-        if isWrappedInMarkdownEmphasis(text), words.count <= 4 {
-            return true
+        guard offered.count >= 4 else { return false }
+        return offered.indices.dropLast(3).contains { index in
+            contains(Array(offered[index..<offered.index(index, offsetBy: 4)]), in: typed)
         }
-
-        if words[0] == "untitled" {
-            return words.count == 1
-                || words.dropFirst().allSatisfy { $0.allSatisfy(\.isNumber) || Self.visibleUIChromeTokens.contains($0) }
-        }
-
-        if words[0] == "ep", words.count <= 3 {
-            return true
-        }
-
-        guard words.count >= 2, words.count <= 5 else {
-            return false
-        }
-
-        return words.allSatisfy { Self.visibleUIChromeTokens.contains($0) || $0.allSatisfy(\.isNumber) }
     }
 
-    private func isWrappedInMarkdownEmphasis(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (trimmed.hasPrefix("**") && trimmed.hasSuffix("**"))
-            || (trimmed.hasPrefix("__") && trimmed.hasSuffix("__"))
-    }
-
-    private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
-        let suggestionWords = normalizedWords(in: suggestion)
-        guard suggestionWords.count >= 3 else {
-            return false
+    private func contains(_ needle: [String], in words: [String]) -> Bool {
+        guard words.count >= needle.count else { return false }
+        return words.indices.dropLast(needle.count - 1).contains { index in
+            Array(words[index..<words.index(index, offsetBy: needle.count)]) == needle
         }
-
-        let contextWords = normalizedWords(in: textBeforeCursor)
-        guard contextWords.count >= 4 else {
-            return false
-        }
-
-        let leadPhrase = Array(suggestionWords.prefix(3))
-        if Array(contextWords.suffix(min(leadPhrase.count, contextWords.count))) == leadPhrase {
-            return false
-        }
-
-        return contextWords.windows(ofCount: leadPhrase.count).contains(leadPhrase)
-    }
-
-    private func duplicatesVisibleTypedWords(_ suggestion: String, after textBeforeCursor: String) -> Bool {
-        let suggestionWords = normalizedWords(in: suggestion)
-        guard !suggestionWords.isEmpty else {
-            return false
-        }
-
-        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
-        guard !currentSentenceWords.isEmpty else {
-            return false
-        }
-
-        if suggestionWords.count == 1,
-           let onlyWord = suggestionWords.first,
-           onlyWord.count > 3,
-           !Self.lowValueSingleWordPhrases.contains(onlyWord),
-           currentSentenceWords.contains(onlyWord) {
-            return true
-        }
-
-        let maximumLead = min(3, suggestionWords.count, currentSentenceWords.count)
-        guard maximumLead >= 2 else {
-            return false
-        }
-
-        for leadCount in stride(from: maximumLead, through: 2, by: -1) {
-            let leadPhrase = Array(suggestionWords.prefix(leadCount))
-            if currentSentenceWords.windows(ofCount: leadCount).contains(leadPhrase) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private func restartsCurrentSentence(_ suggestion: String, after textBeforeCursor: String) -> Bool {
-        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
-        let suggestionWords = normalizedWords(in: suggestion)
-
-        guard currentSentenceWords.count > 3,
-              suggestionWords.count >= 3 else {
-            return false
-        }
-
-        return Array(currentSentenceWords.prefix(3)) == Array(suggestionWords.prefix(3))
-    }
-
-    private func replaysCurrentSentenceSpan(_ suggestion: String, after textBeforeCursor: String) -> Bool {
-        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
-        let suggestionWords = normalizedWords(in: suggestion)
-
-        guard currentSentenceWords.count >= 5,
-              suggestionWords.count >= 4 else {
-            return false
-        }
-
-        let windowSize = min(5, currentSentenceWords.count, suggestionWords.count)
-        for size in stride(from: windowSize, through: 4, by: -1) {
-            let currentWindows = Set(currentSentenceWords.windows(ofCount: size))
-            guard !currentWindows.isEmpty else {
-                continue
-            }
-
-            if suggestionWords.windows(ofCount: size).contains(where: { currentWindows.contains($0) }) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private func currentSentence(in text: String) -> String {
-        let separators = CharacterSet(charactersIn: ".!?\n")
-        let components = text.components(separatedBy: separators)
-        return components.last ?? text
     }
 
     private func normalizedWords(in text: String) -> [String] {
-        text
-            .split(whereSeparator: { $0.isWhitespace })
-            .map {
-                $0.trimmingCharacters(in: .punctuationCharacters).lowercased()
+        wordRanges(in: text).map { normalized(String(text[$0])) }.filter { !$0.isEmpty }
+    }
+
+    private func wordRanges(in text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var start: String.Index?
+        for index in text.indices {
+            if text[index].isWhitespace {
+                if let start { ranges.append(start..<index) }
+                start = nil
+            } else if start == nil {
+                start = index
             }
-            .filter { !$0.isEmpty }
+        }
+        if let start { ranges.append(start..<text.endIndex) }
+        return ranges
     }
 
-    private func trailingWordFragment(in text: String) -> String? {
-        guard let last = text.last, last.isLetter else {
-            return nil
-        }
-
-        return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
-    }
-
-    private static let lowValueSingleWordPhrases: Set<String> = [
-        "a", "an", "and", "are", "as", "at", "be", "but", "for", "i",
-        "if", "in", "is", "it", "of", "on", "or", "so", "the", "to",
-        "was", "we", "were", "with", "you"
-    ]
-
-    private static let promptEchoLabels = [
-        "next words:",
-        "next word:",
-        "continuation:",
-        "completion:",
-        "suggestion:",
-        "suffix:"
-    ]
-
-    private static let noSuggestionWrapperCharacters = CharacterSet(charactersIn: "\"'`")
-
-    // Inlined from the deleted WordCompletionCandidateRanker's default word list.
-    private static let commonWholeWords = Set([
-        "about", "accurate", "actually", "again", "also", "always", "app",
-        "application", "around", "available", "because",
-        "before", "being", "better", "between", "bring", "build", "change",
-        "computer", "context", "conversation", "could",
-        "decent", "decently", "definitely", "dictation", "different",
-        "document", "everything", "fast",
-        "first", "going", "hello", "help", "hey", "important",
-        "instant", "interesting", "kind", "language", "launch",
-        "make", "meaning", "need", "notes",
-        "option", "people", "really",
-        "reliable", "right", "should", "slow", "something",
-        "system", "their", "there", "these", "thing",
-        "think", "this", "trying", "typing", "understand", "want",
-        "what", "when", "where", "which", "while", "window",
-        "without", "working", "would", "writing",
-    ]).union(lowValueSingleWordPhrases)
-
-    private static let visibleUIChromeTokens: Set<String> = [
-        "automations",
-        "chat",
-        "chats",
-        "edited",
-        "font",
-        "format",
-        "helvetica",
-        "new",
-        "plugins",
-        "projects",
-        "regular",
-        "search",
-        "settings",
-        "untitled"
-    ]
-
-    private static let assistantResponsePrefixes: Set<String> = [
-        "first,",
-        "i can ",
-        "i will ",
-        "i'll ",
-        "let me ",
-        "sure,",
-        "we need to "
-    ]
-
-    private static let promptRequestMarkers: Set<String> = [
-        "build ",
-        "can you",
-        "could you",
-        "debug ",
-        "explain ",
-        "fix ",
-        "help me",
-        "inspect ",
-        "look at",
-        "make ",
-        "please ",
-        "run ",
-        "write "
-    ]
-
-    private static let unsafePromptCommandPrefixes = [
-        "/", "!", "@", "--", "sudo ", "curl ", "bash ", "sh ", "rm "
-    ]
-
-    private static let unsafePromptActionWords: Set<String> = [
-        "allow",
-        "approve",
-        "click",
-        "delete",
-        "deploy",
-        "enter",
-        "execute",
-        "merge",
-        "return",
-        "run",
-        "send",
-        "ship",
-        "submit"
-    ]
-
-    private static let unsafePromptActionPhrases = [
-        "accept all visible text",
-        "accept the change",
-        "accept the terms",
-        "accept the whole suggestion",
-        "click send",
-        "execute the command",
-        "execute this command",
-        "hit enter",
-        "hit return",
-        "option-tab",
-        "press enter",
-        "press option-tab",
-        "press return",
-        "press shift-tab",
-        "press tab",
-        "run this command",
-        "send it",
-        "send the prompt",
-        "shift-tab",
-        "submit it",
-        "submit the prompt",
-        "use backtick"
-    ]
-
-    private static let unsafePromptHiddenScalars: Set<Unicode.Scalar> = [
-        "\u{200B}",
-        "\u{200C}",
-        "\u{200D}",
-        "\u{2060}",
-        "\u{FEFF}"
-    ]
-
-    private static let lowSignalWords: Set<String> = [
-        "a", "an", "and", "are", "as", "at", "be", "been", "being", "but",
-        "by", "can", "could", "do", "does", "for", "from", "had", "has",
-        "have", "he", "her", "here", "him", "his", "i", "if", "in", "is",
-        "it", "its", "just", "may", "maybe", "might", "of", "on", "or",
-        "our", "probably", "really", "she", "should", "so", "some", "that",
-        "the", "their", "there", "they", "this", "to", "very", "was", "we",
-        "were", "will", "with", "would", "you", "your"
-    ]
-
-    private static let lowSignalPhraseStarters: Set<String> = [
-        "i guess",
-        "i think",
-        "it would",
-        "kind of",
-        "sort of",
-        "there are",
-        "there is"
-    ]
-
-    private static let genericFillerPrefixes: Set<String> = [
-        "boost productivity",
-        "absolutely,",
-        "certainly,",
-        "comes to life",
-        "comprehensive recovery plan",
-        "drive better outcomes",
-        "enhance the experience",
-        "enhance user experience",
-        "improve productivity",
-        "improve the user experience",
-        "increase productivity",
-        "integrate it seamlessly",
-        "i would like to",
-        "i will do that",
-        "i'll do that",
-        "implement a comprehensive",
-        "key features and benefits",
-        "let me know",
-        "like a formal announcement",
-        "leverage the system",
-        "make users more productive",
-        "maximize efficiency",
-        "of course,",
-        "okay, i would",
-        "okay, would",
-        "one option is",
-        "optimize the workflow",
-        "save time and effort",
-        "streamline the workflow",
-        "streamline workflows",
-        "sure,",
-        "that makes a lot of sense",
-        "the key features",
-        "to acknowledge the user",
-        "unlock efficiency"
-    ]
-
-    private static let adviceOrToneDriftStarters: Set<[String]> = [
-        ["a", "good", "way"],
-        ["a", "better", "approach"],
-        ["absolutely"],
-        ["analyze", "the", "request"],
-        ["boost", "productivity"],
-        ["comes", "to", "life"],
-        ["comprehensive", "recovery", "plan"],
-        ["drive", "better", "outcomes"],
-        ["great", "question"],
-        ["happy", "to", "help"],
-        ["i'd", "recommend"],
-        ["i'd", "suggest"],
-        ["i’d", "recommend"],
-        ["i’d", "suggest"],
-        ["i", "love", "this"],
-        ["i", "recommend"],
-        ["i", "suggest"],
-        ["i", "would", "recommend"],
-        ["i", "would", "suggest"],
-        ["i", "think", "we", "should"],
-        ["implement", "a", "comprehensive"],
-        ["it", "is", "important"],
-        ["it's", "important"],
-        ["let's"],
-        ["lets"],
-        ["like", "a", "formal", "announcement"],
-        ["make", "sure", "to"],
-        ["make", "users", "more", "productive"],
-        ["maximize", "efficiency"],
-        ["key", "features", "and", "benefits"],
-        ["one", "thing", "to", "consider"],
-        ["one", "option", "is"],
-        ["next", "action"],
-        ["next", "step"],
-        ["optimize", "the", "workflow"],
-        ["rewrite", "this"],
-        ["the", "key", "features"],
-        ["to", "acknowledge", "the", "user"],
-        ["save", "time", "and", "effort"],
-        ["seamless", "experience"],
-        ["sounds", "great"],
-        ["streamline", "the", "workflow"],
-        ["streamline", "workflows"],
-        ["the", "best", "way"],
-        ["the", "next", "step"],
-        ["the", "best", "approach"],
-        ["the", "user", "wants"],
-        ["this", "is", "a", "great"],
-        ["this", "is", "exciting"],
-        ["try", "saying"],
-        ["unlock", "efficiency"],
-        ["you", "may", "want"],
-        ["you", "might", "want"],
-        ["you", "need", "to"],
-        ["you", "should"],
-        ["we", "need", "to"],
-        ["we", "should"],
-        ["what", "i", "would", "do"]
-    ]
-}
-
-private extension Array where Element: Equatable {
-    func windows(ofCount count: Int) -> [[Element]] {
-        guard count > 0, self.count >= count else {
-            return []
-        }
-
-        return indices.dropLast(count - 1).map { index in
-            Array(self[index..<self.index(index, offsetBy: count)])
-        }
+    private func normalized(_ word: String) -> String {
+        word.trimmingCharacters(in: .punctuationCharacters).lowercased()
     }
 }

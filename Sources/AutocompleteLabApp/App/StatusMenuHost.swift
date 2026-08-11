@@ -1,7 +1,7 @@
 import AppKit
 
 /// Tilde's complete user-facing surface: useful stats, honest engine status,
-/// working controls, pause, local data, and quit. No settings window or panes.
+/// working controls, pause, and quit. No settings window or panes.
 @MainActor
 final class StatusMenuHost: NSObject {
 
@@ -12,9 +12,6 @@ final class StatusMenuHost: NSObject {
     private var todayItem: NSMenuItem?
     private var engineItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
-    private var screenItem: NSMenuItem?
-    private var soundsItem: NSMenuItem?
-    private var learningItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
 
     /// Every setting, its defaults domain, and its fallback live in one tested
@@ -32,22 +29,14 @@ final class StatusMenuHost: NSObject {
 
         let menu = NSMenu()
         lifetimeItem = addInfoRow(to: menu, "Tilde")
-        todayItem = addInfoRow(to: menu, "Today: no typing yet")
-        engineItem = addInfoRow(to: menu, "Engine: starting…")
+        todayItem = addInfoRow(to: menu, "Today: none accepted")
+        engineItem = addInfoRow(to: menu, LlamaRuntimeSnapshot.starting.menuLine)
         menu.addItem(.separator())
 
-        suggestionsItem = addToggle(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
-        screenItem = addToggle(to: menu, "Screen-aware", #selector(toggleScreenContext(_:)))
-        soundsItem = addToggle(to: menu, "Sounds", #selector(toggleSounds(_:)))
-        learningItem = addToggle(
-            to: menu,
-            "Learn from my writing (syncs to iCloud)",
-            #selector(toggleLearning(_:))
-        )
+        suggestionsItem = addAction(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
-        addAction(to: menu, "Show data in Finder", #selector(showData(_:)))
         addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
         menu.delegate = self
@@ -93,14 +82,6 @@ final class StatusMenuHost: NSObject {
     }
 
     @discardableResult
-    private func addToggle(to menu: NSMenu, _ title: String, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        menu.addItem(item)
-        return item
-    }
-
-    @discardableResult
     private func addAction(
         to menu: NSMenu,
         _ title: String,
@@ -117,14 +98,6 @@ final class StatusMenuHost: NSObject {
         settings.suggestionsEnabled.toggle()
     }
 
-    @objc private func toggleLearning(_ sender: Any?) {
-        settings.learningEnabled.toggle()
-    }
-
-    @objc private func toggleSounds(_ sender: Any?) {
-        settings.soundsEnabled.toggle()
-    }
-
     @objc private func togglePause(_ sender: Any?) {
         if settings.pausedUntil != nil {
             settings.resume()
@@ -133,33 +106,11 @@ final class StatusMenuHost: NSObject {
         }
     }
 
-    @objc private func toggleScreenContext(_ sender: Any?) {
-        settings.screenAware.toggle()
-    }
-
-    @objc private func showData(_ sender: Any?) {
-        let fileManager = FileManager.default
-        let localFolder = fileManager
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tilde", isDirectory: true)
-        let iCloudFolder = fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage", isDirectory: true)
-        let existingFolders = [localFolder, iCloudFolder].filter {
-            fileManager.fileExists(atPath: $0.path)
-        }
-        if existingFolders.isEmpty {
-            try? fileManager.createDirectory(at: localFolder, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(localFolder)
-        } else {
-            existingFolders.forEach { NSWorkspace.shared.open($0) }
-        }
-    }
-
     @objc private func quit(_ sender: Any?) {
         // Deliberate quit means STAY quit: tell the keyboard's watchdog not to
         // summon the brain back. The flag lives in the IME's defaults domain
         // and is cleared by the next on-purpose app launch.
-        UserDefaults(suiteName: AppDelegate.keyboardDefaultsSuite)?
+        UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
             .set(true, forKey: "GhostBrainQuietQuit")
         NSApp.terminate(nil)
     }
@@ -169,25 +120,14 @@ extension StatusMenuHost: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         let lifetime = TildeStats.lifetimeWordsAccepted()
         lifetimeItem?.title = lifetime > 0
-            ? "\(lifetime.formatted()) words written for you"
+            ? "\(lifetime.formatted()) words accepted"
             : "Tilde"
 
-        let today = TildeStats.today()
-        if today.wordsAccepted > 0 {
-            var line = "Today: \(today.wordsAccepted) words (\(today.shareOfTyping)%)"
-            if today.wordsPerMinute > 0 {
-                line += " · \(today.wordsPerMinute) wpm"
-            }
-            todayItem?.title = line
-        } else {
-            todayItem?.title = "Today: no typing yet"
-        }
+        let today = TildeStats.todayWordsAccepted()
+        todayItem?.title = today > 0 ? "Today: \(today) accepted" : "Today: none accepted"
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
-        screenItem?.state = settings.screenAware ? .on : .off
-        soundsItem?.state = settings.soundsEnabled ? .on : .off
-        learningItem?.state = settings.learningEnabled ? .on : .off
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))

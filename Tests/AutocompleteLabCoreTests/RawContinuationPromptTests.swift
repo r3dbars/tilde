@@ -21,23 +21,6 @@ struct RawContinuationPromptTests {
         #expect(prompt.prompt.contains("word600"))
     }
 
-    @Test("Screen context sits between scaffold and text as reference notes")
-    func screenContextSitsBetweenScaffoldAndText() {
-        let prompt = RawContinuationPrompt(
-            textBeforeCursor: "since we ",
-            screenContext: "Q3 Launch Plan\nOwner: Sarah Chen"
-        )
-
-        #expect(prompt.prompt.contains("Reference notes visible on the writer's screen"))
-        #expect(prompt.prompt.contains("Q3 Launch Plan"))
-        let notesIndex = prompt.prompt.range(of: "Reference notes")!.lowerBound
-        let textIndex = prompt.prompt.range(of: "Text: since we")!.lowerBound
-        #expect(notesIndex < textIndex)
-
-        let bare = RawContinuationPrompt(textBeforeCursor: "since we ")
-        #expect(!bare.prompt.contains("Reference notes"))
-    }
-
     @Test("Normalization strips the duplicate separating space and stops at newlines")
     func normalizationHandlesSpacesAndNewlines() {
         let afterSpace = RawContinuationPrompt(textBeforeCursor: "since we ")
@@ -92,29 +75,11 @@ struct ContinuationCutoffRepairTests {
     }
 }
 
-@Suite("Cap-induced dangler repair")
-struct CapInducedDanglerRepairTests {
-    @Test("Word-capped finished sentences get their tails repaired")
-    func cappedSentencesGetRepaired() {
-        #expect(RawContinuationPrompt.repairDanglingTail(" see if you had any thoughts on the") == " see if you had any thoughts")
-        #expect(RawContinuationPrompt.repairDanglingTail("still make the meeting, should be there in") == "still make the meeting, should be there")
-        #expect(RawContinuationPrompt.repairDanglingTail(" walk through the new proposal in detail.") == " walk through the new proposal in detail.")
-    }
-}
+@Test("Empty context stays silent")
+func emptyContextStaysSilent() {
+    let empty = RawContinuationPrompt(textBeforeCursor: "", register: .chat)
+    #expect(empty.prompt.isEmpty)
 
-@Test("Opener mode: empty context + screen builds a reply prompt; no screen builds nothing")
-func openerMode() {
-    let withScreen = RawContinuationPrompt(
-        textBeforeCursor: "",
-        screenContext: "want to grab dinner tonight?",
-        register: .chat
-    )
-    #expect(withScreen.prompt.hasSuffix("Message: want to grab dinner tonight?\nReply:"))
-    #expect(withScreen.prompt.contains("real chat messages"))
-
-    let noScreen = RawContinuationPrompt(textBeforeCursor: "", screenContext: nil, register: .chat)
-    #expect(noScreen.prompt.isEmpty)
-
-    let whitespaceOnly = RawContinuationPrompt(textBeforeCursor: "   ", screenContext: nil, register: .chat)
+    let whitespaceOnly = RawContinuationPrompt(textBeforeCursor: "   ", register: .chat)
     #expect(whitespaceOnly.prompt.isEmpty)
 }

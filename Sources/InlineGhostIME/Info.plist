@@ -3,21 +3,19 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>InlineGhostIME</string>
+    <string>Tilde</string>
     <key>CFBundleDisplayName</key>
-    <string>Inline Ghost (Tilde Spike)</string>
+    <string>Tilde</string>
     <key>CFBundleIdentifier</key>
     <string>bar.r3d.inputmethod.InlineGhost</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1</string>
+    <string>0.1.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>InlineGhostIME</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
     <key>LSMinimumSystemVersion</key>
     <string>26.0</string>
     <key>LSUIElement</key>
