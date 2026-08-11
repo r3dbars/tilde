@@ -77,7 +77,7 @@ final class GhostInputController: IMKInputController {
                 match.ticket.advancing(
                     with: grapheme,
                     boundedContext: match.context,
-                    contextLimit: Self.contextLimit
+                    utf16Limit: Self.contextLimit
                 )
             }
             let current = match?.ticket
@@ -128,10 +128,10 @@ final class GhostInputController: IMKInputController {
             resetFallback()
             return
         }
-        typedFallback.append(text)
-        if typedFallback.count > Self.contextLimit {
-            typedFallback.removeFirst(typedFallback.count - Self.contextLimit)
-        }
+        typedFallback = InlineSuggestionTicket.boundedContext(
+            typedFallback + text,
+            utf16Limit: Self.contextLimit
+        )
         fallbackOwner = FallbackOwner(
             client: owner.client,
             bundle: owner.bundle,
@@ -328,6 +328,7 @@ final class GhostInputController: IMKInputController {
     /// letter partial word, run after the key callback has returned.
     private func spellCheckerSuffix(for context: String) -> String {
         let partial = String(context.reversed().prefix(while: \Character.isLetter).reversed())
+        guard partial.count >= 3 else { return "" }
         let range = NSRange(location: 0, length: partial.utf16.count)
         let candidates = NSSpellChecker.shared.completions(
             forPartialWordRange: range,

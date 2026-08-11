@@ -54,7 +54,7 @@ struct InlineSuggestionStateTests {
     @Test("Matching type-through hides, inserts, and re-marks without scheduling")
     func matchingTypeThroughConsumesOneGrapheme() {
         let current = ticket(context: "caf", location: 3)
-        let advanced = current.advancing(with: "é", boundedContext: "caf", contextLimit: 3_000)
+        let advanced = current.advancing(with: "é", boundedContext: "caf", utf16Limit: 3_000)
         var state = InlineSuggestionState()
         _ = state.reduce(.awaitSuggestion(current))
         _ = state.reduce(.present("é noir", current))
@@ -73,7 +73,7 @@ struct InlineSuggestionStateTests {
         _ = state.reduce(.awaitSuggestion(original))
         _ = state.reduce(.present("ello", original))
 
-        let afterE = original.advancing(with: "e", boundedContext: "h", contextLimit: 3_000)
+        let afterE = original.advancing(with: "e", boundedContext: "h", utf16Limit: 3_000)
         #expect(state.reduce(.type("e", current: original, advanced: afterE)) == [
             .hide, .insert("e"), .show("llo"),
         ])
@@ -86,7 +86,7 @@ struct InlineSuggestionStateTests {
         let afterL = matchedAfterE?.advancing(
             with: "l",
             boundedContext: "he",
-            contextLimit: 3_000
+            utf16Limit: 3_000
         )
         #expect(state.reduce(.type("l", current: matchedAfterE, advanced: afterL)) == [
             .hide, .insert("l"), .show("lo"),
@@ -109,7 +109,7 @@ struct InlineSuggestionStateTests {
         let advanced = current.advancing(
             with: "!",
             boundedContext: "hello",
-            contextLimit: 3_000
+            utf16Limit: 3_000
         )
         #expect(state.reduce(.type("!", current: current, advanced: advanced)) == [
             .hide, .insert("!"), .schedule(afterTyping: "!"),
@@ -124,9 +124,36 @@ struct InlineSuggestionStateTests {
         let advanced = current.advancing(
             with: "b",
             boundedContext: context,
-            contextLimit: 3_000
+            utf16Limit: 3_000
         )
         let live = ticket(context: rolledContext, location: 3_001, request: 99)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+        _ = state.reduce(.present("bc", current))
+
+        #expect(state.reduce(.type("b", current: current, advanced: advanced)) == [
+            .hide, .insert("b"), .show("c"),
+        ])
+        let matchedForTab = state.visibleTicket.flatMap {
+            $0.matchesFieldState(of: live) ? $0 : nil
+        }
+        #expect(state.reduce(.accept(matchedForTab)) == [.hide, .insert("c")])
+    }
+
+    @Test("Non-BMP fallback shares the ticket's UTF-16 context window")
+    func nonBMPFallbackRollover() {
+        var fallback = InlineSuggestionTicket.boundedContext(
+            String(repeating: "😀", count: 1_500),
+            utf16Limit: 3_000
+        )
+        let current = ticket(context: fallback, location: 3_000, request: 8)
+        let advanced = current.advancing(
+            with: "b",
+            boundedContext: fallback,
+            utf16Limit: 3_000
+        )
+        fallback = InlineSuggestionTicket.boundedContext(fallback + "b", utf16Limit: 3_000)
+        let live = ticket(context: fallback, location: 3_001, request: 101)
         var state = InlineSuggestionState()
         _ = state.reduce(.awaitSuggestion(current))
         _ = state.reduce(.present("bc", current))

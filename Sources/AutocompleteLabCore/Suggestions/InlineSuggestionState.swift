@@ -30,15 +30,19 @@ public struct InlineSuggestionTicket: Equatable, Sendable {
         }
     }
 
+    public static func boundedContext(_ text: String, utf16Limit: Int) -> String {
+        let utf16Text = text as NSString
+        return utf16Text.substring(from: max(0, utf16Text.length - max(0, utf16Limit)))
+    }
+
     public func advancing(
         with text: String,
         boundedContext: String,
-        contextLimit: Int
+        utf16Limit: Int
     ) -> Self {
-        let combinedContext = boundedContext + text
-        let utf16Context = combinedContext as NSString
-        let nextContext = utf16Context.substring(
-            from: max(0, utf16Context.length - max(0, contextLimit))
+        let nextContext = Self.boundedContext(
+            boundedContext + text,
+            utf16Limit: utf16Limit
         )
         let utf16Count = text.utf16.count
         return Self(
