@@ -88,7 +88,8 @@ Run `./script/proof.sh fast` for every change. Before release, run
 `./script/package_app.sh` with reviewed helper and model hashes, and require all
 bundle, runtime, signing, notarization, Gatekeeper, and socket-observation lanes
 to pass. The egress lane sends a fixed synthetic prompt directly to the helper;
-it is open-socket observation, not packet capture, Unix-socket authentication
-proof, or a real-editor round trip. Model or helper changes also require a
-freshly installed, notarized build and manual IME checks—including secure text
-fields—in disposable documents.
+its non-mutating proof mode observes only the exact app and helper. It is
+open-socket observation, not packet capture, input-method execution,
+Unix-socket authentication proof, or a real-editor round trip. Model or helper
+changes also require a freshly installed, notarized build and manual IME
+checks—including secure text fields—in disposable documents.

@@ -5,6 +5,7 @@ on:
     paths:
       - "Sources/**"
       - "Tests/**"
+      - "Assets/**"
       - "script/**"
       - "Package.swift"
       - "Package.resolved"
@@ -14,6 +15,7 @@ on:
     paths:
       - "Sources/**"
       - "Tests/**"
+      - "Assets/**"
       - "script/**"
       - "Package.swift"
       - "Package.resolved"

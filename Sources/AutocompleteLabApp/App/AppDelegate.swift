@@ -1,6 +1,21 @@
 import AppKit
 import ServiceManagement
 
+enum TildeLaunchMode: Equatable {
+    case production
+    case releaseProof
+
+    init?(arguments: [String]) {
+        switch Array(arguments.dropFirst()) {
+        case []: self = .production
+        case ["--release-proof"]: self = .releaseProof
+        default: return nil
+        }
+    }
+
+    var allowsDailyDriverMutation: Bool { self == .production }
+}
+
 /// Tilde's brain-caretaker. The product is the InlineGhostIME input
 /// method; this app exists to run its engines and utilities:
 ///   - GhostBrainServerHost: the unix socket the keyboard talks to
@@ -9,6 +24,7 @@ import ServiceManagement
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
+    private let launchMode: TildeLaunchMode
     private let llamaServerHost = LlamaServerProcessHost()
     private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
@@ -17,27 +33,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // belongs only to the keyboard's system spell-checker path.
     private lazy var ghostBrainServerHost = GhostBrainServerHost(runtime: llamaServerHost)
 
+    init(launchMode: TildeLaunchMode = .production) {
+        self.launchMode = launchMode
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // The process-held runtime lock makes this the only socket/model owner.
-        guard ghostBrainServerHost.start() else {
-            DiagnosticsLog.shared.record("duplicate-instance-exit", metadata: [:])
-            NSApp.terminate(nil)
-            return
+        if launchMode == .production {
+            // The process-held runtime lock makes this the only socket/model owner.
+            guard ghostBrainServerHost.start() else {
+                DiagnosticsLog.shared.record("duplicate-instance-exit", metadata: [:])
+                NSApp.terminate(nil)
+                return
+            }
         }
 
         // Menu-bar agents get auto-terminated unless they say otherwise; the
         // keyboard is only as smart as this process is alive.
         ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
-        statusMenuHost.start()
+        if launchMode == .production { statusMenuHost.start() }
         llamaServerHost.start()
-        registerAsLoginItemIfNeeded()
-        ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
-        // Any launch means the brain is wanted again: lift the keyboard
-        // watchdog's stay-quiet flag from a previous deliberate quit.
-        UserDefaults(suiteName: Self.keyboardDefaultsSuite)?
-            .removeObject(forKey: "GhostBrainQuietQuit")
-        DiagnosticsLog.shared.record("launch", metadata: [:])
+        if launchMode.allowsDailyDriverMutation {
+            registerAsLoginItemIfNeeded()
+            ghostKeyboardInstallerHost.installOrUpdateIfNeeded(allowMutation: true)
+            // Any production launch means the brain is wanted again: lift the
+            // keyboard watchdog's stay-quiet flag from a deliberate quit.
+            UserDefaults(suiteName: Self.keyboardDefaultsSuite)?
+                .removeObject(forKey: "GhostBrainQuietQuit")
+        }
+        DiagnosticsLog.shared.record(
+            "launch",
+            metadata: ["mode": launchMode == .production ? "production" : "release-proof"]
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -46,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or the exit races the log queue and the line never lands.
         DiagnosticsLog.shared.record("shutdown", metadata: [:])
         DiagnosticsLog.shared.flush()
-        ghostBrainServerHost.stop()
+        if launchMode == .production { ghostBrainServerHost.stop() }
         llamaServerHost.stop()
     }
 
