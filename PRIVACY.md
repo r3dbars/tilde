@@ -26,6 +26,20 @@ not contain typed text, prompts, model output, or accepted text.
 There is no writing history, raw trace, personal learning store, screenshot
 store, analytics SDK, crash-reporting SDK, or cloud sync path.
 
+### Data left by older builds
+
+Updating does not silently delete data a user previously chose to collect.
+Current Tilde does not read or migrate the old learning, trace, or evaluation
+stores, but they may still contain writing or screenshots at:
+
+- `~/Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage`
+- `~/Library/Application Support/Tilde` and `~/Library/Logs/Tilde`
+- `~/Library/Application Support/AutocompleteLab` and `~/Library/Logs/AutocompleteLab`
+- `~/.cache/tilde-eval`
+
+Review those locations before removing them. In particular, treat the iCloud
+folder as user-owned source data, not as an application cache.
+
 ## Network behavior
 
 Autocomplete does not need the network. Distributed builds contain the model
@@ -44,7 +58,7 @@ a release blocker.
 - Remove Tilde from System Settings → Keyboard → Input Sources.
 - Delete the Tilde app, `~/Library/Input Methods/InlineGhostIME.app`,
   `~/Library/Application Support/Tilde`, and `~/Library/Logs/Tilde` for a full
-  local removal.
+  local removal. Review the older-version locations above separately.
 
 The [threat model](docs/security/threat-model.md) describes the trust granted to
 a macOS input method and the remaining local-process risks.
