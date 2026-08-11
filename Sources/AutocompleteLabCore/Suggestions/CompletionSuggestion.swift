@@ -84,14 +84,19 @@ public struct CompletionSuggestion: Equatable, Sendable {
             return text
         }
 
-        let capped = String(text.prefix(characterLimit))
-        guard let lastWhitespaceIndex = capped.lastIndex(where: { $0.isWhitespace }) else {
+        let cut = text.index(text.startIndex, offsetBy: characterLimit)
+        let capped = String(text[..<cut])
+        if text[cut].isWhitespace {
             return capped
+        }
+
+        guard let lastWhitespaceIndex = capped.lastIndex(where: { $0.isWhitespace }) else {
+            return ""
         }
 
         let wordBoundaryCapped = String(capped[..<lastWhitespaceIndex])
         if wordBoundaryCapped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return capped
+            return ""
         }
 
         return wordBoundaryCapped
