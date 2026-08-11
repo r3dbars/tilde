@@ -8,18 +8,12 @@
 # Every lane is BLOCKING and real:
 #   1. git diff --check            whitespace / conflict markers
 #   2. complexity budget           structural high-water marks stay bounded
-#   3. byte-compile script/*.py    all remaining python tooling parses
-#   4. harness self-tests          the latency/quality measurement tools work
-#   5. swift test (core)           the pure policy suite passes
+#   3. bash -n script/*.sh         all remaining shell tooling parses
+#   4. byte-compile script/*.py    all remaining python tooling parses
+#   5. harness self-tests          proof helpers police their own contracts
+#   6. swift test                  the complete Swift suite passes
 #
 # Environment:
-#   PROOF_SKIP_SWIFT=1      Skip the Swift test step. Swift is auto-skipped when
-#                           `swift` is absent (e.g. the Linux PR runner).
-#   PROOF_REQUIRE_SWIFT=1   Fail instead of skipping when `swift` is unavailable
-#                           (use on a macOS runner that must exercise Swift).
-#   PROOF_SWIFT_FILTER=...  Value for `swift test --filter`. Default
-#                           AutocompleteLabCoreTests (pure, fast, no MLX). Set it
-#                           empty (PROOF_SWIFT_FILTER=) to run the full suite.
 #   PROOF_DIFF_BASE=<ref>   If set, run `git diff --check <ref>...HEAD` (catches
 #                           whitespace/conflict markers introduced by a PR);
 #                           otherwise the working tree is checked.
@@ -29,8 +23,7 @@
 #                           Allow a non-negative structural diff only when the
 #                           PR description explains the justified exception.
 #
-# The release gate (app bundle, model asset, runtime network egress) lives in
-# script/release_check.sh — run it on macOS before cutting a release.
+# The signed/notarized release path lives in script/package_app.sh.
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,13 +31,6 @@ cd "$ROOT_DIR"
 
 print_help() {
   awk 'NR==1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
-}
-
-is_truthy() {
-  case "${1:-}" in
-    1 | true | TRUE | yes | on) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 MODE="fast"
@@ -88,13 +74,6 @@ run_blocking() { # label cmd...
   fi
 }
 
-skip() { # label reason
-  echo
-  echo "== [skip] $1 =="
-  echo "[SKIP] $1 — $2"
-  mark SKIP "$1" "$2"
-}
-
 check_diff() {
   if [ -n "${PROOF_DIFF_BASE:-}" ]; then
     echo "diff base: ${PROOF_DIFF_BASE}...HEAD"
@@ -105,30 +84,15 @@ check_diff() {
 }
 
 run_swift() {
-  if is_truthy "${PROOF_SKIP_SWIFT:-}"; then
-    skip "swift test" "PROOF_SKIP_SWIFT is set"
-    return
-  fi
   if ! command -v swift >/dev/null 2>&1; then
-    if is_truthy "${PROOF_REQUIRE_SWIFT:-}"; then
-      echo
-      echo "== [blocking] swift test =="
-      echo "[FAIL] swift test — swift not found but PROOF_REQUIRE_SWIFT is set"
-      mark FAIL "swift test" "0s"
-      BLOCKING_FAILURES=$((BLOCKING_FAILURES + 1))
-      return
-    fi
-    skip "swift test" "no swift toolchain on PATH (expected on the Linux PR runner)"
+    echo
+    echo "== [blocking] swift test =="
+    echo "[FAIL] swift test — swift not found"
+    mark FAIL "swift test" "0s"
+    BLOCKING_FAILURES=$((BLOCKING_FAILURES + 1))
     return
   fi
-  # Default to the pure core suite: fast, deterministic, no MLX/model needed.
-  # PROOF_SWIFT_FILTER= (empty) runs the full suite.
-  local filter="${PROOF_SWIFT_FILTER-AutocompleteLabCoreTests}"
-  if [ -n "$filter" ]; then
-    run_blocking "swift test --jobs 1 --filter $filter" swift test --jobs 1 --filter "$filter"
-  else
-    run_blocking "swift test --jobs 1 (full suite)" swift test --jobs 1
-  fi
+  run_blocking "swift test --jobs 1 (full suite)" swift test --jobs 1
 }
 
 summarize_and_exit() {
@@ -155,6 +119,7 @@ echo "Repo: ${ROOT_DIR}"
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "complexity budget" bash script/check_complexity_budget.sh
 run_blocking "complexity budget self-test" bash script/check_complexity_budget_self_test.sh
+run_blocking "bash -n script/*.sh" bash -n script/*.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_swift
 
