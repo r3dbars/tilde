@@ -71,6 +71,15 @@ has_system_only_dependencies() {
   ' <<<"$dependencies"
 }
 
+has_arm64_slice() {
+  local architecture architectures
+  architectures="$(/usr/bin/lipo -archs "$1" 2>/dev/null)" || return 1
+  for architecture in $architectures; do
+    [[ "$architecture" == "arm64" || "$architecture" == "arm64e" ]] && return 0
+  done
+  return 1
+}
+
 has_gguf_magic() {
   [[ "$(LC_ALL=C /usr/bin/head -c 4 "$1" 2>/dev/null)" == "GGUF" ]]
 }
@@ -86,6 +95,7 @@ validate_release_inputs() {
   local model="$2"
   [[ -f "$helper" && -x "$helper" ]] || fail "missing executable llama-server: $helper"
   is_macho_execute "$helper" || fail "llama-server is not Mach-O filetype EXECUTE"
+  has_arm64_slice "$helper" || fail "llama-server must include an arm64 or arm64e slice"
   has_system_only_dependencies "$helper" \
     || fail "llama-server dependency inspection failed or found a non-system library"
   [[ -f "$model" ]] || fail "missing model: $model"
@@ -96,8 +106,8 @@ validate_release_inputs() {
 
 run_selftest() {
   local selftest_dir invalid_helper valid_model readme_model small_gguf
-  local fixture_source fixture_main invalid_dylib invalid_executable valid_slice
-  local mixed_filetype_helper mixed_dependency_helper
+  local fixture_source fixture_main system_main invalid_dylib invalid_executable valid_slice
+  local x86_only_helper mixed_filetype_helper mixed_dependency_helper rejection_output
   [[ "$(team_identifier_from_details $'Executable=/tmp/Tilde\nTeamIdentifier=ABCDE12345')" \
     == "ABCDE12345" ]] || return 1
   if team_identifier_from_details "Executable=/tmp/Tilde" >/dev/null; then return 1; fi
@@ -116,9 +126,11 @@ run_selftest() {
   small_gguf="$selftest_dir/small.gguf"
   fixture_source="$selftest_dir/fixture.c"
   fixture_main="$selftest_dir/main.c"
+  system_main="$selftest_dir/system-main.c"
   invalid_dylib="$selftest_dir/invalid.dylib"
   invalid_executable="$selftest_dir/invalid-dependency"
   valid_slice="$selftest_dir/valid-arm64e"
+  x86_only_helper="$selftest_dir/x86-only-helper"
   mixed_filetype_helper="$selftest_dir/mixed-filetype-helper"
   mixed_dependency_helper="$selftest_dir/mixed-dependency-helper"
 
@@ -134,12 +146,14 @@ run_selftest() {
   printf 'int tilde_selftest_dependency(void) { return 0; }\n' >"$fixture_source"
   printf 'int tilde_selftest_dependency(void);\nint main(void) { return tilde_selftest_dependency(); }\n' \
     >"$fixture_main"
+  printf 'int main(void) { return 0; }\n' >"$system_main"
 
   /usr/bin/xcrun clang -arch x86_64 -dynamiclib \
     -Wl,-install_name,@rpath/libtilde-selftest.dylib \
     "$fixture_source" -o "$invalid_dylib" >/dev/null 2>&1
   /usr/bin/xcrun clang -arch x86_64 "$fixture_main" "$invalid_dylib" \
     -o "$invalid_executable" >/dev/null 2>&1
+  /usr/bin/xcrun clang -arch x86_64 "$system_main" -o "$x86_only_helper" >/dev/null 2>&1
   /usr/bin/lipo /usr/bin/true -thin arm64e -output "$valid_slice"
   /usr/bin/lipo -create "$valid_slice" "$invalid_dylib" -output "$mixed_filetype_helper"
   /usr/bin/lipo -create "$valid_slice" "$invalid_executable" -output "$mixed_dependency_helper"
@@ -149,6 +163,10 @@ run_selftest() {
     >/dev/null 2>&1 || return 1
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$invalid_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
+  if rejection_output="$("$ROOT_DIR/script/check_app_bundle.sh" \
+    --release-inputs "$x86_only_helper" "$valid_model" 2>&1)"; then return 1; fi
+  [[ "$rejection_output" == *"llama-server must include an arm64 or arm64e slice"* ]] \
+    || return 1
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$readme_model" \
     >/dev/null 2>&1; then return 1; fi
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$small_gguf" \
