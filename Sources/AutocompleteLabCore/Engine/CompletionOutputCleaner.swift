@@ -7,7 +7,6 @@ public enum CompletionCleanRejectionReason: String, Sendable {
     case promptInstructionEcho
     case emptyAfterPrefixTrimming
     case replaysContext
-    case invalidWordCompletion
 }
 
 public enum CompletionCleanResult: Sendable {
@@ -32,8 +31,7 @@ public struct CompletionOutputCleaner: Sendable {
         "\u{200B}", "\u{200C}", "\u{200D}", "\u{2060}", "\u{FEFF}",
     ]
     private static let instructionPrefixes = [
-        "before cursor", "after cursor", "inline autocomplete", "inline word completion",
-        "return only", "return exactly", "no spaces or punctuation",
+        "before cursor", "after cursor", "inline autocomplete", "return only", "return exactly",
         "continue the current sentence", "start the next sentence", "system:", "assistant:",
         "thinking process", "analyze the request", "okay, let's see", "okay, the user",
         "the user ", "user is ",
@@ -51,16 +49,14 @@ public struct CompletionOutputCleaner: Sendable {
 
     public func clean(
         _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode
+        after textBeforeCursor: String?
     ) -> CompletionSuggestion? {
-        cleanWithReason(rawOutput, after: textBeforeCursor, mode: mode).suggestion
+        cleanWithReason(rawOutput, after: textBeforeCursor).suggestion
     }
 
     public func cleanWithReason(
         _ rawOutput: String,
-        after textBeforeCursor: String?,
-        mode: CompletionRequestMode
+        after textBeforeCursor: String?
     ) -> CompletionCleanResult {
         guard !containsUnsafeCharacter(rawOutput) else {
             return .rejected(.unsafeHiddenOrControlCharacter)
@@ -80,10 +76,6 @@ public struct CompletionOutputCleaner: Sendable {
         guard !isNoSuggestion(candidate) else { return .rejected(.noSuggestionSentinel) }
         guard !isInstructionLeak(candidate) else { return .rejected(.promptInstructionEcho) }
 
-        if mode == .wordCompletion {
-            return cleanWordCompletion(candidate, after: textBeforeCursor)
-        }
-
         var continuation = candidate.first?.isWhitespace == true ? candidate : " " + candidate
         if let textBeforeCursor {
             continuation = trimTypedPrefix(continuation, after: textBeforeCursor)
@@ -96,22 +88,6 @@ public struct CompletionOutputCleaner: Sendable {
         }
 
         return .accepted(CompletionSuggestion(text: continuation, maxVisibleWords: maxVisibleWords))
-    }
-
-    private func cleanWordCompletion(_ candidate: String, after context: String?) -> CompletionCleanResult {
-        guard let context,
-              let fragment = trailingLetterFragment(in: context),
-              !fragment.isEmpty else {
-            return .rejected(.invalidWordCompletion)
-        }
-
-        let trimmed = trimTypedPrefix(candidate, after: context)
-        let suffix = String(trimmed.drop(while: \.isWhitespace).prefix(while: { !$0.isWhitespace }))
-        guard !suffix.isEmpty, suffix.allSatisfy(\.isLetter) else {
-            return .rejected(.invalidWordCompletion)
-        }
-
-        return .accepted(CompletionSuggestion(text: suffix, maxVisibleWords: maxVisibleWords))
     }
 
     private func unwrapped(_ text: String) -> String {
@@ -206,11 +182,6 @@ public struct CompletionOutputCleaner: Sendable {
         return words.indices.dropLast(needle.count - 1).contains { index in
             Array(words[index..<words.index(index, offsetBy: needle.count)]) == needle
         }
-    }
-
-    private func trailingLetterFragment(in text: String) -> String? {
-        guard text.last?.isLetter == true else { return nil }
-        return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
     }
 
     private func normalizedWords(in text: String) -> [String] {

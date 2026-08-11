@@ -5,37 +5,23 @@ public struct CompletionSuggestion: Equatable, Sendable {
     public static let maximumVisibleWords = 20
     public static let defaultMaxVisibleCharacters = 42
 
-    public let text: String
-    public let maxVisibleWords: Int
-    public let maxVisibleCharacters: Int
+    public let visibleText: String
 
     public init(
         text: String,
         maxVisibleWords: Int = Self.defaultMaxVisibleWords,
         maxVisibleCharacters: Int? = nil
     ) {
-        self.maxVisibleWords = max(1, maxVisibleWords)
-        self.maxVisibleCharacters = max(
+        let visibleWords = max(1, maxVisibleWords)
+        let visibleCharacters = max(
             1,
-            maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: self.maxVisibleWords)
+            maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: visibleWords)
         )
-        self.text = Self.cappedText(
+        self.visibleText = Self.cappedText(
             text,
-            wordLimit: self.maxVisibleWords,
-            characterLimit: self.maxVisibleCharacters
+            wordLimit: visibleWords,
+            characterLimit: visibleCharacters
         )
-    }
-
-    public var visibleText: String {
-        Self.acceptedPrefix(in: text, wordLimit: maxVisibleWords)
-    }
-
-    public var visibleWordCount: Int {
-        visibleText.split(whereSeparator: { $0.isWhitespace }).count
-    }
-
-    public var isEmpty: Bool {
-        visibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func cappedText(
