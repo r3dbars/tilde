@@ -29,7 +29,7 @@ final class StatusMenuHost: NSObject {
 
         let menu = NSMenu()
         lifetimeItem = addInfoRow(to: menu, "Tilde")
-        todayItem = addInfoRow(to: menu, "Today: no typing yet")
+        todayItem = addInfoRow(to: menu, "Today: none accepted")
         engineItem = addInfoRow(to: menu, "Engine: starting…")
         menu.addItem(.separator())
 
@@ -128,19 +128,11 @@ extension StatusMenuHost: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         let lifetime = TildeStats.lifetimeWordsAccepted()
         lifetimeItem?.title = lifetime > 0
-            ? "\(lifetime.formatted()) words written for you"
+            ? "\(lifetime.formatted()) words accepted"
             : "Tilde"
 
-        let today = TildeStats.today()
-        if today.wordsAccepted > 0 {
-            var line = "Today: \(today.wordsAccepted) words (\(today.shareOfTyping)%)"
-            if today.wordsPerMinute > 0 {
-                line += " · \(today.wordsPerMinute) wpm"
-            }
-            todayItem?.title = line
-        } else {
-            todayItem?.title = "Today: no typing yet"
-        }
+        let today = TildeStats.todayWordsAccepted()
+        todayItem?.title = today > 0 ? "Today: \(today) accepted" : "Today: none accepted"
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off

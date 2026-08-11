@@ -19,8 +19,6 @@ final class GhostInputController: IMKInputController {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
             return false
         }
-        GhostStats.touchActive()
-
         let defaults = UserDefaults.standard
         let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
         let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
@@ -67,7 +65,7 @@ final class GhostInputController: IMKInputController {
             let advanced = current?.advancing(with: grapheme)
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
-            recordTyped(grapheme)
+            appendFallback(grapheme)
             return true
         }
 
@@ -99,13 +97,6 @@ final class GhostInputController: IMKInputController {
             return nil
         }
         return characters
-    }
-
-    private func recordTyped(_ grapheme: String) {
-        if grapheme.first?.isWhitespace == true, typedFallback.last?.isLetter == true {
-            GhostStats.recordTypedWord()
-        }
-        appendFallback(grapheme)
     }
 
     private func appendFallback(_ text: String) {
