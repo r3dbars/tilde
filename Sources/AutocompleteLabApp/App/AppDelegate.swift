@@ -1,5 +1,4 @@
 import AppKit
-import AutocompleteLabCore
 import ServiceManagement
 
 /// Tilde's brain-caretaker. The product is the InlineGhostIME input

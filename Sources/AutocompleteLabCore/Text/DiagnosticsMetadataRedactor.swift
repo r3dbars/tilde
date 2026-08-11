@@ -2,8 +2,8 @@ import Foundation
 
 public enum DiagnosticsMetadataRedactor {
     private static let enumValues: Set<String> = [
-        "binary-missing", "model-missing", "port-held-by-foreign-process", "launch-failed",
-        "assets-missing", "port-in-use", "health-timeout", "directory", "already-running",
+        "launch-failed", "assets-missing", "port-in-use", "health-timeout", "directory",
+        "already-running",
         "unsafeHiddenOrControlCharacter", "emptyOutput", "noSuggestionSentinel",
         "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext",
         "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
@@ -16,8 +16,7 @@ public enum DiagnosticsMetadataRedactor {
     public static func logSafeField(forKey key: String, value: String) -> String {
         let safe: Bool
         switch key {
-        case "firstTokenProbability", "threshold", "totalMilliseconds", "firstChunkMilliseconds",
-             "promptTokensProcessed", "cleanedChars", "pid", "restart", "chars":
+        case "totalMilliseconds", "cleanedChars", "chars":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
