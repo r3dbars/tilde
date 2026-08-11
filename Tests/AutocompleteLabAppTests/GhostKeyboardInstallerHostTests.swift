@@ -129,3 +129,26 @@ struct GhostKeyboardInstallerHostTests {
         ))
     }
 }
+
+@Suite("Launch mode")
+struct TildeLaunchModeTests {
+    @Test("Production mode retains daily-driver lifecycle behavior")
+    func productionMode() {
+        let mode = TildeLaunchMode(arguments: ["Tilde"])
+        #expect(mode == .production)
+        #expect(mode?.allowsDailyDriverMutation == true)
+    }
+
+    @Test("Release proof mode forbids daily-driver mutation")
+    func releaseProofMode() {
+        let mode = TildeLaunchMode(arguments: ["Tilde", "--release-proof"])
+        #expect(mode == .releaseProof)
+        #expect(mode?.allowsDailyDriverMutation == false)
+    }
+
+    @Test("Unknown or combined modes fail closed")
+    func rejectsUnknownArguments() {
+        #expect(TildeLaunchMode(arguments: ["Tilde", "--unknown"]) == nil)
+        #expect(TildeLaunchMode(arguments: ["Tilde", "--release-proof", "extra"]) == nil)
+    }
+}

@@ -64,6 +64,15 @@ class ProcessRow:
                 return self.command[:end]
         return self.command.split(maxsplit=1)[0] if self.command else ""
 
+    @property
+    def arguments(self) -> list[str]:
+        executable = self.executable
+        if not executable or not self.command.startswith(executable):
+            return []
+        # `ps args` is already flattened on macOS. The options validated here
+        # have no whitespace-bearing values, so token splitting is intentional.
+        return self.command[len(executable) :].split()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -73,6 +82,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=17872)
     parser.add_argument("--app-binary", type=Path, default=DEFAULT_APP_BINARY)
     parser.add_argument("--proof-out", type=Path, default=DEFAULT_PROOF)
+    parser.add_argument(
+        "--synthetic-helper-proof",
+        action="store_true",
+        help="require release-proof mode and omit all input-method observation",
+    )
     parser.add_argument("--selftest", action="store_true")
     return parser.parse_args()
 
@@ -109,6 +123,34 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def option_values(row: ProcessRow, option: str) -> list[str]:
+    values: list[str] = []
+    for index, token in enumerate(row.arguments):
+        if token == option:
+            values.append(row.arguments[index + 1] if index + 1 < len(row.arguments) else "")
+        elif token.startswith(option + "="):
+            values.append(token[len(option) + 1 :])
+    return values
+
+
+def listener_endpoints(output: str) -> dict[int, set[str]]:
+    listeners: dict[int, set[str]] = {}
+    current_pid: int | None = None
+    for field in output.splitlines():
+        if field.startswith("p") and field[1:].isdigit():
+            current_pid = int(field[1:])
+            listeners.setdefault(current_pid, set())
+        elif field.startswith("n") and current_pid is not None:
+            listeners[current_pid].add(field[1:])
+    return listeners
+
+
+def owns_exact_loopback_listener(returncode: int, output: str, pid: int, port: int) -> bool:
+    return returncode == 0 and listener_endpoints(output) == {
+        pid: {f"127.0.0.1:{port}"}
+    }
+
+
 def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, ProcessRow]:
     rows = process_table()
     app_matches = [row for row in rows.values() if same_file(row.executable, app_binary)]
@@ -133,26 +175,32 @@ def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, Proces
         raise RuntimeError(
             f"llama-server child is not the packaged helper at {expected_server}"
         )
-    if f"--port {port}" not in server.command and f"--port={port}" not in server.command:
+    if option_values(server, "--port") != [str(port)]:
         raise RuntimeError(f"llama-server child is not configured for port {port}")
-    if "--host 127.0.0.1" not in server.command and "--host=127.0.0.1" not in server.command:
+    if option_values(server, "--host") != ["127.0.0.1"]:
         raise RuntimeError("llama-server child is not configured for loopback only")
     listener = subprocess.run(
         [
             "lsof", "-nP", "-a", "-p", str(server.pid),
-            f"-iTCP:{port}", "-sTCP:LISTEN", "-t",
+            f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpn",
         ],
         text=True,
         capture_output=True,
         check=False,
     )
-    if listener.returncode != 0 or set(listener.stdout.split()) != {str(server.pid)}:
-        raise RuntimeError("packaged llama-server does not own the loopback listener")
+    if not owns_exact_loopback_listener(
+        listener.returncode, listener.stdout, server.pid, port
+    ):
+        raise RuntimeError("packaged llama-server does not own the exact IPv4 loopback listener")
     return app, server
 
 
 def require_processes(args: argparse.Namespace) -> tuple[ProcessRow, ProcessRow, list[ProcessRow]]:
     app, server = require_owned_model(args.app_binary, args.port)
+    if args.synthetic_helper_proof:
+        if app.arguments != ["--release-proof"]:
+            raise RuntimeError("synthetic helper proof requires the app's exact --release-proof mode")
+        return app, server, []
     rows = process_table()
 
     imes = [row for row in rows.values() if Path(row.executable).name == "InlineGhostIME"]
@@ -262,7 +310,39 @@ def selftest() -> None:
     assert not is_non_loopback("127.0.0.1:17872")
     assert not is_non_loopback("[::1]:17872")
     assert is_non_loopback("203.0.113.1:443")
-    print("selftest OK: fixed model request and endpoint classification")
+    server = ProcessRow(
+        4242,
+        4000,
+        "/tmp/App With Spaces/llama-server --host=127.0.0.1 --port 17872",
+    )
+    assert server.executable == "/tmp/App With Spaces/llama-server"
+    assert option_values(server, "--host") == ["127.0.0.1"]
+    assert option_values(server, "--port") == ["17872"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --port 17872 --port 9999"),
+        "--port",
+    ) != ["17872"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --host 127.0.0.1 --host 0.0.0.0"),
+        "--host",
+    ) != ["127.0.0.1"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --port 178720"),
+        "--port",
+    ) != ["17872"]
+    assert option_values(
+        ProcessRow(1, 0, "/tmp/llama-server --note=--port=17872"),
+        "--port",
+    ) == []
+    exact_listener = "p4242\nn127.0.0.1:17872\n"
+    assert owns_exact_loopback_listener(0, exact_listener, 4242, 17872)
+    assert not owns_exact_loopback_listener(0, "p4242\nn*:17872\n", 4242, 17872)
+    assert not owns_exact_loopback_listener(0, "p4242\nn0.0.0.0:17872\n", 4242, 17872)
+    assert not owns_exact_loopback_listener(0, "p4242\nn[::1]:17872\n", 4242, 17872)
+    assert not owns_exact_loopback_listener(1, exact_listener, 4242, 17872)
+    proof_app = ProcessRow(8, 1, "/tmp/Tilde.app/Contents/MacOS/Tilde --release-proof")
+    assert proof_app.arguments == ["--release-proof"]
+    print("selftest OK: fixed request, strict argv, and exact loopback listener")
 
 
 def observe(
@@ -347,6 +427,23 @@ def main() -> int:
     if remotes:
         failures.append("non-loopback sockets observed: " + ", ".join(sorted(remotes)))
 
+    proves = [
+        "the exact packaged Tilde process and its exact helper child were observed",
+        "the helper returned a nonempty completion for the fixed synthetic prompt",
+        "no non-loopback open socket was visible for the observed processes during the window",
+    ]
+    does_not_prove = [
+        "packet-level absence of network traffic",
+        "a Tilde-to-input-method Unix-socket request round trip",
+        "inline rendering or acceptance in a real editor",
+    ]
+    input_method_observation = "matching running input method observed"
+    if args.synthetic_helper_proof:
+        input_method_observation = "not performed in non-mutating release-proof mode"
+        does_not_prove.insert(1, "input-method installation, execution, or authentication")
+    else:
+        proves[0] += " with a matching running input method"
+
     summary = {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "result": "fail" if failures else "pass",
@@ -354,6 +451,7 @@ def main() -> int:
         "app_pid": app.pid,
         "llama_server_pid": server.pid,
         "inline_ghost_ime_pids": [row.pid for row in imes],
+        "input_method_observation": input_method_observation,
         "samples": samples,
         "health_ok": health_ok,
         "direct_synthetic_model_completion_nonempty": completion_chars > 0,
@@ -364,16 +462,8 @@ def main() -> int:
             "direct POST to the exact packaged llama-server child over loopback "
             "using a fixed synthetic prompt"
         ),
-        "proves": [
-            "the exact packaged Tilde process, its exact helper child, and a matching running input method were observed",
-            "the helper returned a nonempty completion for the fixed synthetic prompt",
-            "no non-loopback open socket was visible for those processes during the observation window",
-        ],
-        "does_not_prove": [
-            "packet-level absence of network traffic",
-            "a Tilde-to-input-method Unix-socket request round trip",
-            "inline rendering or acceptance in a real editor",
-        ],
+        "proves": proves,
+        "does_not_prove": does_not_prove,
         "privacy": "Only process/socket metadata and synthetic completion length are saved.",
     }
     args.proof_out.parent.mkdir(parents=True, exist_ok=True)
@@ -387,7 +477,10 @@ def main() -> int:
         return 1
 
     print("Runtime socket observation: PASS (not packet capture)")
-    print(f"Observed Tilde {app.pid}, llama-server {server.pid}, InlineGhostIME {[row.pid for row in imes]}")
+    if args.synthetic_helper_proof:
+        print(f"Observed release-proof Tilde {app.pid} and llama-server {server.pid}; input method untouched")
+    else:
+        print(f"Observed Tilde {app.pid}, llama-server {server.pid}, InlineGhostIME {[row.pid for row in imes]}")
     print(f"Health: ok; direct synthetic model completion: nonempty ({completion_chars} chars)")
     print(f"Socket samples: {samples}; non-loopback endpoints: 0")
     print(f"Proof: {args.proof_out}")

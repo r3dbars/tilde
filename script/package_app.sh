@@ -41,8 +41,8 @@ Options:
                             signing, notarizing, or uploading anything.
 
 This is intentionally fail-closed. It creates release artifacts only after the
-full test suite, packaged-runtime health/completion/socket observation, Apple
-notarization, stapling, and Gatekeeper assessment all pass.
+full test suite, non-mutating packaged-helper health/completion/socket
+observation, Apple notarization, stapling, and Gatekeeper assessment all pass.
 EOF
 }
 
@@ -144,9 +144,20 @@ STAGING_DMG="$ROOT_DIR/dist/Tilde-notarize.dmg"
 FINAL_ZIP="$ROOT_DIR/dist/Tilde.zip"
 FINAL_DMG="$ROOT_DIR/dist/Tilde.dmg"
 CHECKSUMS="$ROOT_DIR/dist/checksums.txt"
+DMG_SOURCE=""
+RELEASE_PROOF_ACTIVE=0
 rm -rf "$PROOF_DIR"
 rm -f "$NOTARY_ZIP" "$STAGING_DMG" "$FINAL_ZIP" "$FINAL_DMG" "$CHECKSUMS"
 mkdir -p "$PROOF_DIR"
+
+cleanup() {
+  if [[ "$RELEASE_PROOF_ACTIVE" == "1" ]]; then
+    ./script/restart_app.sh --release-proof --cleanup >/dev/null 2>&1 \
+      || echo "warning: exact release-proof candidate cleanup failed" >&2
+  fi
+  [[ -z "$DMG_SOURCE" ]] || rm -rf "$DMG_SOURCE"
+}
+trap cleanup EXIT
 
 record() {
   local output="$1"
@@ -204,11 +215,15 @@ codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
 record "$PROOF_DIR/codesign-verify.txt" codesign --verify --deep --strict --verbose=2 "$APP"
 ./script/check_app_bundle.sh --release "$APP"
 
-echo "==> exercising the exact packaged process tree"
-./script/restart_app.sh
+echo "==> exercising the exact packaged helper without touching the input method"
+RELEASE_PROOF_ACTIVE=1
+./script/restart_app.sh --release-proof
 python3 script/check_runtime_network_egress.py \
   --app-binary "$APP/Contents/MacOS/Tilde" \
+  --synthetic-helper-proof \
   --proof-out "$PROOF_DIR/runtime-socket-observation.json"
+./script/restart_app.sh --release-proof --cleanup
+RELEASE_PROOF_ACTIVE=0
 
 echo "==> notarizing and stapling the app"
 rm -f "$NOTARY_ZIP"
@@ -222,7 +237,6 @@ record "$PROOF_DIR/spctl-app.txt" spctl --assess --type execute --verbose=4 "$AP
 
 echo "==> creating, notarizing, and stapling the DMG"
 DMG_SOURCE="$(mktemp -d "${TMPDIR:-/tmp}/tilde-dmg.XXXXXX")"
-trap 'rm -rf "$DMG_SOURCE"' EXIT
 cp -R "$APP" "$DMG_SOURCE/Tilde.app"
 ln -s /Applications "$DMG_SOURCE/Applications"
 rm -f "$STAGING_DMG"

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_MODE=0
+SELFTEST=0
 APP_BUNDLE="$ROOT_DIR/dist/Tilde.app"
 
 fail() {
@@ -10,14 +11,49 @@ fail() {
   exit 1
 }
 
+team_identifier_from_details() {
+  local details="$1"
+  local line identifier="" count=0
+  while IFS= read -r line; do
+    if [[ "$line" == TeamIdentifier=* ]]; then
+      identifier="${line#TeamIdentifier=}"
+      count=$((count + 1))
+    fi
+  done <<<"$details"
+  [[ "$count" == "1" && -n "$identifier" && "$identifier" != "not set" ]] || return 1
+  printf '%s\n' "$identifier"
+}
+
+signing_team_identifier() {
+  local details
+  details="$(codesign --display --verbose=4 "$1" 2>&1)" || return 1
+  team_identifier_from_details "$details"
+}
+
+run_selftest() {
+  [[ "$(team_identifier_from_details $'Executable=/tmp/Tilde\nTeamIdentifier=ABCDE12345')" \
+    == "ABCDE12345" ]] || return 1
+  if team_identifier_from_details "Executable=/tmp/Tilde" >/dev/null; then return 1; fi
+  if team_identifier_from_details "TeamIdentifier=" >/dev/null; then return 1; fi
+  if team_identifier_from_details "TeamIdentifier=not set" >/dev/null; then return 1; fi
+  if team_identifier_from_details $'TeamIdentifier=ABCDE12345\nTeamIdentifier=ABCDE12345' >/dev/null; then
+    return 1
+  fi
+  echo "selftest OK: signing TeamIdentifier parser fails closed"
+}
+
 for arg in "$@"; do
   case "$arg" in
     --release)
       RELEASE_MODE=1
       ;;
+    --selftest)
+      SELFTEST=1
+      ;;
     -h|--help)
       cat <<'EOF'
 Usage: script/check_app_bundle.sh [--release] [path/to/Tilde.app]
+       script/check_app_bundle.sh --selftest
 
 Checks the local app bundle shape, signature, and hardened runtime.
 Use --release to require the packaged model, server, input method, and a
@@ -33,6 +69,11 @@ EOF
       ;;
   esac
 done
+
+if [[ "$SELFTEST" == "1" ]]; then
+  run_selftest
+  exit 0
+fi
 
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 EXECUTABLE="$APP_BUNDLE/Contents/MacOS/Tilde"
@@ -107,6 +148,15 @@ if [[ "$RELEASE_MODE" == "1" ]]; then
     || fail "InlineGhostIME signature verification failed"
   grep -F "Authority=Developer ID Application" <<<"$SIGNATURE_DETAILS" >/dev/null \
     || fail "release bundle is not signed with Developer ID Application"
+
+  APP_TEAM="$(team_identifier_from_details "$SIGNATURE_DETAILS")" \
+    || fail "release app has no unambiguous TeamIdentifier"
+  IME_TEAM="$(signing_team_identifier "$IME")" \
+    || fail "InlineGhostIME has no unambiguous TeamIdentifier"
+  HELPER_TEAM="$(signing_team_identifier "$LLAMA_SERVER")" \
+    || fail "llama-server has no unambiguous TeamIdentifier"
+  [[ "$IME_TEAM" == "$APP_TEAM" ]] || fail "InlineGhostIME TeamIdentifier differs from app"
+  [[ "$HELPER_TEAM" == "$APP_TEAM" ]] || fail "llama-server TeamIdentifier differs from app"
 fi
 
 echo "App bundle verified: $APP_BUNDLE"
