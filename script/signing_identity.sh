@@ -17,8 +17,9 @@ tilde_resolve_signing_identity_from_details() {
   ')"; then
     printf '%s\n' "$match"
     return
+  else
+    status=$?
   fi
-  status=$?
   if [[ -n "$requested" ]]; then
     echo "signing identity is unavailable: $requested" >&2
   elif [[ "$status" == "10" ]]; then
@@ -40,14 +41,18 @@ tilde_resolve_signing_identity() {
   tilde_resolve_signing_identity_from_details "$1" "$details"
 }
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
   [[ "${1:-}" == "--selftest" && "$#" == "1" ]] || exit 2
   a='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'; b='BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
   d='CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
+  zero_message=''; multiple_message=''
   one="1) $a \"Apple Development: Tilde Dev (TEAMID1234)\""$'\n'"2) $d \"Developer ID Application: Tilde Dev (TEAMID1234)\""
   [[ "$(tilde_resolve_signing_identity_from_details '' "$one")" == "$a" ]]
   [[ "$(tilde_resolve_signing_identity_from_details "$d" "$one")" == "$d" ]]
-  ! tilde_resolve_signing_identity_from_details '' "$one"$'\n'"3) $b \"Apple Development: Other (OTHERID123)\"" >/dev/null 2>&1
-  ! tilde_resolve_signing_identity_from_details '' '0 valid identities found' >/dev/null 2>&1
+  if multiple_message="$(tilde_resolve_signing_identity_from_details '' "$one"$'\n'"3) $b \"Apple Development: Other (OTHERID123)\"" 2>&1 >/dev/null)"; then exit 1; fi
+  if zero_message="$(tilde_resolve_signing_identity_from_details '' '0 valid identities found' 2>&1 >/dev/null)"; then exit 1; fi
+  [[ "$multiple_message" == 'multiple eligible Apple Development identities found; pass one exact SHA-1 with --sign-identity' ]]
+  [[ "$zero_message" == 'no eligible Apple Development identity found; use --sign-identity - only for explicit ad hoc builds' ]]
   ! tilde_resolve_signing_identity_from_details 'Tilde Dev' "$one" >/dev/null 2>&1
   [[ "$(tilde_resolve_signing_identity '-' 2>&1)" == $'warning: ad hoc bundles cannot exercise the authenticated app-to-IME runtime\n-' ]]
   echo "selftest OK: local signing selects one exact Apple Development identity and fails closed"
