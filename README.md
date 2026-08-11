@@ -41,8 +41,10 @@ The project is a Swift 6.2 package with no Xcode project file.
 ./script/build_ime.sh --no-notarize
 ```
 
-`script/proof.sh fast` is the pre-merge gate. `script/package_app.sh` is the
-single manual release driver; it requires exact SHA-256 pins for the helper and
+The two build scripts create development bundles; they do not contain the
+release model or helper. `script/proof.sh fast` is the pre-merge gate.
+`script/package_app.sh` is the single manual release driver; it requires exact
+SHA-256 pins for the helper and
 model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
 open-socket observation checks. Run `./script/package_app.sh --help` for its
 required release inputs.
