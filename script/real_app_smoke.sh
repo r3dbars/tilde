@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Automatic real-app smoke entry point used by AppProofCommandRunner.
-#
-# This intentionally owns only the two automatic app lanes. Build and restart
-# stay explicit; fixtures are disposable and output is limited
-# to privacy-safe status metadata.
+# Disposable TextEdit/Chrome compatibility smoke. Build and restart stay
+# explicit; output is limited to privacy-safe status metadata.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

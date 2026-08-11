@@ -4,7 +4,7 @@ import AutocompleteLabCore
 final class DiagnosticsLog: @unchecked Sendable {
     static let shared = DiagnosticsLog()
 
-    private let queue = DispatchQueue(label: "app.transcripted.autocomplete.diagnostics-log")
+    private let queue = DispatchQueue(label: "bar.r3d.tilde.diagnostics")
     private let logURL: URL
     private let timestampFormatter = ISO8601DateFormatter()
 
@@ -18,7 +18,7 @@ final class DiagnosticsLog: @unchecked Sendable {
         queue.async { [self, logURL] in
             do {
                 let line = format(event: event, metadata: metadata)
-                // Owner-only (0700 dir / 0600 file). See docs/security/threat-model.md (F2).
+                // Owner-only directory and file.
                 SecureLocalStorage.createDirectory(at: logURL.deletingLastPathComponent())
                 SecureLocalStorage.ensureFile(at: logURL)
 
