@@ -115,7 +115,7 @@ def keystrokes_saved(suggestion, golden):
         if normalize_word(suggested) != normalize_word(expected):
             break
         matched.append(suggested)
-    return sum(len(word) + 1 for word in matched)
+    return sum(map(len, matched)) + max(0, len(matched) - 1)
 
 
 def request_completion(context, socket_path, timeout_seconds):
@@ -333,6 +333,8 @@ def selftest():
     assert complete_report["outcomes"]["silent"] == 2
     assert build_quiz(secret_context) == build_quiz(secret_context)
     assert exact_match_at_n("Thanks, for", "thanks for today", 2)
+    assert keystrokes_saved("alpha beta extra", "alpha beta gamma") == len("alpha beta")
+    assert keystrokes_saved("alpha", "alpha beta") == len("alpha")
     print("selftest OK: aggregate privacy schema, stable corpus IDs, and incomplete-run failure")
 
 
