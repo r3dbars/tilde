@@ -220,7 +220,7 @@ on run argv
     if expectedWindowTitle is not "" and name of front window of targetProcess is not expectedWindowTitle then
       error "disposable smoke window is not frontmost"
     end if
-    keystroke "Smoke proof feels inst"
+    keystroke "Smoke proof feels inst "
   end tell
 end run
 APPLESCRIPT
