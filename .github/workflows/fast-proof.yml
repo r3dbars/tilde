@@ -37,10 +37,9 @@ jobs:
       - name: Fast proof tier (script/proof.sh fast)
         run: bash script/proof.sh fast
         env:
-          # The Swift suite needs macOS + Apple Silicon + the MLX runtime, and
-          # even the core filter has to resolve the MLX-laden package graph, so
-          # skip it on the Linux runner (it has a swift toolchain, but can't run
-          # this package). Swift still runs locally and in the pre-push hook.
+          # The package includes macOS-only AppKit and IMKit targets, so the
+          # Linux observation lane cannot run its Swift tests. Swift still runs
+          # locally and in the macOS lane.
           PROOF_SKIP_SWIFT: "1"
           # Compare every manual run with the current default branch.
           PROOF_DIFF_BASE: origin/main
@@ -62,22 +61,6 @@ jobs:
         run: |
           sudo xcode-select --switch /Applications/Xcode_26.6.app
           xcodebuild -version
-
-      - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/org.swift.swiftpm
-            .build
-          # .build contains the patched dependency checkout. Keep this exact so a
-          # changed patch or patch script can never restore already-patched stale code.
-          key: macos-26-swiftpm-${{ hashFiles('Package.resolved', 'patches/mlx-swift-lm/**', 'script/patch_mlx_swift_lm.sh') }}
-
-      - name: Resolve Swift package graph
-        run: swift package resolve
-
-      - name: Patch resolved MLX Swift LM dependency
-        run: ./script/patch_mlx_swift_lm.sh
 
       - name: Fast proof tier with Swift tests (script/proof.sh fast)
         run: bash script/proof.sh fast
