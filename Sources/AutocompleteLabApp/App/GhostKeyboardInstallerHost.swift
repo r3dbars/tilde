@@ -19,8 +19,7 @@ final class GhostKeyboardInstallerHost {
         string: "~/Library/Input Methods/InlineGhostIME.app"
     ).expandingTildeInPath
 
-    func installOrUpdateIfNeeded(allowMutation: Bool) {
-        guard allowMutation else { return }
+    func installOrUpdateIfNeeded() {
         let bundled = URL(fileURLWithPath: Bundle.main.bundlePath).appendingPathComponent(Self.bundledPathInApp)
         guard FileManager.default.fileExists(atPath: bundled.path) else {
             return // dev builds without the packaged keyboard
