@@ -52,12 +52,13 @@ model and a self-contained `llama-server` helper inside the signed app. Tilde
 does not download a model at runtime and does not send autocomplete requests to
 a cloud service.
 
-The release gate starts a non-mutating proof-mode app and observes that app and
-its exact helper child's open sockets while sending a fixed synthetic prompt
-directly to the helper. It does not install, launch, inspect, or terminate the
-input method. Any unexpected remote connection is a release blocker. This is
-open-socket observation, not packet capture, authenticated-socket proof, or a
-real-editor round trip.
+The release gate starts an isolated proof-mode app on a dedicated local port and
+observes that app and its exact helper child's open sockets while sending a
+fixed synthetic prompt directly to the helper. It may append privacy-safe
+diagnostics, but it does not quit or change the daily driver or install, launch,
+inspect, or terminate the input method. Any unexpected remote connection is a
+release blocker. This is open-socket observation, not packet capture,
+authenticated-socket proof, or a real-editor round trip.
 
 ## Control and removal
 
