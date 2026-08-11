@@ -16,6 +16,17 @@ insertion.
 Never test with private writing. Do not capture or attach typed text or
 screenshots.
 
+The repository includes disposable TextEdit and Chrome smoke lanes:
+
+```bash
+./script/real_app_smoke.sh textedit
+./script/real_app_smoke.sh chrome --fixture textarea
+```
+
+They require permission for the invoking terminal to automate the fixture app.
+They prove a request was served, not that marked text rendered correctly; the
+visual and key-routing checks below remain manual.
+
 ## Pass criteria
 
 An editor is compatible only when all of these hold:

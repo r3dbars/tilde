@@ -5,13 +5,13 @@ Status: current for the simplified IMKit + bundled llama architecture
 
 ## System boundary
 
-Tilde has two signed processes:
+Tilde has two signed user-facing processes and one signed helper child:
 
 - `InlineGhostIME` receives keystrokes and bounded document context from IMKit,
   renders marked-text suggestions, and commits accepted text.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
-  its bundled `llama-server` helper and bundled GGUF model, and returns a
-  suggestion.
+  its bundled GGUF model, and returns a suggestion.
+- The bundled `llama-server` helper is a localhost-only child of the Tilde app.
 
 The helper is an app-owned child process bound to localhost. Request text and
 model output exist in memory only. Tilde has no Accessibility, Screen Recording,
