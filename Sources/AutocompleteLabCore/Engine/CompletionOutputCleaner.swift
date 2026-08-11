@@ -47,13 +47,6 @@ public struct CompletionOutputCleaner: Sendable {
         self.maxVisibleWords = CompletionSuggestion.clampedVisibleWords(maxVisibleWords)
     }
 
-    public func clean(
-        _ rawOutput: String,
-        after textBeforeCursor: String?
-    ) -> CompletionSuggestion? {
-        cleanWithReason(rawOutput, after: textBeforeCursor).suggestion
-    }
-
     public func cleanWithReason(
         _ rawOutput: String,
         after textBeforeCursor: String?

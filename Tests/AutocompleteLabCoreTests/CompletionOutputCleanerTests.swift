@@ -9,7 +9,7 @@ struct CompletionOutputCleanerTests {
         _ output: String,
         after context: String? = nil
     ) -> CompletionSuggestion? {
-        cleaner.clean(output, after: context)
+        cleaner.cleanWithReason(output, after: context).suggestion
     }
 
     private func reason(
@@ -38,14 +38,14 @@ struct CompletionOutputCleanerTests {
 
     @Test("Caps visible output once in CompletionSuggestion")
     func capsVisibleOutput() {
-        let wordCapped = CompletionOutputCleaner(maxVisibleWords: 3).clean(
+        let wordCapped = CompletionOutputCleaner(maxVisibleWords: 3).cleanWithReason(
             "one two three four five",
             after: nil
-        )
-        let clamped = CompletionOutputCleaner(maxVisibleWords: 200).clean(
+        ).suggestion
+        let clamped = CompletionOutputCleaner(maxVisibleWords: 200).cleanWithReason(
             (1...24).map { "word\($0)" }.joined(separator: " "),
             after: nil
-        )
+        ).suggestion
 
         #expect(wordCapped?.visibleText == " one two three")
         #expect(clamped?.visibleText.split(whereSeparator: { $0.isWhitespace }).count == 20)
@@ -53,17 +53,20 @@ struct CompletionOutputCleanerTests {
 
     @Test("Repairs a dangling tail exposed by the display cap")
     func repairsCapInducedDangler() {
-        let suggestion = CompletionOutputCleaner(maxVisibleWords: 8).clean(
+        let suggestion = CompletionOutputCleaner(maxVisibleWords: 8).cleanWithReason(
             "see if you had any thoughts on the details.",
             after: nil
-        )
+        ).suggestion
 
         #expect(suggestion?.visibleText == " see if you had any thoughts")
     }
 
     @Test("Rejects unsafe hidden and control characters")
     func rejectsUnsafeCharacters() {
-        for output in ["safe\u{200B}text", "safe\u{200D}text", "safe\u{2060}text", "safe\ttext"] {
+        for output in [
+            "safe\u{200B}text", "safe\u{200C}text", "safe\u{200D}text",
+            "safe\u{2060}text", "safe\u{FEFF}text", "safe\ttext",
+        ] {
             #expect(reason(output) == .unsafeHiddenOrControlCharacter)
         }
     }

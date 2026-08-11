@@ -7,29 +7,9 @@ import Foundation
 /// not depend on a parent directory's mode to stay private, so this helper makes
 /// owner-only permissions explicit.
 ///
-/// The create helpers also *tighten existing* artifacts, so the first write after upgrading
+/// Opening also tightens existing artifacts, so the first write after upgrading
 /// migrates files that were created world-readable by an earlier build.
 enum SecureLocalStorage {
-    /// Create `directory` (and any missing intermediates) owner-only, tightening it if it
-    /// already exists. Returns `true` when the directory exists with the intended mode.
-    @discardableResult
-    static func createDirectory(at directory: URL) -> Bool {
-        guard let descriptor = secureDirectoryDescriptor(at: directory) else {
-            return false
-        }
-        close(descriptor)
-        return true
-    }
-
-    /// Ensure an empty owner-only file exists at `file` (creating it if needed), tightening an
-    /// existing file's permissions. Returns `true` when the file exists with the intended mode.
-    @discardableResult
-    static func ensureFile(at file: URL) -> Bool {
-        guard let handle = openFileForAppending(at: file) else { return false }
-        try? handle.close()
-        return true
-    }
-
     /// Creates and validates the owner-only parent, then opens the exact owner-only regular file.
     /// The parent remains open while `openat` resolves the leaf, so replacing it with a symlink
     /// cannot redirect the write.
