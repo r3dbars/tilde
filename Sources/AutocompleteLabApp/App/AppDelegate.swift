@@ -1,76 +1,78 @@
 import AppKit
-import AutocompleteLabCore
-import CoreGraphics
 import ServiceManagement
+
+enum TildeLaunchMode: Equatable {
+    case production
+    case releaseProof
+
+    init?(arguments: [String]) {
+        switch Array(arguments.dropFirst()) {
+        case []: self = .production
+        case ["--release-proof"]: self = .releaseProof
+        default: return nil
+        }
+    }
+
+    var allowsDailyDriverMutation: Bool { self == .production }
+
+    var llamaServerPort: Int {
+        switch self {
+        case .production: 17_872
+        case .releaseProof: 17_873
+        }
+    }
+}
 
 /// Tilde's brain-caretaker. The product is the InlineGhostIME input
 /// method; this app exists to run its engines and utilities:
 ///   - GhostBrainServerHost: the unix socket the keyboard talks to
 ///   - LlamaServerProcessHost + LlamaCompletionEngine: the Gemma engine
-///   - GhostScreenContextBridge + VisiblePageContextProvider: screen context
 ///   - GhostKeyboardInstallerHost: installs/updates the keyboard itself
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    let visiblePageContextProvider = VisiblePageContextProvider()
-    private let llamaServerHost = LlamaServerProcessHost()
-    private lazy var ghostScreenContextBridge = GhostScreenContextBridge(provider: visiblePageContextProvider)
+    private let launchMode: TildeLaunchMode
+    private let llamaServerHost: LlamaServerProcessHost
     private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
-    // Phrase continuations go to the llama/Gemma engine when its server is
-    // healthy; word completion belongs to the keyboard's dictionary layer, so
-    // the server answers it with silence. No second model engine — llama-only
-    // (owner decision, 2026-07-22).
-    private lazy var ghostBrainServerHost = GhostBrainServerHost(
-        engineProvider: { [weak self] in
-            guard let self else { return UnavailableCompletionEngine(reason: "app shutting down") }
-            let llama = self.llamaServerHost
-            return ModeRoutedCompletionEngine(
-                phraseEngine: LlamaCompletionEngine(baseURL: llama.baseURL),
-                fallbackEngine: UnavailableCompletionEngine(reason: "llama engine unavailable"),
-                phraseEngineIsHealthy: { llama.isHealthy },
-                // Live-flippable: defaults write bar.r3d.tilde ModelHandlesWordCompletions -bool true|false
-                routeWordCompletions: { UserDefaults.standard.bool(forKey: "ModelHandlesWordCompletions") }
-            )
-        },
-        screenContextResolver: { [bridge = ghostScreenContextBridge] app, field, text in
-            bridge.context(
-                appBundleIdentifier: app,
-                fieldIdentity: field,
-                textBeforeCursor: text,
-                enabled: UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled")
-            )
-        }
-    )
+    // Phrase continuations go to the llama/Gemma engine. Mid-word completion
+    // belongs only to the keyboard's system spell-checker path.
+    private lazy var ghostBrainServerHost = GhostBrainServerHost(runtime: llamaServerHost)
+
+    init(launchMode: TildeLaunchMode = .production) {
+        self.launchMode = launchMode
+        self.llamaServerHost = LlamaServerProcessHost(port: launchMode.llamaServerPort)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Two instances fight over the ghost socket and double the engine's
-        // memory — the older instance wins, this one bows out.
-        let me = NSRunningApplication.current
-        let twins = NSRunningApplication.runningApplications(
-            withBundleIdentifier: Bundle.main.bundleIdentifier ?? ""
-        ).filter { $0.processIdentifier != me.processIdentifier }
-        if !twins.isEmpty {
-            DiagnosticsLog.shared.record("duplicate-instance-exit", metadata: [:])
-            NSApp.terminate(nil)
-            return
+        if launchMode == .production {
+            // The process-held runtime lock makes this the only socket/model owner.
+            guard ghostBrainServerHost.start() else {
+                DiagnosticsLog.shared.record("duplicate-instance-exit", metadata: [:])
+                NSApp.terminate(nil)
+                return
+            }
         }
 
         // Menu-bar agents get auto-terminated unless they say otherwise; the
         // keyboard is only as smart as this process is alive.
         ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
-        statusMenuHost.start()
-        ghostBrainServerHost.start()
+        if launchMode == .production { statusMenuHost.start() }
         llamaServerHost.start()
-        registerAsLoginItemIfNeeded()
-        ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
-        // Any launch means the brain is wanted again: lift the keyboard
-        // watchdog's stay-quiet flag from a previous deliberate quit.
-        UserDefaults(suiteName: Self.keyboardDefaultsSuite)?
-            .removeObject(forKey: "GhostBrainQuietQuit")
-        DiagnosticsLog.shared.record("launch", metadata: [:])
+        if launchMode.allowsDailyDriverMutation {
+            registerAsLoginItemIfNeeded()
+            ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
+            // Any production launch means the brain is wanted again: lift the
+            // keyboard watchdog's stay-quiet flag from a deliberate quit.
+            UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
+                .removeObject(forKey: "GhostBrainQuietQuit")
+        }
+        DiagnosticsLog.shared.record(
+            launchMode == .production ? "launch" : "release-proof-launch",
+            metadata: [:]
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -79,13 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or the exit races the log queue and the line never lands.
         DiagnosticsLog.shared.record("shutdown", metadata: [:])
         DiagnosticsLog.shared.flush()
+        if launchMode == .production { ghostBrainServerHost.stop() }
         llamaServerHost.stop()
-        ghostBrainServerHost.stop()
     }
-
-    /// The keyboard's own defaults domain — the one channel the app and the
-    /// IME process share (TrainingSampleLog reads its capture flag the same way).
-    static let keyboardDefaultsSuite = "bar.r3d.inputmethod.InlineGhost"
 
     /// One line for the status menu: which engine is answering. Honest by
     /// rule — the app may fail, but never silently. The personal/generic
@@ -94,11 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath) else {
             return "⚠️ Brain socket missing — quit and reopen"
         }
-        guard llamaServerHost.isHealthy else {
-            return "Engine: starting…"
-        }
-        let personal = RuntimeSetting.string("MODEL_PATH") != nil
-        return personal ? "Engine: Personal Gemma (ready)" : "Engine: Generic Gemma (ready)"
+        return llamaServerHost.snapshot.menuLine
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login

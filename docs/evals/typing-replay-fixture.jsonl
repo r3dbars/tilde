@@ -1,3 +1,0 @@
-{"id":"fixture-plan","contextBefore":"The plan is simple and the next step","actualContinuation":"is to keep it small and measure what helps","appBundleIdentifier":"app.steadytype.fixture","fieldKind":"multilineCompose","dayString":"2026-07-01"}
-{"id":"fixture-ship","contextBefore":"After the focused test passes I think","actualContinuation":"we should ship this and watch the real results","appBundleIdentifier":"app.steadytype.fixture","fieldKind":"multilineCompose","dayString":"2026-07-02"}
-{"id":"fixture-calm","contextBefore":"When the continuation is uncertain we should","actualContinuation":"stay quiet and avoid making an annoying guess","appBundleIdentifier":"app.steadytype.fixture","fieldKind":"multilineCompose","dayString":"2026-07-03"}

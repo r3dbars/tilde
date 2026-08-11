@@ -1,39 +1,29 @@
 import Foundation
 
 public struct CompletionSuggestion: Equatable, Sendable {
+    public static let defaultMaxVisibleWords = 8
+    public static let maximumVisibleWords = 20
     public static let defaultMaxVisibleCharacters = 42
 
-    public let text: String
-    public let maxVisibleWords: Int
-    public let maxVisibleCharacters: Int
+    public let visibleText: String
 
     public init(
         text: String,
-        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
+        maxVisibleWords: Int = Self.defaultMaxVisibleWords,
         maxVisibleCharacters: Int? = nil
     ) {
-        self.maxVisibleWords = max(1, maxVisibleWords)
-        self.maxVisibleCharacters = max(
+        let visibleWords = max(1, maxVisibleWords)
+        let visibleCharacters = max(
             1,
-            maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: self.maxVisibleWords)
+            maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: visibleWords)
         )
-        self.text = Self.cappedText(
-            text,
-            wordLimit: self.maxVisibleWords,
-            characterLimit: self.maxVisibleCharacters
+        self.visibleText = RawContinuationPrompt.repairDanglingTail(
+            Self.cappedText(
+                text,
+                wordLimit: visibleWords,
+                characterLimit: visibleCharacters
+            )
         )
-    }
-
-    public var visibleText: String {
-        acceptedPrefix(wordLimit: maxVisibleWords)
-    }
-
-    public var visibleWordCount: Int {
-        visibleText.split(whereSeparator: { $0.isWhitespace }).count
-    }
-
-    public var isEmpty: Bool {
-        visibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func cappedText(
@@ -81,17 +71,8 @@ public struct CompletionSuggestion: Equatable, Sendable {
         return accepted
     }
 
-    public static func nextWordAcceptanceText(in text: String) -> String {
-        let accepted = acceptedPrefix(in: text, wordLimit: 1)
-        guard accepted.contains(where: { !$0.isWhitespace }) else {
-            return ""
-        }
-
-        if accepted.last?.isWhitespace == true {
-            return accepted
-        }
-
-        return accepted + " "
+    public static func clampedVisibleWords(_ value: Int) -> Int {
+        min(maximumVisibleWords, max(1, value))
     }
 
     public static func defaultMaxVisibleCharacters(forVisibleWords visibleWords: Int) -> Int {
@@ -103,14 +84,19 @@ public struct CompletionSuggestion: Equatable, Sendable {
             return text
         }
 
-        let capped = String(text.prefix(characterLimit))
-        guard let lastWhitespaceIndex = capped.lastIndex(where: { $0.isWhitespace }) else {
+        let cut = text.index(text.startIndex, offsetBy: characterLimit)
+        let capped = String(text[..<cut])
+        if text[cut].isWhitespace {
             return capped
+        }
+
+        guard let lastWhitespaceIndex = capped.lastIndex(where: { $0.isWhitespace }) else {
+            return ""
         }
 
         let wordBoundaryCapped = String(capped[..<lastWhitespaceIndex])
         if wordBoundaryCapped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return capped
+            return ""
         }
 
         return wordBoundaryCapped

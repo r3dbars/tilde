@@ -1,117 +1,42 @@
 import Foundation
 
 public enum DiagnosticsMetadataRedactor {
-    public static func logSafeValue(forKey key: String, value: String) -> String {
-        let flattened = flattenedValue(value)
+    private static let enumValues: Set<String> = [
+        "launch-failed", "assets-missing", "port-in-use", "health-timeout", "directory",
+        "already-running",
+        "unsafeHiddenOrControlCharacter", "emptyOutput", "noSuggestionSentinel",
+        "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext",
+        "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
+    ]
 
-        if isAlreadyRedactedSummary(flattened) {
-            return flattened
+    public static func logSafeEvent(_ event: String) -> String {
+        matches(event, #"^[a-z][a-z0-9-]{0,63}$"#) ? event : "event-redacted"
+    }
+
+    public static func logSafeField(forKey key: String, value: String) -> String {
+        let safe: Bool
+        switch key {
+        case "totalMilliseconds", "cleanedChars", "chars":
+            safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
+        case "willRestart", "firstInstall":
+            safe = value == "true" || value == "false"
+        case "reason", "status":
+            safe = enumValues.contains(value)
+        case "app":
+            safe = value == "unknown"
+                || matches(value, #"^[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9][A-Za-z0-9-]*)+$"#)
+        default:
+            return "metadata=\(redacted(value))"
         }
 
-        if shouldRedactValue(forKey: key, value: flattened) {
-            return DiagnosticValueRedactor.stringSummary(length: value.count)
-        }
-
-        guard isSensitiveKey(key), !isShapeKey(key) else {
-            return flattened
-        }
-
-        return DiagnosticValueRedactor.stringSummary(length: value.count)
+        return "\(key)=\(safe ? value : redacted(value))"
     }
 
-    public static func isSensitiveKey(_ key: String) -> Bool {
-        let normalized = key.lowercased()
-        return [
-            "text",
-            "prompt",
-            "output",
-            "completion",
-            "document",
-            "directory",
-            "email",
-            "filename",
-            "fileurl",
-            "folder",
-            "neighbor",
-            "note",
-            "path",
-            "preview",
-            "recipient",
-            "suggestion",
-            "selected",
-            "subject",
-            "title",
-            "typed",
-            "url",
-            "uri",
-            "value"
-        ].contains { normalized.contains($0) }
+    private static func matches(_ value: String, _ pattern: String) -> Bool {
+        value.range(of: pattern, options: .regularExpression) == value.startIndex..<value.endIndex
     }
 
-    private static func isShapeKey(_ key: String) -> Bool {
-        let normalized = key.lowercased()
-        return normalized.hasSuffix("chars")
-            || normalized.hasSuffix("reasoncode")
-            || normalized.hasSuffix("count")
-            || normalized.hasSuffix("length")
-            || normalized.hasSuffix("milliseconds")
-            || normalized.hasSuffix("rect")
-            || normalized.hasSuffix("frame")
-            || normalized.hasPrefix("has")
-            || normalized.contains("hmac")
-            || (normalized.hasPrefix("acceptedtext") && normalized.contains("fingerprint"))
-    }
-
-    private static func shouldRedactValue(forKey key: String, value: String) -> Bool {
-        if containsLocalPath(value) {
-            return true
-        }
-
-        guard !isShapeKey(key) else {
-            return false
-        }
-
-        return isReasonLikeKey(key) && !isKnownSafeReasonValue(value)
-    }
-
-    private static func containsLocalPath(_ value: String) -> Bool {
-        let patterns = [
-            #"(^|[\s"'=:(])/(Users|private|tmp|var|Volumes|Applications|Library|System|bin|sbin|usr|opt|dev)/[^\s"']+"#,
-            #"(^|[\s"'=:(])~(/[^\s"']*)"#,
-            #"file://[^\s"']+"#,
-            #"[A-Za-z]:\\[^\s"']+"#
-        ]
-
-        return patterns.contains { pattern in
-            value.range(of: pattern, options: .regularExpression) != nil
-        }
-    }
-
-    private static func isReasonLikeKey(_ key: String) -> Bool {
-        key.lowercased().contains("reason")
-    }
-
-    private static func isKnownSafeReasonValue(_ value: String) -> Bool {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return true
-        }
-
-        let pattern = #"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,96}$"#
-        return trimmed.range(of: pattern, options: .regularExpression) != nil
-    }
-
-    private static func flattenedValue(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "\t", with: " ")
-    }
-
-    private static func isAlreadyRedactedSummary(_ value: String) -> Bool {
-        (value.hasPrefix("String(") && value.hasSuffix(" chars)"))
-            || (value.hasPrefix("AttributedString(") && value.hasSuffix(" chars)"))
-            || (value.hasPrefix("Array(") && value.hasSuffix(" items)"))
-            || value.hasSuffix("(redacted)")
+    private static func redacted(_ value: String) -> String {
+        "String(\(value.count) chars)"
     }
 }

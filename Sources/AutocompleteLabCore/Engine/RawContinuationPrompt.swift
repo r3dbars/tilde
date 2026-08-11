@@ -1,14 +1,8 @@
 import Foundation
 
-/// The raw-completion recipe for chat-tuned models served without a chat
-/// template (llama.cpp `/completion`). Discovered 2026-07-22 (see
-/// docs/ime-tuning-log.md): chat mode makes "thinking-first" models like
-/// Gemma 4 deliberate or narrate instead of continuing; raw mode with a short
-/// documents-being-continued scaffold produces natural, in-voice
-/// continuations. The context is sent WITHOUT its trailing whitespace (models
-/// continue cleanly from a word boundary and emit the separating space
-/// themselves); callers use `contextEndedInWhitespace` to trim the duplicate
-/// leading space from the model's output.
+/// A short raw-completion recipe for the app-owned llama server. The context is
+/// sent without trailing whitespace; `contextEndedInWhitespace` removes the
+/// model's duplicate leading space from its response.
 /// Writing register inferred from the host app — the scaffold's examples teach
 /// the model the room's voice (casual chat vs email vs flowing prose).
 public enum ContinuationRegister: String, Sendable {
@@ -36,11 +30,6 @@ public enum ContinuationRegister: String, Sendable {
     /// Suggested generation budget: chat wants shorter bursts; prose/email get
     /// room to finish the clause (cut-off fragments were the top quality wart).
     public var generatedTokenBudget: Int {
-        // Tuning-sweep override: TILDE_TOKEN_BUDGET forces the budget for
-        // all registers (the driver sweeps this against the frozen quiz).
-        if let value = RuntimeSetting.int("TOKEN_BUDGET"), value > 0 {
-            return value
-        }
         return self == .chat ? 14 : 20
     }
 }
@@ -50,15 +39,6 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public let contextEndedInWhitespace: Bool
 
     public static func scaffold(for register: ContinuationRegister) -> String {
-        // Tuning-sweep override: TILDE_SCAFFOLD_<REGISTER>_FILE points at a
-        // ready-made scaffold block (see script/mine_scaffolds.py). Lets the
-        // driver A/B example sets without rebuilding. Absent/unreadable → builtin.
-        let settingName = "SCAFFOLD_\(register.rawValue.uppercased())_FILE"
-        if let path = RuntimeSetting.string(settingName),
-           let contents = try? String(contentsOfFile: path, encoding: .utf8),
-           !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return contents
-        }
         switch register {
         case .chat:
             return """
@@ -108,16 +88,11 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         }
     }
 
-    /// `screenContext` is the OCR snapshot of the writer's screen (frozen per
-    /// typing burst upstream, so it stays inside the server's cacheable prompt
-    /// prefix). It is framed as reference notes, never as text to continue.
     /// `register` selects the scaffold voice from the host app's identity.
     public init(
         textBeforeCursor: String,
-        screenContext: String? = nil,
         register: ContinuationRegister = .prose,
-        maxContextCharacters: Int = 3000,
-        maxScreenContextCharacters: Int = 700
+        maxContextCharacters: Int = 3000
     ) {
         let tail = String(textBeforeCursor.suffix(max(80, maxContextCharacters)))
         let trimmed = String(
@@ -125,87 +100,13 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         )
         contextEndedInWhitespace = trimmed.count != tail.count
 
-        // Opener mode: nothing typed yet, but a message is visible on screen —
-        // propose the first words of a reply instead of waiting for the writer.
-        // Only fires with real screen context; an empty field with no screen is
-        // silence (nothing to ground a guess in).
         if trimmed.isEmpty {
-            let bounded = screenContext.map {
-                String($0.prefix(max(120, maxScreenContextCharacters)))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            } ?? ""
-            if bounded.isEmpty {
-                prompt = ""
-                return
-            }
-            prompt = Self.openerScaffold + "Message: " + bounded + "\nReply:"
+            prompt = ""
             return
         }
 
-        var pieces = Self.scaffold(for: register)
-        if let screenContext {
-            let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !bounded.isEmpty {
-                // Screen framing is tunable (TILDE_SCREEN_FRAMING): the
-                // vague "notes" framing barely helps the model RESPOND to what's
-                // on screen; a direct "reply" framing tells it the screen is the
-                // message being answered. See the screen-response experiments.
-                let framing = RuntimeSetting.string("SCREEN_FRAMING") ?? "notes"
-                switch framing {
-                case "reply":
-                    pieces += """
-                    The writer is replying to this message on screen. Respond to it directly — \
-                    answer its questions and use its topic and names; never copy it verbatim:
-                    \(bounded)
-
-
-                    """
-                case "minimal":
-                    pieces += "On screen:\n\(bounded)\n\n\n"
-                default:
-                    pieces += """
-                    Reference notes visible on the writer's screen (may be a message being replied to, \
-                    a document being discussed, or unrelated windows — use names and topics from it \
-                    when they fit; never copy or continue it):
-                    \(bounded)
-
-
-                    """
-                }
-            }
-        }
-        prompt = pieces + "Text: " + trimmed + "\nContinuation:"
+        prompt = Self.scaffold(for: register) + "Text: " + trimmed + "\nContinuation:"
     }
-
-    /// Few-shot recipe for opener mode: message→reply pairs teach the model
-    /// how the writer opens replies. TILDE_OPENER_SCAFFOLD_FILE (or the
-    /// persisted default) points at a file mined from the writer's own
-    /// exchanges — real variety beats the builtin's generic voice, which
-    /// collapses to "I'm ..." under greedy decoding.
-    static var openerScaffold: String {
-        if let path = RuntimeSetting.string("OPENER_SCAFFOLD_FILE"),
-           let contents = try? String(contentsOfFile: path, encoding: .utf8),
-           !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return contents
-        }
-        return builtinOpenerScaffold
-    }
-
-    static let builtinOpenerScaffold = """
-    The following are real chat messages, each followed by the short casual reply their recipient wrote back.
-
-    Message: want to grab dinner tonight?
-    Reply: yeah I'm down, what time?
-
-    Message: running about 10 min late, sorry!
-    Reply: no worries, see you soon.
-
-    Message: did you get a chance to look at the doc?
-    Reply: just did, looks good overall.
-
-
-    """
 
     /// Words a suggestion should never END on — a trailing article/preposition/
     /// conjunction is the signature of a token-limit cutoff mid-clause
@@ -234,10 +135,8 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         return Self.repairDanglingTail(text)
     }
 
-    /// Cutoff repair, applied both to the raw generation AND after any display
-    /// word-cap (the cap can re-create a dangler from a finished sentence):
-    /// when text ends mid-word-stream (no terminal punctuation), trailing
-    /// never-end-on words are trimmed back to a complete-feeling phrase.
+    /// Apply this to raw output and to the display-capped suggestion: a cap can
+    /// expose a trailing function word from an otherwise complete sentence.
     public static func repairDanglingTail(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard let last = trimmed.last, last.isLetter || last.isNumber else {

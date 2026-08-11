@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Automatic real-app smoke entry point used by AppProofCommandRunner.
-#
-# This intentionally owns only the two automatic app lanes. Build and bundle
-# setup stay in build_and_run.sh; fixtures are disposable and output is limited
-# to privacy-safe status metadata.
+# Disposable TextEdit/Chrome compatibility smoke. Build and restart stay
+# explicit; output is limited to privacy-safe status metadata.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +13,6 @@ APP="${1:-}"
 CHROME_FIXTURE="textarea"
 CHROME_FIXTURE_WAS_SET=0
 DRY_RUN=0
-SKIP_BUILD=0
 TEMP_DIR=""
 TEXTEDIT_WINDOW_TITLE=""
 CHROME_PID=""
@@ -24,18 +20,12 @@ LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome> [--fixture <textarea|contenteditable>] [--skip-build] [--dry-run]
+Usage: script/real_app_smoke.sh <textedit|chrome> [--fixture <textarea|contenteditable>] [--dry-run]
 
 Runs a bounded automatic smoke against a disposable TextEdit document or an
-isolated local Chrome fixture. It never reads, prints, or removes user content.
+isolated local Chrome fixture using the already-running packaged app. It never
+reads, prints, or removes user content.
 EOF
-}
-
-is_truthy() {
-  case "${1:-}" in
-    1 | true | TRUE | yes | on) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 fail() {
@@ -103,9 +93,6 @@ while (($#)); do
     --dry-run)
       DRY_RUN=1
       ;;
-    --skip-build)
-      SKIP_BUILD=1
-      ;;
     --fixture)
       shift
       if (($# == 0)); then
@@ -153,20 +140,12 @@ case "$APP" in
     ;;
 esac
 
-if is_truthy "${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-}"; then
-  SKIP_BUILD=1
-fi
-
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "real_app_smoke: DRY RUN app=$APP fixture=$CHROME_FIXTURE skipBuild=$SKIP_BUILD"
+  echo "real_app_smoke: DRY RUN app=$APP fixture=$CHROME_FIXTURE"
   exit 0
 fi
 
-if [[ "$SKIP_BUILD" != "1" ]]; then
-  "$ROOT_DIR/script/build_and_run.sh" --verify
-fi
-
-[[ -x "$APP_BINARY" ]] || fail "current app bundle is unavailable; run script/build_and_run.sh --verify first"
+[[ -x "$APP_BINARY" ]] || fail "packaged app is unavailable; run the release driver first"
 
 current_app_is_running() {
   local pid command
@@ -182,8 +161,7 @@ current_app_is_running() {
 
 current_app_is_running || fail "current checkout's Tilde app is not running"
 
-# build_and_run.sh waits for this same lock, so acquire it only after any
-# delegated build has finished.
+# Serialize the disposable UI fixture.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   fail "another real-app smoke is already running"
 fi
@@ -242,7 +220,7 @@ on run argv
     if expectedWindowTitle is not "" and name of front window of targetProcess is not expectedWindowTitle then
       error "disposable smoke window is not frontmost"
     end if
-    keystroke "Smoke proof feels inst"
+    keystroke "Smoke proof feels inst "
   end tell
 end run
 APPLESCRIPT

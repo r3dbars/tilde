@@ -6,6 +6,6 @@ name = "transcripted-autocomplete-lab"
 script = ""
 
 [[actions]]
-name = "Run"
+name = "Build"
 icon = "run"
 command = "./script/build_and_run.sh"
