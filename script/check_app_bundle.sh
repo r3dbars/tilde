@@ -10,6 +10,7 @@ RELEASE_INPUT_MODEL=""
 APP_BUNDLE_SET=0
 APP_BUNDLE="$ROOT_DIR/dist/Tilde.app"
 MIN_MODEL_BYTES=1500000000
+MAX_HELPER_MIN_MACOS=26.0
 SELFTEST_TMP_DIR=""
 
 fail() {
@@ -60,6 +61,45 @@ is_macho_execute() {
   ' <<<"$headers"
 }
 
+has_supported_macos_build_versions() {
+  local architectures architecture_count build_versions
+  architectures="$(/usr/bin/lipo -archs "$1" 2>/dev/null)" || return 1
+  architecture_count="$(/usr/bin/awk '{ print NF }' <<<"$architectures")"
+  build_versions="$(/usr/bin/xcrun vtool -show-build "$1" 2>/dev/null)" || return 1
+  /usr/bin/awk -v expected="$architecture_count" -v maximum="$MAX_HELPER_MIN_MACOS" '
+    function is_newer(version, limit, version_parts, limit_parts, part) {
+      split(version, version_parts, ".")
+      split(limit, limit_parts, ".")
+      for (part = 1; part <= 3; part++) {
+        if ((version_parts[part] + 0) != (limit_parts[part] + 0)) {
+          return (version_parts[part] + 0) > (limit_parts[part] + 0)
+        }
+      }
+      return 0
+    }
+    $1 == "cmd" && ($2 == "LC_BUILD_VERSION" || $2 == "LC_VERSION_MIN_MACOSX") {
+      commands += 1
+      in_build = 1
+      saw_platform = ($2 == "LC_VERSION_MIN_MACOSX")
+      legacy = saw_platform
+      next
+    }
+    in_build && $1 == "platform" {
+      if (saw_platform || $2 != "MACOS") invalid = 1
+      saw_platform = 1
+      next
+    }
+    in_build && ((legacy && $1 == "version") || (!legacy && $1 == "minos")) {
+      if (!saw_platform || is_newer($2, maximum)) invalid = 1
+      completed += 1
+      in_build = 0
+    }
+    END {
+      exit !(expected > 0 && commands == expected && completed == expected && invalid == 0)
+    }
+  ' <<<"$build_versions"
+}
+
 has_system_only_dependencies() {
   local dependencies
   dependencies="$(/usr/bin/otool -arch all -L "$1" 2>/dev/null)" || return 1
@@ -86,6 +126,8 @@ validate_release_inputs() {
   local model="$2"
   [[ -f "$helper" && -x "$helper" ]] || fail "missing executable llama-server: $helper"
   is_macho_execute "$helper" || fail "llama-server is not Mach-O filetype EXECUTE"
+  has_supported_macos_build_versions "$helper" \
+    || fail "every llama-server architecture must target macOS $MAX_HELPER_MIN_MACOS or earlier"
   has_system_only_dependencies "$helper" \
     || fail "llama-server dependency inspection failed or found a non-system library"
   [[ -f "$model" ]] || fail "missing model: $model"
@@ -96,8 +138,8 @@ validate_release_inputs() {
 
 run_selftest() {
   local selftest_dir invalid_helper valid_model readme_model small_gguf
-  local fixture_source fixture_main invalid_dylib invalid_executable valid_slice
-  local mixed_filetype_helper mixed_dependency_helper
+  local fixture_source fixture_main valid_source invalid_dylib invalid_executable
+  local valid_helper future_helper ios_helper mixed_filetype_helper mixed_dependency_helper
   [[ "$(team_identifier_from_details $'Executable=/tmp/Tilde\nTeamIdentifier=ABCDE12345')" \
     == "ABCDE12345" ]] || return 1
   if team_identifier_from_details "Executable=/tmp/Tilde" >/dev/null; then return 1; fi
@@ -116,9 +158,12 @@ run_selftest() {
   small_gguf="$selftest_dir/small.gguf"
   fixture_source="$selftest_dir/fixture.c"
   fixture_main="$selftest_dir/main.c"
+  valid_source="$selftest_dir/valid.c"
   invalid_dylib="$selftest_dir/invalid.dylib"
   invalid_executable="$selftest_dir/invalid-dependency"
-  valid_slice="$selftest_dir/valid-arm64e"
+  valid_helper="$selftest_dir/valid-helper"
+  future_helper="$selftest_dir/future-helper"
+  ios_helper="$selftest_dir/ios-helper"
   mixed_filetype_helper="$selftest_dir/mixed-filetype-helper"
   mixed_dependency_helper="$selftest_dir/mixed-dependency-helper"
 
@@ -134,24 +179,35 @@ run_selftest() {
   printf 'int tilde_selftest_dependency(void) { return 0; }\n' >"$fixture_source"
   printf 'int tilde_selftest_dependency(void);\nint main(void) { return tilde_selftest_dependency(); }\n' \
     >"$fixture_main"
+  printf 'int main(void) { return 0; }\n' >"$valid_source"
 
-  /usr/bin/xcrun clang -arch x86_64 -dynamiclib \
+  /usr/bin/xcrun clang -arch arm64 -mmacosx-version-min="$MAX_HELPER_MIN_MACOS" \
+    "$valid_source" -o "$valid_helper" >/dev/null 2>&1
+  /usr/bin/xcrun vtool -set-build-version macos 27.0 27.0 -replace \
+    -output "$future_helper" "$valid_helper" >/dev/null 2>&1
+  /usr/bin/xcrun vtool -set-build-version ios 26.0 26.0 -replace \
+    -output "$ios_helper" "$valid_helper" >/dev/null 2>&1
+  /usr/bin/xcrun clang -arch x86_64 -mmacosx-version-min="$MAX_HELPER_MIN_MACOS" -dynamiclib \
     -Wl,-install_name,@rpath/libtilde-selftest.dylib \
     "$fixture_source" -o "$invalid_dylib" >/dev/null 2>&1
-  /usr/bin/xcrun clang -arch x86_64 "$fixture_main" "$invalid_dylib" \
+  /usr/bin/xcrun clang -arch x86_64 -mmacosx-version-min="$MAX_HELPER_MIN_MACOS" \
+    "$fixture_main" "$invalid_dylib" \
     -o "$invalid_executable" >/dev/null 2>&1
-  /usr/bin/lipo /usr/bin/true -thin arm64e -output "$valid_slice"
-  /usr/bin/lipo -create "$valid_slice" "$invalid_dylib" -output "$mixed_filetype_helper"
-  /usr/bin/lipo -create "$valid_slice" "$invalid_executable" -output "$mixed_dependency_helper"
-  chmod +x "$mixed_filetype_helper" "$mixed_dependency_helper"
+  /usr/bin/lipo -create "$valid_helper" "$invalid_dylib" -output "$mixed_filetype_helper"
+  /usr/bin/lipo -create "$valid_helper" "$invalid_executable" -output "$mixed_dependency_helper"
+  chmod +x "$future_helper" "$ios_helper" "$mixed_filetype_helper" "$mixed_dependency_helper"
 
-  "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$valid_model" \
+  "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$valid_helper" "$valid_model" \
     >/dev/null 2>&1 || return 1
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$invalid_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
-  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$readme_model" \
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$future_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
-  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs /usr/bin/true "$small_gguf" \
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$ios_helper" "$valid_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$valid_helper" "$readme_model" \
+    >/dev/null 2>&1; then return 1; fi
+  if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$valid_helper" "$small_gguf" \
     >/dev/null 2>&1; then return 1; fi
   if "$ROOT_DIR/script/check_app_bundle.sh" --release-inputs "$mixed_filetype_helper" "$valid_model" \
     >/dev/null 2>&1; then return 1; fi
