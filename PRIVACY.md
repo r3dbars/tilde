@@ -33,9 +33,10 @@ and a static `llama-server` helper inside the signed app. Tilde does not
 download a model at runtime and does not send autocomplete requests to a cloud
 service.
 
-The release gate observes the running app's sockets with
-`script/check_runtime_network_egress.py`. Any unexpected remote connection is
-a release blocker.
+The release gate observes the running app, input method, and exact helper
+child's open sockets while sending a fixed synthetic prompt directly to that
+helper. Any unexpected remote connection is a release blocker. This is
+open-socket observation, not packet capture or a real-editor round trip.
 
 ## Control and removal
 
