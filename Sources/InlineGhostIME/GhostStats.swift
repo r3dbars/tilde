@@ -27,10 +27,10 @@ enum GhostStats {
 
     private static func persist(now: Date, force: Bool) {
         guard force || now.timeIntervalSince(lastFlush) > 20 else { return }
-        lastFlush = now
         let accepted = wordsAccepted
-        wordsAccepted = 0
         guard accepted > 0 else { return }
+        lastFlush = now
+        wordsAccepted = 0
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"

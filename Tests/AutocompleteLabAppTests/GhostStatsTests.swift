@@ -4,8 +4,8 @@ import Testing
 
 @Suite("IME usage stats", .serialized)
 struct GhostStatsTests {
-    @Test("Forced flush persists queued aggregate before returning")
-    func forcedFlushIsSynchronous() {
+    @Test("Empty flush does not delay the next aggregate")
+    func emptyFlushKeepsNextWriteImmediate() {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let key = "stats." + formatter.string(from: Date())
@@ -13,11 +13,21 @@ struct GhostStatsTests {
         let original = defaults.object(forKey: key)
         defer { defaults.set(original, forKey: key) }
 
+        GhostStats.flush(force: true)
         let before = (defaults.dictionary(forKey: key) as? [String: Int])?["wordsAccepted"] ?? 0
+        GhostStats.recordAccepted("one")
+        for _ in 0..<50 {
+            let current = (defaults.dictionary(forKey: key) as? [String: Int])?["wordsAccepted"] ?? 0
+            if current == before + 1 { break }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        let automatic = (defaults.dictionary(forKey: key) as? [String: Int])?["wordsAccepted"] ?? 0
+        #expect(automatic == before + 1)
+
         GhostStats.recordAccepted("two words")
         GhostStats.flush(force: true)
         let after = (defaults.dictionary(forKey: key) as? [String: Int])?["wordsAccepted"] ?? 0
 
-        #expect(after == before + 2)
+        #expect(after == before + 3)
     }
 }

@@ -41,6 +41,7 @@ Continuation: scales well beyond the original design load.
 
 
 """
+PRODUCTION_CONTEXT_CHARACTERS = 3_000
 
 
 @dataclass(frozen=True)
@@ -270,8 +271,9 @@ def health_check(port: int) -> None:
 
 
 def model_request(context: str) -> dict[str, object]:
+    bounded_context = context[-PRODUCTION_CONTEXT_CHARACTERS:].rstrip()
     return {
-        "prompt": PROSE_SCAFFOLD + "Text: " + context.rstrip() + "\nContinuation:",
+        "prompt": PROSE_SCAFFOLD + "Text: " + bounded_context + "\nContinuation:",
         "n_predict": 20,
         "temperature": 0,
         "cache_prompt": True,
@@ -307,6 +309,8 @@ def selftest() -> None:
     assert request["prompt"].endswith(
         "Text: The architecture of the system means that we\nContinuation:"
     )
+    long_request = model_request("EARLY_SENTINEL " + "x" * PRODUCTION_CONTEXT_CHARACTERS)
+    assert "EARLY_SENTINEL" not in long_request["prompt"]
     assert not is_non_loopback("127.0.0.1:17872")
     assert not is_non_loopback("[::1]:17872")
     assert is_non_loopback("203.0.113.1:443")
