@@ -9,23 +9,24 @@ final class DiagnosticsLog: @unchecked Sendable {
     private let timestampFormatter = ISO8601DateFormatter()
 
     private init() {
-        logURL = FileManager.default
+        self.logURL = FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Tilde/diagnostics.log")
+    }
+
+    init(logURL: URL) {
+        self.logURL = logURL
     }
 
     func record(_ event: String, metadata: [String: String] = [:]) {
         queue.async { [self, logURL] in
             do {
                 let line = format(event: event, metadata: metadata)
-                // Owner-only directory and file.
-                SecureLocalStorage.createDirectory(at: logURL.deletingLastPathComponent())
-                SecureLocalStorage.ensureFile(at: logURL)
-
-                let handle = try FileHandle(forWritingTo: logURL)
-                try handle.seekToEnd()
+                guard let handle = SecureLocalStorage.openFileForAppending(at: logURL) else {
+                    return
+                }
+                defer { try? handle.close() }
                 try handle.write(contentsOf: Data(line.utf8))
-                try handle.close()
             } catch {
                 // Logging must never affect typing.
             }

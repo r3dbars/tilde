@@ -10,50 +10,100 @@ import Foundation
 /// The create helpers also *tighten existing* artifacts, so the first write after upgrading
 /// migrates files that were created world-readable by an earlier build.
 enum SecureLocalStorage {
-    /// Owner-only directory permissions (`rwx------`).
-    static let directoryPermissions = NSNumber(value: Int16(0o700))
-    /// Owner-only file permissions (`rw-------`).
-    static let filePermissions = NSNumber(value: Int16(0o600))
-
     /// Create `directory` (and any missing intermediates) owner-only, tightening it if it
     /// already exists. Returns `true` when the directory exists with the intended mode.
     @discardableResult
-    static func createDirectory(at directory: URL, fileManager: FileManager = .default) -> Bool {
-        do {
-            try fileManager.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: directoryPermissions]
-            )
-            // `createDirectory` only applies `attributes` to directories it actually creates;
-            // tighten an already-existing leaf directory defensively (best effort).
-            try? fileManager.setAttributes(
-                [.posixPermissions: directoryPermissions],
-                ofItemAtPath: directory.path
-            )
-            return true
-        } catch {
+    static func createDirectory(at directory: URL) -> Bool {
+        guard let descriptor = secureDirectoryDescriptor(at: directory) else {
             return false
         }
+        close(descriptor)
+        return true
     }
 
     /// Ensure an empty owner-only file exists at `file` (creating it if needed), tightening an
     /// existing file's permissions. Returns `true` when the file exists with the intended mode.
     @discardableResult
-    static func ensureFile(at file: URL, fileManager: FileManager = .default) -> Bool {
-        if fileManager.fileExists(atPath: file.path) {
-            try? fileManager.setAttributes(
-                [.posixPermissions: filePermissions],
-                ofItemAtPath: file.path
-            )
-            return true
-        }
-
-        return fileManager.createFile(
-            atPath: file.path,
-            contents: nil,
-            attributes: [.posixPermissions: filePermissions]
-        )
+    static func ensureFile(at file: URL) -> Bool {
+        guard let handle = openFileForAppending(at: file) else { return false }
+        try? handle.close()
+        return true
     }
 
+    /// Creates and validates the owner-only parent, then opens the exact owner-only regular file.
+    /// The parent remains open while `openat` resolves the leaf, so replacing it with a symlink
+    /// cannot redirect the write.
+    static func openFileForAppending(at file: URL) -> FileHandle? {
+        let directory = file.deletingLastPathComponent()
+        guard let directoryDescriptor = secureDirectoryDescriptor(at: directory),
+              !file.lastPathComponent.isEmpty else { return nil }
+        defer { close(directoryDescriptor) }
+
+        let descriptor = openat(
+            directoryDescriptor,
+            file.lastPathComponent,
+            O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK,
+            0o600
+        )
+        guard descriptor >= 0 else { return nil }
+
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              fchmod(descriptor, 0o600) == 0,
+              fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o7777 == 0o600 else {
+            close(descriptor)
+            return nil
+        }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    private static func secureDirectoryDescriptor(at directory: URL) -> Int32? {
+        let components = directory.path.split(separator: "/").map(String.init)
+        guard directory.isFileURL, !components.isEmpty,
+              !components.contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+
+        var parent = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard parent >= 0 else { return nil }
+
+        for (index, component) in components.enumerated() {
+            var child = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            var wasMissing = false
+            if child < 0, errno == ENOENT {
+                wasMissing = true
+                guard mkdirat(parent, component, 0o700) == 0 || errno == EEXIST else {
+                    close(parent)
+                    return nil
+                }
+                child = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            }
+            close(parent)
+            guard child >= 0 else { return nil }
+
+            let isLeaf = index == components.count - 1
+            let mustTighten = wasMissing || isLeaf
+            var info = stat()
+            guard fstat(child, &info) == 0,
+                  info.st_mode & S_IFMT == S_IFDIR,
+                  !mustTighten || tightenDirectory(child, info: &info) else {
+                close(child)
+                return nil
+            }
+            parent = child
+        }
+        return parent
+    }
+
+    private static func tightenDirectory(_ descriptor: Int32, info: inout stat) -> Bool {
+        guard info.st_uid == getuid(),
+              fchmod(descriptor, 0o700) == 0,
+              fstat(descriptor, &info) == 0 else { return false }
+        return info.st_mode & S_IFMT == S_IFDIR
+            && info.st_uid == getuid()
+            && info.st_mode & 0o7777 == 0o700
+    }
 }
