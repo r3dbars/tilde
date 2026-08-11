@@ -4,6 +4,33 @@ import Testing
 
 @Suite("Runtime boundaries")
 struct RuntimeBoundaryTests {
+    @Test("Runtime snapshots have explicit status-menu copy")
+    func statusMenuCopy() {
+        #expect(LlamaRuntimeSnapshot.starting.menuLine == "Engine: Gemma (starting…)")
+        #expect(LlamaRuntimeSnapshot.ready.menuLine == "Engine: Gemma (ready)")
+        #expect(LlamaRuntimeSnapshot.retrying(.portInUse).menuLine == "⚠️ Engine port busy — retrying")
+        #expect(LlamaRuntimeSnapshot.retrying(.launchFailed).menuLine == "⚠️ Engine couldn't start — retrying")
+        #expect(LlamaRuntimeSnapshot.retrying(.healthTimeout).menuLine == "⚠️ Engine didn't become ready — retrying")
+        #expect(LlamaRuntimeSnapshot.retrying(.processExited).menuLine == "⚠️ Engine stopped — retrying")
+        #expect(LlamaRuntimeSnapshot.retrying(.completionFailed).menuLine == "⚠️ Engine stopped responding — retrying")
+        #expect(LlamaRuntimeSnapshot.failed(.assetsMissing).menuLine == "⚠️ Engine files missing — reinstall Tilde")
+        #expect(LlamaRuntimeSnapshot.retrying(.healthTimeout).restartReasonAfterExit == .healthTimeout)
+        #expect(LlamaRuntimeSnapshot.ready.restartReasonAfterExit == .processExited)
+    }
+
+    @Test("Missing assets are a terminal failure, not endless starting")
+    func missingAssetsFailTerminally() async throws {
+        let runtime = LlamaServerProcessHost(port: 19_002, assetResolver: { nil })
+        defer { runtime.stop() }
+
+        runtime.start()
+        for _ in 0..<100 where runtime.snapshot != .failed(.assetsMissing) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(runtime.snapshot == .failed(.assetsMissing))
+    }
+
     @Test("Runtime base URL uses the injected port")
     func injectedPort() {
         let runtime = LlamaServerProcessHost(port: 19_001)

@@ -30,7 +30,7 @@ final class StatusMenuHost: NSObject {
         let menu = NSMenu()
         lifetimeItem = addInfoRow(to: menu, "Tilde")
         todayItem = addInfoRow(to: menu, "Today: none accepted")
-        engineItem = addInfoRow(to: menu, "Engine: starting…")
+        engineItem = addInfoRow(to: menu, LlamaRuntimeSnapshot.starting.menuLine)
         menu.addItem(.separator())
 
         suggestionsItem = addAction(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
