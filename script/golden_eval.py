@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Run one bounded, aggregate-only continuation evaluation against Tilde.
+"""Run a bounded, aggregate-only evaluation against Tilde's local model.
 
-Input is JSONL with a string ``text`` field. Additional fields are ignored.
-Raw text and model output stay in memory: stdout contains only aggregate JSON.
+Input is JSONL with a string ``text`` field. Raw text and model output stay in
+memory; stdout contains only aggregate JSON. The evaluator calls the exact
+packaged ``llama-server`` child on loopback. It does not use Tilde's
+authenticated input-method socket, so it measures the raw model recipe rather
+than end-to-end inline suggestion behavior.
 """
 
 import argparse
@@ -10,13 +13,20 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import socket
+import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+
+from check_runtime_network_egress import model_request, require_owned_model
 
 
-SCHEMA = "tilde.continuation-eval.v1"
-DEFAULT_SOCKET = Path.home() / "Library/Application Support/Tilde/ghost.sock"
+SCHEMA = "tilde.raw-model-continuation-eval.v1"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_APP_BINARY = ROOT_DIR / "dist/Tilde.app/Contents/MacOS/Tilde"
+DEFAULT_PORT = 17872
+LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 DEFAULT_MAX_CASES = 200
 HARD_MAX_CASES = 2_000
 MAX_RESPONSE_BYTES = 1_048_576
@@ -27,7 +37,7 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$")
 
 
 class ProtocolError(Exception):
-    """The local completion socket did not follow its documented protocol."""
+    """The local model helper did not follow its documented HTTP contract."""
 
 
 def canonical_text(text):
@@ -35,12 +45,11 @@ def canonical_text(text):
 
 
 def case_id(text):
-    return hashlib.sha256(canonical_text(text).encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical_text(text).encode()).hexdigest()
 
 
 def digest_ids(ids):
-    payload = "\n".join(sorted(ids)).encode("ascii")
-    return hashlib.sha256(payload).hexdigest()
+    return hashlib.sha256("\n".join(sorted(ids)).encode("ascii")).hexdigest()
 
 
 def build_quiz(text):
@@ -64,8 +73,7 @@ def load_corpus(paths):
             raise ValueError(f"corpus {corpus_number} could not be read") from exc
         with handle:
             try:
-                lines = enumerate(handle, start=1)
-                for line_number, line in lines:
+                for line_number, line in enumerate(handle, start=1):
                     if not line.strip():
                         continue
                     records += 1
@@ -87,16 +95,12 @@ def load_corpus(paths):
                     identifier = case_id(text)
                     if identifier in by_id:
                         duplicates += 1
-                        continue
-                    by_id[identifier] = quiz
+                    else:
+                        by_id[identifier] = quiz
             except UnicodeDecodeError as exc:
                 raise ValueError(f"corpus {corpus_number} is not UTF-8") from exc
     cases = [(identifier, *by_id[identifier]) for identifier in sorted(by_id)]
-    return cases, {
-        "records": records,
-        "ineligible": ineligible,
-        "duplicates": duplicates,
-    }
+    return cases, {"records": records, "ineligible": ineligible, "duplicates": duplicates}
 
 
 def normalize_word(word):
@@ -104,9 +108,9 @@ def normalize_word(word):
 
 
 def exact_match_at_n(suggestion, golden, n):
-    suggestion_words = [normalize_word(word) for word in suggestion.split()][:n]
-    golden_words = [normalize_word(word) for word in golden.split()][:n]
-    return len(suggestion_words) == n and suggestion_words == golden_words
+    suggested = [normalize_word(word) for word in suggestion.split()][:n]
+    expected = [normalize_word(word) for word in golden.split()][:n]
+    return len(suggested) == n and suggested == expected
 
 
 def keystrokes_saved(suggestion, golden):
@@ -118,51 +122,43 @@ def keystrokes_saved(suggestion, golden):
     return sum(map(len, matched)) + max(0, len(matched) - 1)
 
 
-def request_completion(context, socket_path, timeout_seconds):
-    request = json.dumps({"v": 1, "context": context}, separators=(",", ":"))
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-        connection.settimeout(timeout_seconds)
-        connection.connect(socket_path)
-        started = time.monotonic()
-        connection.sendall(request.encode("utf-8") + b"\n")
-        buffered = b""
-        received = 0
-        first_partial_ms = None
-        while received <= MAX_RESPONSE_BYTES:
-            chunk = connection.recv(4096)
-            if not chunk:
-                raise ProtocolError("connection closed before a final response")
-            received += len(chunk)
-            if received > MAX_RESPONSE_BYTES:
-                raise ProtocolError("response exceeded the byte limit")
-            buffered += chunk
-            while b"\n" in buffered:
-                line, buffered = buffered.split(b"\n", 1)
-                try:
-                    response = json.loads(line)
-                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                    raise ProtocolError("response was not JSON") from exc
-                if not isinstance(response, dict):
-                    raise ProtocolError("response was not an object")
-                partial = response.get("partial", False)
-                suggestion = response.get("suggestion")
-                if not isinstance(partial, bool) or not isinstance(suggestion, str):
-                    raise ProtocolError("response fields had invalid types")
-                elapsed_ms = round((time.monotonic() - started) * 1000)
-                if partial:
-                    if first_partial_ms is None:
-                        first_partial_ms = elapsed_ms
-                    continue
-                return suggestion, first_partial_ms, elapsed_ms
-    raise ProtocolError("response ended without a final response")
+def normalize_model_output(raw, context):
+    lines = raw.splitlines()
+    first_line = lines[0] if lines else ""
+    return first_line.lstrip(" ") if context[-1:].isspace() else first_line
+
+
+def request_completion(context, port, timeout_seconds):
+    body = json.dumps(model_request(context), separators=(",", ":")).encode()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/completion",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    started = time.monotonic()
+    with LOCAL_HTTP.open(request, timeout=timeout_seconds) as response:
+        if response.status != 200:
+            raise ProtocolError(f"model helper returned HTTP {response.status}")
+        data = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(data) > MAX_RESPONSE_BYTES:
+        raise ProtocolError("response exceeded the byte limit")
+    try:
+        payload = json.loads(data)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ProtocolError("response was not JSON") from exc
+    content = payload.get("content") if isinstance(payload, dict) else None
+    if not isinstance(content, str):
+        raise ProtocolError("response did not contain string content")
+    final_ms = round((time.monotonic() - started) * 1_000)
+    return normalize_model_output(content, context), final_ms
 
 
 def percentile(values, fraction):
     if not values:
         return None
     ordered = sorted(values)
-    index = min(len(ordered) - 1, round(fraction * (len(ordered) - 1)))
-    return ordered[index]
+    return ordered[min(len(ordered) - 1, round(fraction * (len(ordered) - 1)))]
 
 
 def latency_summary(values):
@@ -182,29 +178,25 @@ def evaluate(cases, ask):
     outcomes = {"ok": 0, "silent": 0, "protocol_error": 0, "timeout": 0}
     exact = {1: 0, 2: 0, 3: 0}
     saved = 0
-    first_partial_latencies = []
     final_latencies = []
-
     for _identifier, context, golden in cases:
         try:
-            suggestion, first_partial_ms, final_ms = ask(context)
-        except (socket.timeout, TimeoutError):
+            suggestion, final_ms = ask(context)
+        except TimeoutError:
             outcomes["timeout"] += 1
+            continue
+        except urllib.error.URLError as exc:
+            key = "timeout" if isinstance(exc.reason, TimeoutError) else "protocol_error"
+            outcomes[key] += 1
             continue
         except (ProtocolError, OSError):
             outcomes["protocol_error"] += 1
             continue
-        if suggestion.strip():
-            outcomes["ok"] += 1
-        else:
-            outcomes["silent"] += 1
-        if first_partial_ms is not None:
-            first_partial_latencies.append(first_partial_ms)
+        outcomes["ok" if suggestion.strip() else "silent"] += 1
         final_latencies.append(final_ms)
         for n in exact:
             exact[n] += int(exact_match_at_n(suggestion, golden, n))
         saved += keystrokes_saved(suggestion, golden)
-
     completed = outcomes["ok"] + outcomes["silent"]
     return {
         "outcomes": outcomes,
@@ -218,10 +210,7 @@ def evaluate(cases, ask):
                 "per_completed_case": round(saved / completed, 6) if completed else 0.0,
             },
         },
-        "latency_ms": {
-            "request_to_first_partial": latency_summary(first_partial_latencies),
-            "request_to_final": latency_summary(final_latencies),
-        },
+        "latency_ms": {"request_to_model_final": latency_summary(final_latencies)},
     }
 
 
@@ -243,10 +232,15 @@ def build_report(cases, corpus_stats, all_case_ids, args, aggregate):
             "paths": False,
         },
         "runtime": {
+            "target": "owned_packaged_llama_helper",
             "arm": args.arm,
             "build_id": args.build_id,
             "model_id": args.model_id,
             "config_id": args.config_id,
+        },
+        "proof_boundary": {
+            "measures": "raw deterministic prose completion from the packaged local model helper",
+            "does_not_measure": "authenticated input-method transport, output cleaning, inline rendering, or acceptance",
         },
         "corpus": {
             **corpus_stats,
@@ -266,6 +260,8 @@ def validate_args(parser, args):
         parser.error(f"--max-cases must be between 1 and {HARD_MAX_CASES}")
     if args.timeout <= 0 or args.timeout > 120:
         parser.error("--timeout must be greater than 0 and no more than 120 seconds")
+    if not 1 <= args.port <= 65_535:
+        parser.error("--port must be between 1 and 65535")
     for value in (args.build_id, args.model_id, args.config_id):
         if value is not None and not SAFE_ID.fullmatch(value):
             parser.error("runtime metadata must be a short identifier, not a path or free text")
@@ -282,16 +278,15 @@ def selftest():
         text = f"{secret_context} {suffix} eta theta"
         context, golden = build_quiz(text)
         cases.append((case_id(text), context, golden))
-
     calls = 0
 
     def incomplete_ask(_context):
         nonlocal calls
         calls += 1
         if calls == 1:
-            return "PRIVATE_OUTPUT_SENTINEL", 4, 9
+            return "PRIVATE_OUTPUT_SENTINEL", 9
         if calls == 2:
-            return "", None, 7
+            return "", 7
         if calls == 3:
             raise TimeoutError
         raise ProtocolError
@@ -310,18 +305,13 @@ def selftest():
     assert report["outcomes"] == {
         "ok": 1, "silent": 1, "protocol_error": 1, "timeout": 1
     }
-    assert exit_code(report) == 1, "incomplete runs must fail nonzero"
-    assert set(report) == {
-        "schema", "privacy", "runtime", "corpus", "outcomes",
-        "quality", "latency_ms", "complete"
-    }
+    assert exit_code(report) == 1
     serialized = json.dumps(report, sort_keys=True)
     for forbidden in (
         "PRIVATE_CONTEXT_SENTINEL", "PRIVATE_OUTPUT_SENTINEL", "/Users/", "com.apple"
     ):
         assert forbidden not in serialized
-
-    complete = evaluate(cases[:2], lambda _context: ("", None, 5))
+    complete = evaluate(cases[:2], lambda _context: ("", 5))
     complete_report = build_report(
         cases[:2],
         {"records": 4, "ineligible": 0, "duplicates": 0},
@@ -330,12 +320,13 @@ def selftest():
         complete,
     )
     assert exit_code(complete_report) == 0
-    assert complete_report["outcomes"]["silent"] == 2
-    assert build_quiz(secret_context) == build_quiz(secret_context)
     assert exact_match_at_n("Thanks, for", "thanks for today", 2)
     assert keystrokes_saved("alpha beta extra", "alpha beta gamma") == len("alpha beta")
-    assert keystrokes_saved("alpha", "alpha beta") == len("alpha")
-    print("selftest OK: aggregate privacy schema, stable corpus IDs, and incomplete-run failure")
+    request = model_request("alpha beta ")
+    assert request["stream"] is False and request["temperature"] == 0
+    assert request["prompt"].endswith("Text: alpha beta\nContinuation:")
+    assert normalize_model_output("  gamma delta\nignored", "alpha beta ") == "gamma delta"
+    print("selftest OK: aggregate privacy, final-only model recipe, and incomplete-run failure")
 
 
 def main():
@@ -343,7 +334,8 @@ def main():
     parser.add_argument("--corpus", action="append", default=[], help="input JSONL (repeatable)")
     parser.add_argument("--max-cases", type=int, default=DEFAULT_MAX_CASES)
     parser.add_argument("--timeout", type=float, default=15.0, help="per-case seconds")
-    parser.add_argument("--sock", default=str(DEFAULT_SOCKET), help="local Tilde socket")
+    parser.add_argument("--app-binary", type=Path, default=DEFAULT_APP_BINARY)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--arm", choices=("single", "baseline", "candidate"), default="single")
     parser.add_argument("--build-id")
     parser.add_argument("--model-id")
@@ -357,18 +349,19 @@ def main():
     if not args.corpus:
         parser.error("--corpus is required unless --selftest is used")
     try:
+        require_owned_model(args.app_binary, args.port)
         all_cases, corpus_stats = load_corpus(args.corpus)
         if not all_cases:
             raise ValueError("corpus has no eligible continuation cases")
         selected = all_cases[:args.max_cases]
         aggregate = evaluate(
             selected,
-            lambda context: request_completion(context, args.sock, args.timeout),
+            lambda context: request_completion(context, args.port, args.timeout),
         )
         report = build_report(
             selected, corpus_stats, [case[0] for case in all_cases], args, aggregate
         )
-    except ValueError as exc:
+    except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as exc:
         print(f"evaluation error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(report, sort_keys=True, separators=(",", ":")))

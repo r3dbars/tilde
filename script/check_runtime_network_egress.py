@@ -14,7 +14,6 @@ import hashlib
 import ipaddress
 import json
 import shutil
-import socket
 import subprocess
 import sys
 import threading
@@ -26,8 +25,22 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_APP_BINARY = ROOT_DIR / "dist/Tilde.app/Contents/MacOS/Tilde"
-DEFAULT_SOCKET = Path.home() / "Library/Application Support/Tilde/ghost.sock"
 DEFAULT_PROOF = ROOT_DIR / "dist/release-proof/runtime-socket-observation.json"
+LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+SYNTHETIC_CONTEXT = "The architecture of the system means that we "
+PROSE_SCAFFOLD = """The following are real documents being written by their authors, continued naturally.
+
+Text: I wanted to follow up on our call from
+Continuation: yesterday afternoon about the launch timeline.
+
+Text: honestly the new setup is working better
+Continuation: than I expected, we should keep it.
+
+Text: The results suggest two things. First, the approach
+Continuation: scales well beyond the original design load.
+
+
+"""
 
 
 @dataclass(frozen=True)
@@ -58,9 +71,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--interval", type=float, default=0.25)
     parser.add_argument("--min-samples", type=int, default=2)
     parser.add_argument("--port", type=int, default=17872)
-    parser.add_argument("--socket", type=Path, default=DEFAULT_SOCKET)
     parser.add_argument("--app-binary", type=Path, default=DEFAULT_APP_BINARY)
     parser.add_argument("--proof-out", type=Path, default=DEFAULT_PROOF)
+    parser.add_argument("--selftest", action="store_true")
     return parser.parse_args()
 
 
@@ -96,12 +109,12 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def require_processes(args: argparse.Namespace) -> tuple[ProcessRow, ProcessRow, list[ProcessRow]]:
+def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, ProcessRow]:
     rows = process_table()
-    app_matches = [row for row in rows.values() if same_file(row.executable, args.app_binary)]
+    app_matches = [row for row in rows.values() if same_file(row.executable, app_binary)]
     if len(app_matches) != 1:
         raise RuntimeError(
-            f"expected exactly one running Tilde from {args.app_binary}; found {len(app_matches)}"
+            f"expected exactly one running Tilde from {app_binary}; found {len(app_matches)}"
         )
     app = app_matches[0]
 
@@ -115,13 +128,32 @@ def require_processes(args: argparse.Namespace) -> tuple[ProcessRow, ProcessRow,
             f"expected exactly one direct llama-server child of Tilde pid {app.pid}; found {len(servers)}"
         )
     server = servers[0]
-    expected_server = args.app_binary.parent.parent / "Helpers/llama-server"
+    expected_server = app_binary.parent.parent / "Helpers/llama-server"
     if not same_file(server.executable, expected_server):
         raise RuntimeError(
             f"llama-server child is not the packaged helper at {expected_server}"
         )
-    if f"--port {args.port}" not in server.command and f"--port={args.port}" not in server.command:
-        raise RuntimeError(f"llama-server child is not configured for port {args.port}")
+    if f"--port {port}" not in server.command and f"--port={port}" not in server.command:
+        raise RuntimeError(f"llama-server child is not configured for port {port}")
+    if "--host 127.0.0.1" not in server.command and "--host=127.0.0.1" not in server.command:
+        raise RuntimeError("llama-server child is not configured for loopback only")
+    listener = subprocess.run(
+        [
+            "lsof", "-nP", "-a", "-p", str(server.pid),
+            f"-iTCP:{port}", "-sTCP:LISTEN", "-t",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if listener.returncode != 0 or set(listener.stdout.split()) != {str(server.pid)}:
+        raise RuntimeError("packaged llama-server does not own the loopback listener")
+    return app, server
+
+
+def require_processes(args: argparse.Namespace) -> tuple[ProcessRow, ProcessRow, list[ProcessRow]]:
+    app, server = require_owned_model(args.app_binary, args.port)
+    rows = process_table()
 
     imes = [row for row in rows.values() if Path(row.executable).name == "InlineGhostIME"]
     if not imes:
@@ -183,49 +215,64 @@ def lsof_remote_endpoints(pid: int) -> set[str]:
 
 
 def health_check(port: int) -> None:
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
+    with LOCAL_HTTP.open(f"http://127.0.0.1:{port}/health", timeout=5) as response:
         payload = json.loads(response.read())
     if payload.get("status") != "ok":
         raise RuntimeError(f"llama-server health was not ok: {payload!r}")
 
 
-def disposable_completion(socket_path: Path) -> int:
-    request = {
-        "v": 1,
-        "context": "The architecture of the system means that we ",
-        "app": "com.apple.TextEdit",
-        "field": "synthetic-release-proof",
-        "page": "",
+def model_request(context: str) -> dict[str, object]:
+    return {
+        "prompt": PROSE_SCAFFOLD + "Text: " + context.rstrip() + "\nContinuation:",
+        "n_predict": 20,
+        "temperature": 0,
+        "cache_prompt": True,
+        "stop": ["\n"],
+        "stream": False,
     }
-    final = ""
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(60)
-        client.connect(str(socket_path))
-        client.sendall((json.dumps(request) + "\n").encode())
-        buffer = b""
-        while True:
-            chunk = client.recv(4096)
-            if not chunk:
-                break
-            buffer += chunk
-            while b"\n" in buffer:
-                line, buffer = buffer.split(b"\n", 1)
-                payload = json.loads(line)
-                if not payload.get("partial"):
-                    final = str(payload.get("suggestion", ""))
-    if not final.strip():
-        raise RuntimeError("disposable completion returned no final suggestion")
-    return len(final)
+
+
+def disposable_completion(port: int) -> int:
+    body = json.dumps(model_request(SYNTHETIC_CONTEXT), separators=(",", ":")).encode()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/completion",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with LOCAL_HTTP.open(request, timeout=60) as response:
+        if response.status != 200:
+            raise RuntimeError(f"llama-server completion returned HTTP {response.status}")
+        payload = json.loads(response.read())
+    completion = payload.get("content")
+    if not isinstance(completion, str) or not completion.strip():
+        raise RuntimeError("direct synthetic model completion was empty or malformed")
+    return len(completion)
+
+
+def selftest() -> None:
+    request = model_request(SYNTHETIC_CONTEXT)
+    assert request["stream"] is False
+    assert request["temperature"] == 0
+    assert request["stop"] == ["\n"]
+    assert request["n_predict"] == 20
+    assert request["prompt"].endswith(
+        "Text: The architecture of the system means that we\nContinuation:"
+    )
+    assert not is_non_loopback("127.0.0.1:17872")
+    assert not is_non_loopback("[::1]:17872")
+    assert is_non_loopback("203.0.113.1:443")
+    print("selftest OK: fixed model request and endpoint classification")
 
 
 def observe(
-    pids: list[int], duration: float, interval: float
+    pids: list[int], minimum_duration: float, interval: float, activity_done: threading.Event
 ) -> tuple[int, set[str], list[str]]:
     sample_count = 0
     remotes: set[str] = set()
     failures: list[str] = []
-    deadline = time.monotonic() + max(duration, 0.25)
-    while time.monotonic() < deadline:
+    deadline = time.monotonic() + max(minimum_duration, 0.25)
+    while time.monotonic() < deadline or not activity_done.is_set():
         try:
             current = process_table()
             for pid in pids:
@@ -242,8 +289,12 @@ def observe(
 
 def main() -> int:
     args = parse_args()
+    if args.selftest:
+        selftest()
+        return 0
     failures: list[str] = []
     completion_chars = 0
+    health_ok = False
     samples = 0
     remotes: set[str] = set()
 
@@ -260,19 +311,28 @@ def main() -> int:
 
     if not failures:
         result: list[tuple[int, set[str], list[str]]] = []
+        activity_done = threading.Event()
 
         def run_observation() -> None:
             result.append(
-                observe([app.pid, server.pid, *(row.pid for row in imes)], args.duration, args.interval)
+                observe(
+                    [app.pid, server.pid, *(row.pid for row in imes)],
+                    args.duration,
+                    args.interval,
+                    activity_done,
+                )
             )
 
         observer = threading.Thread(target=run_observation, daemon=True)
         observer.start()
         try:
             health_check(args.port)
-            completion_chars = disposable_completion(args.socket)
+            health_ok = True
+            completion_chars = disposable_completion(args.port)
         except (OSError, TimeoutError, ValueError, json.JSONDecodeError, RuntimeError) as error:
             failures.append(str(error))
+        finally:
+            activity_done.set()
         observer.join()
         if result:
             samples, remotes, observation_failures = result[0]
@@ -295,11 +355,25 @@ def main() -> int:
         "llama_server_pid": server.pid,
         "inline_ghost_ime_pids": [row.pid for row in imes],
         "samples": samples,
-        "health_ok": not failures and completion_chars > 0,
-        "disposable_completion_nonempty": completion_chars > 0,
-        "disposable_completion_chars": completion_chars,
+        "health_ok": health_ok,
+        "direct_synthetic_model_completion_nonempty": completion_chars > 0,
+        "direct_synthetic_model_completion_chars": completion_chars,
         "non_loopback_endpoints": sorted(remotes),
         "failures": failures,
+        "stimulation": (
+            "direct POST to the exact packaged llama-server child over loopback "
+            "using a fixed synthetic prompt"
+        ),
+        "proves": [
+            "the exact packaged Tilde process, its exact helper child, and a matching running input method were observed",
+            "the helper returned a nonempty completion for the fixed synthetic prompt",
+            "no non-loopback open socket was visible for those processes during the observation window",
+        ],
+        "does_not_prove": [
+            "packet-level absence of network traffic",
+            "a Tilde-to-input-method Unix-socket request round trip",
+            "inline rendering or acceptance in a real editor",
+        ],
         "privacy": "Only process/socket metadata and synthetic completion length are saved.",
     }
     args.proof_out.parent.mkdir(parents=True, exist_ok=True)
@@ -314,7 +388,7 @@ def main() -> int:
 
     print("Runtime socket observation: PASS (not packet capture)")
     print(f"Observed Tilde {app.pid}, llama-server {server.pid}, InlineGhostIME {[row.pid for row in imes]}")
-    print(f"Health: ok; disposable completion: nonempty ({completion_chars} chars)")
+    print(f"Health: ok; direct synthetic model completion: nonempty ({completion_chars} chars)")
     print(f"Socket samples: {samples}; non-loopback endpoints: 0")
     print(f"Proof: {args.proof_out}")
     return 0
