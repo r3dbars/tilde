@@ -5,9 +5,8 @@ import Foundation
 /// per request (connect cost is microseconds locally; keeps the IME crash-proof
 /// and stateless). Newline-delimited JSON: {"v":1,"context":...} → {"suggestion":...}.
 ///
-/// Returns nil when the app isn't running / doesn't answer in time — callers fall
-/// back to the on-device Apple model, then the tiny predictor. Suggestions never
-/// just vanish because the brain is away.
+/// Returns nil when the app isn't running or does not answer in time. The IME
+/// stays silent and asks macOS to relaunch Tilde; there is no second model path.
 enum GhostBrainClient {
 
     static let socketPath = NSString(
@@ -17,14 +16,7 @@ enum GhostBrainClient {
     /// Total time we are willing to wait for the brain, per request.
     private static let timeout = timeval(tv_sec: 0, tv_usec: 700_000)
 
-    /// Streams a completion: `onPartial` fires for each partial suggestion as the
-    /// model generates (first words near time-to-first-token); the return value is
-    /// the final suggestion (or the last partial if the stream times out).
-    static func complete(
-        context: String,
-        app: String?,
-        onPartial: ((String) -> Void)? = nil
-    ) -> String? {
+    static func complete(context: String, app: String?) -> String? {
         var object: [String: Any] = ["v": 1, "context": context]
         if let app { object["app"] = app }
         guard let request = try? JSONSerialization.data(withJSONObject: object) else {
@@ -81,7 +73,6 @@ enum GhostBrainClient {
                 if (object["partial"] as? Bool) == true {
                     if !suggestion.isEmpty {
                         lastPartial = suggestion
-                        onPartial?(suggestion)
                     }
                 } else {
                     // The brain ANSWERED — empty means it chose silence. Return ""
