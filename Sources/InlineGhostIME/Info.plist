@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>InlineGhostIME</string>
+    <string>Tilde</string>
     <key>CFBundleDisplayName</key>
     <string>Tilde</string>
     <key>CFBundleIdentifier</key>
