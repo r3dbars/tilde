@@ -20,7 +20,8 @@ for arg in "$@"; do
 Usage: script/check_app_bundle.sh [--release] [path/to/Tilde.app]
 
 Checks the local app bundle shape, signature, and hardened runtime.
-Use --release to also require a Developer ID Application signature.
+Use --release to require the packaged model, server, input method, and a
+Developer ID Application signature.
 EOF
       exit 0
       ;;
@@ -36,8 +37,10 @@ done
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 EXECUTABLE="$APP_BUNDLE/Contents/MacOS/Tilde"
 APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+LLAMA_SERVER="$APP_BUNDLE/Contents/Helpers/llama-server"
+MODEL="$APP_BUNDLE/Contents/Resources/bundled-model.gguf"
+IME="$APP_BUNDLE/Contents/Library/InlineGhostIME.app"
 ICON_TMP_DIR="$(mktemp -d)"
-ENTITLEMENTS_TMP="$ICON_TMP_DIR/entitlements.plist"
 trap 'rm -rf "$ICON_TMP_DIR"' EXIT
 
 plist_value() {
@@ -48,7 +51,6 @@ plist_value() {
 [[ -f "$INFO_PLIST" ]] || fail "missing Info.plist"
 [[ -x "$EXECUTABLE" ]] || fail "missing executable: $EXECUTABLE"
 [[ -s "$APP_ICON" ]] || fail "missing app icon: $APP_ICON"
-[[ -s "$MLX_METALLIB" ]] || fail "missing packaged MLX Metal library"
 
 ICONSET_DIR="$ICON_TMP_DIR/AppIcon.iconset"
 /usr/bin/iconutil -c iconset "$APP_ICON" -o "$ICONSET_DIR" >/dev/null 2>&1 \
@@ -73,22 +75,31 @@ done
 [[ "$(plist_value NSSupportsAutomaticTermination)" == "false" ]] \
   || fail "NSSupportsAutomaticTermination must be false for persistent menu bar agent"
 
-ACCESSIBILITY_REASON="$(plist_value NSAccessibilityUsageDescription)"
-[[ "$ACCESSIBILITY_REASON" == *"Accessibility permission"* ]] || fail "missing Accessibility usage description"
-APPLE_EVENTS_REASON="$(plist_value NSAppleEventsUsageDescription)"
-[[ "$APPLE_EVENTS_REASON" == *"Automation only for opted-in terminal hosts"* ]] \
-  || fail "missing Apple Events usage description"
+[[ -z "$(plist_value NSAccessibilityUsageDescription)" ]] \
+  || fail "unused Accessibility usage description is present"
+[[ -z "$(plist_value NSAppleEventsUsageDescription)" ]] \
+  || fail "unused Apple Events usage description is present"
 
 codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || fail "codesign verification failed"
-codesign -d --entitlements :- "$APP_BUNDLE" >"$ENTITLEMENTS_TMP" 2>/dev/null \
-  || fail "unable to read app entitlements"
-/usr/libexec/PlistBuddy -c 'Print :com.apple.security.automation.apple-events' "$ENTITLEMENTS_TMP" >/dev/null 2>&1 \
-  || fail "missing Apple Events automation entitlement"
 
 SIGNATURE_DETAILS="$(codesign --display --verbose=4 "$APP_BUNDLE" 2>&1 || true)"
 grep -F "runtime" <<<"$SIGNATURE_DETAILS" >/dev/null || fail "hardened runtime flag is missing"
 
 if [[ "$RELEASE_MODE" == "1" ]]; then
+  [[ -x "$LLAMA_SERVER" ]] || fail "missing packaged llama-server"
+  [[ -s "$MODEL" ]] || fail "missing packaged model"
+  [[ -x "$IME/Contents/MacOS/InlineGhostIME" ]] || fail "missing packaged InlineGhostIME"
+
+  if otool -L "$LLAMA_SERVER" | tail -n +2 \
+    | awk '{ print $1 }' \
+    | grep -Ev '^(/System/|/usr/lib/)' >/dev/null; then
+    fail "packaged llama-server links a non-system library"
+  fi
+
+  codesign --verify --strict "$LLAMA_SERVER" >/dev/null 2>&1 \
+    || fail "llama-server signature verification failed"
+  codesign --verify --deep --strict "$IME" >/dev/null 2>&1 \
+    || fail "InlineGhostIME signature verification failed"
   grep -F "Authority=Developer ID Application" <<<"$SIGNATURE_DETAILS" >/dev/null \
     || fail "release bundle is not signed with Developer ID Application"
 fi
