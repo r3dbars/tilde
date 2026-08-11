@@ -33,6 +33,10 @@ enum LlamaRuntimeSnapshot: Equatable, Sendable {
         if case let .retrying(reason) = self { return reason }
         return .processExited
     }
+
+    var wasHealthyBeforeExit: Bool {
+        self == .ready || self == .retrying(.completionFailed)
+    }
 }
 
 /// Owns the app's one llama-server child, health state, and restart policy.
@@ -211,7 +215,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     private func handleExit(_ child: Process) {
         guard process === child else { return }
-        let wasHealthy = runtimeSnapshot == .ready
+        let wasHealthy = runtimeSnapshot.wasHealthyBeforeExit
         let reason = runtimeSnapshot.restartReasonAfterExit
         let uptime = Date().timeIntervalSince(launchedAt)
         process = nil
