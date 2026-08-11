@@ -1,6 +1,8 @@
 import Foundation
 
 public struct CompletionSuggestion: Equatable, Sendable {
+    public static let defaultMaxVisibleWords = 8
+    public static let maximumVisibleWords = 20
     public static let defaultMaxVisibleCharacters = 42
 
     public let text: String
@@ -9,7 +11,7 @@ public struct CompletionSuggestion: Equatable, Sendable {
 
     public init(
         text: String,
-        maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
+        maxVisibleWords: Int = Self.defaultMaxVisibleWords,
         maxVisibleCharacters: Int? = nil
     ) {
         self.maxVisibleWords = max(1, maxVisibleWords)
@@ -81,17 +83,8 @@ public struct CompletionSuggestion: Equatable, Sendable {
         return accepted
     }
 
-    public static func nextWordAcceptanceText(in text: String) -> String {
-        let accepted = acceptedPrefix(in: text, wordLimit: 1)
-        guard accepted.contains(where: { !$0.isWhitespace }) else {
-            return ""
-        }
-
-        if accepted.last?.isWhitespace == true {
-            return accepted
-        }
-
-        return accepted + " "
+    public static func clampedVisibleWords(_ value: Int) -> Int {
+        min(maximumVisibleWords, max(1, value))
     }
 
     public static func defaultMaxVisibleCharacters(forVisibleWords visibleWords: Int) -> Int {
