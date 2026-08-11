@@ -10,11 +10,12 @@ final class GhostInputController: IMKInputController {
     private static let contextLimit = 3_000
 
     private struct FallbackOwner: Equatable {
-        let client: String
         let bundle: String
         let caret: Int
     }
 
+    /// IMKit creates one controller for each input session.
+    private let sessionIdentifier = UUID().uuidString
     private var state = InlineSuggestionState()
     private var typedFallback = ""
     private var fallbackOwner: FallbackOwner?
@@ -133,7 +134,6 @@ final class GhostInputController: IMKInputController {
             utf16Limit: Self.contextLimit
         )
         fallbackOwner = FallbackOwner(
-            client: owner.client,
             bundle: owner.bundle,
             caret: owner.caret + text.utf16.count
         )
@@ -159,7 +159,6 @@ final class GhostInputController: IMKInputController {
         let selection = client.selectedRange()
         guard selection.location != NSNotFound, selection.length == 0 else { return nil }
         return FallbackOwner(
-            client: clientIdentifier(client),
             bundle: client.bundleIdentifier() ?? "",
             caret: selection.location
         )
@@ -214,17 +213,10 @@ final class GhostInputController: IMKInputController {
 
     // MARK: - Tickets and context
 
-    private func clientIdentifier(_ client: IMKTextInput) -> String {
-        if let identifier = client.uniqueClientIdentifierString(), !identifier.isEmpty {
-            return identifier
-        }
-        return String(describing: ObjectIdentifier(client as AnyObject))
-    }
-
     private func ticket(for client: IMKTextInput, context: String) -> InlineSuggestionTicket {
         let selection = client.selectedRange()
         return InlineSuggestionTicket(
-            clientIdentifier: clientIdentifier(client),
+            clientIdentifier: sessionIdentifier,
             bundleIdentifier: client.bundleIdentifier() ?? "",
             contextFingerprint: InlineSuggestionTicket.fingerprint(context),
             selectionLocation: selection.location == NSNotFound ? -1 : selection.location,
@@ -264,7 +256,6 @@ final class GhostInputController: IMKInputController {
         cancelPendingWork()
         scheduleRevision += 1
         let revision = scheduleRevision
-        let expectedClient = clientIdentifier(client)
         let expectedBundle = client.bundleIdentifier() ?? ""
         let delay = SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: grapheme,
@@ -276,8 +267,7 @@ final class GhostInputController: IMKInputController {
             guard let self, self.scheduleRevision == revision, let liveClient = self.client() else {
                 return
             }
-            guard self.clientIdentifier(liveClient) == expectedClient,
-                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
+            guard (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
             self.updateSuggestion(for: liveClient)
         }
     }
