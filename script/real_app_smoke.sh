@@ -13,7 +13,6 @@ APP="${1:-}"
 CHROME_FIXTURE="textarea"
 CHROME_FIXTURE_WAS_SET=0
 DRY_RUN=0
-SKIP_BUILD=0
 TEMP_DIR=""
 TEXTEDIT_WINDOW_TITLE=""
 CHROME_PID=""
@@ -21,18 +20,12 @@ LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|chrome> [--fixture <textarea|contenteditable>] [--skip-build] [--dry-run]
+Usage: script/real_app_smoke.sh <textedit|chrome> [--fixture <textarea|contenteditable>] [--dry-run]
 
 Runs a bounded automatic smoke against a disposable TextEdit document or an
-isolated local Chrome fixture. It never reads, prints, or removes user content.
+isolated local Chrome fixture using the already-running packaged app. It never
+reads, prints, or removes user content.
 EOF
-}
-
-is_truthy() {
-  case "${1:-}" in
-    1 | true | TRUE | yes | on) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 fail() {
@@ -100,9 +93,6 @@ while (($#)); do
     --dry-run)
       DRY_RUN=1
       ;;
-    --skip-build)
-      SKIP_BUILD=1
-      ;;
     --fixture)
       shift
       if (($# == 0)); then
@@ -150,21 +140,12 @@ case "$APP" in
     ;;
 esac
 
-if is_truthy "${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-}"; then
-  SKIP_BUILD=1
-fi
-
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "real_app_smoke: DRY RUN app=$APP fixture=$CHROME_FIXTURE skipBuild=$SKIP_BUILD"
+  echo "real_app_smoke: DRY RUN app=$APP fixture=$CHROME_FIXTURE"
   exit 0
 fi
 
-if [[ "$SKIP_BUILD" != "1" ]]; then
-  "$ROOT_DIR/script/build_and_run.sh"
-  "$ROOT_DIR/script/restart_app.sh"
-fi
-
-[[ -x "$APP_BINARY" ]] || fail "current app bundle is unavailable; run script/build_and_run.sh first"
+[[ -x "$APP_BINARY" ]] || fail "packaged app is unavailable; run the release driver first"
 
 current_app_is_running() {
   local pid command
