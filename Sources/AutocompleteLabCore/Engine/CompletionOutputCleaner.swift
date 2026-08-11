@@ -10,7 +10,6 @@ public enum CompletionCleanRejectionReason: String, Codable, Equatable, Sendable
     case genericChatFiller
     case unsafePromptAction
     case startsSecondSentence
-    case visibleUIChrome
     case assistantResponseToPrompt
     case restartsCurrentSentence
     case replaysCurrentSentence
@@ -194,10 +193,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return .rejected(.startsSecondSentence)
         }
 
-        guard !looksLikeVisibleUIChromeCandidate(candidateText, mode: mode) else {
-            return .rejected(.visibleUIChrome)
-        }
-
         if let textBeforeCursor,
            looksLikeAssistantResponseToPrompt(candidateText, after: textBeforeCursor) {
             return .rejected(.assistantResponseToPrompt)
@@ -283,10 +278,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         if mode.isContinuation,
            isAdviceOrToneDriftPhrase(suggestion.visibleText) {
             return .rejected(.adviceOrToneDrift)
-        }
-
-        if looksLikeVisibleUIChromeCandidate(suggestion.visibleText, mode: mode) {
-            return .rejected(.visibleUIChrome)
         }
 
         return .accepted(suggestion)
@@ -671,42 +662,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return false
     }
 
-    private func looksLikeVisibleUIChromeCandidate(_ text: String, mode: CompletionRequestMode) -> Bool {
-        guard mode.isContinuation else {
-            return false
-        }
-
-        let words = normalizedWords(in: text)
-        guard !words.isEmpty else {
-            return false
-        }
-
-        if isWrappedInMarkdownEmphasis(text), words.count <= 4 {
-            return true
-        }
-
-        if words[0] == "untitled" {
-            return words.count == 1
-                || words.dropFirst().allSatisfy { $0.allSatisfy(\.isNumber) || Self.visibleUIChromeTokens.contains($0) }
-        }
-
-        if words[0] == "ep", words.count <= 3 {
-            return true
-        }
-
-        guard words.count >= 2, words.count <= 5 else {
-            return false
-        }
-
-        return words.allSatisfy { Self.visibleUIChromeTokens.contains($0) || $0.allSatisfy(\.isNumber) }
-    }
-
-    private func isWrappedInMarkdownEmphasis(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (trimmed.hasPrefix("**") && trimmed.hasSuffix("**"))
-            || (trimmed.hasPrefix("__") && trimmed.hasSuffix("__"))
-    }
-
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
         let suggestionWords = normalizedWords(in: suggestion)
         guard suggestionWords.count >= 3 else {
@@ -854,23 +809,6 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "what", "when", "where", "which", "while", "window",
         "without", "working", "would", "writing",
     ]).union(lowValueSingleWordPhrases)
-
-    private static let visibleUIChromeTokens: Set<String> = [
-        "automations",
-        "chat",
-        "chats",
-        "edited",
-        "font",
-        "format",
-        "helvetica",
-        "new",
-        "plugins",
-        "projects",
-        "regular",
-        "search",
-        "settings",
-        "untitled"
-    ]
 
     private static let assistantResponsePrefixes: Set<String> = [
         "first,",

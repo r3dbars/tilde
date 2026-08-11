@@ -7,8 +7,7 @@ Run with --purge to delete the extracted corpus.
 
 Each record is a real reply situation, in the eval contract:
   text          = a message YOU sent (is_from_me=1)
-  prior_messages= the recent conversation you were replying to (both sides,
-                  oldest first) — the "screen context" the model should use
+  prior_messages= recent conversation metadata for offline reply analysis
   source="imessage", register="chat", app="com.apple.MobileSMS"
 
 So the reply/screen-response quiz can be run on YOUR real replies, not strangers.

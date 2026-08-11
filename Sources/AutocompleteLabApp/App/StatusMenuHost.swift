@@ -1,7 +1,7 @@
 import AppKit
 
 /// Tilde's complete user-facing surface: useful stats, honest engine status,
-/// working controls, pause, local data, and quit. No settings window or panes.
+/// working controls, pause, and quit. No settings window or panes.
 @MainActor
 final class StatusMenuHost: NSObject {
 
@@ -12,9 +12,7 @@ final class StatusMenuHost: NSObject {
     private var todayItem: NSMenuItem?
     private var engineItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
-    private var screenItem: NSMenuItem?
     private var soundsItem: NSMenuItem?
-    private var learningItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
 
     /// Every setting, its defaults domain, and its fallback live in one tested
@@ -37,17 +35,10 @@ final class StatusMenuHost: NSObject {
         menu.addItem(.separator())
 
         suggestionsItem = addToggle(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
-        screenItem = addToggle(to: menu, "Screen-aware", #selector(toggleScreenContext(_:)))
         soundsItem = addToggle(to: menu, "Sounds", #selector(toggleSounds(_:)))
-        learningItem = addToggle(
-            to: menu,
-            "Learn from my writing (syncs to iCloud)",
-            #selector(toggleLearning(_:))
-        )
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
-        addAction(to: menu, "Show data in Finder", #selector(showData(_:)))
         addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
         menu.delegate = self
@@ -117,10 +108,6 @@ final class StatusMenuHost: NSObject {
         settings.suggestionsEnabled.toggle()
     }
 
-    @objc private func toggleLearning(_ sender: Any?) {
-        settings.learningEnabled.toggle()
-    }
-
     @objc private func toggleSounds(_ sender: Any?) {
         settings.soundsEnabled.toggle()
     }
@@ -130,28 +117,6 @@ final class StatusMenuHost: NSObject {
             settings.resume()
         } else {
             settings.pause(for: 3600)
-        }
-    }
-
-    @objc private func toggleScreenContext(_ sender: Any?) {
-        settings.screenAware.toggle()
-    }
-
-    @objc private func showData(_ sender: Any?) {
-        let fileManager = FileManager.default
-        let localFolder = fileManager
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tilde", isDirectory: true)
-        let iCloudFolder = fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Tilde-usage", isDirectory: true)
-        let existingFolders = [localFolder, iCloudFolder].filter {
-            fileManager.fileExists(atPath: $0.path)
-        }
-        if existingFolders.isEmpty {
-            try? fileManager.createDirectory(at: localFolder, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(localFolder)
-        } else {
-            existingFolders.forEach { NSWorkspace.shared.open($0) }
         }
     }
 
@@ -185,9 +150,7 @@ extension StatusMenuHost: NSMenuDelegate {
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
-        screenItem?.state = settings.screenAware ? .on : .off
         soundsItem?.state = settings.soundsEnabled ? .on : .off
-        learningItem?.state = settings.learningEnabled ? .on : .off
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))

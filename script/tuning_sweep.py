@@ -6,8 +6,8 @@ Each version relaunches the app fresh (killing any stray llama-server), sets
 launch-time overrides via env (scaffold file, token budget, temperature,
 model), waits for the socket, VERIFIES the active config via the config probe
 (guards against silently testing the wrong build), then runs the full quiz in
---json mode. Harness-only versions (context format, register ablation) relaunch
-the plain baseline binary and vary quiz flags instead.
+--json mode. Harness-only register ablations relaunch the plain baseline binary
+and vary quiz flags instead.
 
 Results stream to a JSONL log as each version finishes, so a crash mid-sweep
 never loses completed rows. At the end a league table is printed sorted by
@@ -42,9 +42,7 @@ def scaffold(name):
 
 # Each version: label, env overrides (relaunch knobs), quiz flags (harness
 # knobs), and the config field->expected-substring the probe must confirm.
-# All versions run --context prior unless flags say otherwise, so they compare
-# against the context baseline (17.2% EM@1).
-BASE_FLAGS = "--context prior"
+BASE_FLAGS = ""
 
 VERSIONS = [
     ("baseline-control-A", {}, BASE_FLAGS, {}),
@@ -72,15 +70,9 @@ VERSIONS = [
     ("temp-0.15", {"TILDE_TEMPERATURE": "0.15"}, BASE_FLAGS, {"temperature": "0.15"}),
     ("temp-0.3", {"TILDE_TEMPERATURE": "0.3"}, BASE_FLAGS, {"temperature": "0.3"}),
 
-    # 5) conversation-context formatting (harness-only, baseline binary)
-    ("context-turns1", {}, "--context prior --context-turns 1", {}),
-    ("context-turns2", {}, "--context prior --context-turns 2", {}),
-    ("context-turns5", {}, "--context prior --context-turns 5", {}),
-    ("context-labeled", {}, "--context prior --context-style labeled", {}),
-
-    # 6) register system: does chat-voice beat prose/email on chat text?
-    ("register-prose", {}, "--context prior --force-app com.apple.TextEdit", {}),
-    ("register-email", {}, "--context prior --force-app com.apple.mail", {}),
+    # 5) register system: does chat-voice beat prose/email on chat text?
+    ("register-prose", {}, "--force-app com.apple.TextEdit", {}),
+    ("register-email", {}, "--force-app com.apple.mail", {}),
 
     # (the old "model-E2B" smaller-model row is gone with the tier system —
     # pin any alternative GGUF via TILDE_MODEL_PATH instead)
@@ -116,7 +108,6 @@ RETUNE_VERSIONS = [
     ("scaffold-short", scaffold("chat_short.txt"), BASE_FLAGS, {"scaffold_chat": "short"}),
     ("scaffold-mixed", scaffold("chat_mixed.txt"), BASE_FLAGS, {"scaffold_chat": "mixed"}),
     ("scaffold-size6", scaffold("chat_size6.txt"), BASE_FLAGS, {"scaffold_chat": "size6"}),
-    ("context-labeled", {}, "--context prior --context-style labeled", {}),
     ("combo-short+budget28",
      dict(list(scaffold("chat_short.txt").items()) + [("TILDE_TOKEN_BUDGET", "28")]),
      BASE_FLAGS, {"scaffold_chat": "short", "token_budget": "28"}),

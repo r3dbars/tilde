@@ -34,7 +34,6 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         let startedAt = Date()
         // All tuning knobs read from the environment so the auto-research loop
         // can turn any dial without a rebuild (see script/research_loop.py).
-        let env = ProcessInfo.processInfo.environment
         // env still wins; persisted "tilde.<NAME>" defaults survive reboots.
         func envInt(_ k: String) -> Int? { RuntimeSetting.int(String(k.dropFirst("TILDE_".count))) }
         func envDouble(_ k: String) -> Double? { RuntimeSetting.double(String(k.dropFirst("TILDE_".count))) }
@@ -42,13 +41,11 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         let register = ContinuationRegister.from(bundleIdentifier: request.appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: request.textBeforeCursor,
-            screenContext: request.visiblePageContext?.promptText,
             register: register,
-            maxContextCharacters: envInt("TILDE_MAX_CONTEXT_CHARS") ?? 3000,
-            maxScreenContextCharacters: envInt("TILDE_MAX_SCREEN_CHARS") ?? 700
+            maxContextCharacters: envInt("TILDE_MAX_CONTEXT_CHARS") ?? 3000
         )
-        // Opener mode with nothing to ground it (no screen context) builds an
-        // empty prompt: stay silent rather than hallucinate from nothing.
+        // Nothing typed means there is nothing to continue. Stay silent rather
+        // than hallucinate an opener.
         guard !recipe.prompt.isEmpty else { return nil }
         // Greedy (temperature 0) is the default; the loop can explore warmer
         // settings with the sampler knobs below.
@@ -65,23 +62,16 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
         if request.textBeforeCursor.count < shortContextCutoff {
             confidenceThreshold = envDouble("TILDE_CONFIDENCE_SHORT") ?? confidenceThreshold / 2
         }
-        // Screen-echo guard: drop suggestions that copy >= N visible words from
-        // the screen. Tunable because a low N can over-suppress good guesses.
-        let echoGuardMinWords = envInt("TILDE_ECHO_GUARD_MIN_WORDS") ?? 4
         // Owner's "holding it wrong" hypothesis (2026-07-25): instruct models
         // failed our RAW recipe — but the task can be ASKED as a question with
         // a proper chat template. TILDE_PROMPT_MODE=instruct tests that:
-        // Gemma-template prompt framing screen+typed-text as an explicit task.
+        // Gemma-template prompt framing typed text as an explicit task.
         let instructMode = RuntimeSetting.string("PROMPT_MODE") == "instruct"
         var stops = ["\n"]
         var servedPrompt = recipe.prompt
         if instructMode {
             let tail = String(request.textBeforeCursor.suffix(envInt("TILDE_MAX_CONTEXT_CHARS") ?? 3000))
-            let screen = (request.visiblePageContext?.promptText).map { String($0.prefix(700)) }
             var task = "You are the writer's silent autocomplete. "
-            if let screen, !screen.isEmpty {
-                task += "Their screen shows:\n\(screen)\n\n"
-            }
             task += "They are typing and have written so far:\n\(tail)\n\n"
             task += "Reply with ONLY the next few words they would type — continue their text "
             task += "exactly from where it stops, in their own casual voice. No quotes, no "
@@ -215,46 +205,13 @@ final class LlamaCompletionEngine: CompletionEngine, @unchecked Sendable {
                 )
             }
         }
-        // Opener polish: on an empty field the model's separating space is
-        // meaningless — the ghost should start at the word, not " word".
-        if request.textBeforeCursor.isEmpty, let s = suggestion, s.text.first == " " {
-            let trimmed = String(s.text.drop(while: { $0 == " " }))
-            suggestion = trimmed.isEmpty ? nil : CompletionSuggestion(
-                text: trimmed,
-                maxVisibleWords: envInt("TILDE_MAX_VISIBLE_WORDS")
-                    ?? CompletionModelPolicy.mvp.maxVisibleWords
-            )
-        }
-        // Screen-echo guard: never "predict" words by copying a run of text the
-        // user can already see on screen (their own draft elsewhere, the message
-        // being replied to). Grounding is welcome; verbatim copying is not.
-        if echoGuardMinWords > 0,
-           let visible = suggestion?.visibleText.trimmingCharacters(in: .whitespaces).lowercased(),
-           visible.split(separator: " ").count >= echoGuardMinWords,
-           let screen = request.visiblePageContext?.text.lowercased(),
-           screen.contains(visible) {
-            suggestion = nil
-        }
         DiagnosticsLog.shared.record("llama-completion-timing", metadata: [
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1000)),
             "firstChunkMilliseconds": firstChunkMilliseconds.map(String.init) ?? "none",
             "promptTokensProcessed": promptTokensProcessed.map(String.init) ?? "unknown",
-            "screenContextAttached": String(request.visiblePageContext != nil),
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
             "mode": request.mode.rawValue,
         ])
-        // Owner-opt-in training capture: the situation the model saw (typed +
-        // screen) with what it guessed — inference-identical training context.
-        if let visible = suggestion?.visibleText, !visible.isEmpty {
-            TrainingSampleLog.record(
-                appBundle: request.appBundleIdentifier,
-                mode: request.mode.rawValue,
-                typedContext: request.textBeforeCursor,
-                screenContext: request.visiblePageContext?.text,
-                suggestion: visible,
-                firstTokenProbability: firstTokenProbability
-            )
-        }
         return suggestion
     }
 }

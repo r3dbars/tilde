@@ -35,7 +35,7 @@ def ask(ctx, app):
     s.settimeout(60)
     s.connect(SOCK)
     t0 = time.time()
-    s.sendall((json.dumps({"v": 1, "context": ctx, "app": app, "field": "quality-probe"}) + "\n").encode())
+    s.sendall((json.dumps({"v": 1, "context": ctx, "app": app}) + "\n").encode())
     buf = b""
     while True:
         c = s.recv(4096)

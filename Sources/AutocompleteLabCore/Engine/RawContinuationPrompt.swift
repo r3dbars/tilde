@@ -108,16 +108,11 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         }
     }
 
-    /// `screenContext` is the OCR snapshot of the writer's screen (frozen per
-    /// typing burst upstream, so it stays inside the server's cacheable prompt
-    /// prefix). It is framed as reference notes, never as text to continue.
     /// `register` selects the scaffold voice from the host app's identity.
     public init(
         textBeforeCursor: String,
-        screenContext: String? = nil,
         register: ContinuationRegister = .prose,
-        maxContextCharacters: Int = 3000,
-        maxScreenContextCharacters: Int = 700
+        maxContextCharacters: Int = 3000
     ) {
         let tail = String(textBeforeCursor.suffix(max(80, maxContextCharacters)))
         let trimmed = String(
@@ -125,87 +120,13 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         )
         contextEndedInWhitespace = trimmed.count != tail.count
 
-        // Opener mode: nothing typed yet, but a message is visible on screen —
-        // propose the first words of a reply instead of waiting for the writer.
-        // Only fires with real screen context; an empty field with no screen is
-        // silence (nothing to ground a guess in).
         if trimmed.isEmpty {
-            let bounded = screenContext.map {
-                String($0.prefix(max(120, maxScreenContextCharacters)))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            } ?? ""
-            if bounded.isEmpty {
-                prompt = ""
-                return
-            }
-            prompt = Self.openerScaffold + "Message: " + bounded + "\nReply:"
+            prompt = ""
             return
         }
 
-        var pieces = Self.scaffold(for: register)
-        if let screenContext {
-            let bounded = String(screenContext.prefix(max(120, maxScreenContextCharacters)))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !bounded.isEmpty {
-                // Screen framing is tunable (TILDE_SCREEN_FRAMING): the
-                // vague "notes" framing barely helps the model RESPOND to what's
-                // on screen; a direct "reply" framing tells it the screen is the
-                // message being answered. See the screen-response experiments.
-                let framing = RuntimeSetting.string("SCREEN_FRAMING") ?? "notes"
-                switch framing {
-                case "reply":
-                    pieces += """
-                    The writer is replying to this message on screen. Respond to it directly — \
-                    answer its questions and use its topic and names; never copy it verbatim:
-                    \(bounded)
-
-
-                    """
-                case "minimal":
-                    pieces += "On screen:\n\(bounded)\n\n\n"
-                default:
-                    pieces += """
-                    Reference notes visible on the writer's screen (may be a message being replied to, \
-                    a document being discussed, or unrelated windows — use names and topics from it \
-                    when they fit; never copy or continue it):
-                    \(bounded)
-
-
-                    """
-                }
-            }
-        }
-        prompt = pieces + "Text: " + trimmed + "\nContinuation:"
+        prompt = Self.scaffold(for: register) + "Text: " + trimmed + "\nContinuation:"
     }
-
-    /// Few-shot recipe for opener mode: message→reply pairs teach the model
-    /// how the writer opens replies. TILDE_OPENER_SCAFFOLD_FILE (or the
-    /// persisted default) points at a file mined from the writer's own
-    /// exchanges — real variety beats the builtin's generic voice, which
-    /// collapses to "I'm ..." under greedy decoding.
-    static var openerScaffold: String {
-        if let path = RuntimeSetting.string("OPENER_SCAFFOLD_FILE"),
-           let contents = try? String(contentsOfFile: path, encoding: .utf8),
-           !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return contents
-        }
-        return builtinOpenerScaffold
-    }
-
-    static let builtinOpenerScaffold = """
-    The following are real chat messages, each followed by the short casual reply their recipient wrote back.
-
-    Message: want to grab dinner tonight?
-    Reply: yeah I'm down, what time?
-
-    Message: running about 10 min late, sorry!
-    Reply: no worries, see you soon.
-
-    Message: did you get a chance to look at the doc?
-    Reply: just did, looks good overall.
-
-
-    """
 
     /// Words a suggestion should never END on — a trailing article/preposition/
     /// conjunction is the signature of a token-limit cutoff mid-clause

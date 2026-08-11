@@ -66,9 +66,6 @@ KNOBS = {
     "repeat_penalty": ["default", 1.1],
     "confidence": [0, 0.1, 0.15, 0.2],
     "max_context": [3000, 1500],
-    "echo_guard": [4, 6, 8, 0],       # 0 = filter off
-    "context_turns": [3, 1, 5],
-    "context_style": ["plain", "labeled"],
 }
 DEFAULTS = {k: v[0] for k, v in KNOBS.items()}
 
@@ -93,14 +90,7 @@ def recipe_to_version(recipe):
         env["TILDE_CONFIDENCE"] = str(recipe["confidence"])
     if recipe["max_context"] != 3000:
         env["TILDE_MAX_CONTEXT_CHARS"] = str(recipe["max_context"])
-    if recipe["echo_guard"] != 4:
-        env["TILDE_ECHO_GUARD_MIN_WORDS"] = str(recipe["echo_guard"])
-    flags = "--context prior"
-    if recipe["context_turns"] != 3:
-        flags += " --context-turns %d" % recipe["context_turns"]
-    if recipe["context_style"] != "plain":
-        flags += " --context-style " + recipe["context_style"]
-    return env, flags, {}
+    return env, "", {}
 
 
 def recipe_key(recipe):

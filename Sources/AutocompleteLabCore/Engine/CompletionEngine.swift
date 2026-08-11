@@ -23,14 +23,12 @@ public enum CompletionRequestMode: String, Equatable, Sendable {
     }
 }
 
-/// A single completion request from the input method: the text being written,
-/// where it's being written, and the optional screen context.
+/// A single completion request from the input method: the text being written
+/// and where it's being written.
 public struct CompletionRequest: Equatable, Sendable {
     public let textBeforeCursor: String
     public let textAfterCursor: String
     public let appBundleIdentifier: String?
-    public let fieldIdentityDescription: String?
-    public let visiblePageContext: VisiblePageContext?
     public let maxVisibleWords: Int
     public let mode: CompletionRequestMode
 
@@ -38,16 +36,12 @@ public struct CompletionRequest: Equatable, Sendable {
         textBeforeCursor: String,
         textAfterCursor: String = "",
         appBundleIdentifier: String? = nil,
-        fieldIdentityDescription: String? = nil,
-        visiblePageContext: VisiblePageContext? = nil,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
         mode: CompletionRequestMode = .phraseContinuation
     ) {
         self.textBeforeCursor = textBeforeCursor
         self.textAfterCursor = textAfterCursor
         self.appBundleIdentifier = appBundleIdentifier
-        self.fieldIdentityDescription = fieldIdentityDescription
-        self.visiblePageContext = visiblePageContext
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         self.mode = mode
     }
