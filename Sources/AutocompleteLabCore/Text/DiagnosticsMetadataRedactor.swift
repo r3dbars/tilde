@@ -3,10 +3,10 @@ import Foundation
 public enum DiagnosticsMetadataRedactor {
     private static let enumValues: Set<String> = [
         "binary-missing", "model-missing", "port-held-by-foreign-process", "launch-failed",
+        "assets-missing", "port-in-use", "health-timeout", "directory", "already-running",
         "unsafeHiddenOrControlCharacter", "emptyOutput", "noSuggestionSentinel",
         "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext",
-        "invalidWordCompletion", "phraseContinuation", "sentenceContinuation",
-        "wordCompletion", "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
+        "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
@@ -21,7 +21,7 @@ public enum DiagnosticsMetadataRedactor {
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
-        case "reason", "mode", "status":
+        case "reason", "status":
             safe = enumValues.contains(value)
         case "app":
             safe = value == "unknown"

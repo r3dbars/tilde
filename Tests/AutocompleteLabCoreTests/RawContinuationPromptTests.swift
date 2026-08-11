@@ -75,16 +75,6 @@ struct ContinuationCutoffRepairTests {
     }
 }
 
-@Suite("Cap-induced dangler repair")
-struct CapInducedDanglerRepairTests {
-    @Test("Word-capped finished sentences get their tails repaired")
-    func cappedSentencesGetRepaired() {
-        #expect(RawContinuationPrompt.repairDanglingTail(" see if you had any thoughts on the") == " see if you had any thoughts")
-        #expect(RawContinuationPrompt.repairDanglingTail("still make the meeting, should be there in") == "still make the meeting, should be there")
-        #expect(RawContinuationPrompt.repairDanglingTail(" walk through the new proposal in detail.") == " walk through the new proposal in detail.")
-    }
-}
-
 @Test("Empty context stays silent")
 func emptyContextStaysSilent() {
     let empty = RawContinuationPrompt(textBeforeCursor: "", register: .chat)

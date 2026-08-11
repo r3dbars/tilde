@@ -1,14 +1,8 @@
 import Foundation
 
-/// The raw-completion recipe for chat-tuned models served without a chat
-/// template (llama.cpp `/completion`). Discovered 2026-07-22 (see
-/// docs/ime-tuning-log.md): chat mode makes "thinking-first" models like
-/// Gemma 4 deliberate or narrate instead of continuing; raw mode with a short
-/// documents-being-continued scaffold produces natural, in-voice
-/// continuations. The context is sent WITHOUT its trailing whitespace (models
-/// continue cleanly from a word boundary and emit the separating space
-/// themselves); callers use `contextEndedInWhitespace` to trim the duplicate
-/// leading space from the model's output.
+/// A short raw-completion recipe for the app-owned llama server. The context is
+/// sent without trailing whitespace; `contextEndedInWhitespace` removes the
+/// model's duplicate leading space from its response.
 /// Writing register inferred from the host app — the scaffold's examples teach
 /// the model the room's voice (casual chat vs email vs flowing prose).
 public enum ContinuationRegister: String, Sendable {
@@ -141,10 +135,8 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         return Self.repairDanglingTail(text)
     }
 
-    /// Cutoff repair, applied both to the raw generation AND after any display
-    /// word-cap (the cap can re-create a dangler from a finished sentence):
-    /// when text ends mid-word-stream (no terminal punctuation), trailing
-    /// never-end-on words are trimmed back to a complete-feeling phrase.
+    /// When a raw generation ends without terminal punctuation, trim trailing
+    /// function words that make the continuation feel cut off.
     public static func repairDanglingTail(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard let last = trimmed.last, last.isLetter || last.isNumber else {
