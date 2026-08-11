@@ -1,31 +1,15 @@
-- name: beta feedback
-  color: "0E8A16"
-  description: Private beta feedback from the structured issue form.
+- name: bug
+  color: "D73A4A"
+  description: Tilde does not behave as intended.
 
 - name: needs triage
   color: "FBCA04"
-  description: Needs a first read, severity label, and next action.
+  description: Needs a first read and next action.
 
-- name: beta stop
-  color: "B60205"
-  description: Stop the beta until the linked proof is clean.
-
-- name: beta trust blocker
-  color: "D93F0B"
-  description: Wrong insertion, prompt submit, secure/private field, data loss, or unsafe Tab.
-
-- name: beta high
-  color: "E99695"
-  description: Repeated interruption or broken core beta flow.
-
-- name: beta needs report
-  color: "5319E7"
-  description: Needs the redacted Privacy Bundle, not raw text or screenshots.
-
-- name: beta docs
+- name: compatibility
   color: "1D76DB"
-  description: Install, privacy, export, uninstall, or packet copy needs cleanup.
+  description: IMKit behavior differs in a host app.
 
-- name: beta ready to close
-  color: "C2E0C6"
-  description: Fix has proof and the tester confirmed the outcome.
+- name: privacy
+  color: "B60205"
+  description: Local processing, retention, or trust-boundary concern.
