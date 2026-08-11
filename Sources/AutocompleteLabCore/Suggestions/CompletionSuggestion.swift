@@ -17,10 +17,12 @@ public struct CompletionSuggestion: Equatable, Sendable {
             1,
             maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: visibleWords)
         )
-        self.visibleText = Self.cappedText(
-            text,
-            wordLimit: visibleWords,
-            characterLimit: visibleCharacters
+        self.visibleText = RawContinuationPrompt.repairDanglingTail(
+            Self.cappedText(
+                text,
+                wordLimit: visibleWords,
+                characterLimit: visibleCharacters
+            )
         )
     }
 
