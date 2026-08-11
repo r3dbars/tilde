@@ -5,7 +5,7 @@ import Foundation
 ///
 /// The IME stays a thin, crash-proof pipe; this host answers its requests from the
 /// app's already-warm llama/Gemma engine. Wire protocol: one newline-delimited JSON request
-/// {"v":1,"context":"...","app":?,"field":?,"page":?} → a STREAM of newline-delimited JSON
+/// {"v":1,"context":"...","app":?} → a STREAM of newline-delimited JSON
 /// responses: zero or more {"suggestion":"...","partial":true} as the model
 /// generates, then a final {"suggestion":"..."} and close. Partials put the first
 /// words on screen near time-to-first-token instead of time-to-last-token.
@@ -20,7 +20,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
     ).expandingTildeInPath
 
     private let engineProvider: @MainActor () -> any CompletionEngine
-    private let screenContextResolver: @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext?
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
@@ -31,12 +30,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
     // brain (the Apple-fallback persona leak, 2026-07-23).
     private var ownsSocketFile = false
 
-    init(
-        engineProvider: @escaping @MainActor () -> any CompletionEngine,
-        screenContextResolver: @escaping @Sendable (_ app: String?, _ field: String?, _ textBeforeCursor: String) -> VisiblePageContext? = { _, _, _ in nil }
-    ) {
+    init(engineProvider: @escaping @MainActor () -> any CompletionEngine) {
         self.engineProvider = engineProvider
-        self.screenContextResolver = screenContextResolver
     }
 
     func start() {
@@ -162,8 +157,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     "model_path": env["TILDE_MODEL_PATH"] ?? "default",
                     "confidence": env["TILDE_CONFIDENCE"] ?? "0",
                     "max_context_chars": env["TILDE_MAX_CONTEXT_CHARS"] ?? "3000",
-                    "max_screen_chars": env["TILDE_MAX_SCREEN_CHARS"] ?? "700",
-                    "echo_guard": env["TILDE_ECHO_GUARD_MIN_WORDS"] ?? "4",
                     "top_p": env["TILDE_TOP_P"] ?? "default",
                     "top_k": env["TILDE_TOP_K"] ?? "default",
                     "min_p": env["TILDE_MIN_P"] ?? "default",
@@ -173,23 +166,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             let engine = await self.engineProvider()
             // Mid-word contexts want the engine's word-completion mode; word
-            // boundaries want phrase continuation. App + field identity let the
-            // prompt KV cache recognize consecutive keystrokes in the same field.
+            // boundaries want phrase continuation.
             let midWord = payload.context.unicodeScalars.last.map(CharacterSet.alphanumerics.contains) ?? false
-            // An explicit "page" from the client (eval harness) overrides the
-            // live screen resolver; "" forces no context at all. Like context,
-            // it is used in-memory only and never logged or persisted.
-            let pageContext: VisiblePageContext?
-            if let page = payload.page {
-                pageContext = page.isEmpty ? nil : VisiblePageContext(text: page)
-            } else {
-                pageContext = self.screenContextResolver(payload.app, payload.field, payload.context)
-            }
             let request = CompletionRequest(
                 textBeforeCursor: payload.context,
                 appBundleIdentifier: payload.app,
-                fieldIdentityDescription: payload.field,
-                visiblePageContext: pageContext,
                 mode: midWord ? .wordCompletion : .phraseContinuation
             )
             // Partial callbacks can fire from generation threads; serialize socket
@@ -205,9 +186,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 guard !text.isEmpty else { return }
                 send(["suggestion": text, "partial": true])
             }
-            // "page" reports whether screen context was attached — observability
-            // for the capture pipeline (content itself never leaves the process).
-            send(["suggestion": final?.visibleText ?? "", "page": pageContext != nil])
+            send(["suggestion": final?.visibleText ?? ""])
             // The end-to-end proof lane (script/real_app_smoke.sh) waits for
             // this event: a real keystroke travelled keyboard → socket →
             // engine → back. "Served", deliberately not "presented" — the IME
@@ -227,8 +206,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private struct RequestPayload {
         let context: String
         let app: String?
-        let field: String?
-        let page: String?
         let configProbe: Bool
     }
 
@@ -253,17 +230,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
         if (object["config"] as? Bool) == true {
-            return RequestPayload(context: "", app: nil, field: nil, page: nil, configProbe: true)
+            return RequestPayload(context: "", app: nil, configProbe: true)
         }
-        // Empty context is legal: it requests an OPENER (reply's first words
-        // grounded in screen context alone).
         guard let context = object["context"] as? String
         else { return nil }
         return RequestPayload(
             context: context,
             app: object["app"] as? String,
-            field: object["field"] as? String,
-            page: object["page"] as? String,
             configProbe: false
         )
     }

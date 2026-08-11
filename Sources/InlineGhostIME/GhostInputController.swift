@@ -46,34 +46,6 @@ final class GhostInputController: IMKInputController {
     private enum GhostSource: String { case fast, model }
     private var ghostSource: GhostSource = .fast
 
-    /// `ghostSource` translated for `GhostUsageLog` (kept as a separate type so
-    /// the opt-in usage log doesn't couple to this controller's internals).
-    private var usageSource: GhostUsageLog.Source {
-        switch ghostSource {
-        case .fast: return .fast
-        case .model: return .model
-        }
-    }
-
-    /// A ghost the writer began typing OVER (rejected). We hold the log open and
-    /// accumulate the FULL replacement phrase they write instead of accepting —
-    /// the richest training label there is (context → what they actually meant),
-    /// scorable for both exact match and meaning. Flushed as one `typedInstead`
-    /// when the override phrase ends: the next ghost appears, they accept, or
-    /// focus leaves. (The old capture logged only the first keystroke.)
-    private struct PendingRejection {
-        let ghost: String
-        let source: GhostUsageLog.Source
-        let appBundle: String?
-        let context: String
-        var replacement: String
-    }
-    private var pendingRejection: PendingRejection?
-
-    /// Longest override we accumulate before flushing mid-phrase; a rich label
-    /// doesn't need a whole paragraph, and this bounds memory if the writer
-    /// never pauses long enough for a fresh ghost to close the episode.
-    private static let maxReplacementChars = 160
     #if canImport(FoundationModels)
     private var modelSession: LanguageModelSession?
     #endif
@@ -161,24 +133,6 @@ final class GhostInputController: IMKInputController {
             let percent = Int((Double(accepted) / Double(total) * 100).rounded())
             return "Today: wrote \(accepted) words for you (\(percent)%)"
         }
-    }
-
-    /// Emit the deferred `typedInstead` once the override phrase is complete,
-    /// carrying the full replacement text instead of a lone keystroke. No-op when
-    /// nothing is pending or the writer only backspaced their divergence away.
-    private func flushPendingRejection() {
-        guard let pending = pendingRejection else { return }
-        pendingRejection = nil
-        let replacement = pending.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !replacement.isEmpty else { return }
-        GhostUsageLog.record(
-            event: .typedInstead,
-            ghostText: pending.ghost,
-            source: pending.source,
-            appBundle: pending.appBundle,
-            context: pending.context,
-            typedChar: replacement
-        )
     }
 
     /// Accept-reward sounds (owner request, Klack-inspired): a light tick for
@@ -276,24 +230,11 @@ final class GhostInputController: IMKInputController {
             }
         case 53: // Escape — dismiss the ghost if present.
             guard !ghost.isEmpty else { return false }
-            flushPendingRejection()
-            GhostUsageLog.record(
-                event: .dismiss,
-                ghostText: ghost,
-                source: usageSource,
-                appBundle: client.bundleIdentifier(),
-                context: typedFallback
-            )
             clearGhost(client)
             return true
         case 51: // Delete/Backspace — drop ghost, let the app delete normally.
             clearGhost(client)
             if !typedFallback.isEmpty { typedFallback.removeLast() }
-            // Keep an in-progress override phrase in sync so the training label
-            // reflects what the writer actually kept.
-            if pendingRejection?.replacement.isEmpty == false {
-                pendingRejection?.replacement.removeLast()
-            }
             return false
         default:
             break
@@ -306,29 +247,6 @@ final class GhostInputController: IMKInputController {
            chars.count == 1,
            let scalar = chars.unicodeScalars.first,
            scalar.value >= 0x20, scalar.value != 0x7F {
-            if !ghost.isEmpty, pendingRejection == nil {
-                // Typing a normal character over a live ghost = writing something
-                // other than the suggestion. Open a rejection episode against the
-                // FIRST rejected guess; ghosts that pop up mid-override are noise
-                // and must NOT chop the phrase (day-1 data was word fragments).
-                pendingRejection = PendingRejection(
-                    ghost: ghost,
-                    source: usageSource,
-                    appBundle: client.bundleIdentifier(),
-                    context: typedFallback,
-                    replacement: chars
-                )
-            } else if pendingRejection != nil {
-                // Still writing the override — keep building the one true phrase,
-                // across pauses and re-offered ghosts alike.
-                pendingRejection?.replacement.append(chars)
-            }
-            // The episode ends at a real boundary: sentence-ending punctuation,
-            // or the bound (a rich label doesn't need a paragraph).
-            if let count = pendingRejection?.replacement.count,
-               count > Self.maxReplacementChars || ".!?".contains(chars) {
-                flushPendingRejection()
-            }
             clearGhost(client)
             client.insertText(chars, replacementRange: Self.unset)
             typedFallback.append(chars)
@@ -345,7 +263,6 @@ final class GhostInputController: IMKInputController {
         clearGhost(client)
         if let chars = event.characters, chars.contains("\r") || chars.contains("\n") {
             typedFallback.append("\n")
-            flushPendingRejection() // newline ends the thought — close the episode
         }
         return false
     }
@@ -355,7 +272,6 @@ final class GhostInputController: IMKInputController {
     /// would turn an unaccepted ghost into real inserted text. Never allow that:
     /// the ghost is only ever inserted by an explicit Tab/Shift-Tab/tilde.
     override func commitComposition(_ sender: Any!) {
-        flushPendingRejection()
         if let client = sender as? IMKTextInput {
             clearGhost(client)
         }
@@ -364,7 +280,6 @@ final class GhostInputController: IMKInputController {
 
     /// Called when focus leaves; make sure no ghost is stranded.
     override func deactivateServer(_ sender: Any!) {
-        flushPendingRejection()
         Stats.flushIfDue(force: true)
         if let client = sender as? IMKTextInput { clearGhost(client) }
         typedFallback = ""
@@ -593,10 +508,6 @@ final class GhostInputController: IMKInputController {
     ]
 
     private func updateGhost(_ client: IMKTextInput) {
-        // NOTE: a fresh ghost does NOT flush a pending rejection — the writer is
-        // often mid-phrase when the next offer appears, and flushing here chopped
-        // day-1 labels into fragments. Episodes close on accept/Esc/focus loss/
-        // sentence end instead.
         generation += 1
         if let bundle = client.bundleIdentifier(),
            Self.mutedBundlePrefixes.contains(where: bundle.hasPrefix) {
@@ -619,13 +530,6 @@ final class GhostInputController: IMKInputController {
         if !suffix.isEmpty {
             ghostSource = .fast
             show(suffix, client)
-            GhostUsageLog.record(
-                event: .shown,
-                ghostText: suffix,
-                source: .fast,
-                appBundle: client.bundleIdentifier(),
-                context: typedFallback
-            )
         }
 
         // Smart layer. Mid-word, the dictionary/doc completion is precise — when
@@ -763,21 +667,18 @@ final class GhostInputController: IMKInputController {
         // the engine mode. The prompt KV cache makes long context cheap after the
         // first request, so send generously. Require a little so answers aren't wild.
         let tail = String(context.suffix(3000))
-        // No arbitrary character floor (the old 12-char guard predates the
-        // personal model, screen grounding, and the confidence gate — quality
-        // gates decide what shows now, not context length). Empty context is
-        // the OPENER: propose a reply's first words from what's on screen.
+        // No arbitrary character floor: the confidence gate decides what shows,
+        // not context length. Empty context stays silent in the brain.
 
         let gen = generation
         let hostApp = client.bundleIdentifier()
-        let fieldIdentity = client.uniqueClientIdentifierString()
         modelTask?.cancel()
         modelTask = Task { [weak self] in
             // 1) Tilde's own model, served by the menu-bar app over a local
             //    socket. Streaming: partials show the first words near time-to-
             //    first-token; the stale-guard in present() drops late arrivals.
             let brain = await Task.detached(priority: .userInitiated) {
-                GhostBrainClient.complete(context: tail, app: hostApp, field: fieldIdentity) { partial in
+                GhostBrainClient.complete(context: tail, app: hostApp) { partial in
                     let text = Self.cleanedModelOutput(partial)
                     guard !text.isEmpty else { return }
                     Task { @MainActor in self?.present(text, ifStill: gen) }
@@ -808,13 +709,6 @@ final class GhostInputController: IMKInputController {
         ghost = text
         ghostSource = .model
         show(text, liveClient)
-        GhostUsageLog.record(
-            event: .shown,
-            ghostText: text,
-            source: .model,
-            appBundle: liveClient.bundleIdentifier(),
-            context: typedFallback
-        )
     }
 
     private func appleModelGhost(tail: String, gen: Int) async {
@@ -886,9 +780,6 @@ final class GhostInputController: IMKInputController {
     /// Accept everything, then predict a fresh chain.
     private func acceptWholeGhost(_ client: IMKTextInput) {
         let accepted = ghost
-        let acceptedForRecord = accepted
-        let acceptedSource = usageSource
-        let contextBeforeAccept = typedFallback
         generation += 1
         modelTask?.cancel()
         GhostPanel.candidates?.hide()
@@ -898,17 +789,8 @@ final class GhostInputController: IMKInputController {
         typedFallback.append(accepted)
 
         // Optional work happens only after the accepted text is in the document.
-        flushPendingRejection()
         playAcceptSound(whole: true)
-        recordAccept(acceptedForRecord)
-        GhostUsageLog.record(
-            event: .acceptAll,
-            ghostText: acceptedForRecord,
-            source: acceptedSource,
-            appBundle: client.bundleIdentifier(),
-            context: contextBeforeAccept,
-            accepted: acceptedForRecord
-        )
+        recordAccept(accepted)
         scheduleGhostAfterPause(client)
     }
 
@@ -927,8 +809,6 @@ final class GhostInputController: IMKInputController {
             }
         }
         let remainder = String(ghost.dropFirst(chunk.count))
-        let acceptedSource = usageSource
-        let contextBeforeAccept = typedFallback
         generation += 1
         modelTask?.cancel()
         GhostPanel.candidates?.hide()
@@ -938,17 +818,8 @@ final class GhostInputController: IMKInputController {
         typedFallback.append(chunk)
 
         // Optional work happens only after the accepted text is in the document.
-        flushPendingRejection()
         playAcceptSound(whole: false)
         recordAccept(chunk)
-        GhostUsageLog.record(
-            event: .acceptWord,
-            ghostText: chunk,
-            source: acceptedSource,
-            appBundle: client.bundleIdentifier(),
-            context: contextBeforeAccept,
-            accepted: chunk
-        )
         guard !remainder.isEmpty else { scheduleGhostAfterPause(client); return }
         ghost = remainder
         show(remainder, client)

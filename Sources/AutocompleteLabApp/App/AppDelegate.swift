@@ -1,20 +1,16 @@
 import AppKit
 import AutocompleteLabCore
-import CoreGraphics
 import ServiceManagement
 
 /// Tilde's brain-caretaker. The product is the InlineGhostIME input
 /// method; this app exists to run its engines and utilities:
 ///   - GhostBrainServerHost: the unix socket the keyboard talks to
 ///   - LlamaServerProcessHost + LlamaCompletionEngine: the Gemma engine
-///   - GhostScreenContextBridge + VisiblePageContextProvider: screen context
 ///   - GhostKeyboardInstallerHost: installs/updates the keyboard itself
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    let visiblePageContextProvider = VisiblePageContextProvider()
     private let llamaServerHost = LlamaServerProcessHost()
-    private lazy var ghostScreenContextBridge = GhostScreenContextBridge(provider: visiblePageContextProvider)
     private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
@@ -32,14 +28,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 phraseEngineIsHealthy: { llama.isHealthy },
                 // Live-flippable: defaults write bar.r3d.tilde ModelHandlesWordCompletions -bool true|false
                 routeWordCompletions: { UserDefaults.standard.bool(forKey: "ModelHandlesWordCompletions") }
-            )
-        },
-        screenContextResolver: { [bridge = ghostScreenContextBridge] app, field, text in
-            bridge.context(
-                appBundleIdentifier: app,
-                fieldIdentity: field,
-                textBeforeCursor: text,
-                enabled: UserDefaults.standard.bool(forKey: "VisiblePageContextEnabled")
             )
         }
     )
@@ -84,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The keyboard's own defaults domain — the one channel the app and the
-    /// IME process share (TrainingSampleLog reads its capture flag the same way).
+    /// IME process share.
     static let keyboardDefaultsSuite = "bar.r3d.inputmethod.InlineGhost"
 
     /// One line for the status menu: which engine is answering. Honest by
