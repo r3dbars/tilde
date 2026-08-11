@@ -34,6 +34,23 @@ struct InlineSuggestionStateTests {
         #expect(state.reduce(.present(" new", newer)) == [.show(" new")])
     }
 
+    @Test("Replacement and dismissal clear every older suggestion")
+    func replacementAndDismissalClearState() {
+        let first = ticket(request: 1)
+        let second = ticket(request: 2)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(first))
+        _ = state.reduce(.present(" first", first))
+
+        #expect(state.reduce(.awaitSuggestion(second)) == [.hide])
+        #expect(state.reduce(.present(" late", first)).isEmpty)
+        #expect(state.pendingTicket == second)
+        #expect(state.reduce(.dismiss).isEmpty)
+        #expect(state.pendingTicket == nil)
+        #expect(state.reduce(.present(" later", second)).isEmpty)
+        #expect(!state.isVisible)
+    }
+
     @Test("Matching type-through hides, inserts, and re-marks without scheduling")
     func matchingTypeThroughConsumesOneGrapheme() {
         let current = ticket(context: "caf", location: 3)

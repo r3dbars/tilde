@@ -16,13 +16,19 @@ struct SecureLocalStorageTests {
         return Int16(info.st_mode & 0o7777)
     }
 
+    private func canOpenSecurely(_ file: URL) -> Bool {
+        guard let handle = SecureLocalStorage.openFileForAppending(at: file) else { return false }
+        try? handle.close()
+        return true
+    }
+
     @Test("Created directories are owner-only (0700)")
     func createsOwnerOnlyDirectory() throws {
         let root = makeTempDirectoryURL()
         let directory = root.appendingPathComponent("nested/logs", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        #expect(SecureLocalStorage.createDirectory(at: directory))
+        #expect(canOpenSecurely(directory.appendingPathComponent("diagnostics.log")))
         #expect(try posixMode(of: directory) == 0o700)
     }
 
@@ -32,8 +38,7 @@ struct SecureLocalStorageTests {
         let file = root.appendingPathComponent("traces.jsonl")
         defer { try? FileManager.default.removeItem(at: root) }
 
-        #expect(SecureLocalStorage.createDirectory(at: root))
-        #expect(SecureLocalStorage.ensureFile(at: file))
+        #expect(canOpenSecurely(file))
         #expect(try posixMode(of: file) == 0o600)
     }
 
@@ -53,7 +58,7 @@ struct SecureLocalStorageTests {
         #expect(chmod(file.path, 0o4644) == 0)
         #expect(try posixMode(of: file) == 0o4644)
 
-        #expect(SecureLocalStorage.ensureFile(at: file))
+        #expect(canOpenSecurely(file))
         #expect(try posixMode(of: file) == 0o600)
         // Contents are preserved — tightening must not truncate an existing log.
         #expect(try String(contentsOf: file, encoding: .utf8) == "old\n")
@@ -72,7 +77,7 @@ struct SecureLocalStorageTests {
         #expect(chmod(root.path, 0o1755) == 0)
         #expect(try posixMode(of: root) == 0o1755)
 
-        #expect(SecureLocalStorage.createDirectory(at: root))
+        #expect(canOpenSecurely(root.appendingPathComponent("diagnostics.log")))
         #expect(try posixMode(of: root) == 0o700)
     }
 
@@ -85,7 +90,7 @@ struct SecureLocalStorageTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         #expect(FileManager.default.createFile(atPath: directory.path, contents: Data()))
 
-        #expect(!SecureLocalStorage.createDirectory(at: directory))
+        #expect(!canOpenSecurely(directory.appendingPathComponent("diagnostics.log")))
     }
 
     @Test("Directory creation rejects a symbolic link")
@@ -102,7 +107,7 @@ struct SecureLocalStorageTests {
         )
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
 
-        #expect(!SecureLocalStorage.createDirectory(at: link))
+        #expect(!canOpenSecurely(link.appendingPathComponent("diagnostics.log")))
         #expect(try posixMode(of: target) == 0o755)
     }
 
@@ -117,7 +122,7 @@ struct SecureLocalStorageTests {
         try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
 
-        #expect(!SecureLocalStorage.createDirectory(at: directory))
+        #expect(!canOpenSecurely(directory.appendingPathComponent("diagnostics.log")))
         #expect(!FileManager.default.fileExists(
             atPath: target.appendingPathComponent("nested").path
         ))
@@ -131,7 +136,7 @@ struct SecureLocalStorageTests {
 
         try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
 
-        #expect(!SecureLocalStorage.ensureFile(at: file))
+        #expect(!canOpenSecurely(file))
     }
 
     @Test("File creation rejects a symbolic link without changing its target")
@@ -149,7 +154,7 @@ struct SecureLocalStorageTests {
         ))
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
 
-        #expect(!SecureLocalStorage.ensureFile(at: link))
+        #expect(!canOpenSecurely(link))
         #expect(try String(contentsOf: target, encoding: .utf8) == "private\n")
         #expect(try posixMode(of: target) == 0o644)
     }
