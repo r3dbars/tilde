@@ -45,9 +45,10 @@ identity are out of scope.
 - Suggestions are marked text and become committed text only after explicit
   acceptance. There is no clipboard or cross-app synthetic insertion path.
 - Distributed builds embed the helper and model inside the signed app. There is
-  no runtime model download or remote inference fallback.
-- The release gate verifies bundle structure, signing, the embedded model, and
-  observed network egress.
+  no runtime model download or remote inference fallback. The release driver
+  requires exact input hashes before it copies or signs either asset.
+- The release driver verifies bundle structure, runtime ownership, signing,
+  notarization, Gatekeeper assessment, and observed open sockets.
 
 ## Remaining risks
 
@@ -68,6 +69,8 @@ identity are out of scope.
 ## Required proof after security-sensitive changes
 
 Run `./script/proof.sh fast` for every change. Before release, run
-`./script/release_check.sh` and require all bundle, model, signing, and live
-network-egress lanes to pass. Model or helper changes also require a freshly
-installed, notarized build and manual IME checks in disposable documents.
+`./script/package_app.sh` with reviewed helper and model hashes, and require all
+bundle, runtime, signing, notarization, Gatekeeper, and socket-observation lanes
+to pass. Socket observation is not packet capture. Model or helper changes also
+require a freshly installed, notarized build and manual IME checks in disposable
+documents.

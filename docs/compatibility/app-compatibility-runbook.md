@@ -1,7 +1,7 @@
 # App Compatibility Guide
 
 Tilde is a macOS input method. Compatibility depends on how each app implements
-IMKit marked text and routes `Tab`, `Shift-Tab`, and `Esc`. It does not depend on
+IMKit marked text and routes `Tab` and `Esc`. It does not depend on
 Accessibility roles, caret geometry, overlays, the clipboard, or synthetic
 insertion.
 
@@ -23,8 +23,8 @@ An editor is compatible only when all of these hold:
 - Printable keys appear immediately and exactly once.
 - A suggestion appears as marked text after enough context.
 - Continued typing replaces or dismisses stale marked text cleanly.
-- `Tab` accepts one word only while a suggestion is visible.
-- `Shift-Tab` accepts the full visible suggestion.
+- `Tab` accepts the full visible suggestion only while it is visible.
+- `Shift-Tab` keeps the host app's normal behavior.
 - `Esc` dismisses without changing committed text.
 - Backspace, arrows, shortcuts, undo, dead keys, accents, and key repeat keep
   their normal jobs.
@@ -42,7 +42,7 @@ Stop and mark the editor unsupported if Tilde:
 
 - changes or loses committed text,
 - inserts a suggestion without explicit acceptance,
-- consumes `Tab`, `Shift-Tab`, or `Esc` with no visible suggestion,
+- consumes `Tab` or `Esc` with no visible suggestion,
 - leaves marked text in the wrong field or app,
 - breaks composition, autocorrect, password entry, or another input source, or
 - requires Accessibility, Screen Recording, a manual model server, or a
