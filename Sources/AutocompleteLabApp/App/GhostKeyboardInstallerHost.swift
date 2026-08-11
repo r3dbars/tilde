@@ -6,7 +6,7 @@ import Foundation
 /// Contents/Library into ~/Library/Input Methods when missing or outdated,
 /// registers it with Text Input Services, and (first install only) tells the
 /// user the one step macOS reserves for them — adding the keyboard in System
-/// Settings. Encodes the deployment facts from Sources/InlineGhostIME/README.md.
+/// Settings. The bundled input method remains disabled until the user enables it.
 final class GhostKeyboardInstallerHost {
 
     private static let bundledPathInApp = "Contents/Library/InlineGhostIME.app"

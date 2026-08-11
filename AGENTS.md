@@ -37,11 +37,13 @@ safer, or simpler.
 - Pre-merge: `./script/proof.sh fast`
 - Structural change:
   `PROOF_STRUCTURAL_CHANGE=1 PROOF_DIFF_BASE=origin/main ./script/proof.sh fast`
-- Release, on macOS: `./script/release_check.sh`
+- Release, on macOS: `./script/package_app.sh` with the pinned inputs shown by
+  `./script/package_app.sh --help`
 
-The release gate's bundle, embedded model, signing, and network-egress lanes are
-blocking. Keep deterministic proof separate from manual editor compatibility
-proof.
+The release driver's bundle, embedded model, runtime, signing, notarization,
+Gatekeeper, and open-socket observation lanes are blocking. Open-socket
+observation is not packet capture. Keep deterministic proof separate from
+manual editor compatibility proof.
 
 Do not add a script without a real caller or a document without a durable
 reader. Root `AGENTS.md` and `CLAUDE.md` are the only agent guides.

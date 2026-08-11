@@ -5,8 +5,7 @@
 Tilde is an open-source macOS input method that offers quiet inline writing
 suggestions. Type normally, then use:
 
-- `Tab` to accept the next word
-- `Shift-Tab` to accept the whole suggestion
+- `Tab` to accept the whole suggestion
 - `Esc` to dismiss
 
 Suggestions are IMKit marked text inside the app where you are writing. Tilde
@@ -38,14 +37,15 @@ The project is a Swift 6.2 package with no Xcode project file.
 
 ```bash
 ./script/proof.sh fast
-./script/build_and_run.sh --verify
+./script/build_and_run.sh
 ./script/build_ime.sh --no-notarize --no-install
 ```
 
-`script/proof.sh fast` is the pre-merge gate. `script/release_check.sh` is the
-manual release gate and includes bundle, model, signing, and network-egress
-checks. A distributable build embeds the static helper and GGUF model through
-`script/package_app.sh`.
+`script/proof.sh fast` is the pre-merge gate. `script/package_app.sh` is the
+single manual release driver; it requires exact SHA-256 pins for the helper and
+model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
+open-socket observation checks. Run `./script/package_app.sh --help` for its
+required release inputs.
 
 Production code has three parts:
 
