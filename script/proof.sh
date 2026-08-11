@@ -10,7 +10,8 @@
 #   2. structural Swift delta      refactors remove more production code than they add
 #   3. bash -n script/*.sh         all remaining shell tooling parses
 #   4. byte-compile script/*.py    all remaining python tooling parses
-#   5. swift test                  the complete Swift suite passes
+#   5. golden evaluator self-test  aggregate privacy and metric math hold
+#   6. swift test                  the complete Swift suite passes
 #
 # Environment:
 #   PROOF_DIFF_BASE=<ref>   If set, run `git diff --check <ref>...HEAD` (catches
@@ -146,6 +147,7 @@ run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "structural Swift delta" check_structural_delta
 run_blocking "bash -n script/*.sh" bash -n script/*.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
+run_blocking "golden evaluator self-test" python3 script/golden_eval.py --selftest
 run_swift
 
 summarize_and_exit
