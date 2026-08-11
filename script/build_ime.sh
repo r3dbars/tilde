@@ -20,8 +20,7 @@ Options:
   --sign-identity IDENTITY  Sign with this identity; use - for ad hoc signing.
   -h, --help                Show this help.
 
-Without --sign-identity, the script uses the first available Apple Development
-identity, then falls back to an ad hoc signature.
+Without --sign-identity, local builds use an ad hoc signature.
 EOF
 }
 
@@ -50,10 +49,6 @@ while (($#)); do
 done
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 
-if [[ -z "$SIGN_IDENTITY" ]]; then
-    SIGN_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
-        | awk '/Apple Development/ { print $2; exit }' || true)"
-fi
 if [[ -n "$SIGN_IDENTITY" && "$SIGN_IDENTITY" != "-" ]]; then
     RESOLVED_IDENTITY="$(security find-identity -p codesigning -v 2>/dev/null \
         | awk -v wanted="$SIGN_IDENTITY" '$2 == wanted || index($0, "\"" wanted "\"") { print $2; exit }')"
