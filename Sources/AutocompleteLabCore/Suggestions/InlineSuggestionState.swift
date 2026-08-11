@@ -118,7 +118,7 @@ public struct InlineSuggestionState: Equatable, Sendable {
             let accepted = visibleText
             visibleText = ""
             visibleTicket = nil
-            return [.hide, .insert(accepted), .schedule]
+            return [.hide, .insert(accepted)]
 
         case .dismiss:
             pendingTicket = nil

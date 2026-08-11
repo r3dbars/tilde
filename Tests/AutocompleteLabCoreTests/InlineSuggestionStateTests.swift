@@ -61,7 +61,7 @@ struct InlineSuggestionStateTests {
         ])
     }
 
-    @Test("Tab rejects a stale field and accepts the whole current suggestion")
+    @Test("Tab accepts the current suggestion without immediately chaining another")
     func acceptanceRequiresCurrentTicket() {
         let current = ticket()
         var stale = InlineSuggestionState()
@@ -72,7 +72,7 @@ struct InlineSuggestionStateTests {
         var live = InlineSuggestionState()
         _ = live.reduce(.awaitSuggestion(current))
         _ = live.reduce(.present(" world", current))
-        #expect(live.reduce(.accept(current)) == [.hide, .insert(" world"), .schedule])
+        #expect(live.reduce(.accept(current)) == [.hide, .insert(" world")])
     }
 
     private func ticket(
