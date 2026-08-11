@@ -40,6 +40,10 @@ let package = Package(
         .testTarget(
             name: "AutocompleteLabAppTests",
             dependencies: ["AutocompleteLabApp"]
+        ),
+        .testTarget(
+            name: "InlineGhostIMETests",
+            dependencies: ["InlineGhostIME"]
         )
     ]
 )

@@ -217,7 +217,7 @@ final class GhostInputController: IMKInputController {
     private func matchingVisibleTicket(for client: IMKTextInput) -> InlineSuggestionTicket? {
         guard let visible = state.visibleTicket else { return nil }
         let current = ticket(for: client, context: contextBeforeCaret(client))
-        return current == visible ? visible : nil
+        return visible.matchesFieldState(of: current) ? visible : nil
     }
 
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
