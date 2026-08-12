@@ -32,9 +32,9 @@ sounds.
 
 Personal History is off by default. Its menu shows the local storage location
 and approximate size, lets the user exclude the current app, and can delete the
-entire store. Each record is encrypted with AES-GCM; its device-only key lives
-in the macOS data-protection Keychain. See [PRIVACY.md](PRIVACY.md) for the
-capture boundary and remaining risks.
+entire store. Each record is encrypted with AES-GCM; its key lives as a
+non-synchronizing item in the user's macOS login Keychain. See
+[PRIVACY.md](PRIVACY.md) for the capture boundary and remaining risks.
 
 ## Status and requirements
 

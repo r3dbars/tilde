@@ -41,8 +41,8 @@ enum PersonalHistoryStorageError: Error, Equatable {
 }
 
 final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @unchecked Sendable {
-    private let service = "bar.r3d.tilde.personal-history"
-    private let account = "aes-gcm-key-v1"
+    static let service = "bar.r3d.tilde.personal-history"
+    static let account = "aes-gcm-key-v1"
 
     func loadExistingKey() throws -> Data {
         guard let key = try lookupKey() else {
@@ -64,7 +64,6 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
 
         let add = baseQuery().merging([
             kSecValueData: key,
-            kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]) { _, new in new }
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         if addStatus == errSecDuplicateItem { return try loadExistingKey() }
@@ -98,20 +97,21 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
         }
     }
 
-    private func baseQuery() -> [CFString: Any] {
+    static func baseQuery() -> [CFString: Any] {
         [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
-            kSecUseDataProtectionKeychain: true,
             kSecAttrSynchronizable: false,
         ]
     }
+
+    private func baseQuery() -> [CFString: Any] { Self.baseQuery() }
 }
 
 /// A versioned append-only log. Each event is independently authenticated and
 /// encrypted with AES-GCM; only the format header and approximate file size are
-/// visible without the device-only Keychain key.
+/// visible without the non-synchronizing macOS Keychain key.
 final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Sendable {
     private static let header = Data("TILDE-PERSONAL-HISTORY\t1\n".utf8)
     private static let authenticatedData = Data("bar.r3d.tilde.personal-history.v1".utf8)

@@ -65,12 +65,13 @@ Records are stored at:
 `~/Library/Application Support/Tilde/Personal History/history.v1.enc`
 
 Each record is authenticated and encrypted with AES-GCM. The 256-bit key is a
-non-synchronizing, device-only item in the macOS data-protection Keychain. The
-directory is owner-only (`0700`) and the file is owner-only (`0600`). The file
-header, approximate size, record lengths, and record count are not encrypted.
-Local malware running as the user, a process compromise while Tilde is running,
-macOS backups or snapshots, and privileged administrators remain meaningful
-risks.
+non-synchronizing item in the user's macOS login Keychain. The directory is
+owner-only (`0700`) and the file is owner-only (`0600`). The file header,
+approximate size, record lengths, and record count are not encrypted. The login
+Keychain can migrate with a copied or restored user Keychain; this is not a
+device-bound key. Local malware running as the user, a process compromise while
+Tilde is running, macOS backups or snapshots, and privileged administrators
+remain meaningful risks.
 
 While Tilde is running, the shadow necessarily holds derived words and prefix
 counts in process memory. It writes no second vocabulary file and rebuilds from
