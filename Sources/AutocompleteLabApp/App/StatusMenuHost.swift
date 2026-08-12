@@ -52,7 +52,7 @@ final class StatusMenuHost: NSObject {
             "Personal History (local only)",
             #selector(togglePersonalHistory(_:))
         )
-        historySizeItem = addInfoRow(to: menu, "History: 0 bytes")
+        historySizeItem = addInfoRow(to: menu, "History: measuring…")
         personalVocabularyItem = addInfoRow(
             to: menu,
             "Personal vocabulary: waiting for writing"
@@ -285,13 +285,17 @@ extension StatusMenuHost: NSMenuDelegate {
     }
 
     private func refreshHistorySummary() {
+        if showStorageFailureIfNeeded() { return }
         historySizeItem?.title = "History: measuring…"
         Task { [weak self] in
             guard let self else { return }
             guard let summary = await personalHistory.summary() else {
+                if showStorageFailureIfNeeded() { return }
                 historySizeItem?.title = "History: unavailable"
+                deleteHistoryItem?.isEnabled = true
                 return
             }
+            if showStorageFailureIfNeeded() { return }
             let formatter = ByteCountFormatter()
             formatter.allowedUnits = [.useKB, .useMB, .useGB]
             formatter.countStyle = .file
@@ -300,6 +304,13 @@ extension StatusMenuHost: NSMenuDelegate {
             historySizeItem?.title = "History: \(formatter.string(fromByteCount: summary.approximateBytes))"
             deleteHistoryItem?.isEnabled = summary.approximateBytes > 0
         }
+    }
+
+    private func showStorageFailureIfNeeded() -> Bool {
+        guard let line = personalHistory.storageHealthSnapshot.menuLine else { return false }
+        historySizeItem?.title = line
+        deleteHistoryItem?.isEnabled = true
+        return true
     }
 
     private func refreshPersonalVocabulary() {

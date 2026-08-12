@@ -7,6 +7,7 @@ public enum DiagnosticsMetadataRedactor {
         "unsafeHiddenOrControlCharacter", "emptyOutput", "noSuggestionSentinel",
         "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext",
         "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
+        "store-corrupt", "key-unavailable", "storage-unavailable", "internal-error",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
