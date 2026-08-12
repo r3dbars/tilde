@@ -71,7 +71,11 @@ public struct InlineSuggestionState: Equatable, Sendable {
         case awaitSuggestion(InlineSuggestionTicket)
         case present(String, InlineSuggestionTicket)
         case type(String, current: InlineSuggestionTicket?, advanced: InlineSuggestionTicket?)
-        case accept(InlineSuggestionTicket?)
+        case acceptNextWord(
+            current: InlineSuggestionTicket?,
+            boundedContext: String,
+            utf16Limit: Int
+        )
         case dismiss
     }
 
@@ -129,18 +133,27 @@ public struct InlineSuggestionState: Equatable, Sendable {
                 ? [.hide, .insert(grapheme)]
                 : [.hide, .insert(grapheme), .show(remainder)]
 
-        case let .accept(current):
+        case let .acceptNextWord(current, boundedContext, utf16Limit):
             pendingTicket = nil
-            guard isVisible, visibleTicket == current else {
+            guard isVisible, let current, visibleTicket == current else {
                 let effects: [Effect] = isVisible ? [.hide] : []
                 visibleText = ""
                 visibleTicket = nil
                 return effects
             }
-            let accepted = visibleText
-            visibleText = ""
-            visibleTicket = nil
-            return [.hide, .insert(accepted)]
+            let accepted = Self.nextWordPrefix(in: visibleText)
+            let remainder = String(visibleText.dropFirst(accepted.count))
+            visibleText = remainder
+            visibleTicket = remainder.isEmpty
+                ? nil
+                : current.advancing(
+                    with: accepted,
+                    boundedContext: boundedContext,
+                    utf16Limit: utf16Limit
+                )
+            return remainder.isEmpty
+                ? [.hide, .insert(accepted)]
+                : [.hide, .insert(accepted), .show(remainder)]
 
         case .dismiss:
             pendingTicket = nil
@@ -149,5 +162,17 @@ public struct InlineSuggestionState: Equatable, Sendable {
             visibleTicket = nil
             return effects
         }
+    }
+
+    /// Includes whitespace before the first visible word, but leaves the next
+    /// separator in the ghost so repeated Tab presses advance one word at a time.
+    private static func nextWordPrefix(in text: String) -> String {
+        guard let wordStart = text.firstIndex(where: { !$0.isWhitespace }) else {
+            return text
+        }
+        guard let nextSeparator = text[wordStart...].firstIndex(where: \Character.isWhitespace) else {
+            return text
+        }
+        return String(text[..<nextSeparator])
     }
 }

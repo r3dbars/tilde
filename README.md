@@ -5,7 +5,7 @@
 Tilde is an open-source macOS input method that offers quiet inline writing
 suggestions. Type normally, then use:
 
-- `Tab` to accept the whole suggestion
+- `Tab` to accept the next word; press it again to keep advancing
 - `Esc` to dismiss
 
 Suggestions are IMKit marked text inside the app where you are writing. Tilde

@@ -50,7 +50,7 @@ final class GhostInputController: IMKInputController {
         }
 
         switch event.keyCode {
-        case 48: // Plain Tab accepts all. Shift-Tab remains the host app's key.
+        case 48: // Plain Tab accepts one word. Shift-Tab remains the host app's key.
             guard !modifiers.contains(.shift) else {
                 dismiss(client)
                 return false
@@ -195,9 +195,13 @@ final class GhostInputController: IMKInputController {
     }
 
     private func acceptSuggestion(_ client: IMKTextInput) -> Bool {
-        let current = matchingVisibleState(for: client)?.ticket
+        let match = matchingVisibleState(for: client)
         cancelPendingWork()
-        let effects = state.reduce(.accept(current))
+        let effects = state.reduce(.acceptNextWord(
+            current: match?.ticket,
+            boundedContext: match?.context ?? "",
+            utf16Limit: Self.contextLimit
+        ))
         guard case let .insert(accepted)? = effects.first(where: {
             if case .insert = $0 { return true }
             return false
