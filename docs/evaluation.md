@@ -68,25 +68,40 @@ Manual editor compatibility remains separate proof.
 
 Personal History is never exported automatically and is not an input to this
 raw-model evaluator. When explicitly enabled, Tilde separately runs an
-on-device personal next-word shadow. At each eligible word boundary it may
-freeze one prediction from only prior authored words, score it against the next
-authored word, and then learn that word. Accepted suggestions are censored from
-both truth and training. The aggregate snapshot contains opportunities,
-predictions, exact hits, learned-context and transition counts, capacity status,
-and rates; it contains no words or per-case results. The safe live adaptation is
-identified as `r1945-live-v1`: global counts, up to four words of context,
-minimum support two, and at least 50% winner share.
+on-device paired personal next-word shadow. The fixed baseline is
+`r1435-live-v1`; the candidate is `r1945-live-v1`. At each fresh eligible word
+boundary, both recipes freeze a prediction from the same prior authored words,
+score against the same next authored word, and then learn that word. Accepted
+suggestions are censored from both truth and training. This is observational:
+neither recipe changes the visible suggestion path.
 
-At launch the live experiment rebuilds from the most recent complete events in
-a bounded 4 MiB retained-history tail, discards the first possibly truncated
-token, and then learns continually from new allowed events while Tilde runs.
-The current dogfood corpus fits within that replay bound, but the live contract
-remains bounded as the corpus grows. The first-token censor is intentional
-boundary safety. The menu reports `memory limit reached` if the bounded derived
-table fills. It shows checks as the actual number of predictions: before 200,
-`N/200 checks`; afterward, aggregate precision and coverage over those checks.
+The aggregate result contains shared opportunities, baseline and candidate
+prediction and exact-hit counts, a paired 3-by-3 silent/correct/wrong outcome
+table, disagreements, active UTC days, learned-table capacity status, and rates.
+It contains no words, candidate strings, or per-case rows. Tilde persists only
+these lifetime aggregates and at most 64 aggregate daily buckets, encrypted in
+the same history-log append as the events they score. The envelope validates the exact local
+history identifier, durable exclusion generation, and exact exclusion set. Disable retains the checkpoint;
+an exclusion change or Personal History deletion clears it.
+
+At launch the live experiment restores that aggregate checkpoint and rebuilds
+both learned recipes, without scoring, from the most recent complete events in
+a bounded 4 MiB retained-history tail. It discards the first possibly truncated
+token. Writing stored during that rebuild warms the model but is not scored;
+after the referee is ready, new allowed batches are scored and checkpointed in
+the same encrypted append. The current
+dogfood corpus fits within that replay bound, but the live contract remains
+bounded as the corpus grows. The first-token censor is intentional boundary
+safety. The menu reports `memory limit reached` if the bounded derived table
+fills.
+
+Before reporting an outcome, the menu shows progress toward all four descriptive
+minimums: 2,000 shared fresh-word opportunities, 200 candidate predictions, 100
+baseline/candidate disagreements, and 14 active days. After all four are met it
+shows candidate versus baseline effective rate, defined as exact hits divided by
+the shared fresh-word opportunities. These thresholds are a descriptive reading
+rule, not a significance test or a causal claim.
 
 This live shadow is observational evidence, not a claim about acceptance or
-improvement to the visible product. It is a feasibility probe until it has at
-least 200 predictions. Any promotion still requires a later paired comparison
-against the visible incumbent on fresh future words.
+improvement to the visible product. Any promotion still requires separate proof
+on the visible suggestion path.

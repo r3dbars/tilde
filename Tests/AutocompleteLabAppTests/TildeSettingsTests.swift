@@ -25,11 +25,13 @@ struct TildeSettingsTests {
         let (settings, keyboard) = makeSettings()
         settings.personalHistoryEnabled = true
         settings.personalHistoryExcludedApps = ["com.example.Editor", "bad value"]
+        settings.personalNextWordExperimentIdentifier = "experiment-id"
 
         #expect(settings.personalHistoryEnabled)
         #expect(settings.personalHistoryExcludedApps == ["com.example.Editor"])
         #expect(keyboard.object(forKey: "PersonalHistoryEnabled") as? Bool == true)
         #expect(keyboard.stringArray(forKey: "PersonalHistoryExcludedApps") == ["com.example.Editor"])
+        #expect(settings.personalNextWordExperimentIdentifier == "experiment-id")
     }
 
     @Test("Keyboard settings stay in the keyboard defaults domain")

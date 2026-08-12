@@ -25,18 +25,23 @@ Tilde ships as one self-contained, signed package:
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
 text the user produces to the Tilde app. The app stores a local encrypted event
-log and quietly evaluates a bounded personal next-word predictor in memory. The
-personal prediction remains shadow-only: it does not change visible suggestions.
-Tilde has no cloud inference, analytics, sync, upload, screenshots, or accept
-sounds.
+log and quietly compares two bounded personal next-word recipes. The comparison
+is shadow-only: neither recipe changes visible suggestions. Its bounded lifetime
+and daily aggregate checkpoint is encrypted in the same app-owned history log as the
+batch it scores; it contains no words, candidate text, or per-case rows.
+Tilde has no cloud inference, analytics, sync, upload, screenshots, or accept sounds.
 
 Personal History is off by default. Its menu shows the local storage location
 and approximate size, lets the user exclude the current app, reports aggregate
-next-word checks, and can delete the entire store. The in-memory predictor has
-a fixed capacity, rebuilds from a bounded recent 4 MiB history tail, then learns
-from new writing while Tilde runs. The menu says when the predictor's memory
-limit is reached. Each record is encrypted with AES-GCM; its key lives as a
-non-synchronizing item in the user's macOS login Keychain. See
+next-word test progress, and can delete the entire store. At launch the two
+in-memory recipes restore aggregate results and rebuild their learned contexts
+without scoring from a bounded recent 4 MiB history tail. Writing stored while
+that rebuild is loading warms the model but is not scored. They then learn and
+score shared fresh writing while Tilde runs. The menu reports fresh words,
+candidate predictions, disagreements, active days, and any memory limit; only
+after fixed descriptive thresholds does it show candidate versus baseline
+effective rates. Each history record is encrypted with AES-GCM; its key lives
+as a non-synchronizing item in the user's macOS login Keychain. See
 [PRIVACY.md](PRIVACY.md) for the capture boundary and remaining risks.
 
 ## Status and requirements
