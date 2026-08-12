@@ -13,6 +13,7 @@ struct TildeSettings {
         case personalHistoryExcludedApps = "PersonalHistoryExcludedApps"
         case personalHistoryIdentifier = "PersonalHistoryIdentifier"
         case personalHistoryConsentIdentifier = "PersonalHistoryConsentIdentifier"
+        case personalNextWordExperimentIdentifier = "PersonalNextWordExperimentIdentifier"
     }
 
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
@@ -67,6 +68,18 @@ struct TildeSettings {
         }
         nonmutating set {
             keyboard.set(newValue, forKey: KeyboardKey.personalHistoryConsentIdentifier.rawValue)
+        }
+    }
+
+    var personalNextWordExperimentIdentifier: String? {
+        get {
+            guard let value = keyboard.string(
+                forKey: KeyboardKey.personalNextWordExperimentIdentifier.rawValue
+            ), PersonalHistoryEvent.validIdentifier(value) else { return nil }
+            return value
+        }
+        nonmutating set {
+            keyboard.set(newValue, forKey: KeyboardKey.personalNextWordExperimentIdentifier.rawValue)
         }
     }
 

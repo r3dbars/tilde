@@ -1,46 +1,393 @@
 import Foundation
 
-/// Aggregate-only result of the local personal next-word experiment.
-/// No targets, contexts, applications, sessions, or event identifiers escape
-/// the in-memory learner through this value.
+public struct PersonalNextWordOutcomeCells: Codable, Equatable, Sendable {
+    public private(set) var baselineSilentCandidateSilent: Int
+    public private(set) var baselineSilentCandidateCorrect: Int
+    public private(set) var baselineSilentCandidateWrong: Int
+    public private(set) var baselineCorrectCandidateSilent: Int
+    public private(set) var baselineCorrectCandidateCorrect: Int
+    public private(set) var baselineCorrectCandidateWrong: Int
+    public private(set) var baselineWrongCandidateSilent: Int
+    public private(set) var baselineWrongCandidateCorrect: Int
+    public private(set) var baselineWrongCandidateWrong: Int
+
+    init(
+        baselineSilentCandidateSilent: Int = 0,
+        baselineSilentCandidateCorrect: Int = 0,
+        baselineSilentCandidateWrong: Int = 0,
+        baselineCorrectCandidateSilent: Int = 0,
+        baselineCorrectCandidateCorrect: Int = 0,
+        baselineCorrectCandidateWrong: Int = 0,
+        baselineWrongCandidateSilent: Int = 0,
+        baselineWrongCandidateCorrect: Int = 0,
+        baselineWrongCandidateWrong: Int = 0
+    ) {
+        self.baselineSilentCandidateSilent = baselineSilentCandidateSilent
+        self.baselineSilentCandidateCorrect = baselineSilentCandidateCorrect
+        self.baselineSilentCandidateWrong = baselineSilentCandidateWrong
+        self.baselineCorrectCandidateSilent = baselineCorrectCandidateSilent
+        self.baselineCorrectCandidateCorrect = baselineCorrectCandidateCorrect
+        self.baselineCorrectCandidateWrong = baselineCorrectCandidateWrong
+        self.baselineWrongCandidateSilent = baselineWrongCandidateSilent
+        self.baselineWrongCandidateCorrect = baselineWrongCandidateCorrect
+        self.baselineWrongCandidateWrong = baselineWrongCandidateWrong
+    }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var decoded: [Int] = []
+        for _ in 0..<9 { decoded.append(try container.decode(Int.self)) }
+        guard container.isAtEnd else {
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Invalid paired outcome cells"
+            )
+        }
+        baselineSilentCandidateSilent = decoded[0]
+        baselineSilentCandidateCorrect = decoded[1]
+        baselineSilentCandidateWrong = decoded[2]
+        baselineCorrectCandidateSilent = decoded[3]
+        baselineCorrectCandidateCorrect = decoded[4]
+        baselineCorrectCandidateWrong = decoded[5]
+        baselineWrongCandidateSilent = decoded[6]
+        baselineWrongCandidateCorrect = decoded[7]
+        baselineWrongCandidateWrong = decoded[8]
+        guard isValid else {
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Invalid paired outcome cells"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        for value in values { try container.encode(value) }
+    }
+
+    public var opportunities: Int { values.reduce(0, Self.addingWithoutOverflow) }
+    public var baselinePredictions: Int {
+        baselineCorrectCandidateSilent + baselineCorrectCandidateCorrect
+            + baselineCorrectCandidateWrong + baselineWrongCandidateSilent
+            + baselineWrongCandidateCorrect + baselineWrongCandidateWrong
+    }
+    public var baselineExactHits: Int {
+        baselineCorrectCandidateSilent + baselineCorrectCandidateCorrect
+            + baselineCorrectCandidateWrong
+    }
+    public var candidatePredictions: Int {
+        baselineSilentCandidateCorrect + baselineSilentCandidateWrong
+            + baselineCorrectCandidateCorrect + baselineCorrectCandidateWrong
+            + baselineWrongCandidateCorrect + baselineWrongCandidateWrong
+    }
+    public var candidateExactHits: Int {
+        baselineSilentCandidateCorrect + baselineCorrectCandidateCorrect
+            + baselineWrongCandidateCorrect
+    }
+    fileprivate var minimumPredictionDisagreements: Int {
+        baselineSilentCandidateCorrect + baselineSilentCandidateWrong
+            + baselineCorrectCandidateSilent + baselineCorrectCandidateWrong
+            + baselineWrongCandidateSilent + baselineWrongCandidateCorrect
+    }
+
+    fileprivate var isValid: Bool { values.allSatisfy { $0 >= 0 } && sumIsRepresentable }
+    fileprivate var values: [Int] {
+        [
+            baselineSilentCandidateSilent,
+            baselineSilentCandidateCorrect,
+            baselineSilentCandidateWrong,
+            baselineCorrectCandidateSilent,
+            baselineCorrectCandidateCorrect,
+            baselineCorrectCandidateWrong,
+            baselineWrongCandidateSilent,
+            baselineWrongCandidateCorrect,
+            baselineWrongCandidateWrong,
+        ]
+    }
+
+    fileprivate mutating func record(
+        baseline: PersonalNextWordShadow.PredictionOutcome,
+        candidate: PersonalNextWordShadow.PredictionOutcome
+    ) {
+        switch (baseline, candidate) {
+        case (.silent, .silent): baselineSilentCandidateSilent = incremented(baselineSilentCandidateSilent)
+        case (.silent, .correct): baselineSilentCandidateCorrect = incremented(baselineSilentCandidateCorrect)
+        case (.silent, .wrong): baselineSilentCandidateWrong = incremented(baselineSilentCandidateWrong)
+        case (.correct, .silent): baselineCorrectCandidateSilent = incremented(baselineCorrectCandidateSilent)
+        case (.correct, .correct): baselineCorrectCandidateCorrect = incremented(baselineCorrectCandidateCorrect)
+        case (.correct, .wrong): baselineCorrectCandidateWrong = incremented(baselineCorrectCandidateWrong)
+        case (.wrong, .silent): baselineWrongCandidateSilent = incremented(baselineWrongCandidateSilent)
+        case (.wrong, .correct): baselineWrongCandidateCorrect = incremented(baselineWrongCandidateCorrect)
+        case (.wrong, .wrong): baselineWrongCandidateWrong = incremented(baselineWrongCandidateWrong)
+        }
+    }
+
+    private var sumIsRepresentable: Bool {
+        var total = 0
+        for value in values {
+            let result = total.addingReportingOverflow(value)
+            if result.overflow { return false }
+            total = result.partialValue
+        }
+        return true
+    }
+
+    private func incremented(_ value: Int) -> Int {
+        value < Int.max ? value + 1 : value
+    }
+
+    private static func addingWithoutOverflow(_ left: Int, _ right: Int) -> Int {
+        let result = left.addingReportingOverflow(right)
+        return result.overflow ? Int.max : result.partialValue
+    }
+}
+
+public struct PersonalNextWordPairedAggregate: Codable, Equatable, Sendable {
+    public let outcomeCells: PersonalNextWordOutcomeCells
+    public let predictionDisagreements: Int
+
+    init(
+        outcomeCells: PersonalNextWordOutcomeCells = .init(),
+        predictionDisagreements: Int = 0
+    ) {
+        self.outcomeCells = outcomeCells
+        self.predictionDisagreements = predictionDisagreements
+    }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        outcomeCells = try container.decode(PersonalNextWordOutcomeCells.self)
+        predictionDisagreements = try container.decode(Int.self)
+        guard container.isAtEnd, isValid else {
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Invalid paired aggregate"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(outcomeCells)
+        try container.encode(predictionDisagreements)
+    }
+
+    public var opportunities: Int { outcomeCells.opportunities }
+    public var baselinePredictions: Int { outcomeCells.baselinePredictions }
+    public var baselineExactHits: Int { outcomeCells.baselineExactHits }
+    public var candidatePredictions: Int { outcomeCells.candidatePredictions }
+    public var candidateExactHits: Int { outcomeCells.candidateExactHits }
+
+    fileprivate var isValid: Bool {
+        outcomeCells.isValid
+            && predictionDisagreements >= 0
+            && predictionDisagreements >= outcomeCells.minimumPredictionDisagreements
+            && predictionDisagreements <= opportunities
+    }
+}
+
+public struct PersonalNextWordDailyAggregate: Codable, Equatable, Sendable {
+    /// One of the most recent 64 UTC day buckets. Lifetime totals remain in
+    /// the checkpoint after an older bucket ages out.
+    public let utcDayStartMilliseconds: Int64
+    public let aggregate: PersonalNextWordPairedAggregate
+
+    init(
+        utcDayStartMilliseconds: Int64,
+        aggregate: PersonalNextWordPairedAggregate
+    ) {
+        self.utcDayStartMilliseconds = utcDayStartMilliseconds
+        self.aggregate = aggregate
+    }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        utcDayStartMilliseconds = try container.decode(Int64.self)
+        aggregate = try container.decode(PersonalNextWordPairedAggregate.self)
+        guard container.isAtEnd else {
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Invalid daily aggregate"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(utcDayStartMilliseconds)
+        try container.encode(aggregate)
+    }
+}
+
+public struct PersonalNextWordShadowCheckpoint: Codable, Equatable, Sendable {
+    public static let version = 1
+
+    public let v: Int
+    public let baselineRecipeID: String
+    public let candidateRecipeID: String
+    public let evaluationStartMilliseconds: Int64
+    public let totals: PersonalNextWordPairedAggregate
+    public let activeDays: [PersonalNextWordDailyAggregate]
+    public let everCapacityLimited: Bool
+
+    init?(
+        evaluationStartMilliseconds: Int64,
+        totals: PersonalNextWordPairedAggregate,
+        activeDays: [PersonalNextWordDailyAggregate],
+        everCapacityLimited: Bool = false
+    ) {
+        self.v = Self.version
+        self.baselineRecipeID = PersonalNextWordShadow.baselineRecipeID
+        self.candidateRecipeID = PersonalNextWordShadow.candidateRecipeID
+        self.evaluationStartMilliseconds = evaluationStartMilliseconds
+        self.totals = totals
+        self.activeDays = activeDays
+        self.everCapacityLimited = everCapacityLimited
+        guard isStructurallyValid else { return nil }
+    }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        v = try container.decode(Int.self)
+        baselineRecipeID = try container.decode(String.self)
+        candidateRecipeID = try container.decode(String.self)
+        evaluationStartMilliseconds = try container.decode(Int64.self)
+        totals = try container.decode(PersonalNextWordPairedAggregate.self)
+        activeDays = try container.decode([PersonalNextWordDailyAggregate].self)
+        everCapacityLimited = try container.decode(Bool.self)
+        guard container.isAtEnd, isStructurallyValid else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: decoder.codingPath, debugDescription: "Invalid aggregate checkpoint")
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(v)
+        try container.encode(baselineRecipeID)
+        try container.encode(candidateRecipeID)
+        try container.encode(evaluationStartMilliseconds)
+        try container.encode(totals)
+        try container.encode(activeDays)
+        try container.encode(everCapacityLimited)
+    }
+
+    /// Whether this structurally safe checkpoint belongs to the active paired
+    /// experiment. Old experiments may decode so their aggregates can be
+    /// discarded or migrated without duplicating Core's validation rules.
+    public var isCompatibleWithCurrentExperiment: Bool {
+        v == Self.version
+            && baselineRecipeID == PersonalNextWordShadow.baselineRecipeID
+            && candidateRecipeID == PersonalNextWordShadow.candidateRecipeID
+            && evaluationStartMilliseconds == PersonalNextWordShadow.evaluationStartMilliseconds
+    }
+
+    fileprivate var isStructurallyValid: Bool {
+        guard v > 0,
+              PersonalHistoryEvent.validIdentifier(baselineRecipeID),
+              PersonalHistoryEvent.validIdentifier(candidateRecipeID),
+              evaluationStartMilliseconds > 0,
+              totals.isValid,
+              activeDays.count <= PersonalNextWordShadow.maximumActiveDays else {
+            return false
+        }
+        var priorDay: Int64?
+        var dailyCells = Array(repeating: 0, count: 9)
+        var dailyDisagreements = 0
+        for day in activeDays {
+            guard day.utcDayStartMilliseconds >= 0,
+                  day.utcDayStartMilliseconds % PersonalNextWordShadow.dayMilliseconds == 0,
+                  priorDay.map({ $0 < day.utcDayStartMilliseconds }) ?? true,
+                  day.aggregate.isValid,
+                  day.aggregate.opportunities > 0 else { return false }
+            priorDay = day.utcDayStartMilliseconds
+            for (index, value) in day.aggregate.outcomeCells.values.enumerated() {
+                let sum = dailyCells[index].addingReportingOverflow(value)
+                guard !sum.overflow else { return false }
+                dailyCells[index] = sum.partialValue
+            }
+            let disagreementSum = dailyDisagreements.addingReportingOverflow(
+                day.aggregate.predictionDisagreements
+            )
+            guard !disagreementSum.overflow else { return false }
+            dailyDisagreements = disagreementSum.partialValue
+        }
+        return zip(dailyCells, totals.outcomeCells.values).allSatisfy(<=)
+            && dailyDisagreements <= totals.predictionDisagreements
+    }
+}
+
+/// Aggregate-only result of the paired local next-word experiment.
 public struct PersonalNextWordShadowSnapshot: Equatable, Sendable {
+    // Candidate aliases retained for the original live shadow API.
     public let opportunities: Int
     public let predictions: Int
     public let exactHits: Int
     public let learnedContexts: Int
     public let learnedTransitions: Int
     public let capacityLimited: Bool
+    public let baselinePredictions: Int
+    public let baselineExactHits: Int
+    public let outcomeCells: PersonalNextWordOutcomeCells
+    public let predictionDisagreements: Int
+    public let activeDays: Int
+
+    init(
+        opportunities: Int,
+        predictions: Int,
+        exactHits: Int,
+        learnedContexts: Int,
+        learnedTransitions: Int,
+        capacityLimited: Bool,
+        baselinePredictions: Int = 0,
+        baselineExactHits: Int = 0,
+        outcomeCells: PersonalNextWordOutcomeCells = .init(),
+        predictionDisagreements: Int = 0,
+        activeDays: Int = 0
+    ) {
+        self.opportunities = opportunities
+        self.predictions = predictions
+        self.exactHits = exactHits
+        self.learnedContexts = learnedContexts
+        self.learnedTransitions = learnedTransitions
+        self.capacityLimited = capacityLimited
+        self.baselinePredictions = baselinePredictions
+        self.baselineExactHits = baselineExactHits
+        self.outcomeCells = outcomeCells
+        self.predictionDisagreements = predictionDisagreements
+        self.activeDays = activeDays
+    }
 
     public var coverage: Double {
         opportunities == 0 ? 0 : Double(predictions) / Double(opportunities)
     }
-
     public var precision: Double {
         predictions == 0 ? 0 : Double(exactHits) / Double(predictions)
     }
+    public var baselineCoverage: Double {
+        opportunities == 0 ? 0 : Double(baselinePredictions) / Double(opportunities)
+    }
+    public var baselinePrecision: Double {
+        baselinePredictions == 0 ? 0 : Double(baselineExactHits) / Double(baselinePredictions)
+    }
 }
 
-/// A bounded, deterministic, shadow-only personal next-word predictor.
-///
-/// The `r1945-live-v1` recipe safely adapts frozen discovery recipe `r1945`:
-/// global counts from all observed history, folded contexts of up to four
-/// words, support of at least two, winner share of at least one half, and
-/// deterministic surface-exact targets. A candidate is frozen when its
-/// predecessor closes, then scored before its target is learned, so replay
-/// cannot see the answer before predicting it. A fresh live stream censors its
-/// first token because events carry no reliable document-boundary provenance.
+/// One parser and count model score the conservative baseline and the candidate.
 public struct PersonalNextWordShadow: Sendable {
-    public static let recipeID = "r1945-live-v1"
-    public static let evaluationStartMilliseconds: Int64 = 1_786_552_800_000
+    public static let baselineRecipeID = "r1435-live-v1"
+    public static let candidateRecipeID = "r1945-live-v1"
+    public static let recipeID = candidateRecipeID
+    public static let evaluationStartMilliseconds: Int64 = 1_786_556_700_000
 
     static let maximumContexts = 8_192
     static let maximumTransitions = 32_768
     static let maximumActiveStreams = 64
     static let maximumRecentEventIDs = 2_048
+    static let maximumActiveDays = 64
+    static let dayMilliseconds: Int64 = 24 * 60 * 60 * 1_000
     private static let maximumContextWords = 4
     private static let maximumTokenCharacters = 30
     private static let minimumWinnerSupport = 2
     private static let streamGapMilliseconds: Int64 = 30 * 60 * 1_000
+
+    fileprivate enum PredictionOutcome { case silent, correct, wrong }
 
     private struct StreamKey: Hashable, Sendable {
         let history: String
@@ -48,62 +395,50 @@ public struct PersonalNextWordShadow: Sendable {
         let session: String
         let app: String
     }
-
     private struct EventIdentity: Hashable, Sendable {
         let stream: StreamKey
         let event: String
     }
-
+    private struct Predictions: Equatable, Sendable {
+        var baseline: String?
+        var candidate: String?
+    }
     private struct StreamState: Sendable {
         var token = ""
         var tokenTooLong = false
-        // History events do not say whether their first scalar is a complete
-        // token or a tail fragment, so a fresh stream waits for a delimiter.
         var censored = true
         var context: [String] = []
         var hasOpportunity = false
-        var prediction: String?
+        var predictions = Predictions()
         var lastTimestampMilliseconds: Int64?
     }
-
-    private struct ContextKey: Hashable, Sendable {
-        let tokens: [String]
-    }
-
+    private struct ContextKey: Hashable, Sendable { let tokens: [String] }
     private struct TargetBag: Sendable {
         var counts: [String: Int] = [:]
         var total = 0
         var top: String?
+        var runner: String?
 
         mutating func add(_ target: String) {
-            counts[target] = Self.incremented(counts[target, default: 0])
-            total = Self.incremented(total)
-
-            if let top, top != target {
-                let topCount = counts[top, default: 0]
-                let targetCount = counts[target, default: 0]
-                if targetCount > topCount
-                    || targetCount == topCount
-                        && PersonalNextWordShadow.surfacePrecedes(target, top) {
-                    self.top = target
-                }
-            } else if top == nil {
-                top = target
+            counts[target] = incremented(counts[target, default: 0])
+            total = incremented(total)
+            let choices = Set([top, runner, target].compactMap { $0 })
+            let ranked = choices.sorted { left, right in
+                let leftCount = counts[left, default: 0]
+                let rightCount = counts[right, default: 0]
+                if leftCount != rightCount { return leftCount > rightCount }
+                return PersonalNextWordShadow.surfacePrecedes(left, right)
             }
+            top = ranked.first
+            runner = ranked.dropFirst().first
         }
 
-        var winner: (surface: String, support: Int, total: Int)? {
+        var winner: (surface: String, support: Int, runner: Int, total: Int)? {
             guard let top else { return nil }
-            return (
-                surface: top,
-                support: counts[top, default: 0],
-                total: total
-            )
+            return (top, counts[top, default: 0], runner.map { counts[$0, default: 0] } ?? 0, total)
         }
 
-        private static func incremented(_ value: Int) -> Int {
-            value == Int.max ? value : value + 1
-        }
+        private func incremented(_ value: Int) -> Int { value == Int.max ? value : value + 1 }
     }
 
     private let evaluationStart: Int64
@@ -114,29 +449,57 @@ public struct PersonalNextWordShadow: Sendable {
     private var recentEventIDs: [EventIdentity] = []
     private var recentEventIDSet: Set<EventIdentity> = []
     private var nextEventEvictionIndex = 0
-    private var opportunities = 0
-    private var predictions = 0
-    private var exactHits = 0
+    private var totals = PersonalNextWordPairedAggregate()
+    private var days: [Int64: PersonalNextWordPairedAggregate] = [:]
     private var capacityLimited = false
+    private var everCapacityLimited = false
 
-    public init(
-        evaluationStartMilliseconds: Int64 = Self.evaluationStartMilliseconds
-    ) {
-        evaluationStart = evaluationStartMilliseconds
+    public init(evaluationStartMilliseconds: Int64 = Self.evaluationStartMilliseconds) {
+        evaluationStart = max(0, evaluationStartMilliseconds)
+    }
+
+    public init?(checkpoint: PersonalNextWordShadowCheckpoint) {
+        guard checkpoint.isCompatibleWithCurrentExperiment else { return nil }
+        evaluationStart = checkpoint.evaluationStartMilliseconds
+        totals = checkpoint.totals
+        days = Dictionary(uniqueKeysWithValues: checkpoint.activeDays.map {
+            ($0.utcDayStartMilliseconds, $0.aggregate)
+        })
+        everCapacityLimited = checkpoint.everCapacityLimited
+    }
+
+    public var checkpoint: PersonalNextWordShadowCheckpoint {
+        precondition(
+            evaluationStart == Self.evaluationStartMilliseconds,
+            "Only the prospective production experiment can be checkpointed"
+        )
+        return PersonalNextWordShadowCheckpoint(
+            evaluationStartMilliseconds: evaluationStart,
+            totals: totals,
+            activeDays: days.keys.sorted().map {
+                PersonalNextWordDailyAggregate(utcDayStartMilliseconds: $0, aggregate: days[$0]!)
+            },
+            everCapacityLimited: everCapacityLimited || capacityLimited
+        )!
     }
 
     public var snapshot: PersonalNextWordShadowSnapshot {
         PersonalNextWordShadowSnapshot(
-            opportunities: opportunities,
-            predictions: predictions,
-            exactHits: exactHits,
+            opportunities: totals.opportunities,
+            predictions: totals.candidatePredictions,
+            exactHits: totals.candidateExactHits,
             learnedContexts: model.count,
             learnedTransitions: transitionCount,
-            capacityLimited: capacityLimited
+            capacityLimited: capacityLimited || everCapacityLimited,
+            baselinePredictions: totals.baselinePredictions,
+            baselineExactHits: totals.baselineExactHits,
+            outcomeCells: totals.outcomeCells,
+            predictionDisagreements: totals.predictionDisagreements,
+            activeDays: days.count
         )
     }
 
-    public mutating func consume(_ events: [PersonalHistoryEvent]) {
+    public mutating func consume(_ events: [PersonalHistoryEvent], scoring: Bool = true) {
         for event in events {
             let key = StreamKey(
                 history: event.historyIdentifier,
@@ -145,7 +508,6 @@ public struct PersonalNextWordShadow: Sendable {
                 app: event.appBundleIdentifier
             )
             guard remember(event, in: key) else { continue }
-
             var state = takeStream(for: key)
             if let last = state.lastTimestampMilliseconds,
                event.timestampMilliseconds < last
@@ -161,6 +523,7 @@ public struct PersonalNextWordShadow: Sendable {
                     consumeTyped(
                         scalar,
                         timestampMilliseconds: event.timestampMilliseconds,
+                        scoring: scoring,
                         state: &state
                     )
                 }
@@ -169,14 +532,11 @@ public struct PersonalNextWordShadow: Sendable {
         }
     }
 
-    public mutating func reset() {
-        self = Self(evaluationStartMilliseconds: evaluationStart)
-    }
+    public mutating func reset() { self = Self(evaluationStartMilliseconds: evaluationStart) }
 
     private mutating func takeStream(for key: StreamKey) -> StreamState {
         if let state = streams.removeValue(forKey: key) { return state }
-        if streams.count >= Self.maximumActiveStreams,
-           let oldest = streamOrder.first {
+        if streams.count >= Self.maximumActiveStreams, let oldest = streamOrder.first {
             streamOrder.removeFirst()
             streams.removeValue(forKey: oldest)
         }
@@ -187,6 +547,7 @@ public struct PersonalNextWordShadow: Sendable {
     private mutating func consumeTyped(
         _ scalar: Unicode.Scalar,
         timestampMilliseconds: Int64,
+        scoring: Bool,
         state: inout StreamState
     ) {
         if Self.isLetter(scalar) {
@@ -198,7 +559,6 @@ public struct PersonalNextWordShadow: Sendable {
             }
             return
         }
-
         if Self.isMark(scalar), !state.censored, !state.tokenTooLong, !state.token.isEmpty {
             let combined = Self.surface(state.token + String(scalar))
             if combined.unicodeScalars.allSatisfy(Self.isLetter) {
@@ -206,18 +566,22 @@ public struct PersonalNextWordShadow: Sendable {
                 return
             }
         }
-
         if state.censored {
             state.censored = false
             state.token.removeAll(keepingCapacity: true)
             state.tokenTooLong = false
             return
         }
-        finishToken(timestampMilliseconds: timestampMilliseconds, state: &state)
+        finishToken(
+            timestampMilliseconds: timestampMilliseconds,
+            scoring: scoring,
+            state: &state
+        )
     }
 
     private mutating func finishToken(
         timestampMilliseconds: Int64,
+        scoring: Bool,
         state: inout StreamState
     ) {
         defer {
@@ -225,27 +589,47 @@ public struct PersonalNextWordShadow: Sendable {
             state.tokenTooLong = false
         }
         guard !state.tokenTooLong, !state.token.isEmpty else { return }
-
         let target = Self.surface(state.token)
-        guard (1...Self.maximumTokenCharacters).contains(target.unicodeScalars.count) else {
-            return
-        }
+        guard (1...Self.maximumTokenCharacters).contains(target.unicodeScalars.count) else { return }
 
-        if state.hasOpportunity, timestampMilliseconds >= evaluationStart {
-            opportunities += 1
-            if let prediction = state.prediction {
-                predictions += 1
-                if prediction == target { exactHits += 1 }
-            }
+        if scoring, state.hasOpportunity, timestampMilliseconds >= evaluationStart {
+            record(predictions: state.predictions, target: target, at: timestampMilliseconds)
         }
-
         learn(target, after: state.context)
         state.context.append(Self.folded(target))
         if state.context.count > Self.maximumContextWords {
             state.context.removeFirst(state.context.count - Self.maximumContextWords)
         }
         state.hasOpportunity = true
-        state.prediction = candidate(after: state.context)
+        state.predictions = Predictions(
+            baseline: candidate(after: state.context, maximumContext: 2, minimumRatio: 2),
+            candidate: candidate(after: state.context, maximumContext: 4, minimumRatio: 1)
+        )
+    }
+
+    private mutating func record(predictions: Predictions, target: String, at timestamp: Int64) {
+        let baseline = Self.outcome(predictions.baseline, target: target)
+        let candidate = Self.outcome(predictions.candidate, target: target)
+        let disagreed = predictions.baseline != predictions.candidate
+        var totalCells = totals.outcomeCells
+        totalCells.record(baseline: baseline, candidate: candidate)
+        totals = PersonalNextWordPairedAggregate(
+            outcomeCells: totalCells,
+            predictionDisagreements: Self.incremented(totals.predictionDisagreements, if: disagreed)
+        )
+
+        let day = timestamp / Self.dayMilliseconds * Self.dayMilliseconds
+        var daily = days[day] ?? PersonalNextWordPairedAggregate()
+        var dailyCells = daily.outcomeCells
+        dailyCells.record(baseline: baseline, candidate: candidate)
+        daily = PersonalNextWordPairedAggregate(
+            outcomeCells: dailyCells,
+            predictionDisagreements: Self.incremented(daily.predictionDisagreements, if: disagreed)
+        )
+        days[day] = daily
+        if days.count > Self.maximumActiveDays, let oldest = days.keys.min() {
+            days.removeValue(forKey: oldest)
+        }
     }
 
     private mutating func censorAcceptedText(_ text: String, state: inout StreamState) {
@@ -253,22 +637,30 @@ public struct PersonalNextWordShadow: Sendable {
         state.tokenTooLong = false
         state.context.removeAll(keepingCapacity: false)
         state.hasOpportunity = false
-        state.prediction = nil
+        state.predictions = Predictions()
         state.censored = true
-
         for scalar in text.precomposedStringWithCanonicalMapping.unicodeScalars {
             state.censored = Self.isLetter(scalar)
         }
     }
 
-    private func candidate(after history: [String]) -> String? {
-        let maximum = min(Self.maximumContextWords, history.count)
+    private func candidate(
+        after history: [String],
+        maximumContext: Int,
+        minimumRatio: Int
+    ) -> String? {
+        let maximum = min(maximumContext, history.count)
         for order in stride(from: maximum, through: 0, by: -1) {
-            let key = Self.contextKey(order: order, history: history)
-            guard let winner = model[key]?.winner else { continue }
+            guard let winner = model[Self.contextKey(order: order, history: history)]?.winner else {
+                continue
+            }
             let requiredShare = winner.total / 2 + winner.total % 2
+            let meetsRatio = minimumRatio == 1
+                || winner.runner == 0
+                || winner.runner <= winner.support / minimumRatio
             if winner.support >= Self.minimumWinnerSupport,
-               winner.support >= requiredShare {
+               winner.support >= requiredShare,
+               meetsRatio {
                 return winner.surface
             }
         }
@@ -279,18 +671,14 @@ public struct PersonalNextWordShadow: Sendable {
         guard !capacityLimited else { return }
         let maximum = min(Self.maximumContextWords, history.count)
         let keys = (0...maximum).map { Self.contextKey(order: $0, history: history) }
-        let addedContexts = keys.reduce(into: 0) { count, key in
-            if model[key] == nil { count += 1 }
-        }
-        let addedTransitions = keys.reduce(into: 0) { count, key in
-            if model[key]?.counts[target] == nil { count += 1 }
-        }
+        let addedContexts = keys.reduce(into: 0) { if model[$1] == nil { $0 += 1 } }
+        let addedTransitions = keys.reduce(into: 0) { if model[$1]?.counts[target] == nil { $0 += 1 } }
         guard model.count <= Self.maximumContexts - addedContexts,
               transitionCount <= Self.maximumTransitions - addedTransitions else {
             capacityLimited = true
+            everCapacityLimited = true
             return
         }
-
         for key in keys {
             let isNewTransition = model[key]?.counts[target] == nil
             model[key, default: TargetBag()].add(target)
@@ -306,55 +694,48 @@ public struct PersonalNextWordShadow: Sendable {
         } else {
             recentEventIDSet.remove(recentEventIDs[nextEventEvictionIndex])
             recentEventIDs[nextEventEvictionIndex] = identity
-            nextEventEvictionIndex = (nextEventEvictionIndex + 1)
-                % Self.maximumRecentEventIDs
+            nextEventEvictionIndex = (nextEventEvictionIndex + 1) % Self.maximumRecentEventIDs
         }
         return true
     }
 
+    private static func outcome(_ prediction: String?, target: String) -> PredictionOutcome {
+        guard let prediction else { return .silent }
+        return prediction == target ? .correct : .wrong
+    }
+    private static func incremented(_ value: Int, if condition: Bool) -> Int {
+        condition && value < Int.max ? value + 1 : value
+    }
     private static func contextKey(order: Int, history: [String]) -> ContextKey {
         ContextKey(tokens: order == 0 ? [] : Array(history.suffix(order)))
     }
-
     private static func folded(_ token: String) -> String {
-        surface(token).folding(
-            options: [.caseInsensitive],
-            locale: Locale(identifier: "en_US_POSIX")
-        ).precomposedStringWithCanonicalMapping
+        surface(token).folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .precomposedStringWithCanonicalMapping
     }
-
     private static func surface(_ token: String) -> String {
         token.precomposedStringWithCanonicalMapping
     }
-
     private static func surfacePrecedes(_ left: String, _ right: String) -> Bool {
         var leftScalars = left.unicodeScalars.makeIterator()
         var rightScalars = right.unicodeScalars.makeIterator()
         while let leftScalar = leftScalars.next() {
             guard let rightScalar = rightScalars.next() else { return false }
-            if leftScalar.value != rightScalar.value {
-                return leftScalar.value < rightScalar.value
-            }
+            if leftScalar.value != rightScalar.value { return leftScalar.value < rightScalar.value }
         }
         return rightScalars.next() != nil
     }
-
     private static func isLetter(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.properties.generalCategory {
-        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter,
-             .modifierLetter, .otherLetter:
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter:
             true
-        default:
-            false
+        default: false
         }
     }
-
     private static func isMark(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.properties.generalCategory {
-        case .nonspacingMark, .spacingMark, .enclosingMark:
-            true
-        default:
-            false
+        case .nonspacingMark, .spacingMark, .enclosingMark: true
+        default: false
         }
     }
 }

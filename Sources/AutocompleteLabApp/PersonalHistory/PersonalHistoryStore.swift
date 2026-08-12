@@ -10,7 +10,10 @@ struct PersonalHistorySummary: Equatable, Sendable {
 
 protocol PersonalHistoryStore: Sendable {
     var location: URL { get }
-    func append(_ events: [PersonalHistoryEvent]) async throws
+    func append(
+        _ events: [PersonalHistoryEvent],
+        checkpoint: PersonalNextWordStoredCheckpoint?
+    ) async throws
     func loadReplay(maximumBytes: Int64) async throws -> PersonalHistoryReplay
     func deleteAll() async throws
     func summary() async throws -> PersonalHistorySummary
@@ -18,11 +21,61 @@ protocol PersonalHistoryStore: Sendable {
 
 struct PersonalHistoryReplay: Equatable, Sendable {
     let events: [PersonalHistoryEvent]
+    let checkpoint: PersonalNextWordStoredCheckpoint?
 }
 
 extension PersonalHistoryStore {
+    func append(_ events: [PersonalHistoryEvent]) async throws {
+        try await append(events, checkpoint: nil)
+    }
+
     func loadEvents() async throws -> [PersonalHistoryEvent] {
         try await loadReplay(maximumBytes: .max).events
+    }
+}
+
+struct PersonalNextWordStoredCheckpoint: Codable, Equatable, Sendable {
+    private static let version = 1
+
+    let v: Int
+    let historyIdentifier: String
+    let experimentIdentifier: String
+    let excludedApps: [String]
+    let checkpoint: PersonalNextWordShadowCheckpoint
+
+    init(
+        historyIdentifier: String,
+        experimentIdentifier: String,
+        excludedApps: Set<String>,
+        checkpoint: PersonalNextWordShadowCheckpoint
+    ) {
+        v = Self.version
+        self.historyIdentifier = historyIdentifier
+        self.experimentIdentifier = experimentIdentifier
+        self.excludedApps = PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
+        self.checkpoint = checkpoint
+    }
+
+    func matches(
+        historyIdentifier: String,
+        experimentIdentifier: String,
+        excludedApps: Set<String>
+    ) -> Bool {
+        v == Self.version
+            && self.historyIdentifier == historyIdentifier
+            && self.experimentIdentifier == experimentIdentifier
+            && self.excludedApps == PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
+    }
+
+    fileprivate var hasValidEnvelope: Bool {
+        v > 0
+            && PersonalHistoryEvent.validIdentifier(historyIdentifier)
+            && PersonalHistoryEvent.validIdentifier(experimentIdentifier)
+            && excludedApps == PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
+    }
+
+    fileprivate var isCompatibleWithCurrentExperiment: Bool {
+        v == Self.version && checkpoint.isCompatibleWithCurrentExperiment
     }
 }
 
@@ -113,8 +166,10 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
 /// encrypted with AES-GCM; only the format header and approximate file size are
 /// visible without the non-synchronizing macOS Keychain key.
 final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Sendable {
-    private static let header = Data("TILDE-PERSONAL-HISTORY\t1\n".utf8)
+    private static let legacyHeader = Data("TILDE-PERSONAL-HISTORY\t1\n".utf8)
+    private static let header = Data("TILDE-PERSONAL-HISTORY\t2\n".utf8)
     private static let authenticatedData = Data("bar.r3d.tilde.personal-history.v1".utf8)
+    private static let maximumEncryptedRecordBytes = 64 * 1_024
 
     let location: URL
     private let keyProvider: any PersonalHistoryKeyProviding
@@ -130,11 +185,14 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         self.keyProvider = keyProvider
     }
 
-    func append(_ events: [PersonalHistoryEvent]) async throws {
+    func append(
+        _ events: [PersonalHistoryEvent],
+        checkpoint: PersonalNextWordStoredCheckpoint?
+    ) async throws {
         guard PersonalHistoryEvent.validBatch(events) else {
             throw PersonalHistoryStorageError.invalidEvent
         }
-        try await perform { try self.appendSynchronously(events) }
+        try await perform { try self.appendSynchronously(events, checkpoint: checkpoint) }
     }
 
     func loadReplay(maximumBytes: Int64) async throws -> PersonalHistoryReplay {
@@ -161,7 +219,7 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             }
             defer { try? handle.close() }
             let size = try handle.seekToEnd()
-            try self.validateHeaderAndTail(handle: handle, size: size)
+            _ = try self.validateHeaderAndTail(handle: handle, size: size)
             return PersonalHistorySummary(
                 location: self.location,
                 approximateBytes: Int64(size)
@@ -169,7 +227,10 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         }
     }
 
-    private func appendSynchronously(_ events: [PersonalHistoryEvent]) throws {
+    private func appendSynchronously(
+        _ events: [PersonalHistoryEvent],
+        checkpoint: PersonalNextWordStoredCheckpoint?
+    ) throws {
         var info = stat()
         let exists = lstat(location.path, &info) == 0
         if !exists, errno != ENOENT { throw CocoaError(.fileReadUnknown) }
@@ -182,7 +243,9 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         }
         defer { try? handle.close() }
         let size = try handle.seekToEnd()
-        if size > 0 { try validateHeaderAndTail(handle: handle, size: size) }
+        let legacyFormat = size > 0
+            ? try validateHeaderAndTail(handle: handle, size: size)
+            : false
         let keyData: Data
         if let newStoreKey {
             keyData = newStoreKey
@@ -192,43 +255,58 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             keyData = try keyProvider.loadOrCreateKey()
         }
         guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
-        if size > UInt64(Self.header.count) {
-            try authenticateLastRecord(handle: handle, size: size, keyData: keyData)
-        }
+        let carriedCheckpoint = size > UInt64(Self.header.count)
+            ? try authenticateLastRecord(handle: handle, size: size, keyData: keyData)
+            : nil
+        let checkpointToWrite = checkpoint ?? carriedCheckpoint
         let key = SymmetricKey(data: keyData)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         var encryptedLines = Data()
-        for event in events {
-            let plaintext = try encoder.encode(event)
-            let sealed = try AES.GCM.seal(
-                plaintext,
-                using: key,
-                authenticating: Self.authenticatedData
-            )
-            guard let combined = sealed.combined else {
-                throw PersonalHistoryStorageError.corruptStore
-            }
-            encryptedLines.append(combined.base64EncodedData())
-            encryptedLines.append(0x0A)
+        let plaintext = try encoder.encode(
+            StoredBatch(events: events, checkpoint: checkpointToWrite)
+        )
+        let sealed = try AES.GCM.seal(
+            plaintext,
+            using: key,
+            authenticating: Self.authenticatedData
+        )
+        guard let combined = sealed.combined else {
+            throw PersonalHistoryStorageError.corruptStore
         }
-        if size == 0 { try handle.write(contentsOf: Self.header) }
-        _ = try handle.seekToEnd()
-        try handle.write(contentsOf: encryptedLines)
+        encryptedLines.append(combined.base64EncodedData())
+        encryptedLines.append(0x0A)
+        guard encryptedLines.count <= Self.maximumEncryptedRecordBytes else {
+            throw PersonalHistoryStorageError.invalidEvent
+        }
+        do {
+            if size == 0 || legacyFormat {
+                try handle.seek(toOffset: 0)
+                try handle.write(contentsOf: Self.header)
+            }
+            _ = try handle.seekToEnd()
+            try handle.write(contentsOf: encryptedLines)
+        } catch {
+            try? handle.truncate(atOffset: size)
+            throw error
+        }
     }
 
     private func authenticateLastRecord(
         handle: FileHandle,
         size: UInt64,
         keyData: Data
-    ) throws {
+    ) throws -> PersonalNextWordStoredCheckpoint? {
         let bodyStart = UInt64(Self.header.count)
-        let window = min(size - bodyStart, 16 * 1_024)
+        let window = min(size - bodyStart, UInt64(Self.maximumEncryptedRecordBytes))
         try handle.seek(toOffset: size - window)
         let tail = try handle.read(upToCount: Int(window)) ?? Data()
         let lines = tail.split(separator: 0x0A)
-        guard let last = lines.last else { throw PersonalHistoryStorageError.corruptStore }
-        _ = try Self.decode(Data(last) + Data([0x0A]), keyData: keyData)
+        guard let last = lines.last,
+              last.count + 1 <= Self.maximumEncryptedRecordBytes else {
+            throw PersonalHistoryStorageError.corruptStore
+        }
+        return try Self.decode(Data(last) + Data([0x0A]), keyData: keyData).checkpoint
     }
 
     /// Reads only a bounded recent tail. The encrypted corpus remains complete
@@ -237,17 +315,17 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         var info = stat()
         if lstat(location.path, &info) != 0 {
             guard errno == ENOENT else { throw CocoaError(.fileReadUnknown) }
-            return PersonalHistoryReplay(events: [])
+            return PersonalHistoryReplay(events: [], checkpoint: nil)
         }
         guard let handle = SecureLocalStorage.openExistingFileForReading(at: location) else {
             throw PersonalHistoryStorageError.corruptStore
         }
         defer { try? handle.close() }
         let size = try handle.seekToEnd()
-        try validateHeaderAndTail(handle: handle, size: size)
+        _ = try validateHeaderAndTail(handle: handle, size: size)
         let bodyStart = UInt64(Self.header.count)
         guard size > bodyStart else {
-            return PersonalHistoryReplay(events: [])
+            return PersonalHistoryReplay(events: [], checkpoint: nil)
         }
 
         let keyData = try keyProvider.loadExistingKey()
@@ -257,7 +335,7 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             ? bodySize
             : UInt64(max(0, maximumBytes))
         guard budget > 0 else {
-            return PersonalHistoryReplay(events: [])
+            return PersonalHistoryReplay(events: [], checkpoint: nil)
         }
         let start = bodySize > budget ? size - budget : bodyStart
         var startsMidLine = false
@@ -269,44 +347,78 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         var body = try handle.readToEnd() ?? Data()
         if startsMidLine {
             guard let newline = body.firstIndex(of: 0x0A) else {
-                return PersonalHistoryReplay(events: [])
+                return PersonalHistoryReplay(events: [], checkpoint: nil)
             }
             body.removeSubrange(...newline)
         }
-        return PersonalHistoryReplay(events: try Self.decode(body, keyData: keyData))
+        return try Self.decode(body, keyData: keyData)
     }
 
-    private static func decode(_ data: Data, keyData: Data) throws -> [PersonalHistoryEvent] {
+    private static func decode(_ data: Data, keyData: Data) throws -> PersonalHistoryReplay {
         guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
         let key = SymmetricKey(data: keyData)
         let decoder = JSONDecoder()
-        return try data.split(separator: 0x0A).map { line in
-            guard let combined = Data(base64Encoded: Data(line)),
+        var events: [PersonalHistoryEvent] = []
+        var checkpoint: PersonalNextWordStoredCheckpoint?
+        for line in data.split(separator: 0x0A) {
+            guard line.count + 1 <= maximumEncryptedRecordBytes,
+                  let combined = Data(base64Encoded: Data(line)),
                   let box = try? AES.GCM.SealedBox(combined: combined),
                   let plaintext = try? AES.GCM.open(
                     box,
                     using: key,
                     authenticating: authenticatedData
-                  ),
-                  let event = try? decoder.decode(PersonalHistoryEvent.self, from: plaintext) else {
+                  ) else {
                 throw PersonalHistoryStorageError.corruptStore
             }
-            return event
+            if let batch = try? decoder.decode(StoredBatch.self, from: plaintext),
+               batch.isValid {
+                events.append(contentsOf: batch.events)
+                if let stored = batch.checkpoint {
+                    checkpoint = stored.isCompatibleWithCurrentExperiment ? stored : nil
+                }
+            } else if let legacy = try? decoder.decode(PersonalHistoryEvent.self, from: plaintext) {
+                events.append(legacy)
+            } else {
+                throw PersonalHistoryStorageError.corruptStore
+            }
+        }
+        return PersonalHistoryReplay(events: events, checkpoint: checkpoint)
+    }
+
+    private struct StoredBatch: Codable {
+        let v: Int
+        let events: [PersonalHistoryEvent]
+        let checkpoint: PersonalNextWordStoredCheckpoint?
+
+        init(events: [PersonalHistoryEvent], checkpoint: PersonalNextWordStoredCheckpoint?) {
+            v = 1
+            self.events = events
+            self.checkpoint = checkpoint
+        }
+
+        var isValid: Bool {
+            v == 1
+                && PersonalHistoryEvent.validBatch(events)
+                && (checkpoint?.hasValidEnvelope ?? true)
         }
     }
 
-    private func validateHeaderAndTail(handle: FileHandle, size: UInt64) throws {
+    /// Returns true when the same-length v1 header should be upgraded before append.
+    private func validateHeaderAndTail(handle: FileHandle, size: UInt64) throws -> Bool {
         guard size >= UInt64(Self.header.count) else {
             throw PersonalHistoryStorageError.corruptStore
         }
         try handle.seek(toOffset: 0)
-        guard try handle.read(upToCount: Self.header.count) == Self.header else {
+        let header = try handle.read(upToCount: Self.header.count)
+        guard header == Self.header || header == Self.legacyHeader else {
             throw PersonalHistoryStorageError.corruptStore
         }
         try handle.seek(toOffset: size - 1)
         guard try handle.read(upToCount: 1) == Data([0x0A]) else {
             throw PersonalHistoryStorageError.corruptStore
         }
+        return header == Self.legacyHeader
     }
 
     private func perform<T: Sendable>(

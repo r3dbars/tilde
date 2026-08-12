@@ -55,7 +55,7 @@ final class StatusMenuHost: NSObject {
         historySizeItem = addInfoRow(to: menu, "History: measuring…")
         personalNextWordItem = addInfoRow(
             to: menu,
-            "Personal next word: waiting for writing"
+            "Next-word test: waiting for fresh writing · shadow-only"
         )
         personalNextWordItem?.isHidden = true
         historyLocationItem = addInfoRow(
@@ -152,7 +152,7 @@ final class StatusMenuHost: NSObject {
         let alert = NSAlert()
         alert.messageText = "Turn on Personal History?"
         alert.informativeText = """
-        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. Tilde rebuilds its personal next-word test from a bounded recent part of that history, then learns from new writing while Tilde runs. The test is shadow-only: it does not change the suggestions you see, and nothing is uploaded.
+        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. It rebuilds two personal next-word recipes from a bounded recent part of that history, then compares them on fresh writing while Tilde runs. Only aggregate lifetime totals and up to 64 daily buckets are retained with that encrypted history. This test is shadow-only: it makes no visible suggestion changes, and nothing is uploaded.
 
         macOS Secure Event Input blocks password capture when an app enables it. Custom sensitive fields may not be detectable, so exclude apps you do not want recorded.
         """
@@ -182,7 +182,7 @@ final class StatusMenuHost: NSObject {
     @objc private func deletePersonalHistory(_ sender: Any?) {
         let alert = NSAlert()
         alert.messageText = "Delete all Personal History?"
-        alert.informativeText = "This turns Personal History off and removes its encrypted file and Keychain key. This cannot be undone."
+        alert.informativeText = "This turns Personal History off and removes its encrypted file, Keychain key, and aggregate next-word test results. This cannot be undone."
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
@@ -315,7 +315,7 @@ extension StatusMenuHost: NSMenuDelegate {
 
     private func refreshPersonalNextWord() {
         guard personalHistory.isEnabled else { return }
-        personalNextWordItem?.title = "Personal next word: loading…"
+        personalNextWordItem?.title = "Next-word test: loading… · shadow-only"
         Task { [weak self] in
             guard let self else { return }
             personalNextWordItem?.title = await personalHistory.nextWordStatus().menuLine

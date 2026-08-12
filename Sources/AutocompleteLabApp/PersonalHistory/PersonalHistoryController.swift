@@ -13,31 +13,47 @@ enum PersonalNextWordShadowPhase: Equatable, Sendable {
 }
 
 struct PersonalNextWordShadowStatus: Equatable, Sendable {
+    static let reportingOpportunityMinimum = 2_000
     static let reportingPredictionMinimum = 200
+    static let reportingDisagreementMinimum = 100
+    static let reportingActiveDayMinimum = 14
 
     let phase: PersonalNextWordShadowPhase
     let snapshot: PersonalNextWordShadowSnapshot
 
     var menuLine: String {
         let capacity = snapshot.capacityLimited ? " · memory limit reached" : ""
+        let shadowOnly = " · shadow-only"
         switch phase {
         case .inactive:
-            return "Personal next word: off"
+            return "Next-word test: off\(shadowOnly)"
         case .loading:
-            return "Personal next word: loading recent history…"
+            return "Next-word test: loading recent history…\(shadowOnly)"
         case .unavailable:
-            return "Personal next word: unavailable"
-        case .ready where snapshot.opportunities == 0:
-            return "Personal next word: waiting for writing\(capacity)"
-        case .ready where snapshot.predictions < Self.reportingPredictionMinimum:
-            let checks = "\(snapshot.predictions)/\(Self.reportingPredictionMinimum) checks"
-            return "Personal next word: \(snapshot.learnedContexts) contexts · \(checks)\(capacity)"
+            return "Next-word test: unavailable\(shadowOnly)"
+        case .ready where !isDescriptive:
+            let words = "\(snapshot.opportunities.formatted())/2,000 shared fresh words"
+            let predictions = "\(snapshot.predictions)/\(Self.reportingPredictionMinimum) candidate predictions"
+            let differences = "\(snapshot.predictionDisagreements)/\(Self.reportingDisagreementMinimum) disagreements"
+            let days = "\(snapshot.activeDays)/\(Self.reportingActiveDayMinimum) active days"
+            return "Next-word test: \(words) · \(predictions) · \(differences) · \(days)\(capacity)\(shadowOnly)"
         case .ready:
-            let exact = Int((snapshot.precision * 100).rounded())
-            let coverage = Int((snapshot.coverage * 100).rounded())
-            let metrics = "\(exact)% exact · \(coverage)% coverage"
-            return "Personal next word: \(metrics) · \(snapshot.predictions) checks\(capacity)"
+            let candidate = Self.percent(snapshot.exactHits, of: snapshot.opportunities)
+            let baseline = Self.percent(snapshot.baselineExactHits, of: snapshot.opportunities)
+            return "Next-word test: candidate \(candidate) vs baseline \(baseline) effective · \(snapshot.opportunities.formatted()) shared fresh words\(capacity)\(shadowOnly)"
         }
+    }
+
+    private var isDescriptive: Bool {
+        snapshot.opportunities >= Self.reportingOpportunityMinimum
+            && snapshot.predictions >= Self.reportingPredictionMinimum
+            && snapshot.predictionDisagreements >= Self.reportingDisagreementMinimum
+            && snapshot.activeDays >= Self.reportingActiveDayMinimum
+    }
+
+    private static func percent(_ hits: Int, of opportunities: Int) -> String {
+        guard opportunities > 0 else { return "0.0%" }
+        return String(format: "%.1f%%", Double(hits) * 100 / Double(opportunities))
     }
 }
 
@@ -111,18 +127,25 @@ private struct PersonalHistoryConfiguration: Equatable, Sendable {
     let enabled: Bool
     let excludedApps: Set<String>
     let consentIdentifier: String
+    let experimentIdentifier: String
 }
 
 private final class PersonalHistoryConfigurationState: @unchecked Sendable {
     private let lock = NSLock()
     private var configuration: PersonalHistoryConfiguration
 
-    init(enabled: Bool, excludedApps: Set<String>, consentIdentifier: String) {
+    init(
+        enabled: Bool,
+        excludedApps: Set<String>,
+        consentIdentifier: String,
+        experimentIdentifier: String
+    ) {
         configuration = PersonalHistoryConfiguration(
             revision: 1,
             enabled: enabled,
             excludedApps: excludedApps,
-            consentIdentifier: consentIdentifier
+            consentIdentifier: consentIdentifier,
+            experimentIdentifier: experimentIdentifier
         )
     }
 
@@ -130,13 +153,20 @@ private final class PersonalHistoryConfigurationState: @unchecked Sendable {
         lock.withLock { configuration }
     }
 
-    func update(enabled: Bool, excludedApps: Set<String>) -> PersonalHistoryConfiguration {
+    func update(
+        enabled: Bool,
+        excludedApps: Set<String>,
+        rotateExperiment: Bool = false
+    ) -> PersonalHistoryConfiguration {
         lock.withLock {
             configuration = PersonalHistoryConfiguration(
                 revision: configuration.revision + 1,
                 enabled: enabled,
                 excludedApps: excludedApps,
-                consentIdentifier: UUID().uuidString
+                consentIdentifier: UUID().uuidString,
+                experimentIdentifier: rotateExperiment
+                    ? UUID().uuidString
+                    : configuration.experimentIdentifier
             )
             return configuration
         }
@@ -180,8 +210,12 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         let initialConfiguration = PersonalHistoryConfigurationState(
             enabled: settings.personalHistoryEnabled,
             excludedApps: settings.personalHistoryExcludedApps,
-            consentIdentifier: consentIdentifier
+            consentIdentifier: consentIdentifier,
+            experimentIdentifier: settings.personalNextWordExperimentIdentifier
+                ?? UUID().uuidString
         )
+        settings.personalNextWordExperimentIdentifier = initialConfiguration.snapshot()
+            .experimentIdentifier
         self.configurationState = initialConfiguration
         let historyIdentifier = settings.personalHistoryIdentifier ?? UUID().uuidString
         settings.personalHistoryIdentifier = historyIdentifier
@@ -216,9 +250,11 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             let normalized = Set(PersonalHistoryCapturePolicy.normalizedExcludedApps(newValue))
             let configuration = configurationState.update(
                 enabled: settings.personalHistoryEnabled,
-                excludedApps: normalized
+                excludedApps: normalized,
+                rotateExperiment: true
             )
             settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
+            settings.personalNextWordExperimentIdentifier = configuration.experimentIdentifier
             settings.personalHistoryExcludedApps = normalized
             scheduleConfiguration(configuration)
         }
@@ -244,8 +280,9 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     }
 
     func nextWordStatus() async -> PersonalNextWordShadowStatus {
-        let status = await operations.nextWordStatus()
-        guard configurationState.snapshot().enabled else {
+        let configuration = configurationState.snapshot()
+        let status = await operations.nextWordStatus(configuration: configuration)
+        guard configuration.enabled else {
             return PersonalNextWordShadowStatus(
                 phase: .inactive,
                 snapshot: PersonalNextWordShadow().snapshot
@@ -265,9 +302,11 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     func deleteAll() async throws {
         let configuration = configurationState.update(
             enabled: false,
-            excludedApps: settings.personalHistoryExcludedApps
+            excludedApps: settings.personalHistoryExcludedApps,
+            rotateExperiment: true
         )
         settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
+        settings.personalNextWordExperimentIdentifier = configuration.experimentIdentifier
         settings.personalHistoryEnabled = false
         let nextIdentifier = UUID().uuidString
         settings.personalHistoryIdentifier = nextIdentifier
@@ -295,6 +334,7 @@ private actor PersistenceOperations {
     private var configurationRevision = 0
     private var replayBacklog: [PersonalHistoryEvent] = []
     private var replayBacklogOverflowed = false
+    private var ingestOperations = OrderedAsyncTaskTail()
     private var storageOperations = OrderedAsyncTaskTail()
 
     init(
@@ -313,6 +353,17 @@ private actor PersistenceOperations {
         _ events: [PersonalHistoryEvent],
         configuration: PersonalHistoryConfiguration
     ) async throws {
+        let transaction = ingestOperations.enqueue { [weak self] in
+            guard let self else { return }
+            try await self.ingestSerially(events, configuration: configuration)
+        }
+        try await transaction.value
+    }
+
+    private func ingestSerially(
+        _ events: [PersonalHistoryEvent],
+        configuration: PersonalHistoryConfiguration
+    ) async throws {
         guard events.allSatisfy({ $0.historyIdentifier == historyIdentifier }) else {
             return
         }
@@ -323,8 +374,26 @@ private actor PersistenceOperations {
                 && !configuration.excludedApps.contains($0.appBundleIdentifier)
         }
         guard !allowed.isEmpty else { return }
+
+        var evaluated: PersonalNextWordShadow?
+        var storedCheckpoint: PersonalNextWordStoredCheckpoint?
+        if configurationRevision == configuration.revision, nextWordPhase == .ready {
+            var updated = nextWord
+            updated.consume(allowed, scoring: true)
+            evaluated = updated
+            storedCheckpoint = PersonalNextWordStoredCheckpoint(
+                historyIdentifier: historyIdentifier,
+                experimentIdentifier: configuration.experimentIdentifier,
+                excludedApps: configuration.excludedApps,
+                checkpoint: updated.checkpoint
+            )
+        }
+
         let store = store
-        let append = storageOperations.enqueue { try await store.append(allowed) }
+        let checkpointToStore = storedCheckpoint
+        let append = storageOperations.enqueue {
+            try await store.append(allowed, checkpoint: checkpointToStore)
+        }
         do {
             try await append.value
             guard configurationState.snapshot() == configuration else { return }
@@ -335,9 +404,12 @@ private actor PersistenceOperations {
             throw error
         }
 
-        let latest = configurationState.snapshot()
-        guard latest == configuration,
-              configurationRevision == configuration.revision else { return }
+        guard configurationState.snapshot() == configuration else { return }
+        if configuration.revision > configurationRevision {
+            beginConfiguration(configuration)
+            return
+        }
+        guard configurationRevision == configuration.revision else { return }
         switch nextWordPhase {
         case .loading:
             replayBacklog.append(contentsOf: allowed)
@@ -347,7 +419,13 @@ private actor PersistenceOperations {
                 nextWordPhase = .unavailable
             }
         case .ready:
-            nextWord.consume(allowed)
+            if let evaluated {
+                nextWord = evaluated
+            } else {
+                // The replay may have finished while this loading-phase append
+                // was in flight. Warm from the durable batch without scoring it.
+                nextWord.consume(allowed, scoring: false)
+            }
         case .inactive:
             break
         case .unavailable:
@@ -355,8 +433,12 @@ private actor PersistenceOperations {
         }
     }
 
-    func configure(_ configuration: PersonalHistoryConfiguration) async {
+    func configure(_ configuration: PersonalHistoryConfiguration) {
         guard configuration.revision > configurationRevision else { return }
+        beginConfiguration(configuration)
+    }
+
+    private func beginConfiguration(_ configuration: PersonalHistoryConfiguration) {
         configurationRevision = configuration.revision
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
@@ -364,45 +446,66 @@ private actor PersistenceOperations {
         nextWordPhase = configuration.enabled ? .loading : .inactive
         guard configuration.enabled else { return }
 
-        do {
-            let store = store
-            let replayTask = storageOperations.enqueue {
-                try await store.loadReplay(maximumBytes: Self.maximumReplayBytes)
+        let store = store
+        Task { [weak self] in
+            do {
+                let replay = try await store.loadReplay(maximumBytes: Self.maximumReplayBytes)
+                await self?.finishReplay(replay, configuration: configuration)
+            } catch {
+                await self?.failReplay(error, configuration: configuration)
             }
-            let replay = try await replayTask.value
-            guard configurationRevision == configuration.revision,
-                  configurationState.snapshot() == configuration else { return }
-            guard !replayBacklogOverflowed else { return }
-            let events = replay.events.filter {
-                $0.historyIdentifier == historyIdentifier
-                    && !configuration.excludedApps.contains($0.appBundleIdentifier)
-            }
-            guard configurationRevision == configuration.revision,
-                  configurationState.snapshot() == configuration else { return }
-            var rebuilt = PersonalNextWordShadow()
-            rebuilt.consume(events)
-            guard configurationRevision == configuration.revision,
-                  configurationState.snapshot() == configuration else { return }
-            var current = rebuilt
-            let backlog = replayBacklog
-            current.consume(backlog)
-            guard configurationRevision == configuration.revision,
-                  configurationState.snapshot() == configuration else { return }
-            replayBacklog.removeAll(keepingCapacity: true)
-            nextWord = current
-            nextWordPhase = .ready
-        } catch {
-            guard configurationRevision == configuration.revision,
-                  configurationState.snapshot() == configuration else { return }
-            storageHealthState.recordFailure(error, duringReplay: true)
-            replayBacklog.removeAll(keepingCapacity: true)
-            nextWord.reset()
-            nextWordPhase = .unavailable
         }
     }
 
-    func nextWordStatus() -> PersonalNextWordShadowStatus {
-        PersonalNextWordShadowStatus(phase: nextWordPhase, snapshot: nextWord.snapshot)
+    private func finishReplay(
+        _ replay: PersonalHistoryReplay,
+        configuration: PersonalHistoryConfiguration
+    ) {
+        guard configurationRevision == configuration.revision,
+              configurationState.snapshot() == configuration,
+              !replayBacklogOverflowed else { return }
+        let events = replay.events.filter {
+            $0.historyIdentifier == historyIdentifier
+                && !configuration.excludedApps.contains($0.appBundleIdentifier)
+        }
+        let stored = replay.checkpoint?.matches(
+            historyIdentifier: historyIdentifier,
+            experimentIdentifier: configuration.experimentIdentifier,
+            excludedApps: configuration.excludedApps
+        ) == true ? replay.checkpoint : nil
+        var rebuilt = stored.flatMap { PersonalNextWordShadow(checkpoint: $0.checkpoint) }
+            ?? PersonalNextWordShadow()
+        rebuilt.consume(events, scoring: false)
+        rebuilt.consume(replayBacklog, scoring: false)
+        guard configurationRevision == configuration.revision,
+              configurationState.snapshot() == configuration else { return }
+        replayBacklog.removeAll(keepingCapacity: true)
+        nextWord = rebuilt
+        nextWordPhase = .ready
+    }
+
+    private func failReplay(
+        _ error: any Error,
+        configuration: PersonalHistoryConfiguration
+    ) {
+        guard configurationRevision == configuration.revision,
+              configurationState.snapshot() == configuration else { return }
+        storageHealthState.recordFailure(error, duringReplay: true)
+        replayBacklog.removeAll(keepingCapacity: true)
+        nextWord.reset()
+        nextWordPhase = .unavailable
+    }
+
+    func nextWordStatus(
+        configuration: PersonalHistoryConfiguration
+    ) -> PersonalNextWordShadowStatus {
+        guard configuration.revision == configurationRevision else {
+            return PersonalNextWordShadowStatus(
+                phase: configuration.enabled ? .loading : .inactive,
+                snapshot: PersonalNextWordShadow().snapshot
+            )
+        }
+        return PersonalNextWordShadowStatus(phase: nextWordPhase, snapshot: nextWord.snapshot)
     }
 
     func deleteAll(

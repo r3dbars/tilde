@@ -40,13 +40,13 @@ paste operations or edits made outside Tilde, and it can retain characters that
 the user later deletes. IMKit also has no stable field identifier: Tilde breaks
 writing segments on known caret, app, editing, and composition changes, but a
 same-app field switch at the same caret with no composition callback can join
-one writing context in the shadow experiment. The app replays manually typed
-words into a bounded, memory-only personal next-word predictor. At each eligible
-word boundary it may predict before observing the next word, scores that frozen
-prediction against the word subsequently typed, and learns only afterward. This
-shadow experiment does not change visible suggestions, perform retrieval, or
-train the bundled model. Accepted Tilde suggestions are excluded from its
-learning and scoring.
+one writing context in the shadow experiment. The app rebuilds two bounded,
+memory-only personal next-word recipes from manually typed history. Replay
+rebuilds learned contexts but is not scored. On fresh eligible word boundaries,
+both recipes freeze a prediction from the same prior authored words, compare it
+with the same next authored word, and learn only afterward. This paired shadow
+experiment does not change visible suggestions, perform retrieval, or train the
+bundled model. Accepted Tilde suggestions are excluded from learning and scoring.
 
 Capture stops when Personal History is disabled, when macOS Secure Event Input
 is active, when the host app cannot be identified safely, or when the current
@@ -74,15 +74,36 @@ device-bound key. Local malware running as the user, a process compromise while
 Tilde is running, macOS backups or snapshots, and privileged administrators
 remain meaningful risks.
 
-While Tilde is running, the shadow necessarily holds derived word contexts and
-transition counts in process memory. It writes no second prediction file. At
-launch it rebuilds from the most recent complete events in a 4 MiB encrypted-
-history window, then learns from new allowed events while Tilde keeps running.
-Because that tail can begin after an earlier part of a writing stream, the
-predictor discards the first possibly truncated token before it learns or
-scores. Replay work and decrypted replay memory stay bounded as the encrypted
-corpus grows. The derived predictor also has a fixed capacity, and the menu
-explicitly reports when that capacity is reached.
+The stable filename contains `v1` for compatibility with existing installs. Its
+same-length header is upgraded from format 1 to format 2 before the first new
+batch append; format 2 stores each event batch and its optional aggregate
+checkpoint as one authenticated record. Tilde continues to read legacy format-1
+event records. Rolling back requires restoring the pre-upgrade history-file
+backup as well as the older app.
+
+While Tilde is running, the paired shadow necessarily holds derived word
+contexts and transition counts in process memory. At launch it restores a
+bounded aggregate checkpoint, then rebuilds both recipes from the most recent
+complete events in a 4 MiB encrypted-history window without adding replayed
+events to the score. It learns and scores only new allowed events while Tilde
+keeps running. Because the tail can begin partway through a writing stream, the
+predictor discards the first possibly truncated token before learning it. Replay
+work and decrypted replay memory stay bounded as the encrypted corpus grows.
+The derived model also has a fixed capacity, and the menu explicitly reports
+when that capacity is reached.
+
+The checkpoint is encrypted in the same app-owned history-log append as the
+fresh batch it scores. It stores only lifetime aggregate totals plus at most 64
+aggregate UTC-day buckets. Its
+fields are the two fixed recipe identifiers, evaluation start time, a 3-by-3
+silent/correct/wrong outcome table, disagreement count, and daily versions of
+those same counts. A small envelope binds it to the exact local history
+identifier, durable exclusion generation, and exact excluded-app set. It stores no words, contexts, candidate
+text, per-case rows, session identifiers, or per-case app identifiers. Tilde
+computes it before storage, writes the events and checkpoint together, then
+publishes the in-memory result and acknowledges the batch. Writing that arrives
+while startup replay is loading is stored and used for training but is not added
+to the score. A corrupt, stale-generation, or mismatched checkpoint is rejected.
 
 A corrupt store or missing Keychain key makes history replay and writes fail
 closed when the problem is encountered. Appends authenticate the most recent
@@ -132,10 +153,15 @@ authenticated-socket proof, or a real-editor round trip.
 
 - Personal History can be turned on or off from Tilde's menu. Turning it off
   immediately stops new capture and shadow evaluation but does not delete
-  existing history. Re-enabling rebuilds from retained, non-excluded history.
+  existing history or its encrypted aggregate checkpoint. Re-enabling restores the
+  aggregate and rebuilds learned contexts from retained, non-excluded history.
 - The menu shows the Personal History storage location and approximate encrypted
   size, can exclude or re-include the current app, and can delete all Personal
-  History after confirmation. Deletion also turns capture off, rotates the
+  History after confirmation. Changing the exclusion set logically clears the
+  aggregate checkpoint by rotating a durable experiment generation. Old
+  aggregate checkpoints cannot revive if an exclusion set is later restored;
+  retained event history is filtered under the current exclusions. Deletion also
+  turns capture off, rotates the
   local history identifier so queued older events are rejected, and removes
   both the encrypted file and its Keychain key. It also clears the in-memory
   next-word predictor and aggregate shadow result. It is not a promise of
