@@ -74,7 +74,7 @@ struct PersonalNextWordStoredCheckpoint: Codable, Equatable, Sendable {
             && excludedApps == PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
     }
 
-    fileprivate var isCompatibleWithCurrentExperiment: Bool {
+    var isCompatibleWithCurrentExperiment: Bool {
         v == Self.version && checkpoint.isCompatibleWithCurrentExperiment
     }
 }
@@ -199,6 +199,34 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         try await perform { try self.loadSynchronously(maximumBytes: maximumBytes) }
     }
 
+    /// Status reads authenticate only the newest record and decode only its
+    /// aggregate checkpoint. They never replay or return the record's events.
+    func loadLatestCheckpoint() throws -> PersonalNextWordStoredCheckpoint? {
+        let handle: FileHandle
+        switch SecureLocalStorage.openExistingOwnerOnlyFileForReadOnlyStatus(at: location) {
+        case let .opened(opened): handle = opened
+        case .missing: return nil
+        case .rejected:
+            throw PersonalHistoryStorageError.corruptStore
+        }
+        defer { try? handle.close() }
+        let size = try handle.seekToEnd()
+        let legacyFormat = try validateHeaderAndTail(handle: handle, size: size)
+        let bodyStart = UInt64(Self.header.count)
+        guard size > bodyStart else { return nil }
+        guard !legacyFormat else { return nil }
+        let keyData = try keyProvider.loadExistingKey()
+        guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
+        let plaintext = try decryptLastRecord(handle: handle, size: size, keyData: keyData)
+        guard let record = try? JSONDecoder().decode(
+            StoredCheckpointRecord.self, from: plaintext
+        ) else {
+            throw PersonalHistoryStorageError.corruptStore
+        }
+        guard record.isValid else { throw PersonalHistoryStorageError.corruptStore }
+        return record.checkpoint
+    }
+
     func deleteAll() async throws {
         try await perform {
             let removedFile = SecureLocalStorage.removeOwnerOnlyFile(at: self.location)
@@ -297,6 +325,29 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         size: UInt64,
         keyData: Data
     ) throws -> PersonalNextWordStoredCheckpoint? {
+        let line = try encryptedLine(handle: handle, size: size)
+        return try Self.decode(line + Data([0x0A]), keyData: keyData).checkpoint
+    }
+
+    private func decryptLastRecord(
+        handle: FileHandle,
+        size: UInt64,
+        keyData: Data
+    ) throws -> Data {
+        let line = try encryptedLine(handle: handle, size: size)
+        guard let combined = Data(base64Encoded: line),
+              let box = try? AES.GCM.SealedBox(combined: combined),
+              let plaintext = try? AES.GCM.open(
+                box,
+                using: SymmetricKey(data: keyData),
+                authenticating: Self.authenticatedData
+              ) else {
+            throw PersonalHistoryStorageError.corruptStore
+        }
+        return plaintext
+    }
+
+    private func encryptedLine(handle: FileHandle, size: UInt64) throws -> Data {
         let bodyStart = UInt64(Self.header.count)
         let window = min(size - bodyStart, UInt64(Self.maximumEncryptedRecordBytes))
         try handle.seek(toOffset: size - window)
@@ -306,7 +357,7 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
               last.count + 1 <= Self.maximumEncryptedRecordBytes else {
             throw PersonalHistoryStorageError.corruptStore
         }
-        return try Self.decode(Data(last) + Data([0x0A]), keyData: keyData).checkpoint
+        return Data(last)
     }
 
     /// Reads only a bounded recent tail. The encrypted corpus remains complete
@@ -401,6 +452,32 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             v == 1
                 && PersonalHistoryEvent.validBatch(events)
                 && (checkpoint?.hasValidEnvelope ?? true)
+        }
+    }
+
+    private struct StoredCheckpointRecord: Decodable {
+        let v: Int
+        let checkpoint: PersonalNextWordStoredCheckpoint?
+
+        private enum CodingKeys: String, CodingKey {
+            case v, events, checkpoint
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            v = try container.decode(Int.self, forKey: .v)
+            guard container.contains(.events) else {
+                throw PersonalHistoryStorageError.corruptStore
+            }
+            _ = try container.superDecoder(forKey: .events).unkeyedContainer()
+            checkpoint = try container.decodeIfPresent(
+                PersonalNextWordStoredCheckpoint.self,
+                forKey: .checkpoint
+            )
+        }
+
+        var isValid: Bool {
+            v == 1 && (checkpoint?.hasValidEnvelope ?? true)
         }
     }
 
