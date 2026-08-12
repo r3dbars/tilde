@@ -1,7 +1,7 @@
 import AutocompleteLabCore
 import Foundation
 
-/// Aggregate-only keyboard counters. Typed text and suggestion text are never persisted.
+/// Aggregate-only keyboard counters. Personal History is a separate, explicit subsystem.
 enum GhostStats {
     private static let persistenceQueue = DispatchQueue(label: "com.tilde.ghostStats", qos: .utility)
     private static var pending = [String: Int]()
@@ -19,7 +19,7 @@ enum GhostStats {
         case .error: key = "completionErrors"
         case .timeout: key = "completionTimeouts"
         case .invalidRequest: key = "completionInvalidRequests"
-        case .suggestion, .silence, .unavailable: return
+        case .suggestion, .silence, .unavailable, .recorded: return
         }
         record(1, key: key)
     }

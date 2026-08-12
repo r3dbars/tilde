@@ -8,19 +8,23 @@ Status: current for the simplified IMKit + bundled llama architecture
 Tilde has two signed user-facing processes and one signed helper child:
 
 - `InlineGhostIME` receives keystrokes and bounded document context from IMKit,
-  renders marked-text suggestions, and commits accepted text.
+  renders marked-text suggestions, commits accepted text, and—only when the
+  user enables Personal History—buffers bounded history events in memory.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
-  its bundled GGUF model, and returns a suggestion.
+  its bundled GGUF model, returns suggestions, and exclusively owns the local
+  Personal History store and memory-only personal-vocabulary shadow.
 - The bundled `llama-server` helper is a localhost-only child of the Tilde app.
 
-The helper is an app-owned child process bound to localhost. Request text and
-model output exist in memory only. Tilde has no Accessibility, Screen Recording,
-OCR, screenshot capture, raw trace, writing-history, learning, cloud inference,
-or analytics path.
+The helper is an app-owned child process bound to localhost. Ordinary request
+text and unaccepted model output exist in memory only. If explicitly enabled,
+Personal History persists text the user produces as encrypted local events.
+Tilde has no Accessibility, Screen Recording, OCR, screenshot capture, cloud
+inference, sync, upload, or analytics path.
 
 ## Assets to protect
 
-1. Typed context, prompts, model output, and accepted text.
+1. Typed context, prompts, model output, accepted text, and the durable Personal
+   History corpus and encryption key.
 2. Integrity of committed text and the field receiving it.
 3. Integrity of the signed input method, helper, and model.
 4. Privacy-safe settings and diagnostics stored for the local user.
@@ -38,18 +42,32 @@ identity are out of scope.
 ## Controls
 
 - Text stays on-device and is bounded before it crosses the local socket.
+- Personal History is off by default. The input method applies the master
+  switch, Secure Event Input, valid-app, and app-exclusion policy before
+  capture; the app repeats the durable settings checks before persistence.
+  The input method performs no disk I/O and keeps only a bounded in-memory
+  queue. Only the app writes the history store.
 - One process-held lock owns the runtime. The socket directory is mode `0700`,
   the socket is mode `0600`, and both endpoints require the same user, the
   expected signing identifiers, and matching non-empty Team IDs in release
-  builds. Payload text is not logged or written to disk.
+  builds. Completion payloads are not logged or written to disk; explicit
+  Personal History payloads are written only to the encrypted history store.
 - The input method uses a cancellable two-second request deadline and the wire
   protocol distinguishes suggestions, silence, timeout, invalid input, and
   runtime failure.
 - When macOS Secure Event Input is active, the input method clears its fallback
-  context, cancels pending work, and refuses to read, request, or display a
-  suggestion.
+  context and pending history batch, cancels suggestion work, and refuses to
+  read, request, display, or capture text.
+- Personal History records are independently authenticated and encrypted with
+  AES-GCM using a 256-bit, non-synchronizing, device-only key in the macOS
+  data-protection Keychain. Its directory and file are restricted to the owner.
+- The personal-word shadow processes a bounded recent history window in append
+  order, predicts before learning each word, ignores accepted model
+  suggestions, and deduplicates recent stable event IDs. Its bounded derived
+  word counts remain in app memory and are never logged or sent to the model.
 - Diagnostics pass through a redaction layer and store shape, timing, count,
-  app identity, and failure metadata only.
+  app identity, and failure metadata only. Personal History is a separate,
+  explicit data path.
 - Suggestions are marked text and become committed text only after explicit
   acceptance. There is no clipboard or cross-app synthetic insertion path.
 - Distributed builds embed the helper and model inside the signed app. There is
@@ -66,6 +84,28 @@ identity are out of scope.
 
 - A macOS input method is highly trusted and can observe typing while active.
   Users must explicitly enable Tilde and can switch input sources or quit it.
+- Enabling Personal History creates a durable, highly sensitive writing corpus.
+  Encryption at rest does not protect it from local malware running as the
+  user, a compromise of Tilde while the key is available, privileged access,
+  or plaintext copied elsewhere after decryption. The in-memory shadow also
+  exposes derived personal words to a compromise of the running app.
+- The encrypted log exposes a plaintext format header, approximate size,
+  ciphertext lengths, and record count. Independent per-record authentication
+  detects modified ciphertext when that record is replayed; append also checks
+  the most recent existing record. Older records outside the bounded replay
+  window are not reauthenticated on each launch or append. Authentication does
+  not prevent deletion, duplication, or reordering of complete encrypted
+  records. A lost local acknowledgement can also cause an event retry; readers
+  deduplicate recent stable event IDs.
+- The encryption key is device-only and is not expected to survive a file-only
+  restore to another Mac. If ciphertext exists without its original key, Tilde
+  refuses replay and append rather than creating a replacement key and mixing
+  unreadable and newly encrypted records.
+- Deleting Personal History removes its current file and Keychain key but
+  cannot promise forensic erasure from backups, snapshots, storage
+  wear-leveling, or copies made outside Tilde. Deletion turns capture off and
+  rotates a local history identifier so queued pre-deletion events cannot
+  recreate the corpus.
 - The llama HTTP listener is local-only but is not authenticated. Another
   same-user process can contact it and consume model resources. Tilde checks
   exact listener ownership before each prompt, but a fixed TCP port still has a
@@ -76,6 +116,10 @@ identity are out of scope.
 - Secure Event Input is the only field-sensitivity signal available through
   this IMKit design. A custom secret field that does not enable the macOS signal
   is indistinguishable from an ordinary field.
+- IMKit exposes no stable field identifier. Tilde separates history on known
+  app, caret, edit, and composition changes, but two fields in one app at the
+  same caret can share one partial shadow token if no composition callback is
+  delivered.
 - Host apps control marked-text behavior and key routing. Compatibility must be
   proven per editor; wrong or duplicate commits are release-blocking bugs.
 - `llama-server`, the model parser, IMKit, and macOS remain complex trusted
@@ -97,3 +141,12 @@ input-method execution, Unix-socket authentication proof, or a real-editor
 round trip. Model or helper changes also require a freshly installed, notarized
 build and manual IME checks—including secure text fields—in disposable
 documents.
+
+Personal History changes additionally require tests for disabled capture,
+excluded apps, secure-input policy, bounded event decoding, encrypted
+round-trips, corrupt-store failure, deletion, prediction-before-learning,
+duplicate delivery, and edit-boundary isolation. Manual installed-IME proof
+must confirm that secure password fields add no records, ordinary fields add
+records only after explicit opt-in, exclusions work in real host apps, and the
+menu accurately reports size and deletion. Those manual checks are not proven
+by the deterministic test suite.

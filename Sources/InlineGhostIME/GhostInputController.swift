@@ -14,11 +14,26 @@ final class GhostInputController: IMKInputController {
         let caret: Int
     }
 
+    private struct InsertionObservation {
+        let bundle: String
+        let selection: NSRange
+
+        var owner: FallbackOwner? {
+            guard selection.location != NSNotFound, selection.length == 0 else { return nil }
+            return FallbackOwner(bundle: bundle, caret: selection.location)
+        }
+    }
+
     /// IMKit creates one controller for each input session.
-    private let sessionIdentifier = UUID().uuidString
+    private let suggestionSessionIdentifier = UUID().uuidString
+    /// Personal History needs a stricter notion of continuity than IMKit's
+    /// unstable client identifiers. Rotate this on known edit/session
+    /// boundaries so replay does not join across deletion or navigation.
+    private var historySegmentIdentifier = UUID().uuidString
     private var state = InlineSuggestionState()
     private var typedFallback = ""
     private var fallbackOwner: FallbackOwner?
+    private var historyOwner: FallbackOwner?
     private var scheduleRevision = 0
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
@@ -28,41 +43,67 @@ final class GhostInputController: IMKInputController {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
             return false
         }
-        guard !stopForSecureInput(client) else { return false }
-        let defaults = UserDefaults.standard
-        let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
-        let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
-        guard suggestionsEnabled, !paused else {
+        let secureInput = IsSecureEventInputEnabled()
+        if secureInput {
+            PersonalHistoryCapture.shared.sensitiveInputBegan()
+            breakHistorySegment()
             dismiss(client)
             resetFallback()
             return false
         }
-        synchronizeFallback(with: client)
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers.contains(.command)
             || modifiers.contains(.control)
             || modifiers.contains(.function)
             || modifiers.contains(.option) {
+            breakHistorySegment()
             dismiss(client)
             resetFallback()
             return false
         }
 
+        let typedGrapheme = printableGrapheme(from: event)
+        let defaults = UserDefaults.standard
+        let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
+        let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
+        guard suggestionsEnabled, !paused else {
+            dismiss(client)
+            resetFallback()
+            if let typedGrapheme {
+                capturePersonalHistory(
+                    typedGrapheme,
+                    source: .typed,
+                    client: client,
+                    secureInput: secureInput,
+                    observation: nil
+                )
+            } else {
+                breakHistorySegment()
+            }
+            return false
+        }
+        let insertionObservation = synchronizeFallback(with: client)
+
         switch event.keyCode {
-        case 48: // Plain Tab accepts all. Shift-Tab remains the host app's key.
+        case 48: // Plain Tab accepts one word. Shift-Tab remains the host app's key.
             guard !modifiers.contains(.shift) else {
+                breakHistorySegment()
                 dismiss(client)
                 return false
             }
-            return acceptSuggestion(client)
+            let accepted = acceptSuggestion(client, observation: insertionObservation)
+            if !accepted { breakHistorySegment() }
+            return accepted
 
         case 53: // Escape dismisses only when something is visible.
             let wasVisible = state.isVisible
             dismiss(client)
+            if !wasVisible { breakHistorySegment() }
             return wasVisible
 
         case 51: // The host owns deletion; wait for the next typed character.
+            breakHistorySegment()
             dismiss(client)
             resetFallback()
             return false
@@ -71,7 +112,7 @@ final class GhostInputController: IMKInputController {
             break
         }
 
-        if let grapheme = printableGrapheme(from: event) {
+        if let grapheme = typedGrapheme {
             let match = matchingVisibleState(for: client)
             cancelPendingWork()
             let advanced = match.map { match in
@@ -85,10 +126,18 @@ final class GhostInputController: IMKInputController {
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
             appendFallback(grapheme, for: client)
+            capturePersonalHistory(
+                grapheme,
+                source: .typed,
+                client: client,
+                secureInput: secureInput,
+                observation: insertionObservation
+            )
             return true
         }
 
         dismiss(client)
+        breakHistorySegment()
         resetFallback()
         return false
     }
@@ -96,11 +145,14 @@ final class GhostInputController: IMKInputController {
     /// Client-driven composition endings must never commit an unaccepted ghost.
     override func commitComposition(_ sender: Any!) {
         if let client = sender as? IMKTextInput { dismiss(client) }
+        breakHistorySegment()
     }
 
     override func deactivateServer(_ sender: Any!) {
         GhostStats.flush(force: true)
+        PersonalHistoryCapture.shared.flush()
         if let client = sender as? IMKTextInput { dismiss(client) }
+        breakHistorySegment()
         resetFallback()
         super.deactivateServer(sender)
     }
@@ -119,6 +171,8 @@ final class GhostInputController: IMKInputController {
     /// field with macOS secure event input.
     private func stopForSecureInput(_ client: IMKTextInput) -> Bool {
         guard IsSecureEventInputEnabled() else { return false }
+        PersonalHistoryCapture.shared.sensitiveInputBegan()
+        breakHistorySegment()
         dismiss(client)
         resetFallback()
         return true
@@ -139,15 +193,20 @@ final class GhostInputController: IMKInputController {
         )
     }
 
-    private func synchronizeFallback(with client: IMKTextInput) {
-        guard let current = fallbackOwner(for: client) else {
+    private func synchronizeFallback(with client: IMKTextInput) -> InsertionObservation {
+        let observation = InsertionObservation(
+            bundle: client.bundleIdentifier() ?? "",
+            selection: client.selectedRange()
+        )
+        guard let current = observation.owner else {
             resetFallback()
-            return
+            return observation
         }
         if fallbackOwner != current {
             typedFallback = ""
             fallbackOwner = current
         }
+        return observation
     }
 
     private func resetFallback() {
@@ -194,10 +253,17 @@ final class GhostInputController: IMKInputController {
         apply(state.reduce(.dismiss), to: client)
     }
 
-    private func acceptSuggestion(_ client: IMKTextInput) -> Bool {
-        let current = matchingVisibleState(for: client)?.ticket
+    private func acceptSuggestion(
+        _ client: IMKTextInput,
+        observation: InsertionObservation
+    ) -> Bool {
+        let match = matchingVisibleState(for: client)
         cancelPendingWork()
-        let effects = state.reduce(.accept(current))
+        let effects = state.reduce(.acceptNextWord(
+            current: match?.ticket,
+            boundedContext: match?.context ?? "",
+            utf16Limit: Self.contextLimit
+        ))
         guard case let .insert(accepted)? = effects.first(where: {
             if case .insert = $0 { return true }
             return false
@@ -207,8 +273,43 @@ final class GhostInputController: IMKInputController {
         }
         apply(effects, to: client)
         appendFallback(accepted, for: client)
+        capturePersonalHistory(
+            accepted,
+            source: .acceptedSuggestion,
+            client: client,
+            secureInput: IsSecureEventInputEnabled(),
+            observation: observation
+        )
         GhostStats.recordAccepted(accepted)
         return true
+    }
+
+    private func capturePersonalHistory(
+        _ text: String,
+        source: PersonalHistoryEventSource,
+        client: IMKTextInput,
+        secureInput: Bool,
+        observation: InsertionObservation?
+    ) {
+        let bundle = observation?.bundle ?? client.bundleIdentifier()
+        guard let permit = PersonalHistoryCapture.shared.permit(
+            appBundleIdentifier: bundle,
+            secureInput: secureInput
+        ) else {
+            invalidateHistoryContinuity()
+            return
+        }
+        let observed = observation ?? InsertionObservation(
+            bundle: permit.appBundleIdentifier,
+            selection: client.selectedRange()
+        )
+        guard prepareHistoryInsertion(text, observation: observed) else { return }
+        PersonalHistoryCapture.shared.record(
+            text: text,
+            source: source,
+            sessionIdentifier: historySegmentIdentifier,
+            permit: permit
+        )
     }
 
     // MARK: - Tickets and context
@@ -216,7 +317,7 @@ final class GhostInputController: IMKInputController {
     private func ticket(for client: IMKTextInput, context: String) -> InlineSuggestionTicket {
         let selection = client.selectedRange()
         return InlineSuggestionTicket(
-            clientIdentifier: sessionIdentifier,
+            clientIdentifier: suggestionSessionIdentifier,
             bundleIdentifier: client.bundleIdentifier() ?? "",
             contextFingerprint: InlineSuggestionTicket.fingerprint(context),
             selectionLocation: selection.location == NSNotFound ? -1 : selection.location,
@@ -297,6 +398,7 @@ final class GhostInputController: IMKInputController {
         guard !stopForSecureInput(client) else { return }
         let selection = client.selectedRange()
         guard selection.location != NSNotFound, selection.length == 0 else {
+            breakHistorySegment()
             dismiss(client)
             resetFallback()
             return
@@ -363,7 +465,7 @@ final class GhostInputController: IMKInputController {
                 Self.summonBrainIfNeeded()
             case .error, .timeout, .invalidRequest:
                 GhostStats.recordFailure(result.outcome)
-            case .silence:
+            case .silence, .recorded:
                 break
             }
         }
@@ -384,6 +486,37 @@ final class GhostInputController: IMKInputController {
         revealTask = nil
         modelTask?.cancel()
         modelTask = nil
+    }
+
+    private func breakHistorySegment() {
+        historySegmentIdentifier = UUID().uuidString
+        historyOwner = nil
+    }
+
+    private func invalidateHistoryContinuity() {
+        if historyOwner != nil { breakHistorySegment() }
+    }
+
+    /// Tracks only known app/caret boundaries. IMKit cannot distinguish two
+    /// same-app fields at the same caret without broader system permissions.
+    private func prepareHistoryInsertion(
+        _ text: String,
+        observation: InsertionObservation
+    ) -> Bool {
+        let selection = observation.selection
+        guard selection.location != NSNotFound else {
+            breakHistorySegment()
+            return false
+        }
+        let current = FallbackOwner(bundle: observation.bundle, caret: selection.location)
+        if selection.length != 0 || (historyOwner != nil && historyOwner != current) {
+            breakHistorySegment()
+        }
+        historyOwner = FallbackOwner(
+            bundle: current.bundle,
+            caret: current.caret + text.utf16.count
+        )
+        return true
     }
 
     // MARK: - App watchdog
