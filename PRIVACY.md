@@ -40,12 +40,13 @@ paste operations or edits made outside Tilde, and it can retain characters that
 the user later deletes. IMKit also has no stable field identifier: Tilde breaks
 writing segments on known caret, app, editing, and composition changes, but a
 same-app field switch at the same caret with no composition callback can join
-one partial word in the shadow experiment. The app replays manually typed words
-into a bounded, memory-only personal word completer. It freezes a possible
-completion before a word is finished, compares it with the word subsequently
-typed, and then learns the word. This shadow experiment does not change visible
-suggestions, perform retrieval, or train the bundled model. Accepted Tilde
-suggestions are excluded from its learning and scoring.
+one writing context in the shadow experiment. The app replays manually typed
+words into a bounded, memory-only personal next-word predictor. At each eligible
+word boundary it may predict before observing the next word, scores that frozen
+prediction against the word subsequently typed, and learns only afterward. This
+shadow experiment does not change visible suggestions, perform retrieval, or
+train the bundled model. Accepted Tilde suggestions are excluded from its
+learning and scoring.
 
 Capture stops when Personal History is disabled, when macOS Secure Event Input
 is active, when the host app cannot be identified safely, or when the current
@@ -73,12 +74,19 @@ device-bound key. Local malware running as the user, a process compromise while
 Tilde is running, macOS backups or snapshots, and privileged administrators
 remain meaningful risks.
 
-While Tilde is running, the shadow necessarily holds derived words and prefix
-counts in process memory. It writes no second vocabulary file and rebuilds from
-the most recent complete events in a 4 MiB encrypted-history window after
-launch. A corrupt store or missing Keychain key makes history replay and writes
-fail closed when the problem is encountered. Appends authenticate the most
-recent existing record before writing; replay authenticates records inside its
+While Tilde is running, the shadow necessarily holds derived word contexts and
+transition counts in process memory. It writes no second prediction file. At
+launch it rebuilds from the most recent complete events in a 4 MiB encrypted-
+history window, then learns from new allowed events while Tilde keeps running.
+Because that tail can begin after an earlier part of a writing stream, the
+predictor discards the first possibly truncated token before it learns or
+scores. Replay work and decrypted replay memory stay bounded as the encrypted
+corpus grows. The derived predictor also has a fixed capacity, and the menu
+explicitly reports when that capacity is reached.
+
+A corrupt store or missing Keychain key makes history replay and writes fail
+closed when the problem is encountered. Appends authenticate the most recent
+existing record before writing; launch replay authenticates records inside its
 recent window. Older corruption outside that window may remain undetected.
 Ordinary autocomplete continues, and deleting Personal History is the recovery
 path.
@@ -130,9 +138,9 @@ authenticated-socket proof, or a real-editor round trip.
   History after confirmation. Deletion also turns capture off, rotates the
   local history identifier so queued older events are rejected, and removes
   both the encrypted file and its Keychain key. It also clears the in-memory
-  vocabulary and aggregate shadow result. It is not a promise of forensic
-  erasure from backups, snapshots, storage wear-leveling, or previously copied
-  files.
+  next-word predictor and aggregate shadow result. It is not a promise of
+  forensic erasure from backups, snapshots, storage wear-leveling, or
+  previously copied files.
 - Pause suggestions from Tilde's menu. Quitting stops the menu and model app,
   but the selected input method remains active.
 - Switch to another input source when you do not want Tilde handling typing.
