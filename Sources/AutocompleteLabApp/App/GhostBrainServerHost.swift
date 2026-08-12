@@ -2,8 +2,9 @@ import AutocompleteLabCore
 import Foundation
 import Security
 
-/// Owner-only, final-response unix socket between Tilde and its input method.
-/// Typed context is used in memory and is never logged or persisted.
+/// Owner-only unix socket between Tilde and its input method. Completion
+/// context remains memory-only; explicit Personal History batches are routed
+/// to the app-owned encrypted store.
 final class GhostBrainServerHost: @unchecked Sendable {
     static let socketPath = NSString(
         string: "~/Library/Application Support/Tilde/ghost.sock"
@@ -11,15 +12,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
     private let runtime: LlamaServerProcessHost
     private let engine: LlamaCompletionEngine
+    private let personalHistory: any PersonalHistoryIngesting
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
     private var source: DispatchSourceRead?
     private var ownsSocket = false
 
-    init(runtime: LlamaServerProcessHost) {
+    init(runtime: LlamaServerProcessHost, personalHistory: any PersonalHistoryIngesting) {
         self.runtime = runtime
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
+        self.personalHistory = personalHistory
     }
 
     func start() -> Bool {
@@ -134,6 +137,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 _ = Self.write(.invalidRequest, to: connection)
                 return
             }
+            if case let .personalHistory(events) = request {
+                let accepted = await self.personalHistory.ingest(events)
+                _ = Self.write(accepted ? .recorded : .error, to: connection)
+                return
+            }
+            guard case let .completion(completionRequest) = request else { return }
             guard await self.runtime.isReadyForCompletion() else {
                 _ = Self.write(.unavailable, to: connection)
                 return
@@ -141,8 +150,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
             let completion = Task {
                 try await self.engine.suggestion(
-                    textBeforeCursor: request.context,
-                    appBundleIdentifier: request.app
+                    textBeforeCursor: completionRequest.context,
+                    appBundleIdentifier: completionRequest.app
                 )
             }
             let disconnect = DispatchSource.makeReadSource(
@@ -173,7 +182,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 } ?? ""
                 response = .suggestion(text)
                 servedMetadata = text.isEmpty ? nil : [
-                    "app": request.app ?? "unknown",
+                    "app": completionRequest.app ?? "unknown",
                     "chars": String(text.count),
                 ]
             case let .failure(error):
@@ -187,24 +196,42 @@ final class GhostBrainServerHost: @unchecked Sendable {
         }
     }
 
-    private static func readRequest(_ fd: Int32) -> Result<GhostBrainRequest, Error> {
+    private enum ValidatedRequest {
+        case completion(GhostBrainRequest)
+        case personalHistory([PersonalHistoryEvent])
+    }
+
+    private static func readRequest(_ fd: Int32) -> Result<ValidatedRequest, Error> {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4_096)
-        while data.count < 16_384 {
-            let count = Darwin.read(fd, &buffer, min(buffer.count, 16_384 - data.count))
+        while data.count < GhostBrainRequest.maximumWireBytes {
+            let count = Darwin.read(
+                fd,
+                &buffer,
+                min(buffer.count, GhostBrainRequest.maximumWireBytes - data.count)
+            )
             guard count > 0 else { return .failure(WireError.invalid) }
             data.append(contentsOf: buffer[0..<count])
             guard let newline = data.firstIndex(of: 0x0A) else { continue }
             data = data.prefix(upTo: newline)
             guard let request = try? JSONDecoder().decode(GhostBrainRequest.self, from: data),
-                  request.v == GhostBrainRequest.version,
-                  !request.context.isEmpty,
+                  request.v == GhostBrainRequest.version else {
+                return .failure(WireError.invalid)
+            }
+            if let events = request.personalHistoryEvents {
+                guard request.context.isEmpty, request.app == nil,
+                      PersonalHistoryEvent.validBatch(events) else {
+                    return .failure(WireError.invalid)
+                }
+                return .success(.personalHistory(events))
+            }
+            guard !request.context.isEmpty,
                   request.context.count <= 3_000,
                   request.context.last?.isWhitespace == true,
                   (request.app?.count ?? 0) <= 512 else {
                 return .failure(WireError.invalid)
             }
-            return .success(request)
+            return .success(.completion(request))
         }
         return .failure(WireError.invalid)
     }

@@ -96,7 +96,11 @@ struct InlineSuggestionStateTests {
         let matchedForTab = state.visibleTicket.flatMap {
             $0.matchesFieldState(of: liveAfterL) ? $0 : nil
         }
-        #expect(state.reduce(.accept(matchedForTab)) == [.hide, .insert("lo")])
+        #expect(state.reduce(.acceptNextWord(
+            current: matchedForTab,
+            boundedContext: "hel",
+            utf16Limit: 3_000
+        )) == [.hide, .insert("lo")])
     }
 
     @Test("Divergence hides, inserts, then schedules a new request")
@@ -137,7 +141,11 @@ struct InlineSuggestionStateTests {
         let matchedForTab = state.visibleTicket.flatMap {
             $0.matchesFieldState(of: live) ? $0 : nil
         }
-        #expect(state.reduce(.accept(matchedForTab)) == [.hide, .insert("c")])
+        #expect(state.reduce(.acceptNextWord(
+            current: matchedForTab,
+            boundedContext: rolledContext,
+            utf16Limit: 3_000
+        )) == [.hide, .insert("c")])
     }
 
     @Test("Non-BMP fallback shares the ticket's UTF-16 context window")
@@ -164,21 +172,71 @@ struct InlineSuggestionStateTests {
         let matchedForTab = state.visibleTicket.flatMap {
             $0.matchesFieldState(of: live) ? $0 : nil
         }
-        #expect(state.reduce(.accept(matchedForTab)) == [.hide, .insert("c")])
+        #expect(state.reduce(.acceptNextWord(
+            current: matchedForTab,
+            boundedContext: fallback,
+            utf16Limit: 3_000
+        )) == [.hide, .insert("c")])
     }
 
-    @Test("Tab accepts the current suggestion without immediately chaining another")
+    @Test("Tab advances through a suggestion one word at a time")
+    func repeatedTabAcceptsWords() {
+        let current = ticket(context: "hello", location: 5, request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+        _ = state.reduce(.present(" world and beyond", current))
+
+        #expect(state.reduce(.acceptNextWord(
+            current: current,
+            boundedContext: "hello",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" world"), .show(" and beyond")])
+
+        let afterWorld = current.advancing(
+            with: " world",
+            boundedContext: "hello",
+            utf16Limit: 3_000
+        )
+        #expect(state.visibleTicket == afterWorld)
+        #expect(state.reduce(.acceptNextWord(
+            current: afterWorld,
+            boundedContext: "hello world",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" and"), .show(" beyond")])
+
+        let afterAnd = afterWorld.advancing(
+            with: " and",
+            boundedContext: "hello world",
+            utf16Limit: 3_000
+        )
+        #expect(state.reduce(.acceptNextWord(
+            current: afterAnd,
+            boundedContext: "hello world and",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" beyond")])
+        #expect(!state.isVisible)
+    }
+
+    @Test("Tab accepts only a current suggestion")
     func acceptanceRequiresCurrentTicket() {
         let current = ticket()
         var stale = InlineSuggestionState()
         _ = stale.reduce(.awaitSuggestion(current))
         _ = stale.reduce(.present(" world", current))
-        #expect(stale.reduce(.accept(ticket(location: 99))) == [.hide])
+        #expect(stale.reduce(.acceptNextWord(
+            current: ticket(location: 99),
+            boundedContext: "hello",
+            utf16Limit: 3_000
+        )) == [.hide])
 
         var live = InlineSuggestionState()
         _ = live.reduce(.awaitSuggestion(current))
         _ = live.reduce(.present(" world", current))
-        #expect(live.reduce(.accept(current)) == [.hide, .insert(" world")])
+        #expect(live.reduce(.acceptNextWord(
+            current: current,
+            boundedContext: "hello",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" world")])
     }
 
     private func ticket(

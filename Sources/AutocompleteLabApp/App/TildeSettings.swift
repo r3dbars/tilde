@@ -1,3 +1,4 @@
+import AutocompleteLabCore
 import Foundation
 
 /// Every menu setting, the process that owns it, and its default.
@@ -8,9 +9,13 @@ struct TildeSettings {
     enum KeyboardKey: String {
         case suggestions = "GhostSuggestionsEnabled"
         case pausedUntil = "GhostPausedUntil"
+        case personalHistory = "PersonalHistoryEnabled"
+        case personalHistoryExcludedApps = "PersonalHistoryExcludedApps"
+        case personalHistoryIdentifier = "PersonalHistoryIdentifier"
+        case personalHistoryConsentIdentifier = "PersonalHistoryConsentIdentifier"
     }
 
-    static let keyboardSuiteName = "bar.r3d.inputmethod.InlineGhost"
+    static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
 
     private let keyboard: UserDefaults
 
@@ -21,6 +26,48 @@ struct TildeSettings {
     var suggestionsEnabled: Bool {
         get { flag(.suggestions) }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.suggestions.rawValue) }
+    }
+
+    var personalHistoryEnabled: Bool {
+        get { keyboard.bool(forKey: KeyboardKey.personalHistory.rawValue) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.personalHistory.rawValue) }
+    }
+
+    var personalHistoryExcludedApps: Set<String> {
+        get {
+            Set(PersonalHistoryCapturePolicy.normalizedExcludedApps(
+                keyboard.stringArray(forKey: KeyboardKey.personalHistoryExcludedApps.rawValue) ?? []
+            ))
+        }
+        nonmutating set {
+            keyboard.set(
+                PersonalHistoryCapturePolicy.normalizedExcludedApps(newValue),
+                forKey: KeyboardKey.personalHistoryExcludedApps.rawValue
+            )
+        }
+    }
+
+    var personalHistoryIdentifier: String? {
+        get {
+            guard let value = keyboard.string(forKey: KeyboardKey.personalHistoryIdentifier.rawValue),
+                  PersonalHistoryEvent.validIdentifier(value) else { return nil }
+            return value
+        }
+        nonmutating set {
+            keyboard.set(newValue, forKey: KeyboardKey.personalHistoryIdentifier.rawValue)
+        }
+    }
+
+    var personalHistoryConsentIdentifier: String? {
+        get {
+            guard let value = keyboard.string(
+                forKey: KeyboardKey.personalHistoryConsentIdentifier.rawValue
+            ), PersonalHistoryEvent.validIdentifier(value) else { return nil }
+            return value
+        }
+        nonmutating set {
+            keyboard.set(newValue, forKey: KeyboardKey.personalHistoryConsentIdentifier.rawValue)
+        }
     }
 
     var pausedUntil: Date? {
