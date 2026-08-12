@@ -59,8 +59,8 @@ identity are out of scope.
   context and pending history batch, cancels suggestion work, and refuses to
   read, request, display, or capture text.
 - Personal History records are independently authenticated and encrypted with
-  AES-GCM using a 256-bit, non-synchronizing, device-only key in the macOS
-  data-protection Keychain. Its directory and file are restricted to the owner.
+  AES-GCM using a 256-bit, non-synchronizing key in the user's macOS login
+  Keychain. Its directory and file are restricted to the owner.
 - The personal-word shadow processes a bounded recent history window in append
   order, predicts before learning each word, ignores accepted model
   suggestions, and deduplicates recent stable event IDs. Its bounded derived
@@ -97,10 +97,10 @@ identity are out of scope.
   not prevent deletion, duplication, or reordering of complete encrypted
   records. A lost local acknowledgement can also cause an event retry; readers
   deduplicate recent stable event IDs.
-- The encryption key is device-only and is not expected to survive a file-only
-  restore to another Mac. If ciphertext exists without its original key, Tilde
-  refuses replay and append rather than creating a replacement key and mixing
-  unreadable and newly encrypted records.
+- The encryption key is not synchronized by Tilde, but the user's login
+  Keychain can migrate through a Keychain copy or restore. If ciphertext exists
+  without its original key, Tilde refuses replay and append rather than creating
+  a replacement key and mixing unreadable and newly encrypted records.
 - Deleting Personal History removes its current file and Keychain key but
   cannot promise forensic erasure from backups, snapshots, storage
   wear-leveling, or copies made outside Tilde. Deletion turns capture off and

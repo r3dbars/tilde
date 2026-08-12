@@ -1,10 +1,23 @@
 import Foundation
+import Security
 import Testing
 @testable import AutocompleteLabApp
 @testable import AutocompleteLabCore
 
 @Suite("Encrypted Personal History store", .serialized)
 struct PersonalHistoryStoreTests {
+    @Test("Key query stays in the non-synchronizing login Keychain")
+    func keychainQueryShape() {
+        let query = KeychainPersonalHistoryKeyProvider.baseQuery()
+
+        #expect(query[kSecClass] as? String == kSecClassGenericPassword as String)
+        #expect(query[kSecAttrService] as? String == KeychainPersonalHistoryKeyProvider.service)
+        #expect(query[kSecAttrAccount] as? String == KeychainPersonalHistoryKeyProvider.account)
+        #expect(query[kSecAttrSynchronizable] as? Bool == false)
+        #expect(query[kSecUseDataProtectionKeychain] == nil)
+        #expect(query[kSecAttrAccessible] == nil)
+    }
+
     @Test("Encrypted events round-trip without plaintext on disk")
     func encryptedRoundTrip() async throws {
         let fixture = try Fixture()
