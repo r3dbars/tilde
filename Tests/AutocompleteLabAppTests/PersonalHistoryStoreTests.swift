@@ -272,6 +272,56 @@ struct PersonalHistoryStoreTests {
         #expect(fixture.keys.wasDeleted)
     }
 
+    @Test("Delete remains available when the owner-owned corpus is read-only")
+    func readOnlyStoreCanBeDeleted() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.store.append([fixture.event(id: "read-only", text: "history")])
+        #expect(chmod(fixture.file.path, 0o400) == 0)
+
+        try await fixture.store.deleteAll()
+
+        #expect(!FileManager.default.fileExists(atPath: fixture.file.path))
+        #expect(fixture.keys.wasDeleted)
+    }
+
+    @Test("Delete rejects an owner-only FIFO promptly without deleting its key")
+    func deletionRejectsFIFO() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.makeFIFO()
+        let start = ContinuousClock.now
+
+        await #expect(throws: Error.self) { try await fixture.store.deleteAll() }
+
+        #expect(start.duration(to: .now) < .seconds(1))
+        var info = stat()
+        #expect(lstat(fixture.file.path, &info) == 0)
+        #expect(info.st_mode & S_IFMT == S_IFIFO)
+        #expect(!fixture.keys.wasDeleted)
+    }
+
+    @Test("Replay, summary, and append reject an owner-only FIFO promptly")
+    func storageOperationsRejectFIFO() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.makeFIFO()
+        let start = ContinuousClock.now
+
+        await #expect(throws: Error.self) {
+            try await fixture.store.loadReplay(maximumBytes: 4 * 1_024)
+        }
+        await #expect(throws: Error.self) { try await fixture.store.summary() }
+        await #expect(throws: Error.self) {
+            try await fixture.store.append([fixture.event(id: "fifo", text: "history")])
+        }
+
+        #expect(start.duration(to: .now) < .seconds(1))
+        var info = stat()
+        #expect(lstat(fixture.file.path, &info) == 0)
+        #expect(info.st_mode & S_IFMT == S_IFIFO)
+    }
+
     @Test("Deletion refuses a history directory redirected by a symlink")
     func deletionRejectsRedirectedDirectory() async throws {
         let fixture = try Fixture()
@@ -473,6 +523,14 @@ struct PersonalHistoryStoreTests {
             raw.append(0x0A)
             try raw.write(to: file)
             chmod(file.path, 0o600)
+        }
+
+        func makeFIFO() throws {
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            #expect(chmod(file.deletingLastPathComponent().path, 0o700) == 0)
+            #expect(mkfifo(file.path, 0o600) == 0)
         }
 
         func remove() {
