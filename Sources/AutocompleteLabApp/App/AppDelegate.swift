@@ -23,6 +23,20 @@ enum TildeLaunchMode: Equatable {
     }
 }
 
+enum TildeInvocation: Equatable {
+    case application(TildeLaunchMode)
+    case personalBrainStatusJSON
+
+    init?(arguments: [String]) {
+        switch Array(arguments.dropFirst()) {
+        case []: self = .application(.production)
+        case ["--release-proof"]: self = .application(.releaseProof)
+        case ["--personal-brain-status-json"]: self = .personalBrainStatusJSON
+        default: return nil
+        }
+    }
+}
+
 /// Tilde's brain-caretaker. The product is the InlineGhostIME input
 /// method; this app exists to run its engines and utilities:
 ///   - GhostBrainServerHost: the unix socket the keyboard talks to
