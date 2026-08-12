@@ -38,6 +38,71 @@ struct PersonalVocabularyShadowStatus: Equatable, Sendable {
     }
 }
 
+enum PersonalHistoryStorageHealth: String, Equatable, Sendable {
+    case healthy
+    case storeCorrupt = "store-corrupt"
+    case keyUnavailable = "key-unavailable"
+    case storageUnavailable = "storage-unavailable"
+    case internalError = "internal-error"
+
+    static func failure(error: any Error, duringReplay: Bool = false) -> Self? {
+        guard let storageError = error as? PersonalHistoryStorageError else {
+            if error is CocoaError || error is POSIXError { return .storageUnavailable }
+            return duringReplay ? nil : .internalError
+        }
+        switch storageError {
+        case .corruptStore: return .storeCorrupt
+        case .invalidKey, .missingKey: return .keyUnavailable
+        case .keychain: return .storageUnavailable
+        case .invalidEvent: return duringReplay ? nil : .internalError
+        }
+    }
+
+    var menuLine: String? {
+        switch self {
+        case .healthy: return nil
+        case .storeCorrupt, .keyUnavailable: return "History: not saving — reset required"
+        case .storageUnavailable: return "History: not saving — storage unavailable"
+        case .internalError: return "History: not saving — restart Tilde"
+        }
+    }
+}
+
+private final class PersonalHistoryStorageHealthState: @unchecked Sendable {
+    private let lock = NSLock()
+    private let diagnostics: DiagnosticsLog
+    private var health = PersonalHistoryStorageHealth.healthy
+
+    init(diagnostics: DiagnosticsLog) { self.diagnostics = diagnostics }
+
+    func snapshot() -> PersonalHistoryStorageHealth { lock.withLock { health } }
+
+    func recordFailure(_ error: any Error, duringReplay: Bool = false) {
+        guard let next = PersonalHistoryStorageHealth.failure(
+            error: error,
+            duringReplay: duringReplay
+        ) else { return }
+        record(next)
+    }
+
+    func recordSuccess() { record(.healthy) }
+    func reset() { lock.withLock { health = .healthy } }
+
+    private func record(_ next: PersonalHistoryStorageHealth) {
+        let changed = lock.withLock {
+            guard health != next else { return false }
+            health = next
+            return true
+        }
+        guard changed else { return }
+        if next == .healthy {
+            diagnostics.record("personal-history-write-recovered")
+        } else {
+            diagnostics.record("personal-history-write-failed", metadata: ["reason": next.rawValue])
+        }
+    }
+}
+
 private struct PersonalHistoryConfiguration: Equatable, Sendable {
     let revision: Int
     let enabled: Bool
@@ -96,13 +161,17 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     private let settings: TildeSettings
     private let operations: PersistenceOperations
     private let configurationState: PersonalHistoryConfigurationState
+    private let storageHealthState: PersonalHistoryStorageHealthState
 
     init(
         store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
-        settings: TildeSettings = TildeSettings()
+        settings: TildeSettings = TildeSettings(),
+        diagnostics: DiagnosticsLog = .shared
     ) {
         self.store = store
         self.settings = settings
+        let storageHealthState = PersonalHistoryStorageHealthState(diagnostics: diagnostics)
+        self.storageHealthState = storageHealthState
         let consentIdentifier = settings.personalHistoryConsentIdentifier ?? UUID().uuidString
         settings.personalHistoryConsentIdentifier = consentIdentifier
         let initialConfiguration = PersonalHistoryConfigurationState(
@@ -116,7 +185,8 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         self.operations = PersistenceOperations(
             store: store,
             historyIdentifier: historyIdentifier,
-            configurationState: initialConfiguration
+            configurationState: initialConfiguration,
+            storageHealthState: storageHealthState
         )
         let configuration = initialConfiguration.snapshot()
         if configuration.enabled {
@@ -153,13 +223,15 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
 
     var location: URL { store.location }
 
+    var storageHealthSnapshot: PersonalHistoryStorageHealth { storageHealthState.snapshot() }
+
     func ingest(_ events: [PersonalHistoryEvent]) async -> Bool {
         guard PersonalHistoryEvent.validBatch(events) else { return false }
         let configuration = configurationState.snapshot()
         do {
-            return try await operations.ingest(events, configuration: configuration)
+            try await operations.ingest(events, configuration: configuration)
+            return true
         } catch {
-            DiagnosticsLog.shared.record("personal-history-write-failed", metadata: [:])
             return false
         }
     }
@@ -200,6 +272,10 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             nextHistoryIdentifier: nextIdentifier,
             configuration: configuration
         )
+        if configurationState.snapshot() == configuration,
+           settings.personalHistoryIdentifier == nextIdentifier {
+            storageHealthState.reset()
+        }
     }
 }
 
@@ -209,6 +285,7 @@ private actor PersistenceOperations {
 
     private let store: any PersonalHistoryStore
     private let configurationState: PersonalHistoryConfigurationState
+    private let storageHealthState: PersonalHistoryStorageHealthState
     private var historyIdentifier: String
     private var shadow = PersonalVocabularyShadow()
     private var shadowPhase: PersonalVocabularyShadowPhase = .inactive
@@ -220,34 +297,44 @@ private actor PersistenceOperations {
     init(
         store: any PersonalHistoryStore,
         historyIdentifier: String,
-        configurationState: PersonalHistoryConfigurationState
+        configurationState: PersonalHistoryConfigurationState,
+        storageHealthState: PersonalHistoryStorageHealthState
     ) {
         self.store = store
         self.historyIdentifier = historyIdentifier
         self.configurationState = configurationState
+        self.storageHealthState = storageHealthState
     }
 
     func ingest(
         _ events: [PersonalHistoryEvent],
         configuration: PersonalHistoryConfiguration
-    ) async throws -> Bool {
+    ) async throws {
         guard events.allSatisfy({ $0.historyIdentifier == historyIdentifier }) else {
-            return true
+            return
         }
         guard configuration.enabled,
-              configurationState.snapshot() == configuration else { return true }
+              configurationState.snapshot() == configuration else { return }
         let allowed = events.filter {
             $0.consentIdentifier == configuration.consentIdentifier
                 && !configuration.excludedApps.contains($0.appBundleIdentifier)
         }
-        guard !allowed.isEmpty else { return true }
+        guard !allowed.isEmpty else { return }
         let store = store
         let append = storageOperations.enqueue { try await store.append(allowed) }
-        try await append.value
+        do {
+            try await append.value
+            guard configurationState.snapshot() == configuration else { return }
+            storageHealthState.recordSuccess()
+        } catch {
+            guard configurationState.snapshot() == configuration else { throw error }
+            storageHealthState.recordFailure(error)
+            throw error
+        }
 
         let latest = configurationState.snapshot()
         guard latest == configuration,
-              configurationRevision == configuration.revision else { return true }
+              configurationRevision == configuration.revision else { return }
         switch shadowPhase {
         case .loading:
             replayBacklog.append(contentsOf: allowed)
@@ -263,7 +350,6 @@ private actor PersistenceOperations {
         case .unavailable:
             break
         }
-        return true
     }
 
     func configure(_ configuration: PersonalHistoryConfiguration) async {
@@ -281,6 +367,8 @@ private actor PersistenceOperations {
                 try await store.loadReplay(maximumBytes: Self.maximumReplayBytes)
             }
             let replay = try await replayTask.value
+            guard configurationRevision == configuration.revision,
+                  configurationState.snapshot() == configuration else { return }
             guard !replayBacklogOverflowed else { return }
             let events = replay.events.filter {
                 $0.historyIdentifier == historyIdentifier
@@ -303,6 +391,7 @@ private actor PersistenceOperations {
         } catch {
             guard configurationRevision == configuration.revision,
                   configurationState.snapshot() == configuration else { return }
+            storageHealthState.recordFailure(error, duringReplay: true)
             replayBacklog.removeAll(keepingCapacity: true)
             shadow.reset()
             shadowPhase = .unavailable
