@@ -5,6 +5,7 @@ import Foundation
 /// explicit local-persistence payload and are never sent off-device.
 public struct GhostBrainRequest: Codable, Equatable, Sendable {
     public static let version = 1
+    public static let maximumWireBytes = 16_384
 
     public let v: Int
     public let context: String

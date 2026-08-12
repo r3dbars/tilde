@@ -5,6 +5,7 @@ public enum PersonalHistorySettingsContract {
     public static let enabledKey = "PersonalHistoryEnabled"
     public static let excludedAppsKey = "PersonalHistoryExcludedApps"
     public static let historyIdentifierKey = "PersonalHistoryIdentifier"
+    public static let consentIdentifierKey = "PersonalHistoryConsentIdentifier"
 }
 
 public enum PersonalHistoryEventSource: String, Codable, Equatable, Sendable {
@@ -20,16 +21,19 @@ public enum PersonalHistoryEventSource: String, Codable, Equatable, Sendable {
 public struct PersonalHistoryEvent: Codable, Equatable, Sendable {
     public static let version = 1
     public static let maximumTextCharacters = 512
+    public static let maximumTextUTF8Bytes = 2_048
     public static let maximumIdentifierCharacters = 64
     public static let maximumBundleIdentifierCharacters = 200
     /// Keeps worst-case escaped JSON below the socket's 16 KiB request limit.
     public static let maximumBatchEvents = 12
     public static let maximumBatchTextCharacters = 1_024
+    public static let maximumBatchTextUTF8Bytes = 4_096
 
     public let v: Int
     public let id: String
     public let timestampMilliseconds: Int64
     public let historyIdentifier: String
+    public let consentIdentifier: String
     public let sessionIdentifier: String
     public let appBundleIdentifier: String
     public let source: PersonalHistoryEventSource
@@ -39,6 +43,7 @@ public struct PersonalHistoryEvent: Codable, Equatable, Sendable {
         id: String,
         timestampMilliseconds: Int64,
         historyIdentifier: String,
+        consentIdentifier: String? = nil,
         sessionIdentifier: String,
         appBundleIdentifier: String,
         source: PersonalHistoryEventSource,
@@ -47,16 +52,20 @@ public struct PersonalHistoryEvent: Codable, Equatable, Sendable {
         guard Self.validIdentifier(id),
               timestampMilliseconds > 0,
               Self.validIdentifier(historyIdentifier),
+              let consentIdentifier = consentIdentifier ?? Optional(historyIdentifier),
+              Self.validIdentifier(consentIdentifier),
               Self.validIdentifier(sessionIdentifier),
               Self.validBundleIdentifier(appBundleIdentifier),
               !text.isEmpty,
-              text.count <= Self.maximumTextCharacters else {
+              text.count <= Self.maximumTextCharacters,
+              text.utf8.count <= Self.maximumTextUTF8Bytes else {
             return nil
         }
         self.v = Self.version
         self.id = id
         self.timestampMilliseconds = timestampMilliseconds
         self.historyIdentifier = historyIdentifier
+        self.consentIdentifier = consentIdentifier
         self.sessionIdentifier = sessionIdentifier
         self.appBundleIdentifier = appBundleIdentifier
         self.source = source
@@ -67,19 +76,38 @@ public struct PersonalHistoryEvent: Codable, Equatable, Sendable {
         !events.isEmpty
             && events.count <= maximumBatchEvents
             && events.reduce(0) { $0 + $1.text.count } <= maximumBatchTextCharacters
+            && events.reduce(0) { $0 + $1.text.utf8.count } <= maximumBatchTextUTF8Bytes
             && events.allSatisfy { $0.v == version }
+    }
+
+    public static func boundedBatchPrefix(_ events: [Self]) -> [Self] {
+        var batch: [Self] = []
+        var characters = 0
+        var utf8Bytes = 0
+        for event in events.prefix(maximumBatchEvents) {
+            let nextCharacters = characters + event.text.count
+            let nextBytes = utf8Bytes + event.text.utf8.count
+            guard nextCharacters <= maximumBatchTextCharacters,
+                  nextBytes <= maximumBatchTextUTF8Bytes else { break }
+            batch.append(event)
+            characters = nextCharacters
+            utf8Bytes = nextBytes
+        }
+        return batch
     }
 
     public func coalescing(with next: Self) -> Self? {
         guard source == .typed,
               next.source == .typed,
               historyIdentifier == next.historyIdentifier,
+              consentIdentifier == next.consentIdentifier,
               sessionIdentifier == next.sessionIdentifier,
               appBundleIdentifier == next.appBundleIdentifier else { return nil }
         return Self(
             id: id,
             timestampMilliseconds: timestampMilliseconds,
             historyIdentifier: historyIdentifier,
+            consentIdentifier: consentIdentifier,
             sessionIdentifier: sessionIdentifier,
             appBundleIdentifier: appBundleIdentifier,
             source: source,
@@ -110,7 +138,7 @@ public struct PersonalHistoryEvent: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case v, id, timestampMilliseconds, historyIdentifier, sessionIdentifier
+        case v, id, timestampMilliseconds, historyIdentifier, consentIdentifier, sessionIdentifier
         case appBundleIdentifier, source, text
     }
 
@@ -122,6 +150,10 @@ public struct PersonalHistoryEvent: Codable, Equatable, Sendable {
                 id: try values.decode(String.self, forKey: .id),
                 timestampMilliseconds: try values.decode(Int64.self, forKey: .timestampMilliseconds),
                 historyIdentifier: try values.decode(String.self, forKey: .historyIdentifier),
+                consentIdentifier: try values.decodeIfPresent(
+                    String.self,
+                    forKey: .consentIdentifier
+                ),
                 sessionIdentifier: try values.decode(String.self, forKey: .sessionIdentifier),
                 appBundleIdentifier: try values.decode(String.self, forKey: .appBundleIdentifier),
                 source: try values.decode(PersonalHistoryEventSource.self, forKey: .source),

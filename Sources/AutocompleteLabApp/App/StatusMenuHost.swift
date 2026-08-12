@@ -14,6 +14,7 @@ final class StatusMenuHost: NSObject {
     private var engineItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
     private var personalHistoryItem: NSMenuItem?
+    private var personalVocabularyItem: NSMenuItem?
     private var historySizeItem: NSMenuItem?
     private var historyLocationItem: NSMenuItem?
     private var excludeCurrentAppItem: NSMenuItem?
@@ -52,6 +53,11 @@ final class StatusMenuHost: NSObject {
             #selector(togglePersonalHistory(_:))
         )
         historySizeItem = addInfoRow(to: menu, "History: 0 bytes")
+        personalVocabularyItem = addInfoRow(
+            to: menu,
+            "Personal vocabulary: waiting for writing"
+        )
+        personalVocabularyItem?.isHidden = true
         historyLocationItem = addInfoRow(
             to: menu,
             "Location: \(NSString(string: personalHistory.location.path).abbreviatingWithTildeInPath)"
@@ -72,7 +78,11 @@ final class StatusMenuHost: NSObject {
         )
         menu.addItem(.separator())
 
-        pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
+        pauseItem = addAction(
+            to: menu,
+            "Pause suggestions for an hour",
+            #selector(togglePause(_:))
+        )
         addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
         menu.delegate = self
@@ -142,7 +152,7 @@ final class StatusMenuHost: NSObject {
         let alert = NSAlert()
         alert.messageText = "Turn on Personal History?"
         alert.informativeText = """
-        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. It is never uploaded. This first foundation does not change suggestions yet.
+        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. Tilde uses this history to quietly test personal word completions. The test does not change the suggestions you see, and nothing is uploaded.
 
         macOS Secure Event Input blocks password capture when an app enables it. Custom sensitive fields may not be detectable, so exclude apps you do not want recorded.
         """
@@ -222,15 +232,17 @@ extension StatusMenuHost: NSMenuDelegate {
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
         personalHistoryItem?.state = personalHistory.isEnabled ? .on : .off
+        personalVocabularyItem?.isHidden = !personalHistory.isEnabled
         refreshCurrentExclusionCandidate()
         refreshExcludedAppsMenu()
         refreshHistorySummary()
+        refreshPersonalVocabulary()
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
             pauseItem?.title = "Resume Tilde (paused \(minutes)m)"
         } else {
-            pauseItem?.title = "Pause for an hour"
+            pauseItem?.title = "Pause suggestions for an hour"
         }
     }
 
@@ -287,6 +299,15 @@ extension StatusMenuHost: NSMenuDelegate {
             formatter.isAdaptive = true
             historySizeItem?.title = "History: \(formatter.string(fromByteCount: summary.approximateBytes))"
             deleteHistoryItem?.isEnabled = summary.approximateBytes > 0
+        }
+    }
+
+    private func refreshPersonalVocabulary() {
+        guard personalHistory.isEnabled else { return }
+        personalVocabularyItem?.title = "Personal vocabulary: loading…"
+        Task { [weak self] in
+            guard let self else { return }
+            personalVocabularyItem?.title = await personalHistory.shadowStatus().menuLine
         }
     }
 }

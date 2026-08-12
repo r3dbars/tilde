@@ -25,8 +25,10 @@ Tilde ships as one self-contained, signed package:
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
 text the user produces to the Tilde app. The app stores a local encrypted event
-log for future user-controlled personalization. Tilde has no cloud inference,
-analytics, sync, upload, screenshots, or accept sounds.
+log and quietly evaluates a bounded personal word completer in memory. The
+personal candidate remains shadow-only: it does not change visible suggestions.
+Tilde has no cloud inference, analytics, sync, upload, screenshots, or accept
+sounds.
 
 Personal History is off by default. Its menu shows the local storage location
 and approximate size, lets the user exclude the current app, and can delete the
