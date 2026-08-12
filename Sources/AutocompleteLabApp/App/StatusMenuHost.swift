@@ -14,7 +14,7 @@ final class StatusMenuHost: NSObject {
     private var engineItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
     private var personalHistoryItem: NSMenuItem?
-    private var personalVocabularyItem: NSMenuItem?
+    private var personalNextWordItem: NSMenuItem?
     private var historySizeItem: NSMenuItem?
     private var historyLocationItem: NSMenuItem?
     private var excludeCurrentAppItem: NSMenuItem?
@@ -52,12 +52,12 @@ final class StatusMenuHost: NSObject {
             "Personal History (local only)",
             #selector(togglePersonalHistory(_:))
         )
-        historySizeItem = addInfoRow(to: menu, "History: 0 bytes")
-        personalVocabularyItem = addInfoRow(
+        historySizeItem = addInfoRow(to: menu, "History: measuring…")
+        personalNextWordItem = addInfoRow(
             to: menu,
-            "Personal vocabulary: waiting for writing"
+            "Personal next word: waiting for writing"
         )
-        personalVocabularyItem?.isHidden = true
+        personalNextWordItem?.isHidden = true
         historyLocationItem = addInfoRow(
             to: menu,
             "Location: \(NSString(string: personalHistory.location.path).abbreviatingWithTildeInPath)"
@@ -152,7 +152,7 @@ final class StatusMenuHost: NSObject {
         let alert = NSAlert()
         alert.messageText = "Turn on Personal History?"
         alert.informativeText = """
-        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. Tilde uses this history to quietly test personal word completions. The test does not change the suggestions you see, and nothing is uploaded.
+        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. Tilde rebuilds its personal next-word test from a bounded recent part of that history, then learns from new writing while Tilde runs. The test is shadow-only: it does not change the suggestions you see, and nothing is uploaded.
 
         macOS Secure Event Input blocks password capture when an app enables it. Custom sensitive fields may not be detectable, so exclude apps you do not want recorded.
         """
@@ -232,11 +232,11 @@ extension StatusMenuHost: NSMenuDelegate {
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
         personalHistoryItem?.state = personalHistory.isEnabled ? .on : .off
-        personalVocabularyItem?.isHidden = !personalHistory.isEnabled
+        personalNextWordItem?.isHidden = !personalHistory.isEnabled
         refreshCurrentExclusionCandidate()
         refreshExcludedAppsMenu()
         refreshHistorySummary()
-        refreshPersonalVocabulary()
+        refreshPersonalNextWord()
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
@@ -285,13 +285,17 @@ extension StatusMenuHost: NSMenuDelegate {
     }
 
     private func refreshHistorySummary() {
+        if showStorageFailureIfNeeded() { return }
         historySizeItem?.title = "History: measuring…"
         Task { [weak self] in
             guard let self else { return }
             guard let summary = await personalHistory.summary() else {
+                if showStorageFailureIfNeeded() { return }
                 historySizeItem?.title = "History: unavailable"
+                deleteHistoryItem?.isEnabled = true
                 return
             }
+            if showStorageFailureIfNeeded() { return }
             let formatter = ByteCountFormatter()
             formatter.allowedUnits = [.useKB, .useMB, .useGB]
             formatter.countStyle = .file
@@ -302,12 +306,19 @@ extension StatusMenuHost: NSMenuDelegate {
         }
     }
 
-    private func refreshPersonalVocabulary() {
+    private func showStorageFailureIfNeeded() -> Bool {
+        guard let line = personalHistory.storageHealthSnapshot.menuLine else { return false }
+        historySizeItem?.title = line
+        deleteHistoryItem?.isEnabled = true
+        return true
+    }
+
+    private func refreshPersonalNextWord() {
         guard personalHistory.isEnabled else { return }
-        personalVocabularyItem?.title = "Personal vocabulary: loading…"
+        personalNextWordItem?.title = "Personal next word: loading…"
         Task { [weak self] in
             guard let self else { return }
-            personalVocabularyItem?.title = await personalHistory.shadowStatus().menuLine
+            personalNextWordItem?.title = await personalHistory.nextWordStatus().menuLine
         }
     }
 }

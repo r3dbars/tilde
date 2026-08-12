@@ -1,7 +1,7 @@
 # Tilde Threat Model
 
 Status: current for the simplified IMKit + bundled llama architecture
-(2026-08-11).
+(2026-08-12).
 
 ## System boundary
 
@@ -12,7 +12,7 @@ Tilde has two signed user-facing processes and one signed helper child:
   user enables Personal History—buffers bounded history events in memory.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
   its bundled GGUF model, returns suggestions, and exclusively owns the local
-  Personal History store and memory-only personal-vocabulary shadow.
+  Personal History store and memory-only personal next-word shadow.
 - The bundled `llama-server` helper is a localhost-only child of the Tilde app.
 
 The helper is an app-owned child process bound to localhost. Ordinary request
@@ -59,12 +59,15 @@ identity are out of scope.
   context and pending history batch, cancels suggestion work, and refuses to
   read, request, display, or capture text.
 - Personal History records are independently authenticated and encrypted with
-  AES-GCM using a 256-bit, non-synchronizing, device-only key in the macOS
-  data-protection Keychain. Its directory and file are restricted to the owner.
-- The personal-word shadow processes a bounded recent history window in append
-  order, predicts before learning each word, ignores accepted model
-  suggestions, and deduplicates recent stable event IDs. Its bounded derived
-  word counts remain in app memory and are never logged or sent to the model.
+  AES-GCM using a 256-bit, non-synchronizing key in the user's macOS login
+  Keychain. Its directory and file are restricted to the owner.
+- The personal next-word shadow rebuilds from a bounded recent 4 MiB history
+  tail, then processes new allowed events in append order into a bounded
+  context-and-transition table. It censors the tail's first possibly truncated
+  token, predicts before learning the observed next word, ignores accepted
+  model suggestions, and deduplicates recent stable event IDs. Derived counts
+  remain in app memory and are never logged or sent to the model. The menu
+  reports if the table reaches its fixed memory capacity.
 - Diagnostics pass through a redaction layer and store shape, timing, count,
   app identity, and failure metadata only. Personal History is a separate,
   explicit data path.
@@ -87,20 +90,21 @@ identity are out of scope.
 - Enabling Personal History creates a durable, highly sensitive writing corpus.
   Encryption at rest does not protect it from local malware running as the
   user, a compromise of Tilde while the key is available, privileged access,
-  or plaintext copied elsewhere after decryption. The in-memory shadow also
-  exposes derived personal words to a compromise of the running app.
+  or plaintext copied elsewhere after decryption. A compromise of the running
+  app can expose the decrypted recent replay window and derived personal
+  contexts and transitions.
 - The encrypted log exposes a plaintext format header, approximate size,
   ciphertext lengths, and record count. Independent per-record authentication
-  detects modified ciphertext when that record is replayed; append also checks
-  the most recent existing record. Older records outside the bounded replay
-  window are not reauthenticated on each launch or append. Authentication does
-  not prevent deletion, duplication, or reordering of complete encrypted
-  records. A lost local acknowledgement can also cause an event retry; readers
-  deduplicate recent stable event IDs.
-- The encryption key is device-only and is not expected to survive a file-only
-  restore to another Mac. If ciphertext exists without its original key, Tilde
-  refuses replay and append rather than creating a replacement key and mixing
-  unreadable and newly encrypted records.
+  detects modified ciphertext when that record is replayed; launch replay
+  authenticates records in its recent window, while append checks the most
+  recent existing record. Older corruption outside the replay window may
+  remain undetected. Authentication does not prevent deletion, duplication, or
+  reordering of complete encrypted records. A lost local acknowledgement can
+  also cause an event retry; readers deduplicate recent stable event IDs.
+- The encryption key is not synchronized by Tilde, but the user's login
+  Keychain can migrate through a Keychain copy or restore. If ciphertext exists
+  without its original key, Tilde refuses replay and append rather than creating
+  a replacement key and mixing unreadable and newly encrypted records.
 - Deleting Personal History removes its current file and Keychain key but
   cannot promise forensic erasure from backups, snapshots, storage
   wear-leveling, or copies made outside Tilde. Deletion turns capture off and
@@ -118,7 +122,7 @@ identity are out of scope.
   is indistinguishable from an ordinary field.
 - IMKit exposes no stable field identifier. Tilde separates history on known
   app, caret, edit, and composition changes, but two fields in one app at the
-  same caret can share one partial shadow token if no composition callback is
+  same caret can share one shadow context if no composition callback is
   delivered.
 - Host apps control marked-text behavior and key routing. Compatibility must be
   proven per editor; wrong or duplicate commits are release-blocking bugs.
@@ -148,5 +152,5 @@ round-trips, corrupt-store failure, deletion, prediction-before-learning,
 duplicate delivery, and edit-boundary isolation. Manual installed-IME proof
 must confirm that secure password fields add no records, ordinary fields add
 records only after explicit opt-in, exclusions work in real host apps, and the
-menu accurately reports size and deletion. Those manual checks are not proven
-by the deterministic test suite.
+menu accurately reports size, next-word shadow state, memory capacity, and
+deletion. Those manual checks are not proven by the deterministic test suite.

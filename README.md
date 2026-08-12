@@ -25,16 +25,19 @@ Tilde ships as one self-contained, signed package:
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
 text the user produces to the Tilde app. The app stores a local encrypted event
-log and quietly evaluates a bounded personal word completer in memory. The
-personal candidate remains shadow-only: it does not change visible suggestions.
+log and quietly evaluates a bounded personal next-word predictor in memory. The
+personal prediction remains shadow-only: it does not change visible suggestions.
 Tilde has no cloud inference, analytics, sync, upload, screenshots, or accept
 sounds.
 
 Personal History is off by default. Its menu shows the local storage location
-and approximate size, lets the user exclude the current app, and can delete the
-entire store. Each record is encrypted with AES-GCM; its device-only key lives
-in the macOS data-protection Keychain. See [PRIVACY.md](PRIVACY.md) for the
-capture boundary and remaining risks.
+and approximate size, lets the user exclude the current app, reports aggregate
+next-word checks, and can delete the entire store. The in-memory predictor has
+a fixed capacity, rebuilds from a bounded recent 4 MiB history tail, then learns
+from new writing while Tilde runs. The menu says when the predictor's memory
+limit is reached. Each record is encrypted with AES-GCM; its key lives as a
+non-synchronizing item in the user's macOS login Keychain. See
+[PRIVACY.md](PRIVACY.md) for the capture boundary and remaining risks.
 
 ## Status and requirements
 
