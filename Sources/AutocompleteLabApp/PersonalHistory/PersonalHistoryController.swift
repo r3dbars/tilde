@@ -5,35 +5,38 @@ protocol PersonalHistoryIngesting: Sendable {
     func ingest(_ events: [PersonalHistoryEvent]) async -> Bool
 }
 
-enum PersonalVocabularyShadowPhase: Equatable, Sendable {
+enum PersonalNextWordShadowPhase: Equatable, Sendable {
     case inactive
     case loading
     case ready
     case unavailable
 }
 
-struct PersonalVocabularyShadowStatus: Equatable, Sendable {
+struct PersonalNextWordShadowStatus: Equatable, Sendable {
     static let reportingPredictionMinimum = 200
 
-    let phase: PersonalVocabularyShadowPhase
-    let snapshot: PersonalVocabularyShadowSnapshot
+    let phase: PersonalNextWordShadowPhase
+    let snapshot: PersonalNextWordShadowSnapshot
 
     var menuLine: String {
+        let capacity = snapshot.capacityLimited ? " · memory limit reached" : ""
         switch phase {
         case .inactive:
-            return "Personal vocabulary: off"
+            return "Personal next word: off"
         case .loading:
-            return "Personal vocabulary: loading history…"
+            return "Personal next word: loading recent history…"
         case .unavailable:
-            return "Personal vocabulary: unavailable"
+            return "Personal next word: unavailable"
         case .ready where snapshot.opportunities == 0:
-            return "Personal vocabulary: waiting for writing"
+            return "Personal next word: waiting for writing\(capacity)"
         case .ready where snapshot.predictions < Self.reportingPredictionMinimum:
-            return "Personal vocabulary: \(snapshot.learnedWords) words · \(snapshot.predictions)/\(Self.reportingPredictionMinimum) checks"
+            let checks = "\(snapshot.predictions)/\(Self.reportingPredictionMinimum) checks"
+            return "Personal next word: \(snapshot.learnedContexts) contexts · \(checks)\(capacity)"
         case .ready:
             let exact = Int((snapshot.precision * 100).rounded())
             let coverage = Int((snapshot.coverage * 100).rounded())
-            return "Personal vocabulary: \(exact)% exact · \(coverage)% coverage · \(snapshot.predictions) checks"
+            let metrics = "\(exact)% exact · \(coverage)% coverage"
+            return "Personal next word: \(metrics) · \(snapshot.predictions) checks\(capacity)"
         }
     }
 }
@@ -240,16 +243,16 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         try? await store.summary()
     }
 
-    func shadowStatus() async -> PersonalVocabularyShadowStatus {
-        let status = await operations.shadowStatus()
+    func nextWordStatus() async -> PersonalNextWordShadowStatus {
+        let status = await operations.nextWordStatus()
         guard configurationState.snapshot().enabled else {
-            return PersonalVocabularyShadowStatus(
+            return PersonalNextWordShadowStatus(
                 phase: .inactive,
-                snapshot: PersonalVocabularyShadow().snapshot
+                snapshot: PersonalNextWordShadow().snapshot
             )
         }
         return status.phase == .inactive
-            ? PersonalVocabularyShadowStatus(phase: .loading, snapshot: status.snapshot)
+            ? PersonalNextWordShadowStatus(phase: .loading, snapshot: status.snapshot)
             : status
     }
 
@@ -287,8 +290,8 @@ private actor PersistenceOperations {
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
     private var historyIdentifier: String
-    private var shadow = PersonalVocabularyShadow()
-    private var shadowPhase: PersonalVocabularyShadowPhase = .inactive
+    private var nextWord = PersonalNextWordShadow()
+    private var nextWordPhase: PersonalNextWordShadowPhase = .inactive
     private var configurationRevision = 0
     private var replayBacklog: [PersonalHistoryEvent] = []
     private var replayBacklogOverflowed = false
@@ -335,16 +338,16 @@ private actor PersistenceOperations {
         let latest = configurationState.snapshot()
         guard latest == configuration,
               configurationRevision == configuration.revision else { return }
-        switch shadowPhase {
+        switch nextWordPhase {
         case .loading:
             replayBacklog.append(contentsOf: allowed)
             if replayBacklog.count > Self.maximumReplayBacklogEvents {
                 replayBacklog.removeAll(keepingCapacity: true)
                 replayBacklogOverflowed = true
-                shadowPhase = .unavailable
+                nextWordPhase = .unavailable
             }
         case .ready:
-            shadow.consume(allowed)
+            nextWord.consume(allowed)
         case .inactive:
             break
         case .unavailable:
@@ -357,8 +360,8 @@ private actor PersistenceOperations {
         configurationRevision = configuration.revision
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
-        shadow.reset()
-        shadowPhase = configuration.enabled ? .loading : .inactive
+        nextWord.reset()
+        nextWordPhase = configuration.enabled ? .loading : .inactive
         guard configuration.enabled else { return }
 
         do {
@@ -376,7 +379,7 @@ private actor PersistenceOperations {
             }
             guard configurationRevision == configuration.revision,
                   configurationState.snapshot() == configuration else { return }
-            var rebuilt = PersonalVocabularyShadow()
+            var rebuilt = PersonalNextWordShadow()
             rebuilt.consume(events)
             guard configurationRevision == configuration.revision,
                   configurationState.snapshot() == configuration else { return }
@@ -386,20 +389,20 @@ private actor PersistenceOperations {
             guard configurationRevision == configuration.revision,
                   configurationState.snapshot() == configuration else { return }
             replayBacklog.removeAll(keepingCapacity: true)
-            shadow = current
-            shadowPhase = .ready
+            nextWord = current
+            nextWordPhase = .ready
         } catch {
             guard configurationRevision == configuration.revision,
                   configurationState.snapshot() == configuration else { return }
             storageHealthState.recordFailure(error, duringReplay: true)
             replayBacklog.removeAll(keepingCapacity: true)
-            shadow.reset()
-            shadowPhase = .unavailable
+            nextWord.reset()
+            nextWordPhase = .unavailable
         }
     }
 
-    func shadowStatus() -> PersonalVocabularyShadowStatus {
-        PersonalVocabularyShadowStatus(phase: shadowPhase, snapshot: shadow.snapshot)
+    func nextWordStatus() -> PersonalNextWordShadowStatus {
+        PersonalNextWordShadowStatus(phase: nextWordPhase, snapshot: nextWord.snapshot)
     }
 
     func deleteAll(
@@ -409,8 +412,8 @@ private actor PersistenceOperations {
         configurationRevision = max(configurationRevision, configuration.revision)
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
-        shadow.reset()
-        shadowPhase = .inactive
+        nextWord.reset()
+        nextWordPhase = .inactive
         historyIdentifier = nextHistoryIdentifier
         let store = store
         let deletion = storageOperations.enqueue { try await store.deleteAll() }
