@@ -61,6 +61,15 @@ struct PersonalHistoryEventTests {
             source: .typed,
             text: String(repeating: "x", count: PersonalHistoryEvent.maximumTextCharacters + 1)
         ) == nil)
+        #expect(PersonalHistoryEvent(
+            id: "event",
+            timestampMilliseconds: 1,
+            historyIdentifier: "history",
+            sessionIdentifier: "session",
+            appBundleIdentifier: "com.example.Editor",
+            source: .typed,
+            text: "x" + String(repeating: "\u{301}", count: 2_100)
+        ) == nil)
 
         let tooMany = (0...PersonalHistoryEvent.maximumBatchEvents).map {
             makeEvent(id: "event-\($0)", text: "x")
@@ -84,6 +93,15 @@ struct PersonalHistoryEventTests {
             try JSONEncoder().encode(GhostBrainRequest(personalHistoryEvents: largestBatch)).count
                 < 16_384
         )
+
+        let sized = [
+            makeEvent(id: "a", text: String(repeating: "a", count: 512)),
+            makeEvent(id: "b", text: String(repeating: "b", count: 512)),
+            makeEvent(id: "c", text: "c"),
+        ]
+        #expect(PersonalHistoryEvent.boundedBatchPrefix(sized).map(\.id) == ["a", "b"])
+        #expect(PersonalHistoryEvent.validBatch(Array(sized.prefix(2))))
+        #expect(!PersonalHistoryEvent.validBatch(sized))
 
         let normalized = PersonalHistoryCapturePolicy.normalizedExcludedApps([
             "com.example.Valid", "bad value", "com.example.Valid", "org.example.Other",

@@ -12,7 +12,7 @@ Tilde has two signed user-facing processes and one signed helper child:
   user enables Personal History—buffers bounded history events in memory.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
   its bundled GGUF model, returns suggestions, and exclusively owns the local
-  Personal History store.
+  Personal History store and memory-only personal-vocabulary shadow.
 - The bundled `llama-server` helper is a localhost-only child of the Tilde app.
 
 The helper is an app-owned child process bound to localhost. Ordinary request
@@ -61,6 +61,10 @@ identity are out of scope.
 - Personal History records are independently authenticated and encrypted with
   AES-GCM using a 256-bit, non-synchronizing, device-only key in the macOS
   data-protection Keychain. Its directory and file are restricted to the owner.
+- The personal-word shadow processes a bounded recent history window in append
+  order, predicts before learning each word, ignores accepted model
+  suggestions, and deduplicates recent stable event IDs. Its bounded derived
+  word counts remain in app memory and are never logged or sent to the model.
 - Diagnostics pass through a redaction layer and store shape, timing, count,
   app identity, and failure metadata only. Personal History is a separate,
   explicit data path.
@@ -83,12 +87,20 @@ identity are out of scope.
 - Enabling Personal History creates a durable, highly sensitive writing corpus.
   Encryption at rest does not protect it from local malware running as the
   user, a compromise of Tilde while the key is available, privileged access,
-  or plaintext copied elsewhere after decryption.
+  or plaintext copied elsewhere after decryption. The in-memory shadow also
+  exposes derived personal words to a compromise of the running app.
 - The encrypted log exposes a plaintext format header, approximate size,
   ciphertext lengths, and record count. Independent per-record authentication
-  detects modified ciphertext but does not prevent deletion, duplication, or
-  reordering of complete encrypted records. A lost local acknowledgement can
-  also cause an event retry; future readers must deduplicate stable event IDs.
+  detects modified ciphertext when that record is replayed; append also checks
+  the most recent existing record. Older records outside the bounded replay
+  window are not reauthenticated on each launch or append. Authentication does
+  not prevent deletion, duplication, or reordering of complete encrypted
+  records. A lost local acknowledgement can also cause an event retry; readers
+  deduplicate recent stable event IDs.
+- The encryption key is device-only and is not expected to survive a file-only
+  restore to another Mac. If ciphertext exists without its original key, Tilde
+  refuses replay and append rather than creating a replacement key and mixing
+  unreadable and newly encrypted records.
 - Deleting Personal History removes its current file and Keychain key but
   cannot promise forensic erasure from backups, snapshots, storage
   wear-leveling, or copies made outside Tilde. Deletion turns capture off and
@@ -104,6 +116,10 @@ identity are out of scope.
 - Secure Event Input is the only field-sensitivity signal available through
   this IMKit design. A custom secret field that does not enable the macOS signal
   is indistinguishable from an ordinary field.
+- IMKit exposes no stable field identifier. Tilde separates history on known
+  app, caret, edit, and composition changes, but two fields in one app at the
+  same caret can share one partial shadow token if no composition callback is
+  delivered.
 - Host apps control marked-text behavior and key routing. Compatibility must be
   proven per editor; wrong or duplicate commits are release-blocking bugs.
 - `llama-server`, the model parser, IMKit, and macOS remain complex trusted
@@ -128,7 +144,8 @@ documents.
 
 Personal History changes additionally require tests for disabled capture,
 excluded apps, secure-input policy, bounded event decoding, encrypted
-round-trips, corrupt-store failure, and deletion. Manual installed-IME proof
+round-trips, corrupt-store failure, deletion, prediction-before-learning,
+duplicate delivery, and edit-boundary isolation. Manual installed-IME proof
 must confirm that secure password fields add no records, ordinary fields add
 records only after explicit opt-in, exclusions work in real host apps, and the
 menu accurately reports size and deletion. Those manual checks are not proven

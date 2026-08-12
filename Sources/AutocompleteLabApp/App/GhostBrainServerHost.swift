@@ -204,8 +204,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private static func readRequest(_ fd: Int32) -> Result<ValidatedRequest, Error> {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4_096)
-        while data.count < 16_384 {
-            let count = Darwin.read(fd, &buffer, min(buffer.count, 16_384 - data.count))
+        while data.count < GhostBrainRequest.maximumWireBytes {
+            let count = Darwin.read(
+                fd,
+                &buffer,
+                min(buffer.count, GhostBrainRequest.maximumWireBytes - data.count)
+            )
             guard count > 0 else { return .failure(WireError.invalid) }
             data.append(contentsOf: buffer[0..<count])
             guard let newline = data.firstIndex(of: 0x0A) else { continue }

@@ -65,6 +65,24 @@ struct PersonalHistoryStoreTests {
         #expect(try Data(contentsOf: fixture.file) == original)
     }
 
+    @Test("Delete remains available when the corpus is corrupt")
+    func corruptStoreCanBeDeleted() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        chmod(fixture.file.deletingLastPathComponent().path, 0o700)
+        try Data("UNKNOWN-FORMAT\n".utf8).write(to: fixture.file)
+        chmod(fixture.file.path, 0o600)
+
+        try await fixture.store.deleteAll()
+
+        #expect(!FileManager.default.fileExists(atPath: fixture.file.path))
+        #expect(fixture.keys.wasDeleted)
+    }
+
     @Test("Deletion refuses a history directory redirected by a symlink")
     func deletionRejectsRedirectedDirectory() async throws {
         let fixture = try Fixture()
@@ -89,7 +107,62 @@ struct PersonalHistoryStoreTests {
             try await fixture.store.deleteAll()
         }
         #expect(try Data(contentsOf: outsideFile) == sentinel)
-        #expect(fixture.keys.wasDeleted)
+        #expect(!fixture.keys.wasDeleted)
+    }
+
+    @Test("Replay reads only the most recent complete encrypted events")
+    func boundedReplay() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let first = fixture.event(id: "one", text: "older history")
+        let second = fixture.event(id: "two", text: "recent history")
+        try await fixture.store.append([first, second])
+        let raw = try Data(contentsOf: fixture.file)
+        let finalLineBytes = raw.split(separator: 0x0A).last!.count + 1
+
+        let replay = try await fixture.store.loadReplay(
+            maximumBytes: Int64(finalLineBytes)
+        )
+        #expect(replay.events == [second])
+    }
+
+    @Test("A missing key never replaces or mixes an existing corpus")
+    func missingExistingKeyFailsClosed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.store.append([fixture.event(id: "one", text: "history")])
+        let original = try Data(contentsOf: fixture.file)
+        let missingKeys = MutableKeys(keyData: nil)
+        let reopened = EncryptedPersonalHistoryStore(
+            location: fixture.file,
+            keyProvider: missingKeys
+        )
+
+        await #expect(throws: PersonalHistoryStorageError.missingKey) {
+            try await reopened.loadEvents()
+        }
+        await #expect(throws: PersonalHistoryStorageError.missingKey) {
+            try await reopened.append([fixture.event(id: "two", text: "new history")])
+        }
+        #expect(missingKeys.creationCount == 0)
+        #expect(try Data(contentsOf: fixture.file) == original)
+    }
+
+    @Test("A wrong existing key cannot mix new records into the corpus")
+    func wrongExistingKeyFailsClosed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.store.append([fixture.event(id: "one", text: "history")])
+        let original = try Data(contentsOf: fixture.file)
+        let reopened = EncryptedPersonalHistoryStore(
+            location: fixture.file,
+            keyProvider: MutableKeys(keyData: Data(repeating: 0x5A, count: 32))
+        )
+
+        await #expect(throws: PersonalHistoryStorageError.corruptStore) {
+            try await reopened.append([fixture.event(id: "two", text: "new history")])
+        }
+        #expect(try Data(contentsOf: fixture.file) == original)
     }
 
     @Test("An invalid encryption key fails before creating the store")
@@ -103,12 +176,13 @@ struct PersonalHistoryStoreTests {
         #expect(!FileManager.default.fileExists(atPath: fixture.file.path))
     }
 
-    private final class FixedKeys: PersonalHistoryKeyProviding, @unchecked Sendable {
+    private final class MutableKeys: PersonalHistoryKeyProviding, @unchecked Sendable {
         private let lock = NSLock()
-        private let keyData: Data
+        private var keyData: Data?
         private var deleted = false
+        private var creations = 0
 
-        init(keyData: Data) {
+        init(keyData: Data?) {
             self.keyData = keyData
         }
 
@@ -116,8 +190,25 @@ struct PersonalHistoryStoreTests {
             lock.withLock { deleted }
         }
 
+        var creationCount: Int {
+            lock.withLock { creations }
+        }
+
+        func loadExistingKey() throws -> Data {
+            try lock.withLock {
+                guard let keyData else { throw PersonalHistoryStorageError.missingKey }
+                return keyData
+            }
+        }
+
         func loadOrCreateKey() throws -> Data {
-            keyData
+            lock.withLock {
+                if let keyData { return keyData }
+                creations += 1
+                let created = Data(repeating: 0x5A, count: 32)
+                keyData = created
+                return created
+            }
         }
 
         func deleteKey() throws {
@@ -128,14 +219,14 @@ struct PersonalHistoryStoreTests {
     private struct Fixture {
         let root: URL
         let file: URL
-        let keys: FixedKeys
+        let keys: MutableKeys
         let store: EncryptedPersonalHistoryStore
 
         init(keyData: Data = Data(repeating: 0xA5, count: 32)) throws {
             root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
                 .appendingPathComponent("tilde-history-tests-\(UUID().uuidString)")
             file = root.appendingPathComponent("Personal History/history.v1.enc")
-            keys = FixedKeys(keyData: keyData)
+            keys = MutableKeys(keyData: keyData)
             store = EncryptedPersonalHistoryStore(location: file, keyProvider: keys)
         }
 

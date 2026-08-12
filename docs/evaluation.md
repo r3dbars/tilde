@@ -66,7 +66,12 @@ This is raw-model evidence. It does not exercise the authenticated Tilde-to-IME
 socket, production output cleaning, marked-text rendering, or acceptance.
 Manual editor compatibility remains separate proof.
 
-Personal History is not an evaluator input and is never exported automatically.
-The current model and evaluator do not read it. Any future quality experiment
-must derive a separate, explicit on-device dataset and keep aggregate reports
-free of personal text.
+Personal History is never exported automatically and is not an input to this
+raw-model evaluator. When explicitly enabled, Tilde separately runs an
+on-device personal-word shadow: it freezes a current-word completion after a
+typed prefix, scores it against the subsequently finished word, then learns.
+It exposes aggregate counts only. That live shadow is observational evidence,
+not a claim about acceptance or improvement
+to the visible product. It is a feasibility probe until it has at least 200
+predictions; any promotion still requires a later paired comparison against the
+current spellchecker on fresh future words.
