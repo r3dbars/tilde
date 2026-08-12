@@ -147,8 +147,12 @@ run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "structural Swift delta" check_structural_delta
 run_blocking "bash -n script/*.sh" bash -n script/*.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
+run_blocking "personal brain lab LOC budget" bash -c \
+  'test $(( $(wc -l < script/personal_brain_lab.py) + $(wc -l < script/personal_brain_messages.swift) )) -le 1250'
 run_blocking "runtime egress harness self-test" python3 script/check_runtime_network_egress.py --selftest
 run_blocking "golden evaluator self-test" python3 script/golden_eval.py --selftest
+run_blocking "personal brain historical discovery self-test" python3 script/personal_brain_lab.py --selftest
+run_blocking "personal brain Messages decoder self-test" xcrun swift script/personal_brain_messages.swift --selftest
 run_blocking "bundle signing parser self-test" bash script/check_app_bundle.sh --selftest
 run_blocking "development signing selector self-test" bash script/signing_identity.sh --selftest
 run_blocking "release-proof cleanup parser self-test" bash script/restart_app.sh --selftest

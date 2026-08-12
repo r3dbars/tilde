@@ -104,6 +104,9 @@ process_executable() {
   /usr/sbin/lsof -nP -a -p "$1" -d txt -Fn 2>/dev/null \
     | awk '/^n/ { sub(/^n/, ""); print; exit }' || true
 }
+same_file_identity() {
+  [[ -n "$1" && -n "$2" && -e "$1" && -e "$2" && "$1" -ef "$2" ]]
+}
 proof_helper_command() {
   local command="$1" args
   [[ "$command" == "$HELPER "* ]] || return 1
@@ -133,7 +136,7 @@ captured_helper_is_current() {
     "$(ps -p "$pid" -o lstart= 2>/dev/null || true)"
 }
 helper_identity_matches() {
-  [[ "$2" == "$HELPER" && "$3" == "${1#*$'\t'}" ]]
+  same_file_identity "$2" "$HELPER" && [[ "$3" == "${1#*$'\t'}" ]]
 }
 stop_captured_helpers() {
   local captured="$1" signal identity pid any_running
@@ -171,13 +174,17 @@ proof_child_pid() {
   done
 }
 if [[ "$SELFTEST" == "1" ]]; then
-  HELPER="/tmp/Tilde Proof.app/Contents/Helpers/llama-server"
+  HELPER="$ROOT_DIR/script/restart_app.sh"
   proof_helper_command "$HELPER --port $RELEASE_PROOF_PORT"
   ! proof_helper_command "$HELPER --port $PRODUCTION_PORT"
   helper_identity_matches $'201\tbirth-a' "$HELPER" birth-a
   ! helper_identity_matches $'201\tbirth-a' /tmp/other birth-a
   ! helper_identity_matches $'201\tbirth-a' "$HELPER" birth-b
-  echo "selftest OK: cleanup matcher rejects port, path, and birth mismatches"
+  if [[ "$HELPER" == /private/tmp/* ]]; then
+    helper_alias="/tmp${HELPER#/private/tmp}"
+    helper_identity_matches $'201\tbirth-a' "$helper_alias" birth-a
+  fi
+  echo "selftest OK: cleanup matcher rejects port and birth mismatches; file identity accepts the /tmp alias"
   exit 0
 fi
 
@@ -231,10 +238,9 @@ for _ in {1..60}; do
   app_pid="$(pgrep -f "^${BINARY}([[:space:]]|$)" | head -n 1 || true)"
   if [[ -n "$app_pid" ]]; then
     child_pid="$(pgrep -P "$app_pid" -f '/llama-server([[:space:]]|$)' | head -n 1 || true)"
-    child_command="$(ps -p "$child_pid" -o command= 2>/dev/null || true)"
     expected_helper="$APP/Contents/Helpers/llama-server"
     if [[ -n "$child_pid" ]] \
-      && [[ "$child_command" == "$expected_helper" || "$child_command" == "$expected_helper "* ]] \
+      && same_file_identity "$(process_executable "$child_pid")" "$expected_helper" \
       && curl -sf "http://127.0.0.1:$PRODUCTION_PORT/health" >/dev/null \
       && [[ -S "$SOCKET" ]]; then
       echo "Tilde restarted from $APP (pid $app_pid, llama-server child $child_pid)."
