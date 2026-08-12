@@ -21,7 +21,7 @@ enum SecureLocalStorage {
     }
 
     static func openFileForReadingAndAppending(at file: URL) -> FileHandle? {
-        openOwnerOnlyFile(at: file, flags: O_RDWR | O_APPEND | O_CREAT)
+        openOwnerOnlyFile(at: file, flags: O_RDWR | O_CREAT)
     }
 
     static func openExistingFileForReading(at file: URL) -> FileHandle? {

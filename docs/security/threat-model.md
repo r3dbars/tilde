@@ -12,7 +12,7 @@ Tilde has two signed user-facing processes and one signed helper child:
   user enables Personal History—buffers bounded history events in memory.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
   its bundled GGUF model, returns suggestions, and exclusively owns the local
-  Personal History store and memory-only personal next-word shadow.
+  Personal History store and paired personal next-word shadow.
 - The bundled `llama-server` helper is a localhost-only child of the Tilde app.
 
 The helper is an app-owned child process bound to localhost. Ordinary request
@@ -61,13 +61,21 @@ identity are out of scope.
 - Personal History records are independently authenticated and encrypted with
   AES-GCM using a 256-bit, non-synchronizing key in the user's macOS login
   Keychain. Its directory and file are restricted to the owner.
-- The personal next-word shadow rebuilds from a bounded recent 4 MiB history
-  tail, then processes new allowed events in append order into a bounded
-  context-and-transition table. It censors the tail's first possibly truncated
-  token, predicts before learning the observed next word, ignores accepted
-  model suggestions, and deduplicates recent stable event IDs. Derived counts
-  remain in app memory and are never logged or sent to the model. The menu
-  reports if the table reaches its fixed memory capacity.
+- The paired personal next-word shadow restores bounded aggregate totals, then
+  rebuilds both learned recipes without scoring from a bounded recent 4 MiB
+  history tail. It processes new allowed events in append order, scores both
+  recipes on the same fresh words, censors the tail's first possibly truncated
+  token, predicts before learning, ignores accepted model suggestions, and
+  deduplicates recent stable event IDs. Neither recipe affects visible
+  suggestions. The menu reports if the learned table reaches its fixed memory
+  capacity.
+- The only persistent shadow state is bounded aggregate lifetime totals and up
+  to 64 daily buckets,
+  encrypted in the same history-log append as the events it scores. It has no
+  words, candidates, contexts, or per-case rows. Its envelope must match the
+  local history identifier, durable exclusion generation, and exact exclusion set; malformed, stale, or
+  mismatched data fails validation. Disable retains it, while exclusion changes
+  logically clear it and deletion removes it.
 - Diagnostics pass through a redaction layer and store shape, timing, count,
   app identity, and failure metadata only. Personal History is a separate,
   explicit data path.
@@ -92,7 +100,7 @@ identity are out of scope.
   user, a compromise of Tilde while the key is available, privileged access,
   or plaintext copied elsewhere after decryption. A compromise of the running
   app can expose the decrypted recent replay window and derived personal
-  contexts and transitions.
+  contexts, transitions, aggregate paired outcome counts, and recipe identifiers.
 - The encrypted log exposes a plaintext format header, approximate size,
   ciphertext lengths, and record count. Independent per-record authentication
   detects modified ciphertext when that record is replayed; launch replay
@@ -149,8 +157,11 @@ documents.
 Personal History changes additionally require tests for disabled capture,
 excluded apps, secure-input policy, bounded event decoding, encrypted
 round-trips, corrupt-store failure, deletion, prediction-before-learning,
-duplicate delivery, and edit-boundary isolation. Manual installed-IME proof
+duplicate delivery, edit-boundary isolation, aggregate-checkpoint corruption,
+restart restoration, replay/live overlap, stale checkpoint rejection, and the
+retention and clearing lifecycle. Manual installed-IME proof
 must confirm that secure password fields add no records, ordinary fields add
 records only after explicit opt-in, exclusions work in real host apps, and the
-menu accurately reports size, next-word shadow state, memory capacity, and
-deletion. Those manual checks are not proven by the deterministic test suite.
+menu accurately reports size, paired-test progress, shadow-only status, memory
+capacity, and deletion. Those manual checks are not proven by the deterministic
+test suite.

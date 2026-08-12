@@ -10,9 +10,11 @@ struct PersonalNextWordShadowTests {
     func frozenRecipeIdentity() {
         let snapshot = PersonalNextWordShadow(evaluationStartMilliseconds: 0).snapshot
 
+        #expect(PersonalNextWordShadow.baselineRecipeID == "r1435-live-v1")
+        #expect(PersonalNextWordShadow.candidateRecipeID == "r1945-live-v1")
         #expect(PersonalNextWordShadow.recipeID == "r1945-live-v1")
         #expect(snapshot == PersonalNextWordShadow(evaluationStartMilliseconds: 0).snapshot)
-        #expect(PersonalNextWordShadow.evaluationStartMilliseconds == 1_786_552_800_000)
+        #expect(PersonalNextWordShadow.evaluationStartMilliseconds == 1_786_556_700_000)
         #expect(PersonalNextWordShadow.maximumContexts == 8_192)
         #expect(PersonalNextWordShadow.maximumTransitions == 32_768)
         #expect(PersonalNextWordShadow.maximumActiveStreams == 64)
@@ -27,8 +29,22 @@ struct PersonalNextWordShadowTests {
         #expect(shadow.snapshot.opportunities == 2)
         #expect(shadow.snapshot.predictions == 1)
         #expect(shadow.snapshot.exactHits == 1)
+        #expect(shadow.snapshot.baselinePredictions == 1)
+        #expect(shadow.snapshot.baselineExactHits == 1)
+        assertPairedInvariants(shadow.snapshot)
         #expect(shadow.snapshot.coverage == 0.5)
         #expect(shadow.snapshot.precision == 1)
+    }
+
+    @Test("Both recipes score before either learns the target")
+    func pairedCausality() {
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: 0)
+        shadow.consume([event(id: "first", text: " echo echo ")])
+
+        #expect(shadow.snapshot.opportunities == 1)
+        #expect(shadow.snapshot.predictions == 0)
+        #expect(shadow.snapshot.baselinePredictions == 0)
+        #expect(shadow.snapshot.outcomeCells.baselineSilentCandidateSilent == 1)
     }
 
     @Test("Order four predicts and an ineligible context backs off to order zero")
@@ -47,6 +63,11 @@ struct PersonalNextWordShadowTests {
         #expect(contextFour.snapshot.opportunities == 1)
         #expect(contextFour.snapshot.predictions == 1)
         #expect(contextFour.snapshot.exactHits == 1)
+        #expect(contextFour.snapshot.baselinePredictions == 0)
+        #expect(contextFour.snapshot.baselineExactHits == 0)
+        #expect(contextFour.snapshot.outcomeCells.baselineSilentCandidateCorrect == 1)
+        #expect(contextFour.snapshot.predictionDisagreements == 1)
+        assertPairedInvariants(contextFour.snapshot)
 
         var backoff = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
         backoff.consume([
@@ -76,6 +97,11 @@ struct PersonalNextWordShadowTests {
         #expect(tied.snapshot.opportunities == 1)
         #expect(tied.snapshot.predictions == 1)
         #expect(tied.snapshot.exactHits == 1)
+        #expect(tied.snapshot.baselinePredictions == 1)
+        #expect(tied.snapshot.baselineExactHits == 0)
+        #expect(tied.snapshot.outcomeCells.baselineWrongCandidateCorrect == 1)
+        #expect(tied.snapshot.predictionDisagreements == 1)
+        assertPairedInvariants(tied.snapshot)
 
         var shareBackoff = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
         shareBackoff.consume([
@@ -91,6 +117,79 @@ struct PersonalNextWordShadowTests {
         #expect(shareBackoff.snapshot.opportunities == 1)
         #expect(shareBackoff.snapshot.predictions == 1)
         #expect(shareBackoff.snapshot.exactHits == 1)
+    }
+
+    @Test("The four both-predict exactness cells remain independently countable")
+    func fourBothPredictionOutcomeCells() {
+        let bothCorrect = pairedFixture(exactTarget: "Good", exactSupport: "Good", broadSupport: "Good")
+        #expect(bothCorrect.outcomeCells.baselineCorrectCandidateCorrect == 1)
+
+        let baselineCorrect = pairedFixture(
+            exactTarget: "Good", exactSupport: "Wrong", broadSupport: "Good"
+        )
+        #expect(baselineCorrect.outcomeCells.baselineCorrectCandidateWrong == 1)
+
+        let candidateCorrect = pairedFixture(
+            exactTarget: "Good", exactSupport: "Good", broadSupport: "Wrong"
+        )
+        #expect(candidateCorrect.outcomeCells.baselineWrongCandidateCorrect == 1)
+
+        let bothWrong = pairedFixture(
+            exactTarget: "Target", exactSupport: "Wrong", broadSupport: "Wrong"
+        )
+        #expect(bothWrong.outcomeCells.baselineWrongCandidateWrong == 1)
+
+        for snapshot in [bothCorrect, baselineCorrect, candidateCorrect, bothWrong] {
+            assertPairedInvariants(snapshot)
+        }
+
+        let differentWrong = pairedFixture(
+            exactTarget: "Target", exactSupport: "Candidate", broadSupport: "Baseline"
+        )
+        #expect(differentWrong.outcomeCells.baselineWrongCandidateWrong == 1)
+        #expect(bothWrong.predictionDisagreements == 0)
+        #expect(differentWrong.predictionDisagreements == 1)
+    }
+
+    @Test("All nine cells reconstruct both recipe marginals")
+    func nineCellMarginals() {
+        let cells = PersonalNextWordOutcomeCells(
+            baselineSilentCandidateSilent: 1,
+            baselineSilentCandidateCorrect: 2,
+            baselineSilentCandidateWrong: 3,
+            baselineCorrectCandidateSilent: 4,
+            baselineCorrectCandidateCorrect: 5,
+            baselineCorrectCandidateWrong: 6,
+            baselineWrongCandidateSilent: 7,
+            baselineWrongCandidateCorrect: 8,
+            baselineWrongCandidateWrong: 9
+        )
+
+        #expect(cells.opportunities == 45)
+        #expect(cells.baselinePredictions == 39)
+        #expect(cells.baselineExactHits == 15)
+        #expect(cells.candidatePredictions == 33)
+        #expect(cells.candidateExactHits == 15)
+    }
+
+    @Test("A candidate-only higher-order prediction can be wrong")
+    func candidateOnlyWrongCell() {
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        shadow.consume([
+            event(id: "exact-a", text: " one two three four Candidate ", time: 100, session: "a"),
+            event(id: "exact-b", text: " one two three four Candidate ", time: 100, session: "b"),
+            event(id: "broad-a", text: " nine ten three four Other ", time: 100, session: "c"),
+            event(id: "broad-b", text: " nine ten three four Other ", time: 100, session: "d"),
+            event(id: "live-context", text: " one two three four ", time: 999, session: "live"),
+            event(id: "live-target", text: "Wrong ", time: cutover, session: "live"),
+        ])
+
+        #expect(shadow.snapshot.outcomeCells.baselineSilentCandidateWrong == 1)
+        #expect(shadow.snapshot.baselinePredictions == 0)
+        #expect(shadow.snapshot.predictions == 1)
+        #expect(shadow.snapshot.exactHits == 0)
+        #expect(shadow.snapshot.predictionDisagreements == 1)
+        assertPairedInvariants(shadow.snapshot)
     }
 
     @Test("Global counts cross streams while partial tokens do not")
@@ -393,6 +492,170 @@ struct PersonalNextWordShadowTests {
         #expect(reconstructed.snapshot.exactHits == 1)
     }
 
+    @Test("Checkpoint round-trip restores aggregates while replay only rebuilds the model")
+    func checkpointRoundTripAndTrainingOnlyReplay() throws {
+        let experimentStart = PersonalNextWordShadow.evaluationStartMilliseconds
+        let training = [
+            event(id: "train-a", text: " quiet work ", time: 100, session: "a"),
+            event(id: "train-b", text: " quiet work ", time: 100, session: "b"),
+        ]
+        var original = PersonalNextWordShadow()
+        original.consume(training, scoring: false)
+        original.consume([
+            event(id: "boundary", text: " quiet ", time: experimentStart, session: "live"),
+            event(id: "target", text: "work ", time: experimentStart, session: "live"),
+        ])
+
+        let encoded = try JSONEncoder().encode(original.checkpoint)
+        let serialized = String(decoding: encoded, as: UTF8.self)
+        #expect(!serialized.contains("quiet"))
+        #expect(!serialized.contains("work"))
+        #expect(!serialized.contains("com.example"))
+
+        let decoded = try JSONDecoder().decode(
+            PersonalNextWordShadowCheckpoint.self,
+            from: encoded
+        )
+        var restored = try #require(PersonalNextWordShadow(checkpoint: decoded))
+        #expect(restored.checkpoint == original.checkpoint)
+        #expect(restored.snapshot.opportunities == original.snapshot.opportunities)
+        #expect(restored.snapshot.predictions == original.snapshot.predictions)
+        #expect(restored.snapshot.baselinePredictions == original.snapshot.baselinePredictions)
+        #expect(restored.snapshot.learnedTransitions == 0)
+
+        let totalsBeforeReplay = restored.checkpoint.totals
+        let daysBeforeReplay = restored.checkpoint.activeDays
+        restored.consume(training, scoring: false)
+        #expect(restored.checkpoint.totals == totalsBeforeReplay)
+        #expect(restored.checkpoint.activeDays == daysBeforeReplay)
+        #expect(restored.snapshot.learnedTransitions > 0)
+    }
+
+    @Test("Old checkpoints decode but only current compatible checkpoints restore")
+    func oldCheckpointIsSafeButIncompatible() throws {
+        let data = try JSONEncoder().encode(PersonalNextWordShadow().checkpoint)
+        var object = try #require(JSONSerialization.jsonObject(with: data) as? [Any])
+        object[0] = 2
+        object[1] = "r1000-live-v0"
+        object[2] = "r1001-live-v0"
+        object[3] = PersonalNextWordShadow.evaluationStartMilliseconds - 1
+
+        let decoded = try JSONDecoder().decode(
+            PersonalNextWordShadowCheckpoint.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+
+        #expect(decoded.v == 2)
+        #expect(decoded.baselineRecipeID == "r1000-live-v0")
+        #expect(decoded.candidateRecipeID == "r1001-live-v0")
+        #expect(!decoded.isCompatibleWithCurrentExperiment)
+        #expect(PersonalNextWordShadow(checkpoint: decoded) == nil)
+    }
+
+    @Test("Checkpoint validation rejects malformed and over-cap aggregates")
+    func malformedCheckpointFailsClosed() throws {
+        let valid = PersonalNextWordShadow().checkpoint
+        let data = try JSONEncoder().encode(valid)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [Any]
+        )
+        let mutations: [(Int, Any)] = [
+            (0, 0), (1, ""), (2, "invalid recipe"), (3, 0),
+        ]
+        for (index, replacement) in mutations {
+            var mutated = object
+            mutated[index] = replacement
+            let invalid = try JSONSerialization.data(withJSONObject: mutated)
+            #expect(throws: (any Error).self) {
+                try JSONDecoder().decode(PersonalNextWordShadowCheckpoint.self, from: invalid)
+            }
+        }
+
+        let negative = PersonalNextWordPairedAggregate(
+            outcomeCells: .init(baselineSilentCandidateSilent: -1)
+        )
+        #expect(PersonalNextWordShadowCheckpoint(
+            evaluationStartMilliseconds: PersonalNextWordShadow.evaluationStartMilliseconds,
+            totals: negative,
+            activeDays: []
+        ) == nil)
+
+        let tooManyDays = (0...PersonalNextWordShadow.maximumActiveDays).map {
+            PersonalNextWordDailyAggregate(
+                utcDayStartMilliseconds: Int64($0) * PersonalNextWordShadow.dayMilliseconds,
+                aggregate: .init()
+            )
+        }
+        #expect(PersonalNextWordShadowCheckpoint(
+            evaluationStartMilliseconds: PersonalNextWordShadow.evaluationStartMilliseconds,
+            totals: .init(),
+            activeDays: tooManyDays
+        ) == nil)
+
+        #expect(PersonalNextWordShadowCheckpoint(
+            evaluationStartMilliseconds: PersonalNextWordShadow.evaluationStartMilliseconds,
+            totals: .init(),
+            activeDays: [.init(utcDayStartMilliseconds: 0, aggregate: .init())]
+        ) == nil)
+
+        let impossibleDisagreement = PersonalNextWordPairedAggregate(
+            outcomeCells: .init(baselineCorrectCandidateWrong: 1),
+            predictionDisagreements: 0
+        )
+        #expect(PersonalNextWordShadowCheckpoint(
+            evaluationStartMilliseconds: PersonalNextWordShadow.evaluationStartMilliseconds,
+            totals: impossibleDisagreement,
+            activeDays: []
+        ) == nil)
+    }
+
+    @Test("A capacity warning survives checkpoint restoration")
+    func capacityWarningSurvivesCheckpoint() {
+        var shadow = PersonalNextWordShadow()
+        let gap = Int64(30 * 60 * 1_000 + 1)
+        shadow.consume((0..<6_600).map { index in
+            event(
+                id: "sticky-cap-\(index)",
+                text: " context stays fixed here \(uniqueWord(index)) ",
+                time: Int64(index + 1) * gap
+            )
+        }, scoring: false)
+        #expect(shadow.snapshot.capacityLimited)
+
+        let restored = PersonalNextWordShadow(checkpoint: shadow.checkpoint)
+        #expect(restored?.snapshot.capacityLimited == true)
+        #expect(restored?.snapshot.learnedTransitions == 0)
+    }
+
+    @Test("Lifetime totals retain 65 days while recent UTC buckets stay capped at 64")
+    func dailyAggregateCap() {
+        var shadow = PersonalNextWordShadow()
+        let firstDay = PersonalNextWordShadow.evaluationStartMilliseconds
+            / PersonalNextWordShadow.dayMilliseconds * PersonalNextWordShadow.dayMilliseconds
+        shadow.consume([
+            event(id: "day-train-a", text: " cue Answer ", session: "train-a"),
+            event(id: "day-train-b", text: " cue Answer ", session: "train-b"),
+        ], scoring: false)
+
+        for index in 0..<65 {
+            let timestamp = max(
+                PersonalNextWordShadow.evaluationStartMilliseconds,
+                firstDay + Int64(index) * PersonalNextWordShadow.dayMilliseconds
+            )
+            let session = "day-\(index)"
+            shadow.consume([
+                event(id: "day-boundary-\(index)", text: " cue ", time: timestamp, session: session),
+                event(id: "day-target-\(index)", text: "Answer ", time: timestamp, session: session),
+            ])
+        }
+
+        #expect(shadow.snapshot.opportunities == 65)
+        #expect(shadow.snapshot.activeDays == PersonalNextWordShadow.maximumActiveDays)
+        #expect(shadow.checkpoint.activeDays.count == PersonalNextWordShadow.maximumActiveDays)
+        #expect(shadow.checkpoint.activeDays.first?.utcDayStartMilliseconds
+            == firstDay + PersonalNextWordShadow.dayMilliseconds)
+    }
+
     @Test("The active-stream bound admits new writing")
     func activeStreamBoundAdmitsNewWriting() {
         var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: 0)
@@ -464,6 +727,46 @@ struct PersonalNextWordShadowTests {
             event(id: "baseline-b", text: " alpha beta ", time: 100, session: "b"),
         ])
         return (shadow.snapshot.learnedContexts, shadow.snapshot.learnedTransitions)
+    }
+
+    private func pairedFixture(
+        exactTarget: String,
+        exactSupport: String,
+        broadSupport: String
+    ) -> PersonalNextWordShadowSnapshot {
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        shadow.consume([
+            event(id: "exact-a", text: " one two three four \(exactSupport) ", time: 100, session: "exact-a"),
+            event(id: "exact-b", text: " one two three four \(exactSupport) ", time: 100, session: "exact-b"),
+        ])
+        for index in 0..<5 {
+            shadow.consume([event(
+                id: "broad-\(index)",
+                text: " other path three four \(broadSupport) ",
+                time: 100,
+                session: "broad-\(index)"
+            )])
+        }
+        shadow.consume([
+            event(id: "fixture-boundary", text: " one two three four ", time: 999, session: "live"),
+            event(id: "fixture-target", text: "\(exactTarget) ", time: cutover, session: "live"),
+        ])
+        return shadow.snapshot
+    }
+
+    private func assertPairedInvariants(
+        _ snapshot: PersonalNextWordShadowSnapshot,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) {
+        let cells = snapshot.outcomeCells
+        #expect(cells.opportunities == snapshot.opportunities, sourceLocation: sourceLocation)
+        #expect(cells.baselinePredictions == snapshot.baselinePredictions, sourceLocation: sourceLocation)
+        #expect(cells.baselineExactHits == snapshot.baselineExactHits, sourceLocation: sourceLocation)
+        #expect(cells.candidatePredictions == snapshot.predictions, sourceLocation: sourceLocation)
+        #expect(cells.candidateExactHits == snapshot.exactHits, sourceLocation: sourceLocation)
+        #expect(snapshot.baselineExactHits <= snapshot.baselinePredictions, sourceLocation: sourceLocation)
+        #expect(snapshot.exactHits <= snapshot.predictions, sourceLocation: sourceLocation)
+        #expect(snapshot.predictionDisagreements <= snapshot.opportunities, sourceLocation: sourceLocation)
     }
 
     private func uniqueWord(_ number: Int) -> String {

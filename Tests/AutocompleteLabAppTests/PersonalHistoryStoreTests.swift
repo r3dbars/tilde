@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import Security
 import Testing
 @testable import AutocompleteLabApp
@@ -38,6 +39,181 @@ struct PersonalHistoryStoreTests {
         var info = stat()
         #expect(lstat(fixture.file.path, &info) == 0)
         #expect(info.st_mode & 0o7777 == 0o600)
+    }
+
+    @Test("A legacy event log replays and upgrades before the first batch append")
+    func legacyEventMigration() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let legacy = fixture.event(id: "legacy", text: "legacy history")
+        let plaintext = try JSONEncoder().encode(legacy)
+        let key = SymmetricKey(data: try fixture.keys.loadExistingKey())
+        let sealed = try AES.GCM.seal(
+            plaintext,
+            using: key,
+            authenticating: Data("bar.r3d.tilde.personal-history.v1".utf8)
+        )
+        let combined = try #require(sealed.combined)
+        try FileManager.default.createDirectory(
+            at: fixture.file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        chmod(fixture.file.deletingLastPathComponent().path, 0o700)
+        var raw = Data("TILDE-PERSONAL-HISTORY\t1\n".utf8)
+        raw.append(combined.base64EncodedData())
+        raw.append(0x0A)
+        try raw.write(to: fixture.file)
+        chmod(fixture.file.path, 0o600)
+
+        #expect(try await fixture.store.loadEvents() == [legacy])
+        let current = fixture.event(id: "current", text: "current history")
+        try await fixture.store.append([current])
+
+        #expect(try Data(contentsOf: fixture.file).starts(
+            with: Data("TILDE-PERSONAL-HISTORY\t2\n".utf8)
+        ))
+        #expect(try await fixture.store.loadEvents() == [legacy, current])
+    }
+
+    @Test("A paired checkpoint is encrypted in the same append as its events")
+    func encryptedCheckpointRoundTrip() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let events = [
+            fixture.event(id: "paired-a", text: "PRIVATE_CHECKPOINT_SENTINEL"),
+            fixture.event(id: "paired-b", text: "second event"),
+        ]
+        let stored = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: ["com.example.Excluded"],
+            checkpoint: PersonalNextWordShadow().checkpoint
+        )
+
+        try await fixture.store.append(events, checkpoint: stored)
+
+        let replay = try await fixture.store.loadReplay(maximumBytes: .max)
+        #expect(replay.events == events)
+        #expect(replay.checkpoint == stored)
+        let raw = try Data(contentsOf: fixture.file)
+        #expect(raw.split(separator: 0x0A).count == 2)
+        let text = String(decoding: raw, as: UTF8.self)
+        #expect(!text.contains("PRIVATE_CHECKPOINT_SENTINEL"))
+        #expect(!text.contains(PersonalNextWordShadow.candidateRecipeID))
+    }
+
+    @Test("An authenticated old-recipe checkpoint is dropped without losing its events")
+    func oldRecipeCheckpointMigration() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let oldEvent = fixture.event(id: "old-recipe", text: "retained history")
+        let stored = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            checkpoint: PersonalNextWordShadow().checkpoint
+        )
+        try fixture.writeAuthenticatedBatch(events: [oldEvent], checkpoint: stored) {
+            $0[2] = "retired-candidate-recipe"
+        }
+
+        let migrated = try await fixture.store.loadReplay(maximumBytes: .max)
+        #expect(migrated.events == [oldEvent])
+        #expect(migrated.checkpoint == nil)
+
+        let current = fixture.event(id: "after-migration", text: "current history")
+        try await fixture.store.append([current], checkpoint: nil)
+        let replay = try await fixture.store.loadReplay(maximumBytes: .max)
+        #expect(replay.events == [oldEvent, current])
+        #expect(replay.checkpoint == nil)
+    }
+
+    @Test("A malformed authenticated checkpoint still makes the record corrupt")
+    func malformedCheckpointFailsClosed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let event = fixture.event(id: "malformed-checkpoint", text: "history")
+        let stored = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            checkpoint: PersonalNextWordShadow().checkpoint
+        )
+        try fixture.writeAuthenticatedBatch(events: [event], checkpoint: stored) {
+            $0.removeLast()
+        }
+
+        await #expect(throws: PersonalHistoryStorageError.corruptStore) {
+            try await fixture.store.loadReplay(maximumBytes: .max)
+        }
+    }
+
+    @Test("The maximum retained daily checkpoint stays within one appendable record")
+    func maximumCheckpointRemainsAppendable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let daily = (0..<PersonalNextWordShadow.maximumActiveDays).map { day in
+            PersonalNextWordDailyAggregate(
+                utcDayStartMilliseconds: Int64(day) * PersonalNextWordShadow.dayMilliseconds,
+                aggregate: PersonalNextWordPairedAggregate(
+                    outcomeCells: PersonalNextWordOutcomeCells(
+                        baselineSilentCandidateSilent: 1
+                    )
+                )
+            )
+        }
+        let totals = PersonalNextWordPairedAggregate(
+            outcomeCells: PersonalNextWordOutcomeCells(
+                baselineSilentCandidateSilent: PersonalNextWordShadow.maximumActiveDays
+            )
+        )
+        let checkpoint = try #require(PersonalNextWordShadowCheckpoint(
+            evaluationStartMilliseconds: PersonalNextWordShadow.evaluationStartMilliseconds,
+            totals: totals,
+            activeDays: daily
+        ))
+        let stored = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            checkpoint: checkpoint
+        )
+        let first = fixture.event(id: "maximum-checkpoint", text: "history")
+        let second = fixture.event(id: "after-maximum", text: "more history")
+
+        try await fixture.store.append([first], checkpoint: stored)
+        let firstRaw = try Data(contentsOf: fixture.file)
+        #expect(firstRaw.split(separator: 0x0A).last!.count + 1 < 4 * 1_024)
+        try await fixture.store.append([second])
+
+        let replay = try await fixture.store.loadReplay(maximumBytes: .max)
+        #expect(replay.events == [first, second])
+        #expect(replay.checkpoint == stored)
+    }
+
+    @Test("A training-only append carries the last checkpoint into the bounded replay tail")
+    func checkpointSurvivesTrainingOnlyTail() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let stored = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            checkpoint: PersonalNextWordShadow().checkpoint
+        )
+        let scored = fixture.event(id: "scored", text: "scored history")
+        let trainingOnly = fixture.event(id: "training-only", text: "new history")
+
+        try await fixture.store.append([scored], checkpoint: stored)
+        try await fixture.store.append([trainingOnly], checkpoint: nil)
+        let raw = try Data(contentsOf: fixture.file)
+        let newestRecordBytes = try #require(raw.split(separator: 0x0A).last).count + 1
+
+        let replay = try await fixture.store.loadReplay(
+            maximumBytes: Int64(newestRecordBytes)
+        )
+        #expect(replay.events == [trainingOnly])
+        #expect(replay.checkpoint == stored)
     }
 
     @Test("Delete removes the corpus and its encryption key")
@@ -129,7 +305,8 @@ struct PersonalHistoryStoreTests {
         defer { fixture.remove() }
         let first = fixture.event(id: "one", text: "older history")
         let second = fixture.event(id: "two", text: "recent history")
-        try await fixture.store.append([first, second])
+        try await fixture.store.append([first])
+        try await fixture.store.append([second])
         let raw = try Data(contentsOf: fixture.file)
         let finalLineBytes = raw.split(separator: 0x0A).last!.count + 1
 
@@ -259,8 +436,53 @@ struct PersonalHistoryStoreTests {
             )!
         }
 
+        func writeAuthenticatedBatch(
+            events: [PersonalHistoryEvent],
+            checkpoint: PersonalNextWordStoredCheckpoint,
+            mutateShadowCheckpoint: (inout [Any]) -> Void
+        ) throws {
+            let encoded = try JSONEncoder().encode(
+                EncodedStoredBatch(events: events, checkpoint: checkpoint)
+            )
+            guard var batch = try JSONSerialization.jsonObject(with: encoded) as? [String: Any],
+                  var stored = batch["checkpoint"] as? [String: Any],
+                  var shadow = stored["checkpoint"] as? [Any] else {
+                throw CocoaError(.coderInvalidValue)
+            }
+            mutateShadowCheckpoint(&shadow)
+            stored["checkpoint"] = shadow
+            batch["checkpoint"] = stored
+            let plaintext = try JSONSerialization.data(
+                withJSONObject: batch,
+                options: [.sortedKeys]
+            )
+            let key = SymmetricKey(data: try keys.loadExistingKey())
+            let sealed = try AES.GCM.seal(
+                plaintext,
+                using: key,
+                authenticating: Data("bar.r3d.tilde.personal-history.v1".utf8)
+            )
+            let combined = try #require(sealed.combined)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            chmod(file.deletingLastPathComponent().path, 0o700)
+            var raw = Data("TILDE-PERSONAL-HISTORY\t2\n".utf8)
+            raw.append(combined.base64EncodedData())
+            raw.append(0x0A)
+            try raw.write(to: file)
+            chmod(file.path, 0o600)
+        }
+
         func remove() {
             try? FileManager.default.removeItem(at: root)
         }
+    }
+
+    private struct EncodedStoredBatch: Encodable {
+        let v = 1
+        let events: [PersonalHistoryEvent]
+        let checkpoint: PersonalNextWordStoredCheckpoint
     }
 }

@@ -58,6 +58,134 @@ struct PersonalHistoryControllerTests {
         #expect(await settledStatus(fixture.controller).snapshot.learnedTransitions > 0)
     }
 
+    @Test("Live paired aggregates persist before ack and survive restart without replay scoring")
+    func pairedCheckpointSurvivesRestart() async {
+        let fixture = Fixture(enabled: true)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        let event = fixture.event(
+            text: " alpha beta alpha beta alpha beta alpha beta "
+        )
+
+        #expect(await fixture.controller.ingest([event]))
+        let before = await settledStatus(fixture.controller).snapshot
+        #expect(before.opportunities > 0)
+        let stored = await fixture.store.checkpoint
+        let data = try? JSONEncoder().encode(stored)
+        let checkpointJSON = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        #expect(stored != nil)
+        #expect(!checkpointJSON.contains("alpha"))
+        #expect(!checkpointJSON.contains("beta"))
+        #expect(!checkpointJSON.contains(event.id))
+        #expect(!checkpointJSON.contains(event.sessionIdentifier))
+
+        let restarted = PersonalHistoryController(
+            store: fixture.store,
+            settings: TildeSettings(keyboard: fixture.defaults)
+        )
+        let after = await settledStatus(restarted).snapshot
+        #expect(after.opportunities == before.opportunities)
+        #expect(after.outcomeCells == before.outcomeCells)
+        #expect(after.predictionDisagreements == before.predictionDisagreements)
+        #expect(after.activeDays == before.activeDays)
+        #expect(after.learnedContexts == before.learnedContexts)
+        #expect(after.learnedTransitions == before.learnedTransitions)
+
+        let continuation = fixture.event(id: "after-restart", text: " beta ")
+        #expect(await restarted.ingest([continuation]))
+        var uninterrupted = PersonalNextWordShadow()
+        uninterrupted.consume([event], scoring: true)
+        uninterrupted.consume([continuation], scoring: true)
+        #expect(await settledStatus(restarted).snapshot == uninterrupted.snapshot)
+    }
+
+    @Test("Disabling retains the checkpoint while exclusion changes clear it")
+    func checkpointDisableAndExclusionLifecycle() async {
+        let fixture = Fixture(enabled: true)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        #expect(await fixture.controller.ingest([
+            fixture.event(text: " alpha beta alpha beta alpha beta "),
+        ]))
+        let saved = await fixture.store.checkpoint
+        #expect(saved != nil)
+
+        fixture.controller.isEnabled = false
+        #expect(await fixture.controller.nextWordStatus().phase == .inactive)
+        #expect(await fixture.store.checkpoint == saved)
+
+        fixture.controller.isEnabled = true
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        fixture.controller.excludedApps = ["com.example.Other"]
+        let reset = await settledStatus(fixture.controller)
+        #expect(reset.snapshot.opportunities == 0)
+        #expect(await fixture.store.checkpoint == saved)
+
+        fixture.controller.excludedApps = []
+        #expect(await settledStatus(fixture.controller).snapshot.opportunities == 0)
+        let restarted = PersonalHistoryController(
+            store: fixture.store,
+            settings: TildeSettings(keyboard: fixture.defaults)
+        )
+        #expect(await settledStatus(restarted).snapshot.opportunities == 0)
+    }
+
+    @Test("A mismatched checkpoint is discarded before bounded replay")
+    func mismatchedCheckpointFailsClosed() async {
+        let checkpoint = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "other-history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            checkpoint: PersonalNextWordShadow().checkpoint
+        )
+        let fixture = Fixture(enabled: true, checkpoint: checkpoint)
+
+        let status = await settledStatus(fixture.controller)
+        #expect(status.phase == .ready)
+        #expect(status.snapshot.opportunities == 0)
+        #expect(await fixture.store.replayMaximumBytes == [4 * 1_024 * 1_024])
+    }
+
+    @Test("An exclusion change prevents stale replay from publishing old-scope totals")
+    func exclusionChangeDefeatsStaleReplay() async {
+        var prior = PersonalNextWordShadow()
+        prior.consume([PersonalHistoryEvent(
+            id: "prior",
+            timestampMilliseconds: PersonalNextWordShadow.evaluationStartMilliseconds + 1,
+            historyIdentifier: "history",
+            consentIdentifier: "consent",
+            sessionIdentifier: "session",
+            appBundleIdentifier: "com.example.Editor",
+            source: .typed,
+            text: " alpha beta alpha beta alpha beta "
+        )!])
+        let stored = PersonalNextWordStoredCheckpoint(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            checkpoint: prior.checkpoint
+        )
+        let fixture = Fixture(enabled: true, blockReplays: true, checkpoint: stored)
+        await fixture.store.waitForReplayStart()
+
+        fixture.controller.excludedApps = ["com.example.Other"]
+        await fixture.store.releaseReplays()
+
+        let status = await settledStatus(fixture.controller)
+        #expect(status.phase == .ready)
+        #expect(status.snapshot.opportunities == 0)
+    }
+
+    @Test("A failed append cannot publish a paired checkpoint")
+    func failedAppendDoesNotPublishCheckpoint() async {
+        let fixture = Fixture(enabled: true, appendFailure: .corruptStore)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        let event = fixture.event(text: " alpha beta alpha beta alpha beta ")
+
+        #expect(!(await fixture.controller.ingest([event])))
+        #expect(await fixture.store.events.isEmpty)
+        #expect(await fixture.store.checkpoint == nil)
+        #expect(await fixture.controller.nextWordStatus().snapshot.opportunities == 0)
+    }
+
     @Test("Storage errors map to fixed privacy-safe menu copy")
     func storageErrorCopy() {
         enum UnexpectedFailure: Error { case value }
@@ -259,16 +387,19 @@ struct PersonalHistoryControllerTests {
     func deletionRotatesHistory() async throws {
         let fixture = Fixture()
         fixture.controller.isEnabled = true
+        #expect(await settledStatus(fixture.controller).phase == .ready)
         let eventBeforeDeletion = fixture.event(
             text: " personal writing helps personal writing helps "
         )
         #expect(await fixture.controller.ingest([eventBeforeDeletion]))
         #expect(await settledStatus(fixture.controller).snapshot.learnedTransitions > 0)
+        #expect(await fixture.store.checkpoint != nil)
 
         try await fixture.controller.deleteAll()
         #expect(!fixture.controller.isEnabled)
         #expect(await fixture.store.events.isEmpty)
         #expect(await fixture.controller.nextWordStatus().snapshot.opportunities == 0)
+        #expect(await fixture.store.checkpoint == nil)
 
         fixture.controller.isEnabled = true
         #expect(await fixture.controller.ingest([eventBeforeDeletion]))
@@ -279,15 +410,15 @@ struct PersonalHistoryControllerTests {
         #expect(await fixture.store.events == [eventAfterDeletion])
     }
 
-    @Test("Menu copy stays honest until the next-word shadow has enough predictions")
+    @Test("Menu copy stays honest until every paired next-word threshold is met")
     func nextWordStatusCopy() {
         let empty = PersonalNextWordShadow(evaluationStartMilliseconds: 0).snapshot
         #expect(PersonalNextWordShadowStatus(phase: .ready, snapshot: empty).menuLine
-            == "Personal next word: waiting for writing")
+            == "Next-word test: 0/2,000 shared fresh words · 0/200 candidate predictions · 0/100 disagreements · 0/14 active days · shadow-only")
         #expect(PersonalNextWordShadowStatus(phase: .inactive, snapshot: empty).menuLine
-            == "Personal next word: off")
+            == "Next-word test: off · shadow-only")
         #expect(PersonalNextWordShadowStatus(phase: .loading, snapshot: empty).menuLine
-            == "Personal next word: loading recent history…")
+            == "Next-word test: loading recent history… · shadow-only")
 
         let early = PersonalNextWordShadowSnapshot(
             opportunities: 20,
@@ -295,23 +426,58 @@ struct PersonalHistoryControllerTests {
             exactHits: 3,
             learnedContexts: 12,
             learnedTransitions: 18,
-            capacityLimited: false
+            capacityLimited: false,
+            baselinePredictions: 5,
+            baselineExactHits: 2,
+            predictionDisagreements: 4,
+            activeDays: 2
         )
         #expect(PersonalNextWordShadowStatus(phase: .ready, snapshot: early).menuLine
-            == "Personal next word: 12 contexts · 7/200 checks")
+            == "Next-word test: 20/2,000 shared fresh words · 7/200 candidate predictions · 4/100 disagreements · 2/14 active days · shadow-only")
         #expect(PersonalNextWordShadowStatus(phase: .unavailable, snapshot: empty).menuLine
-            == "Personal next word: unavailable")
+            == "Next-word test: unavailable · shadow-only")
 
         let reportable = PersonalNextWordShadowSnapshot(
-            opportunities: 400,
+            opportunities: 2_000,
             predictions: 200,
             exactHits: 100,
             learnedContexts: 80,
             learnedTransitions: 120,
-            capacityLimited: false
+            capacityLimited: false,
+            baselinePredictions: 180,
+            baselineExactHits: 80,
+            predictionDisagreements: 100,
+            activeDays: 14
         )
         #expect(PersonalNextWordShadowStatus(phase: .ready, snapshot: reportable).menuLine
-            == "Personal next word: 50% exact · 50% coverage · 200 checks")
+            == "Next-word test: candidate 5.0% vs baseline 4.0% effective · 2,000 shared fresh words · shadow-only")
+
+        let thresholdMisses = [
+            PersonalNextWordShadowSnapshot(
+                opportunities: 1_999, predictions: 200, exactHits: 100,
+                learnedContexts: 1, learnedTransitions: 1, capacityLimited: false,
+                predictionDisagreements: 100, activeDays: 14
+            ),
+            PersonalNextWordShadowSnapshot(
+                opportunities: 2_000, predictions: 199, exactHits: 100,
+                learnedContexts: 1, learnedTransitions: 1, capacityLimited: false,
+                predictionDisagreements: 100, activeDays: 14
+            ),
+            PersonalNextWordShadowSnapshot(
+                opportunities: 2_000, predictions: 200, exactHits: 100,
+                learnedContexts: 1, learnedTransitions: 1, capacityLimited: false,
+                predictionDisagreements: 99, activeDays: 14
+            ),
+            PersonalNextWordShadowSnapshot(
+                opportunities: 2_000, predictions: 200, exactHits: 100,
+                learnedContexts: 1, learnedTransitions: 1, capacityLimited: false,
+                predictionDisagreements: 100, activeDays: 13
+            ),
+        ]
+        for snapshot in thresholdMisses {
+            #expect(PersonalNextWordShadowStatus(phase: .ready, snapshot: snapshot).menuLine
+                .contains("candidate predictions"))
+        }
 
         let capacityLimited = PersonalNextWordShadowSnapshot(
             opportunities: 20,
@@ -319,12 +485,14 @@ struct PersonalHistoryControllerTests {
             exactHits: 3,
             learnedContexts: 12,
             learnedTransitions: 18,
-            capacityLimited: true
+            capacityLimited: true,
+            predictionDisagreements: 4,
+            activeDays: 2
         )
         #expect(PersonalNextWordShadowStatus(
             phase: .ready,
             snapshot: capacityLimited
-        ).menuLine == "Personal next word: 12 contexts · 7/200 checks · memory limit reached")
+        ).menuLine == "Next-word test: 20/2,000 shared fresh words · 7/200 candidate predictions · 4/100 disagreements · 2/14 active days · memory limit reached · shadow-only")
     }
 
     @Test("Enabled startup replays only allowed encrypted history")
@@ -343,7 +511,7 @@ struct PersonalHistoryControllerTests {
         var expected = PersonalNextWordShadow()
         expected.consume(await fixture.store.events.filter {
             $0.appBundleIdentifier == "com.example.Editor"
-        })
+        }, scoring: false)
         #expect(status.snapshot == expected.snapshot)
     }
 
@@ -363,27 +531,82 @@ struct PersonalHistoryControllerTests {
         #expect(status.snapshot.learnedTransitions == 3)
     }
 
-    @Test("A retry overlapping startup replay reaches the shadow exactly once")
-    func replayLiveOverlapIsIdempotent() async {
-        let text = " personal writing helps "
+    @Test("Writing during startup is acknowledged without waiting and warms without scoring")
+    func loadingIngestAcknowledgesBeforeReplay() async {
         let fixture = Fixture(
             enabled: true,
-            preloaded: [("overlap", text, "com.example.Editor")],
+            preloaded: [("training", " personal writing helps ", "com.example.Editor")],
             blockReplays: true
         )
         await fixture.store.waitForReplayStart()
-        let retry = fixture.event(id: "overlap", text: text)
+        let live = fixture.event(id: "live-during-replay", text: " personal writing helps ")
         let controller = fixture.controller
         let store = fixture.store
-        let ingest = Task { await controller.ingest([retry]) }
-
-        await store.releaseReplays()
+        let ingest = Task { await controller.ingest([live]) }
 
         #expect(await ingest.value)
         #expect(await store.events.count == 2)
+        #expect(await controller.nextWordStatus().phase == .loading)
+        await store.releaseReplays()
+
         var expected = PersonalNextWordShadow()
-        expected.consume([retry])
+        expected.consume(await store.events, scoring: false)
         #expect(await settledStatus(controller).snapshot == expected.snapshot)
+    }
+
+    @Test("A replay that finishes during a startup append cannot lose that batch")
+    func replayFinishesDuringLoadingAppend() async {
+        let fixture = Fixture(
+            enabled: true,
+            preloaded: [("training", " personal writing helps ", "com.example.Editor")],
+            blockReplays: true,
+            blockAppends: true
+        )
+        await fixture.store.waitForReplayStart()
+        let live = fixture.event(id: "live-during-append", text: " novel startup branch ")
+        let controller = fixture.controller
+        let store = fixture.store
+        let ingest = Task { await controller.ingest([live]) }
+        await store.waitForAppendStart()
+
+        await store.releaseReplays()
+        #expect(await settledStatus(controller).phase == .ready)
+        await store.releaseAppends()
+        #expect(await ingest.value)
+
+        var expected = PersonalNextWordShadow()
+        expected.consume(await store.events, scoring: false)
+        #expect(await settledStatus(controller).snapshot == expected.snapshot)
+    }
+
+    @Test("Concurrent ready batches score and checkpoint in durable order")
+    func concurrentReadyIngestsAreSerialized() async {
+        let fixture = Fixture(enabled: true, blockAppends: true)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        let first = fixture.event(
+            id: "concurrent-first",
+            text: " alpha beta alpha beta alpha beta "
+        )
+        let second = fixture.event(
+            id: "concurrent-second",
+            text: " beta alpha beta alpha "
+        )
+        let controller = fixture.controller
+        let store = fixture.store
+        let firstIngest = Task { await controller.ingest([first]) }
+        await store.waitForAppendStart()
+        let secondIngest = Task { await controller.ingest([second]) }
+
+        await store.releaseAppends()
+        #expect(await firstIngest.value)
+        #expect(await secondIngest.value)
+
+        var expected = PersonalNextWordShadow()
+        expected.consume([first])
+        expected.consume([second])
+        let actual = await settledStatus(controller).snapshot
+        #expect(actual == expected.snapshot)
+        #expect(await store.checkpoint?.checkpoint == expected.checkpoint)
     }
 
     @Test("A newer off setting rejects work queued under an older revision")
@@ -424,6 +647,7 @@ struct PersonalHistoryControllerTests {
     private actor MemoryStore: PersonalHistoryStore {
         nonisolated let location = URL(fileURLWithPath: "/tmp/tilde-personal-history-test")
         private(set) var events: [PersonalHistoryEvent]
+        private(set) var checkpoint: PersonalNextWordStoredCheckpoint?
         private var appendFailure: PersonalHistoryStorageError?
         private var replayFailure: PersonalHistoryStorageError?
         private var replayBlocked: Bool
@@ -443,6 +667,7 @@ struct PersonalHistoryControllerTests {
 
         init(
             events: [PersonalHistoryEvent] = [],
+            checkpoint: PersonalNextWordStoredCheckpoint? = nil,
             appendFailure: PersonalHistoryStorageError? = nil,
             replayFailure: PersonalHistoryStorageError? = nil,
             replayBlocked: Bool = false,
@@ -450,6 +675,7 @@ struct PersonalHistoryControllerTests {
             deleteBlocked: Bool = false
         ) {
             self.events = events
+            self.checkpoint = checkpoint
             self.appendFailure = appendFailure
             self.replayFailure = replayFailure
             self.replayBlocked = replayBlocked
@@ -457,7 +683,10 @@ struct PersonalHistoryControllerTests {
             self.deleteBlocked = deleteBlocked
         }
 
-        func append(_ events: [PersonalHistoryEvent]) async throws {
+        func append(
+            _ events: [PersonalHistoryEvent],
+            checkpoint: PersonalNextWordStoredCheckpoint?
+        ) async throws {
             appendStarted = true
             appendStartWaiters.forEach { $0.resume() }
             appendStartWaiters.removeAll()
@@ -466,6 +695,7 @@ struct PersonalHistoryControllerTests {
             }
             if let appendFailure { throw appendFailure }
             self.events.append(contentsOf: events)
+            if let checkpoint { self.checkpoint = checkpoint }
         }
 
         func setAppendFailure(_ failure: PersonalHistoryStorageError?) {
@@ -519,7 +749,7 @@ struct PersonalHistoryControllerTests {
                 await withCheckedContinuation { replayWaiters.append($0) }
             }
             if let replayFailure { throw replayFailure }
-            return PersonalHistoryReplay(events: events)
+            return PersonalHistoryReplay(events: events, checkpoint: checkpoint)
         }
         func deleteAll() async throws {
             deleteStarted = true
@@ -529,6 +759,7 @@ struct PersonalHistoryControllerTests {
                 await withCheckedContinuation { deleteWaiters.append($0) }
             }
             events = []
+            checkpoint = nil
         }
         func summary() async throws -> PersonalHistorySummary {
             PersonalHistorySummary(location: location, approximateBytes: Int64(events.count))
@@ -536,6 +767,9 @@ struct PersonalHistoryControllerTests {
     }
 
     private struct Fixture {
+        private static let freshTimestamp = PersonalNextWordShadow.evaluationStartMilliseconds
+            + 24 * 60 * 60 * 1_000
+
         let defaults: UserDefaults
         let store: MemoryStore
         let controller: PersonalHistoryController
@@ -549,6 +783,7 @@ struct PersonalHistoryControllerTests {
             blockReplays: Bool = false,
             blockAppends: Bool = false,
             blockDeletes: Bool = false,
+            checkpoint: PersonalNextWordStoredCheckpoint? = nil,
             diagnostics: DiagnosticsLog = .shared
         ) {
             let name = "tilde.tests.personal-history.\(UUID().uuidString)"
@@ -563,6 +798,7 @@ struct PersonalHistoryControllerTests {
                 "consent",
                 forKey: PersonalHistorySettingsContract.consentIdentifierKey
             )
+            defaults.set("experiment", forKey: "PersonalNextWordExperimentIdentifier")
             defaults.set(enabled, forKey: PersonalHistorySettingsContract.enabledKey)
             defaults.set(
                 Array(excludedApps).sorted(),
@@ -572,7 +808,7 @@ struct PersonalHistoryControllerTests {
                 events: preloaded.map {
                     PersonalHistoryEvent(
                         id: $0.id,
-                        timestampMilliseconds: 1_786_485_600_000,
+                        timestampMilliseconds: Self.freshTimestamp,
                         historyIdentifier: historyIdentifier,
                         consentIdentifier: "consent",
                         sessionIdentifier: "session",
@@ -581,6 +817,7 @@ struct PersonalHistoryControllerTests {
                         text: $0.text
                     )!
                 },
+                checkpoint: checkpoint,
                 appendFailure: appendFailure,
                 replayFailure: replayFailure,
                 replayBlocked: blockReplays,
@@ -600,7 +837,7 @@ struct PersonalHistoryControllerTests {
         ) -> PersonalHistoryEvent {
             PersonalHistoryEvent(
                 id: id,
-                timestampMilliseconds: 1_786_485_600_000,
+                timestampMilliseconds: Self.freshTimestamp,
                 historyIdentifier: defaults.string(
                     forKey: PersonalHistorySettingsContract.historyIdentifierKey
                 )!,
