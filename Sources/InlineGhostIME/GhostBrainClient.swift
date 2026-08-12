@@ -16,11 +16,22 @@ enum GhostBrainClient {
     )
 
     static func complete(context: String, app: String?) async -> GhostBrainResponse {
+        await send(GhostBrainRequest(context: context, app: app))
+    }
+
+    static func recordPersonalHistory(
+        _ events: [PersonalHistoryEvent]
+    ) async -> GhostBrainResponse {
+        guard PersonalHistoryEvent.validBatch(events) else { return .invalidRequest }
+        return await send(GhostBrainRequest(personalHistoryEvents: events))
+    }
+
+    private static func send(_ request: GhostBrainRequest) async -> GhostBrainResponse {
         guard let connection = Connection(path: socketPath) else { return .unavailable }
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 worker.async {
-                    continuation.resume(returning: connection.run(context: context, app: app))
+                    continuation.resume(returning: connection.run(request: request))
                 }
             }
         } onCancel: {
@@ -64,11 +75,11 @@ enum GhostBrainClient {
             lock.unlock()
         }
 
-        func run(context: String, app: String?) -> GhostBrainResponse {
+        func run(request: GhostBrainRequest) -> GhostBrainResponse {
             defer { finish() }
             guard !isCancelled, connect(), !isCancelled, verifyPeer() else { return .unavailable }
-            guard let request = try? JSONEncoder().encode(GhostBrainRequest(context: context, app: app)),
-                  write(request + [0x0A]) else { return timedOut ? .timeout : .unavailable }
+            guard let payload = try? JSONEncoder().encode(request),
+                  write(payload + [0x0A]) else { return timedOut ? .timeout : .unavailable }
             guard let line = readLine(maximumBytes: 8_192) else {
                 return timedOut ? .timeout : .unavailable
             }

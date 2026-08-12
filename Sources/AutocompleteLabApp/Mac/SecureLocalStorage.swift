@@ -14,6 +14,44 @@ enum SecureLocalStorage {
     /// The parent remains open while `openat` resolves the leaf, so replacing it with a symlink
     /// cannot redirect the write.
     static func openFileForAppending(at file: URL) -> FileHandle? {
+        openOwnerOnlyFile(
+            at: file,
+            flags: O_WRONLY | O_APPEND | O_CREAT | O_NONBLOCK
+        )
+    }
+
+    static func openFileForReadingAndAppending(at file: URL) -> FileHandle? {
+        openOwnerOnlyFile(at: file, flags: O_RDWR | O_APPEND | O_CREAT)
+    }
+
+    static func openExistingFileForReading(at file: URL) -> FileHandle? {
+        openOwnerOnlyFile(at: file, flags: O_RDONLY)
+    }
+
+    /// Removes only an owner-owned regular file reached through a validated,
+    /// non-symlink parent path. Missing files count as already removed.
+    static func removeOwnerOnlyFile(at file: URL) -> Bool {
+        let directory = file.deletingLastPathComponent()
+        guard let directoryDescriptor = secureDirectoryDescriptor(at: directory),
+              !file.lastPathComponent.isEmpty else { return false }
+        defer { close(directoryDescriptor) }
+
+        let descriptor = openat(
+            directoryDescriptor,
+            file.lastPathComponent,
+            O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK
+        )
+        if descriptor < 0 { return errno == ENOENT }
+        defer { close(descriptor) }
+
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid() else { return false }
+        return unlinkat(directoryDescriptor, file.lastPathComponent, 0) == 0
+    }
+
+    private static func openOwnerOnlyFile(at file: URL, flags: Int32) -> FileHandle? {
         let directory = file.deletingLastPathComponent()
         guard let directoryDescriptor = secureDirectoryDescriptor(at: directory),
               !file.lastPathComponent.isEmpty else { return nil }
@@ -22,7 +60,7 @@ enum SecureLocalStorage {
         let descriptor = openat(
             directoryDescriptor,
             file.lastPathComponent,
-            O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK,
+            flags | O_NOFOLLOW | O_CLOEXEC,
             0o600
         )
         guard descriptor >= 0 else { return nil }

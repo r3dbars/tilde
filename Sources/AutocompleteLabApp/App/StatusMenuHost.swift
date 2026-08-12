@@ -1,3 +1,4 @@
+import AutocompleteLabCore
 import AppKit
 
 /// Tilde's complete user-facing surface: useful stats, honest engine status,
@@ -12,14 +13,23 @@ final class StatusMenuHost: NSObject {
     private var todayItem: NSMenuItem?
     private var engineItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
+    private var personalHistoryItem: NSMenuItem?
+    private var historySizeItem: NSMenuItem?
+    private var historyLocationItem: NSMenuItem?
+    private var excludeCurrentAppItem: NSMenuItem?
+    private var excludedAppsItem: NSMenuItem?
+    private var deleteHistoryItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
+    private var currentExclusionCandidate: (name: String, bundle: String)?
 
     /// Every setting, its defaults domain, and its fallback live in one tested
     /// type so menu switches cannot silently target keys nothing reads.
     private let settings = TildeSettings()
+    private let personalHistory: PersonalHistoryController
 
-    init(appDelegate: AppDelegate) {
+    init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
+        self.personalHistory = personalHistory
     }
 
     func start() {
@@ -34,6 +44,32 @@ final class StatusMenuHost: NSObject {
         menu.addItem(.separator())
 
         suggestionsItem = addAction(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
+        menu.addItem(.separator())
+
+        personalHistoryItem = addAction(
+            to: menu,
+            "Personal History (local only)",
+            #selector(togglePersonalHistory(_:))
+        )
+        historySizeItem = addInfoRow(to: menu, "History: 0 bytes")
+        historyLocationItem = addInfoRow(
+            to: menu,
+            "Location: \(NSString(string: personalHistory.location.path).abbreviatingWithTildeInPath)"
+        )
+        excludeCurrentAppItem = addAction(
+            to: menu,
+            "Exclude Current App",
+            #selector(excludeCurrentApp(_:))
+        )
+        let excluded = NSMenuItem(title: "Excluded Apps", action: nil, keyEquivalent: "")
+        excluded.submenu = NSMenu()
+        menu.addItem(excluded)
+        excludedAppsItem = excluded
+        deleteHistoryItem = addAction(
+            to: menu,
+            "Delete Personal History…",
+            #selector(deletePersonalHistory(_:))
+        )
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for an hour", #selector(togglePause(_:)))
@@ -98,6 +134,63 @@ final class StatusMenuHost: NSObject {
         settings.suggestionsEnabled.toggle()
     }
 
+    @objc private func togglePersonalHistory(_ sender: Any?) {
+        if personalHistory.isEnabled {
+            personalHistory.isEnabled = false
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Turn on Personal History?"
+        alert.informativeText = """
+        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. It is never uploaded. This first foundation does not change suggestions yet.
+
+        macOS Secure Event Input blocks password capture when an app enables it. Custom sensitive fields may not be detectable, so exclude apps you do not want recorded.
+        """
+        alert.addButton(withTitle: "Turn On")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            personalHistory.isEnabled = true
+        }
+    }
+
+    @objc private func excludeCurrentApp(_ sender: Any?) {
+        guard let candidate = currentExclusionCandidate else { return }
+        var apps = personalHistory.excludedApps
+        apps.insert(candidate.bundle)
+        personalHistory.excludedApps = apps
+        refreshExcludedAppsMenu()
+    }
+
+    @objc private func removeExcludedApp(_ sender: NSMenuItem) {
+        guard let bundle = sender.representedObject as? String else { return }
+        var apps = personalHistory.excludedApps
+        apps.remove(bundle)
+        personalHistory.excludedApps = apps
+        refreshExcludedAppsMenu()
+    }
+
+    @objc private func deletePersonalHistory(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.messageText = "Delete all Personal History?"
+        alert.informativeText = "This turns Personal History off and removes its encrypted file and Keychain key. This cannot be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await personalHistory.deleteAll()
+                refreshHistorySummary()
+            } catch {
+                let failure = NSAlert()
+                failure.messageText = "Personal History could not be deleted"
+                failure.informativeText = "Quit and reopen Tilde, then try again."
+                failure.runModal()
+            }
+        }
+    }
+
     @objc private func togglePause(_ sender: Any?) {
         if settings.pausedUntil != nil {
             settings.resume()
@@ -128,12 +221,72 @@ extension StatusMenuHost: NSMenuDelegate {
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
+        personalHistoryItem?.state = personalHistory.isEnabled ? .on : .off
+        refreshCurrentExclusionCandidate()
+        refreshExcludedAppsMenu()
+        refreshHistorySummary()
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
             pauseItem?.title = "Resume Tilde (paused \(minutes)m)"
         } else {
             pauseItem?.title = "Pause for an hour"
+        }
+    }
+
+    private func refreshCurrentExclusionCandidate() {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              let bundle = app.bundleIdentifier,
+              bundle != Bundle.main.bundleIdentifier,
+              PersonalHistoryEvent.validBundleIdentifier(bundle),
+              !personalHistory.excludedApps.contains(bundle) else {
+            currentExclusionCandidate = nil
+            excludeCurrentAppItem?.title = "Exclude Current App"
+            excludeCurrentAppItem?.isEnabled = false
+            return
+        }
+        currentExclusionCandidate = (app.localizedName ?? bundle, bundle)
+        excludeCurrentAppItem?.title = "Exclude \(app.localizedName ?? bundle)"
+        excludeCurrentAppItem?.isEnabled = true
+    }
+
+    private func refreshExcludedAppsMenu() {
+        guard let menu = excludedAppsItem?.submenu else { return }
+        menu.removeAllItems()
+        let apps = personalHistory.excludedApps.sorted()
+        if apps.isEmpty {
+            let empty = NSMenuItem(title: "No excluded apps", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+        for bundle in apps {
+            let item = NSMenuItem(
+                title: "Remove \(bundle)",
+                action: #selector(removeExcludedApp(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = bundle
+            menu.addItem(item)
+        }
+    }
+
+    private func refreshHistorySummary() {
+        historySizeItem?.title = "History: measuring…"
+        Task { [weak self] in
+            guard let self else { return }
+            guard let summary = await personalHistory.summary() else {
+                historySizeItem?.title = "History: unavailable"
+                return
+            }
+            let formatter = ByteCountFormatter()
+            formatter.allowedUnits = [.useKB, .useMB, .useGB]
+            formatter.countStyle = .file
+            formatter.includesUnit = true
+            formatter.isAdaptive = true
+            historySizeItem?.title = "History: \(formatter.string(fromByteCount: summary.approximateBytes))"
+            deleteHistoryItem?.isEnabled = summary.approximateBytes > 0
         }
     }
 }

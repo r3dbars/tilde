@@ -8,14 +8,17 @@ safer, or simpler.
 
 - Suggestions must help more than they interrupt. Silence and noise are both
   failures.
-- Privacy is a hard requirement. Never store or print raw typed text, prompts,
-  model output, or accepted text, and never transmit them off-device.
+- Privacy is a hard requirement. Tilde may retain writing locally when it
+  provides direct user benefit. Personal writing data remains on the user's
+  device, is controlled by the user, and is never transmitted for inference,
+  analytics, or training. Never print personal writing data in logs or scripts.
 - The product is the input method. Render with IMKit marked text in the focused
   app; do not add an Accessibility/overlay insertion path.
 - Inference is app-owned and bundled. Users must not install Ollama, llama.cpp,
   Python, or a separate model server.
-- Do not add OCR, Screen Recording, screenshots, raw learning, writing history,
-  cloud sync, accept sounds, or hidden telemetry.
+- Do not add OCR, Screen Recording, screenshots, cloud sync, accept sounds, or
+  hidden telemetry. Personal History must remain explicit, local, and
+  user-controlled.
 - Show app, helper, and model status in the menu, and record input-method and
   runtime failures in privacy-safe diagnostics.
 
@@ -28,7 +31,8 @@ safer, or simpler.
   text, and acceptance. Keep it responsive and thin.
 - `Sources/AutocompleteLabApp` owns the local Unix socket, bundled llama helper
   and model lifecycle, input-method installation, menu, and redacted
-  diagnostics. It must never persist request or response text.
+  diagnostics. It is the only owner of persistent Personal History; ordinary
+  completion requests and unaccepted model responses remain memory-only.
 - Prefer deleting or merging policy over adding another gate. Independent
   thresholds compound into a silent product.
 - Add or update tests with every behavior change.

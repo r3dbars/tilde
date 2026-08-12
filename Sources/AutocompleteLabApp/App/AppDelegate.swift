@@ -33,12 +33,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let launchMode: TildeLaunchMode
     private let llamaServerHost: LlamaServerProcessHost
-    private lazy var statusMenuHost = StatusMenuHost(appDelegate: self)
+    private lazy var personalHistoryController = PersonalHistoryController()
+    private lazy var statusMenuHost = StatusMenuHost(
+        appDelegate: self,
+        personalHistory: personalHistoryController
+    )
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
     // Phrase continuations go to the llama/Gemma engine. Mid-word completion
     // belongs only to the keyboard's system spell-checker path.
-    private lazy var ghostBrainServerHost = GhostBrainServerHost(runtime: llamaServerHost)
+    private lazy var ghostBrainServerHost = GhostBrainServerHost(
+        runtime: llamaServerHost,
+        personalHistory: personalHistoryController
+    )
 
     init(launchMode: TildeLaunchMode = .production) {
         self.launchMode = launchMode

@@ -22,8 +22,17 @@ Tilde ships as one self-contained, signed package:
 3. The app runs its bundled `llama-server` helper and bundled GGUF model as a
    child process. Users do not install or run a model server.
 
-Typed context and model output stay in memory. Tilde has no cloud inference,
-analytics, raw-text learning, screenshots, or accept sounds.
+Completion requests and unaccepted model output stay in memory. When the user
+explicitly enables Personal History, the input method asynchronously sends the
+text the user produces to the Tilde app. The app stores a local encrypted event
+log for future user-controlled personalization. Tilde has no cloud inference,
+analytics, sync, upload, screenshots, or accept sounds.
+
+Personal History is off by default. Its menu shows the local storage location
+and approximate size, lets the user exclude the current app, and can delete the
+entire store. Each record is encrypted with AES-GCM; its device-only key lives
+in the macOS data-protection Keychain. See [PRIVACY.md](PRIVACY.md) for the
+capture boundary and remaining risks.
 
 ## Status and requirements
 
@@ -67,14 +76,16 @@ Production code has three parts:
 - `Sources/AutocompleteLabCore`: pure, deterministic suggestion policy
 - `Sources/InlineGhostIME`: IMKit input and marked-text presentation
 - `Sources/AutocompleteLabApp`: local socket, app-owned llama lifecycle, menu,
-  installation, and redacted diagnostics
+  installation, encrypted Personal History, and redacted diagnostics
 
 Read [AGENTS.md](AGENTS.md) before changing behavior.
 
 ## Privacy
 
-Tilde processes writing locally and does not retain raw typed text, prompts,
-model output, or accepted text. See [PRIVACY.md](PRIVACY.md) and the current
+Tilde may retain writing locally when it provides direct user benefit. Personal
+writing data remains on the user's device, is controlled by the user, and is
+never transmitted for inference, analytics, or training. See
+[PRIVACY.md](PRIVACY.md) and the current
 [threat model](docs/security/threat-model.md).
 
 ## License
