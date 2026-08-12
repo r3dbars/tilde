@@ -65,3 +65,8 @@ no option to bypass the ownership check.
 This is raw-model evidence. It does not exercise the authenticated Tilde-to-IME
 socket, production output cleaning, marked-text rendering, or acceptance.
 Manual editor compatibility remains separate proof.
+
+Personal History is not an evaluator input and is never exported automatically.
+The current model and evaluator do not read it. Any future quality experiment
+must derive a separate, explicit on-device dataset and keep aggregate reports
+free of personal text.

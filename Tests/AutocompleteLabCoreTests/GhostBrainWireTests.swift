@@ -19,6 +19,7 @@ struct GhostBrainWireTests {
     func outcomesAreDistinct() throws {
         let outcomes: [GhostBrainResponse] = [
             .suggestion("next words"), .silence, .unavailable, .error, .timeout, .invalidRequest,
+            .recorded,
         ]
         for outcome in outcomes {
             let decoded = try JSONDecoder().decode(

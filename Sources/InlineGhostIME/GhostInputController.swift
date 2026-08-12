@@ -28,16 +28,13 @@ final class GhostInputController: IMKInputController {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
             return false
         }
-        guard !stopForSecureInput(client) else { return false }
-        let defaults = UserDefaults.standard
-        let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
-        let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
-        guard suggestionsEnabled, !paused else {
+        let secureInput = IsSecureEventInputEnabled()
+        if secureInput {
+            PersonalHistoryCapture.shared.sensitiveInputBegan()
             dismiss(client)
             resetFallback()
             return false
         }
-        synchronizeFallback(with: client)
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers.contains(.command)
@@ -48,6 +45,25 @@ final class GhostInputController: IMKInputController {
             resetFallback()
             return false
         }
+
+        let typedGrapheme = printableGrapheme(from: event)
+        let defaults = UserDefaults.standard
+        let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
+        let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
+        guard suggestionsEnabled, !paused else {
+            dismiss(client)
+            resetFallback()
+            if let typedGrapheme {
+                recordPersonalHistory(
+                    typedGrapheme,
+                    source: .typed,
+                    client: client,
+                    secureInput: secureInput
+                )
+            }
+            return false
+        }
+        synchronizeFallback(with: client)
 
         switch event.keyCode {
         case 48: // Plain Tab accepts one word. Shift-Tab remains the host app's key.
@@ -71,7 +87,7 @@ final class GhostInputController: IMKInputController {
             break
         }
 
-        if let grapheme = printableGrapheme(from: event) {
+        if let grapheme = typedGrapheme {
             let match = matchingVisibleState(for: client)
             cancelPendingWork()
             let advanced = match.map { match in
@@ -85,6 +101,7 @@ final class GhostInputController: IMKInputController {
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
             appendFallback(grapheme, for: client)
+            recordPersonalHistory(grapheme, source: .typed, client: client, secureInput: secureInput)
             return true
         }
 
@@ -100,6 +117,7 @@ final class GhostInputController: IMKInputController {
 
     override func deactivateServer(_ sender: Any!) {
         GhostStats.flush(force: true)
+        PersonalHistoryCapture.shared.flush()
         if let client = sender as? IMKTextInput { dismiss(client) }
         resetFallback()
         super.deactivateServer(sender)
@@ -119,6 +137,7 @@ final class GhostInputController: IMKInputController {
     /// field with macOS secure event input.
     private func stopForSecureInput(_ client: IMKTextInput) -> Bool {
         guard IsSecureEventInputEnabled() else { return false }
+        PersonalHistoryCapture.shared.sensitiveInputBegan()
         dismiss(client)
         resetFallback()
         return true
@@ -211,8 +230,29 @@ final class GhostInputController: IMKInputController {
         }
         apply(effects, to: client)
         appendFallback(accepted, for: client)
+        recordPersonalHistory(
+            accepted,
+            source: .acceptedSuggestion,
+            client: client,
+            secureInput: IsSecureEventInputEnabled()
+        )
         GhostStats.recordAccepted(accepted)
         return true
+    }
+
+    private func recordPersonalHistory(
+        _ text: String,
+        source: PersonalHistoryEventSource,
+        client: IMKTextInput,
+        secureInput: Bool
+    ) {
+        PersonalHistoryCapture.shared.record(
+            text: text,
+            source: source,
+            sessionIdentifier: sessionIdentifier,
+            appBundleIdentifier: client.bundleIdentifier(),
+            secureInput: secureInput
+        )
     }
 
     // MARK: - Tickets and context
@@ -367,7 +407,7 @@ final class GhostInputController: IMKInputController {
                 Self.summonBrainIfNeeded()
             case .error, .timeout, .invalidRequest:
                 GhostStats.recordFailure(result.outcome)
-            case .silence:
+            case .silence, .recorded:
                 break
             }
         }
