@@ -218,4 +218,16 @@ struct TildeLaunchModeTests {
         #expect(TildeLaunchMode(arguments: ["Tilde", "--unknown"]) == nil)
         #expect(TildeLaunchMode(arguments: ["Tilde", "--release-proof", "extra"]) == nil)
     }
+
+    @Test("Personal brain status is a standalone invocation")
+    func personalBrainStatusInvocation() {
+        #expect(TildeInvocation(arguments: ["Tilde"]) == .application(.production))
+        #expect(TildeInvocation(arguments: ["Tilde", "--release-proof"])
+            == .application(.releaseProof))
+        #expect(TildeInvocation(arguments: ["Tilde", "--personal-brain-status-json"])
+            == .personalBrainStatusJSON)
+        #expect(TildeInvocation(arguments: [
+            "Tilde", "--personal-brain-status-json", "extra",
+        ]) == nil)
+    }
 }
