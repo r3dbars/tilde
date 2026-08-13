@@ -62,17 +62,23 @@ tilde_pids() {
 
 proof_candidate_pids() {
   ps ax -o pid=,command= | while read -r pid command; do
-    [[ "$command" == "$BINARY --release-proof" ]] && printf '%s\n' "$pid"
+    if [[ "$command" == *"/Tilde.app/Contents/MacOS/Tilde --release-proof" ]] \
+      && same_file_identity "$(process_executable "$pid")" "$BINARY"; then
+      printf '%s\n' "$pid"
+    fi
   done
+  return 0
 }
 
 other_candidate_pids() {
   ps ax -o pid=,command= | while read -r pid command; do
-    if [[ "$command" == "$BINARY" || "$command" == "$BINARY "* ]] \
-      && [[ "$command" != "$BINARY --release-proof" ]]; then
+    if [[ "$command" == *"/Tilde.app/Contents/MacOS/Tilde"* ]] \
+      && same_file_identity "$(process_executable "$pid")" "$BINARY" \
+      && [[ "$command" != *" --release-proof" ]]; then
       printf '%s\n' "$pid"
     fi
   done
+  return 0
 }
 
 stop_exact_processes() {
@@ -108,10 +114,8 @@ same_file_identity() {
   [[ -n "$1" && -n "$2" && -e "$1" && -e "$2" && "$1" -ef "$2" ]]
 }
 proof_helper_command() {
-  local command="$1" args
-  [[ "$command" == "$HELPER "* ]] || return 1
-  args="${command#"$HELPER"}"
-  [[ "$args" =~ (^|[[:space:]])--port[[:space:]]+${RELEASE_PROOF_PORT}([[:space:]]|$) ]]
+  local command="$1"
+  [[ "$command" =~ (^|[[:space:]])--port[[:space:]]+${RELEASE_PROOF_PORT}([[:space:]]|$) ]]
 }
 release_proof_helper_identities() {
   local listeners rc=0 pid row parent command birth
@@ -122,7 +126,9 @@ release_proof_helper_identities() {
     [[ "$pid" =~ ^[0-9]+$ ]] || continue
     row="$(ps -p "$pid" -o ppid=,command= 2>/dev/null || true)"
     read -r parent command <<<"$row"
-    [[ "$parent" == "1" && "$(process_executable "$pid")" == "$HELPER" ]] || continue
+    [[ "$parent" == "1" ]] \
+      && same_file_identity "$(process_executable "$pid")" "$HELPER" \
+      || continue
     proof_helper_command "$command" || continue
     birth="$(ps -p "$pid" -o lstart= 2>/dev/null || true)"
     [[ -n "${birth//[[:space:]]/}" ]] && printf '%s\t%s\n' "$pid" "$birth"
@@ -168,10 +174,11 @@ proof_child_pid() {
   local wanted_parent="$1"
   ps ax -o pid=,ppid=,command= | while read -r pid parent command; do
     if [[ "$parent" == "$wanted_parent" ]] \
-      && [[ "$command" == "$HELPER" || "$command" == "$HELPER "* ]]; then
+      && same_file_identity "$(process_executable "$pid")" "$HELPER"; then
       printf '%s\n' "$pid"
     fi
   done
+  return 0
 }
 if [[ "$SELFTEST" == "1" ]]; then
   HELPER="$ROOT_DIR/script/restart_app.sh"
@@ -184,6 +191,10 @@ if [[ "$SELFTEST" == "1" ]]; then
     helper_alias="/tmp${HELPER#/private/tmp}"
     helper_identity_matches $'201\tbirth-a' "$helper_alias" birth-a
   fi
+  BINARY="/private/tmp/tilde-no-such-release-proof-app"
+  proof_candidate_pids >/dev/null
+  other_candidate_pids >/dev/null
+  proof_child_pid 999999999 >/dev/null
   echo "selftest OK: cleanup matcher rejects port and birth mismatches; file identity accepts the /tmp alias"
   exit 0
 fi
