@@ -49,7 +49,7 @@ final class StatusMenuHost: NSObject {
 
         personalHistoryItem = addAction(
             to: menu,
-            "Personal History (local only)",
+            "Personal History (open research)",
             #selector(togglePersonalHistory(_:))
         )
         historySizeItem = addInfoRow(to: menu, "History: measuring…")
@@ -152,7 +152,7 @@ final class StatusMenuHost: NSObject {
         let alert = NSAlert()
         alert.messageText = "Turn on Personal History?"
         alert.informativeText = """
-        Tilde will store text you produce through its keyboard in an encrypted file on this Mac. It rebuilds two personal next-word recipes from a bounded recent part of that history, then compares them on fresh writing while Tilde runs. Only aggregate lifetime totals and up to 64 daily buckets are retained with that encrypted history. This test is shadow-only: it makes no visible suggestion changes, and nothing is uploaded.
+        This personal research build stores text you produce through its keyboard as readable JSONL on this Mac so local Codex research can inspect it. It rebuilds two personal next-word recipes from a bounded recent part of that history, then compares them on fresh writing while Tilde runs. This test is shadow-only: it makes no visible suggestion changes, and nothing is uploaded automatically.
 
         macOS Secure Event Input blocks password capture when an app enables it. Custom sensitive fields may not be detectable, so exclude apps you do not want recorded.
         """
@@ -182,7 +182,7 @@ final class StatusMenuHost: NSObject {
     @objc private func deletePersonalHistory(_ sender: Any?) {
         let alert = NSAlert()
         alert.messageText = "Delete all Personal History?"
-        alert.informativeText = "This turns Personal History off and removes its encrypted file, Keychain key, and aggregate next-word test results. This cannot be undone."
+        alert.informativeText = "This turns Personal History off and removes its open research history, any legacy encrypted history and key, and aggregate next-word test results. This cannot be undone."
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning

@@ -135,11 +135,11 @@ struct PersonalBrainStatusReport: Encodable {
 enum PersonalBrainStatusCommandResult: Equatable { case output(String), failure(String) }
 
 struct PersonalBrainStatusCommand {
-    private let settings: TildeSettings; private let store: EncryptedPersonalHistoryStore
+    private let settings: TildeSettings; private let store: any PersonalBrainCheckpointReading
 
     init(
         settings: TildeSettings = TildeSettings(),
-        store: EncryptedPersonalHistoryStore = EncryptedPersonalHistoryStore()
+        store: any PersonalBrainCheckpointReading = PlaintextPersonalHistoryStore()
     ) {
         self.settings = settings
         self.store = store
@@ -197,3 +197,10 @@ struct PersonalBrainStatusCommand {
         }
     }
 }
+
+protocol PersonalBrainCheckpointReading {
+    func loadLatestCheckpoint() throws -> PersonalNextWordStoredCheckpoint?
+}
+
+extension EncryptedPersonalHistoryStore: PersonalBrainCheckpointReading {}
+extension PlaintextPersonalHistoryStore: PersonalBrainCheckpointReading {}

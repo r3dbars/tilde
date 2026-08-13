@@ -197,7 +197,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     private let storageHealthState: PersonalHistoryStorageHealthState
 
     init(
-        store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
+        store: any PersonalHistoryStore = OpenResearchHistoryStore(),
         settings: TildeSettings = TildeSettings(),
         diagnostics: DiagnosticsLog = .shared
     ) {

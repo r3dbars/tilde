@@ -17,14 +17,15 @@ Tilde has two signed user-facing processes and one signed helper child:
 
 The helper is an app-owned child process bound to localhost. Ordinary request
 text and unaccepted model output exist in memory only. If explicitly enabled,
-Personal History persists text the user produces as encrypted local events.
+this personal research build persists text the user produces as readable local
+events for owner-directed Codex analysis.
 Tilde has no Accessibility, Screen Recording, OCR, screenshot capture, cloud
 inference, sync, upload, or analytics path.
 
 ## Assets to protect
 
-1. Typed context, prompts, model output, accepted text, and the durable Personal
-   History corpus and encryption key.
+1. Typed context, prompts, model output, accepted text, and the durable readable
+   Personal History corpus.
 2. Integrity of committed text and the field receiving it.
 3. Integrity of the signed input method, helper, and model.
 4. Privacy-safe settings and diagnostics stored for the local user.
@@ -51,16 +52,16 @@ identity are out of scope.
   the socket is mode `0600`, and both endpoints require the same user, the
   expected signing identifiers, and matching non-empty Team IDs in release
   builds. Completion payloads are not logged or written to disk; explicit
-  Personal History payloads are written only to the encrypted history store.
+  Personal History payloads are written only to the explicit open research store.
 - The input method uses a cancellable two-second request deadline and the wire
   protocol distinguishes suggestions, silence, timeout, invalid input, and
   runtime failure.
 - When macOS Secure Event Input is active, the input method clears its fallback
   context and pending history batch, cancels suggestion work, and refuses to
   read, request, display, or capture text.
-- Personal History records are independently authenticated and encrypted with
-  AES-GCM using a 256-bit, non-synchronizing key in the user's macOS login
-  Keychain. Its directory and file are restricted to the owner.
+- Personal History records are readable JSONL. The directory is restricted to
+  the owner (`0700`) and the file is owner-only (`0600`), but same-user processes
+  can intentionally read it and no encryption-at-rest protection is claimed.
 - The paired personal next-word shadow restores bounded aggregate totals, then
   rebuilds both learned recipes without scoring from a bounded recent 4 MiB
   history tail. It processes new allowed events in append order, scores both
@@ -71,7 +72,8 @@ identity are out of scope.
   capacity.
 - The only persistent shadow state is bounded aggregate lifetime totals and up
   to 64 daily buckets,
-  encrypted in the same history-log append as the events it scores. It has no
+  stored in the same readable history-log record as the events it scores. The
+  aggregate has no
   words, candidates, contexts, or per-case rows. Its envelope must match the
   local history identifier, durable exclusion generation, and exact exclusion set; malformed, stale, or
   mismatched data fails validation. Disable retains it, while exclusion changes
@@ -96,24 +98,21 @@ identity are out of scope.
 - A macOS input method is highly trusted and can observe typing while active.
   Users must explicitly enable Tilde and can switch input sources or quit it.
 - Enabling Personal History creates a durable, highly sensitive writing corpus.
-  Encryption at rest does not protect it from local malware running as the
-  user, a compromise of Tilde while the key is available, privileged access,
-  or plaintext copied elsewhere after decryption. A compromise of the running
-  app can expose the decrypted recent replay window and derived personal
+  In this research build it is deliberately readable to any process running as
+  the same user. Owner-only permissions do not protect it from same-user malware,
+  privileged access, backups, snapshots, or copied files. A compromise of the
+  running app can expose the recent replay window and derived personal
   contexts, transitions, aggregate paired outcome counts, and recipe identifiers.
-- The encrypted log exposes a plaintext format header, approximate size,
-  ciphertext lengths, and record count. Independent per-record authentication
-  detects modified ciphertext when that record is replayed; launch replay
-  authenticates records in its recent window, while append checks the most
-  recent existing record. Older corruption outside the replay window may
-  remain undetected. Authentication does not prevent deletion, duplication, or
-  reordering of complete encrypted records. A lost local acknowledgement can
+- The open log exposes the complete event corpus and metadata. Structural
+  validation detects malformed records when they are replayed; launch replay
+  validates records in its recent window, while append checks the most recent
+  existing record. Older corruption outside the replay window may remain
+  undetected. Validation does not prevent deletion, duplication, or reordering
+  of complete records. A lost local acknowledgement can
   also cause an event retry; readers deduplicate recent stable event IDs.
-- The encryption key is not synchronized by Tilde, but the user's login
-  Keychain can migrate through a Keychain copy or restore. If ciphertext exists
-  without its original key, Tilde refuses replay and append rather than creating
-  a replacement key and mixing unreadable and newly encrypted records.
-- Deleting Personal History removes its current file and Keychain key but
+- On first use, the research store migrates the legacy encrypted corpus and
+  removes its old file and Keychain key after validating copied event identities.
+- Deleting Personal History removes its current open file and any legacy key but
   cannot promise forensic erasure from backups, snapshots, storage
   wear-leveling, or copies made outside Tilde. Deletion turns capture off and
   rotates a local history identifier so queued pre-deletion events cannot
@@ -155,8 +154,8 @@ build and manual IME checks—including secure text fields—in disposable
 documents.
 
 Personal History changes additionally require tests for disabled capture,
-excluded apps, secure-input policy, bounded event decoding, encrypted
-round-trips, corrupt-store failure, deletion, prediction-before-learning,
+excluded apps, secure-input policy, bounded event decoding, plaintext
+round-trips, legacy migration, corrupt-store failure, deletion, prediction-before-learning,
 duplicate delivery, edit-boundary isolation, aggregate-checkpoint corruption,
 restart restoration, replay/live overlap, stale checkpoint rejection, and the
 retention and clearing lifecycle. Manual installed-IME proof

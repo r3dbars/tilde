@@ -4,7 +4,7 @@ import Security
 
 /// Owner-only unix socket between Tilde and its input method. Completion
 /// context remains memory-only; explicit Personal History batches are routed
-/// to the app-owned encrypted store.
+/// to the app-owned open research store in this explicitly opted-in build.
 final class GhostBrainServerHost: @unchecked Sendable {
     static let socketPath = NSString(
         string: "~/Library/Application Support/Tilde/ghost.sock"

@@ -2,6 +2,10 @@
 
 Tilde is local-only by design.
 
+This personal research branch deliberately makes opted-in Personal History
+readable to local tools. It is not the intended storage policy for a public
+Tilde release.
+
 ## What Tilde reads
 
 While Tilde is the active input method, IMKit gives it keystrokes and access to
@@ -63,36 +67,34 @@ writing from the input-method process.
 
 Records are stored at:
 
-`~/Library/Application Support/Tilde/Personal History/history.v1.enc`
+`~/Library/Application Support/Tilde/Open Research History/history.v1.jsonl`
 
-Each record is authenticated and encrypted with AES-GCM. The 256-bit key is a
-non-synchronizing item in the user's macOS login Keychain. The directory is
-owner-only (`0700`) and the file is owner-only (`0600`). The file header,
-approximate size, record lengths, and record count are not encrypted. The login
-Keychain can migrate with a copied or restored user Keychain; this is not a
-device-bound key. Local malware running as the user, a process compromise while
-Tilde is running, macOS backups or snapshots, and privileged administrators
-remain meaningful risks.
+The file is ordinary readable JSONL. It includes raw event text, accepted Tilde
+text, timestamps, source labels, writing-segment identifiers, consent/history
+identifiers, and app bundle identifiers. Its directory is owner-only (`0700`)
+and the file is owner-only (`0600`), but it is deliberately **not encrypted**.
+Any process running as this macOS user—including local Codex tools—can read or
+copy it. Backups, snapshots, malware running as the user, privileged
+administrators, and copied files remain meaningful risks. Tilde does not upload
+the file automatically.
 
-The stable filename contains `v1` for compatibility with existing installs. Its
-same-length header is upgraded from format 1 to format 2 before the first new
-batch append; format 2 stores each event batch and its optional aggregate
-checkpoint as one authenticated record. Tilde continues to read legacy format-1
-event records. Rolling back requires restoring the pre-upgrade history-file
-backup as well as the older app.
+On first use, this research build migrates the existing encrypted Personal
+History into the readable log. It validates the copied event identities, then
+removes the legacy encrypted file and its Keychain key. Older unrelated Tilde
+learning, trace, or evaluation stores are not imported.
 
 While Tilde is running, the paired shadow necessarily holds derived word
 contexts and transition counts in process memory. At launch it restores a
 bounded aggregate checkpoint, then rebuilds both recipes from the most recent
-complete events in a 4 MiB encrypted-history window without adding replayed
+complete events in a 4 MiB history window without adding replayed
 events to the score. It learns and scores only new allowed events while Tilde
 keeps running. Because the tail can begin partway through a writing stream, the
 predictor discards the first possibly truncated token before learning it. Replay
-work and decrypted replay memory stay bounded as the encrypted corpus grows.
+work and replay memory stay bounded as the plaintext corpus grows.
 The derived model also has a fixed capacity, and the menu explicitly reports
 when that capacity is reached.
 
-The checkpoint is encrypted in the same app-owned history-log append as the
+The checkpoint is stored in the same readable app-owned history-log record as the
 fresh batch it scores. It stores only lifetime aggregate totals plus at most 64
 aggregate UTC-day buckets. Its
 fields are the two fixed recipe identifiers, evaluation start time, a 3-by-3
@@ -105,12 +107,11 @@ publishes the in-memory result and acknowledges the batch. Writing that arrives
 while startup replay is loading is stored and used for training but is not added
 to the score. A corrupt, stale-generation, or mismatched checkpoint is rejected.
 
-A corrupt store or missing Keychain key makes history replay and writes fail
-closed when the problem is encountered. Appends authenticate the most recent
-existing record before writing; launch replay authenticates records inside its
-recent window. Older corruption outside that window may remain undetected.
-Ordinary autocomplete continues, and deleting Personal History is the recovery
-path.
+A malformed store makes history replay and writes fail closed when the problem
+is encountered. Appends validate the most recent existing record before
+writing; launch replay validates records inside its recent window. Older
+corruption outside that window may remain undetected. Ordinary autocomplete
+continues, and deleting Personal History is the recovery path.
 
 Tilde also stores settings and privacy-safe diagnostics such as event names,
 timings, counts, lengths, app identifiers, and failure labels. This diagnostics
@@ -153,9 +154,9 @@ authenticated-socket proof, or a real-editor round trip.
 
 - Personal History can be turned on or off from Tilde's menu. Turning it off
   immediately stops new capture and shadow evaluation but does not delete
-  existing history or its encrypted aggregate checkpoint. Re-enabling restores the
+  existing history or its aggregate checkpoint. Re-enabling restores the
   aggregate and rebuilds learned contexts from retained, non-excluded history.
-- The menu shows the Personal History storage location and approximate encrypted
+- The menu shows the Personal History storage location and approximate
   size, can exclude or re-include the current app, and can delete all Personal
   History after confirmation. Changing the exclusion set logically clears the
   aggregate checkpoint by rotating a durable experiment generation. Old
@@ -163,7 +164,7 @@ authenticated-socket proof, or a real-editor round trip.
   retained event history is filtered under the current exclusions. Deletion also
   turns capture off, rotates the
   local history identifier so queued older events are rejected, and removes
-  both the encrypted file and its Keychain key. It also clears the in-memory
+  the open research file, any legacy encrypted file and key, and the in-memory
   next-word predictor and aggregate shadow result. It is not a promise of
   forensic erasure from backups, snapshots, storage wear-leveling, or
   previously copied files.

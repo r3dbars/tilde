@@ -2,6 +2,10 @@
 
 ![Tilde cover](Assets/GitHub/tilde-cover.png)
 
+> **Personal research build:** this branch intentionally stores opted-in
+> Personal History as readable, owner-only JSONL so local Codex research can
+> inspect it. It is not the storage design for a public Tilde release.
+
 Tilde is an open-source macOS input method that offers quiet inline writing
 suggestions. Type normally, then use:
 
@@ -24,11 +28,11 @@ Tilde ships as one self-contained, signed package:
 
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
-text the user produces to the Tilde app. The app stores a local encrypted event
-log and quietly compares two bounded personal next-word recipes. The comparison
-is shadow-only: neither recipe changes visible suggestions. Its bounded lifetime
-and daily aggregate checkpoint is encrypted in the same app-owned history log as the
-batch it scores; it contains no words, candidate text, or per-case rows.
+text the user produces to the Tilde app. This personal research build stores a
+readable local event log and quietly compares two bounded personal next-word
+recipes. The comparison is shadow-only: neither recipe changes visible
+suggestions. Its bounded lifetime and daily aggregate checkpoint is stored in
+the same app-owned history record as the batch it scores.
 Tilde has no cloud inference, analytics, sync, upload, screenshots, or accept sounds.
 
 Personal History is off by default. Its menu shows the local storage location
@@ -40,8 +44,8 @@ that rebuild is loading warms the model but is not scored. They then learn and
 score shared fresh writing while Tilde runs. The menu reports fresh words,
 candidate predictions, disagreements, active days, and any memory limit; only
 after fixed descriptive thresholds does it show candidate versus baseline
-effective rates. Each history record is encrypted with AES-GCM; its key lives
-as a non-synchronizing item in the user's macOS login Keychain. See
+effective rates. The research log is owner-only (`0600`) but deliberately not
+encrypted, so any process running as the same macOS user can read it. See
 [PRIVACY.md](PRIVACY.md) for the capture boundary and remaining risks.
 
 ## Status and requirements
@@ -86,7 +90,7 @@ Production code has three parts:
 - `Sources/AutocompleteLabCore`: pure, deterministic suggestion policy
 - `Sources/InlineGhostIME`: IMKit input and marked-text presentation
 - `Sources/AutocompleteLabApp`: local socket, app-owned llama lifecycle, menu,
-  installation, encrypted Personal History, and redacted diagnostics
+  installation, open research Personal History, and redacted diagnostics
 
 Read [AGENTS.md](AGENTS.md) before changing behavior.
 

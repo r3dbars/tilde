@@ -66,8 +66,10 @@ This is raw-model evidence. It does not exercise the authenticated Tilde-to-IME
 socket, production output cleaning, marked-text rendering, or acceptance.
 Manual editor compatibility remains separate proof.
 
-Personal History is never exported automatically and is not an input to this
-raw-model evaluator. When explicitly enabled, Tilde separately runs an
+Personal History is not exported automatically and is not an input to this
+raw-model evaluator. In this personal research build its raw JSONL is readable
+by local Codex tools when the owner asks them to analyze it. When explicitly
+enabled, Tilde separately runs an
 on-device paired personal next-word shadow. The fixed baseline is
 `r1435-live-v1`; the candidate is `r1945-live-v1`. At each fresh eligible word
 boundary, both recipes freeze a prediction from the same prior authored words,
@@ -78,9 +80,9 @@ neither recipe changes the visible suggestion path.
 The aggregate result contains shared opportunities, baseline and candidate
 prediction and exact-hit counts, a paired 3-by-3 silent/correct/wrong outcome
 table, disagreements, active UTC days, learned-table capacity status, and rates.
-It contains no words, candidate strings, or per-case rows. Tilde persists only
-these lifetime aggregates and at most 64 aggregate daily buckets, encrypted in
-the same history-log append as the events they score. The envelope validates the exact local
+The aggregate itself contains no words, candidate strings, or per-case rows.
+Tilde persists these lifetime aggregates and at most 64 aggregate daily buckets
+in the same readable history-log record as the raw events they score. The envelope validates the exact local
 history identifier, durable exclusion generation, and exact exclusion set. Disable retains the checkpoint;
 an exclusion change or Personal History deletion clears it.
 
@@ -89,7 +91,7 @@ both learned recipes, without scoring, from the most recent complete events in
 a bounded 4 MiB retained-history tail. It discards the first possibly truncated
 token. Writing stored during that rebuild warms the model but is not scored;
 after the referee is ready, new allowed batches are scored and checkpointed in
-the same encrypted append. The current
+the same plaintext append. The current
 dogfood corpus fits within that replay bound, but the live contract remains
 bounded as the corpus grows. The first-token censor is intentional boundary
 safety. The menu reports `memory limit reached` if the bounded derived table
