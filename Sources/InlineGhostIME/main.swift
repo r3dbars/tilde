@@ -9,4 +9,12 @@ let bundleIdentifier = Bundle.main.bundleIdentifier ?? "bar.r3d.inputmethod.Inli
 let server = IMKServer(name: connectionName, bundleIdentifier: bundleIdentifier)
 _ = server
 
+enum GhostPanel {
+    static var candidates: IMKCandidates?
+}
+GhostPanel.candidates = IMKCandidates(
+    server: server,
+    panelType: kIMKSingleRowSteppingCandidatePanel
+)
+
 NSApplication.shared.run()

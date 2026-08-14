@@ -37,7 +37,7 @@ final class GhostInputController: IMKInputController {
     private var scheduleRevision = 0
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
-    private var calmRevealByBundle = [String: Bool]()
+    private var externalSurfaceByBundle = [String: Bool]()
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
@@ -227,6 +227,7 @@ final class GhostInputController: IMKInputController {
         for effect in effects {
             switch effect {
             case .hide:
+                GhostPanel.candidates?.hide()
                 client.setMarkedText(
                     "",
                     selectionRange: NSRange(location: 0, length: 0),
@@ -235,13 +236,18 @@ final class GhostInputController: IMKInputController {
             case let .insert(text):
                 client.insertText(text, replacementRange: Self.unset)
             case let .show(text):
-                client.setMarkedText(
-                    NSAttributedString(string: text, attributes: [
-                        .foregroundColor: NSColor.tertiaryLabelColor,
-                    ]),
-                    selectionRange: NSRange(location: 0, length: 0),
-                    replacementRange: Self.unset
-                )
+                if requiresExternalSurface(for: client.bundleIdentifier() ?? "") {
+                    GhostPanel.candidates?.update()
+                    GhostPanel.candidates?.show(kIMKLocateCandidatesBelowHint)
+                } else {
+                    client.setMarkedText(
+                        NSAttributedString(string: text, attributes: [
+                            .foregroundColor: NSColor.tertiaryLabelColor,
+                        ]),
+                        selectionRange: NSRange(location: 0, length: 0),
+                        replacementRange: Self.unset
+                    )
+                }
             case let .schedule(afterTyping: grapheme):
                 scheduleSuggestion(for: client, afterUserTyped: grapheme)
             }
@@ -251,6 +257,10 @@ final class GhostInputController: IMKInputController {
     private func dismiss(_ client: IMKTextInput) {
         cancelPendingWork()
         apply(state.reduce(.dismiss), to: client)
+    }
+
+    override func candidates(_ sender: Any!) -> [Any]! {
+        state.visibleText.isEmpty ? [] : [state.visibleText]
     }
 
     private func acceptSuggestion(
@@ -360,7 +370,7 @@ final class GhostInputController: IMKInputController {
         let expectedBundle = client.bundleIdentifier() ?? ""
         let delay = SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: grapheme,
-            calmMarkedText: usesCalmReveal(for: expectedBundle)
+            calmMarkedText: requiresExternalSurface(for: expectedBundle)
         )
 
         revealTask = Task { @MainActor [weak self] in
@@ -373,12 +383,11 @@ final class GhostInputController: IMKInputController {
         }
     }
 
-    /// Chromium browsers and Electron apps render marked-text carets at the
-    /// ghost's end. Their longer pause prevents visible caret ping-pong while
-    /// keeping native editors on the near-instant path.
-    private func usesCalmReveal(for bundleIdentifier: String) -> Bool {
+    /// Chromium browsers and Electron apps need a slower reveal to prevent
+    /// visible caret/panel ping-pong while native editors stay near-instant.
+    private func requiresExternalSurface(for bundleIdentifier: String) -> Bool {
         guard !bundleIdentifier.isEmpty else { return false }
-        if let cached = calmRevealByBundle[bundleIdentifier] { return cached }
+        if let cached = externalSurfaceByBundle[bundleIdentifier] { return cached }
         let electronFramework = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
             .first?.bundleURL?
@@ -386,12 +395,12 @@ final class GhostInputController: IMKInputController {
         let electron = electronFramework.map {
             FileManager.default.fileExists(atPath: $0.path)
         } ?? false
-        let calm = SuggestionRevealDelayPolicy.requiresCalmMarkedText(
+        let external = CommitUnsafeHostPolicy.requiresExternalSurface(
             bundleIdentifier: bundleIdentifier,
             hasElectronFramework: electron
         )
-        calmRevealByBundle[bundleIdentifier] = calm
-        return calm
+        externalSurfaceByBundle[bundleIdentifier] = external
+        return external
     }
 
     private func updateSuggestion(for client: IMKTextInput) {

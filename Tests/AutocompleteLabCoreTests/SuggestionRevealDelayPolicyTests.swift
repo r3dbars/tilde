@@ -3,7 +3,7 @@ import Testing
 
 @Suite("Suggestion reveal delay")
 struct SuggestionRevealDelayPolicyTests {
-    @Test("Chromium browsers and Electron apps use calm marked text")
+    @Test("Chromium browsers and Electron apps use calm reveal timing")
     func knownJumpyHostsUseCalmMarkedText() {
         #expect(SuggestionRevealDelayPolicy.requiresCalmMarkedText(
             bundleIdentifier: "com.google.Chrome.beta",
