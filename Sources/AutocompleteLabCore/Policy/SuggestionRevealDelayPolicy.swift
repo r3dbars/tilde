@@ -1,18 +1,14 @@
-/// Keeps native editors fast while giving Chromium/Electron marked text enough
-/// time to avoid moving the visible caret between keystrokes.
+/// Keeps native editors fast while giving Chromium/Electron suggestion surfaces
+/// enough time to avoid moving the visible caret between keystrokes.
 public enum SuggestionRevealDelayPolicy {
-    private static let chromiumBundlePrefixes = [
-        "com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser",
-        "company.thebrowser.Browser", "com.openai.atlas", "com.vivaldi.Vivaldi",
-        "com.operasoftware.Opera",
-    ]
-
     public static func requiresCalmMarkedText(
         bundleIdentifier: String,
         hasElectronFramework: Bool
     ) -> Bool {
-        hasElectronFramework
-            || chromiumBundlePrefixes.contains(where: bundleIdentifier.hasPrefix)
+        CommitUnsafeHostPolicy.requiresExternalSurface(
+            bundleIdentifier: bundleIdentifier,
+            hasElectronFramework: hasElectronFramework
+        )
     }
 
     public static func nanoseconds(
