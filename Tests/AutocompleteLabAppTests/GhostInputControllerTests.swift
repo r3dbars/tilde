@@ -1,8 +1,25 @@
 import Testing
 @testable import InlineGhostIME
 
-@Suite("Dictionary suffix")
+@Suite("Ghost input controller")
 struct GhostInputControllerTests {
+    @Test("Slow-key timing separates queue delay from handler work")
+    func slowKeyTiming() throws {
+        let timing = try #require(GhostInputController.slowKeyTiming(
+            eventTimestamp: 10,
+            handlerStartedAt: 10.060,
+            handlerFinishedAt: 10.080
+        ))
+        #expect(timing.totalMilliseconds == 80)
+        #expect(timing.queuedMilliseconds == 60)
+        #expect(timing.handlerMilliseconds == 20)
+        #expect(GhostInputController.slowKeyTiming(
+            eventTimestamp: 10,
+            handlerStartedAt: 10.020,
+            handlerFinishedAt: 10.049
+        ) == nil)
+    }
+
     @Test("Complete words do not grow into longer completions")
     func completeWordsStayComplete() {
         #expect(GhostInputController.dictionarySuffix(
