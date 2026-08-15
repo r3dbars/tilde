@@ -39,5 +39,3 @@ This is the strongest existing evidence that on-device, never-uploaded personali
 - **No DP/secure aggregation despite the privacy framing** — the privacy claim rests on "raw text never leaves the device" plus cross-client aggregation, a weaker guarantee than Tilde's single-device, no-server-round-trip design already provides. Not a privacy proof point to cite beyond "don't upload raw text."
 - **Infra and scale assumptions don't transfer** — 1.5M clients, dedicated FL infrastructure, idle/charging/unmetered eligibility gating are all irrelevant to a solo macOS input method.
 - **Metric mismatch** — headline metrics are word-level top-1/top-3 recall and chip CTR inside Gboard's UI, not Tilde's EM@1, keystrokes-saved, or "help more than interrupt" friction constraint; numbers are directionally useful, not directly comparable.
-
-File written to `/private/tmp/claude-501/-Users-redbars-Steadytype--claude-worktrees-musing-poitras-f871d3/84c04d6c-b013-4ad4-aa07-1c8390cf1f60/scratchpad/fed_keyboard_digest.md`.
