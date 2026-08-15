@@ -32,6 +32,29 @@ struct GhostStatsTests {
         #expect(after == before + 3)
     }
 
+    @Test("Suggestion shown and accepted counters persist independently")
+    func suggestionCountersStayExplicit() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let key = "stats." + formatter.string(from: Date())
+        let defaults = UserDefaults.standard
+        let original = defaults.object(forKey: key)
+        defer { defaults.set(original, forKey: key) }
+
+        GhostStats.flush(force: true)
+        let before = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
+        GhostStats.recordSuggestionShown()
+        GhostStats.recordSuggestionShown()
+        GhostStats.recordSuggestionAccepted()
+        GhostStats.flush(force: true)
+        let after = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
+
+        var expected = before
+        expected["suggestionsShown", default: 0] += 2
+        expected["suggestionsAccepted", default: 0] += 1
+        #expect(after == expected)
+    }
+
     @Test("Runtime failures persist as distinct aggregate counters")
     func runtimeFailuresStayExplicit() {
         let formatter = DateFormatter()

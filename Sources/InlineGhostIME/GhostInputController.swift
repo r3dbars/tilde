@@ -244,6 +244,10 @@ final class GhostInputController: IMKInputController {
                 )
             case let .schedule(afterTyping: grapheme):
                 scheduleSuggestion(for: client, afterUserTyped: grapheme)
+            case .shown:
+                GhostStats.recordSuggestionShown()
+            case .accepted:
+                GhostStats.recordSuggestionAccepted()
             }
         }
     }

@@ -31,7 +31,7 @@ struct InlineSuggestionStateTests {
         _ = state.reduce(.awaitSuggestion(newer))
 
         #expect(state.reduce(.present(" old", older)).isEmpty)
-        #expect(state.reduce(.present(" new", newer)) == [.show(" new")])
+        #expect(state.reduce(.present(" new", newer)) == [.shown, .show(" new")])
     }
 
     @Test("Replacement and dismissal clear every older suggestion")
@@ -100,7 +100,7 @@ struct InlineSuggestionStateTests {
             current: matchedForTab,
             boundedContext: "hel",
             utf16Limit: 3_000
-        )) == [.hide, .insert("lo")])
+        )) == [.hide, .insert("lo"), .accepted])
     }
 
     @Test("Divergence hides, inserts, then schedules a new request")
@@ -145,7 +145,7 @@ struct InlineSuggestionStateTests {
             current: matchedForTab,
             boundedContext: rolledContext,
             utf16Limit: 3_000
-        )) == [.hide, .insert("c")])
+        )) == [.hide, .insert("c"), .accepted])
     }
 
     @Test("Non-BMP fallback shares the ticket's UTF-16 context window")
@@ -176,7 +176,7 @@ struct InlineSuggestionStateTests {
             current: matchedForTab,
             boundedContext: fallback,
             utf16Limit: 3_000
-        )) == [.hide, .insert("c")])
+        )) == [.hide, .insert("c"), .accepted])
     }
 
     @Test("Tab advances through a suggestion one word at a time")
@@ -190,7 +190,7 @@ struct InlineSuggestionStateTests {
             current: current,
             boundedContext: "hello",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" world"), .show(" and beyond")])
+        )) == [.hide, .insert(" world"), .show(" and beyond"), .accepted])
 
         let afterWorld = current.advancing(
             with: " world",
@@ -236,7 +236,51 @@ struct InlineSuggestionStateTests {
             current: current,
             boundedContext: "hello",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" world")])
+        )) == [.hide, .insert(" world"), .accepted])
+    }
+
+    @Test("Shown counts only fresh presentations; accepted counts only the first accept")
+    func presentationCountingSemantics() {
+        let current = ticket(context: "hello", location: 5, request: 1)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+
+        // A fresh presentation is shown.
+        #expect(state.reduce(.present(" world and beyond", current)) == [
+            .shown, .show(" world and beyond"),
+        ])
+
+        // A matching keystroke consumes a character without re-recording shown.
+        let advanced = current.advancing(with: " ", boundedContext: "hello", utf16Limit: 3_000)
+        #expect(state.reduce(.type(" ", current: current, advanced: advanced)) == [
+            .hide, .insert(" "), .show("world and beyond"),
+        ])
+
+        // The first Tab-walk accept of this presentation is recorded once...
+        #expect(state.reduce(.acceptNextWord(
+            current: advanced,
+            boundedContext: "hello ",
+            utf16Limit: 3_000
+        )) == [.hide, .insert("world"), .show(" and beyond"), .accepted])
+
+        let afterWorld = advanced.advancing(with: "world", boundedContext: "hello ", utf16Limit: 3_000)
+        // ...and a later Tab-walk accept of the same presentation is not.
+        #expect(state.reduce(.acceptNextWord(
+            current: afterWorld,
+            boundedContext: "hello world",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" and"), .show(" beyond")])
+
+        // A brand-new presentation is a fresh shown, and its first accept
+        // records again.
+        let next = ticket(context: "hello world and beyond", location: 23, request: 2)
+        _ = state.reduce(.awaitSuggestion(next))
+        #expect(state.reduce(.present(" next", next)) == [.shown, .show(" next")])
+        #expect(state.reduce(.acceptNextWord(
+            current: next,
+            boundedContext: "hello world and beyond",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" next"), .accepted])
     }
 
     private func ticket(
