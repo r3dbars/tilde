@@ -36,7 +36,7 @@ the digest isn't enough.
   (Khandelwal et al.) — retrieval over a user's own past text as a second
   personalization signal; gains concentrate on rare personal tokens (names,
   project words). Candidate phase-2 personalization after interpolation.
-- [Dasher](http://www.dasher.org.uk/) (MacKay) — text entry as navigation of
+- [Dasher](https://dasher.zone/) (MacKay) — text entry as navigation of
   probability space; the deepest treatment of the information theory behind
   keystrokes-saved, Tilde's north-star metric.
 
