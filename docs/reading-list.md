@@ -5,6 +5,11 @@ The external knowledge Tilde builds on: annotated links, never copied text
 one-line note on what it teaches *for Tilde*. Ideas from here are hypotheses;
 once measured, the result graduates to `docs/model-lessons.md` as fact.
 
+Most entries have an original-words digest in `docs/research/` — method,
+numbers, what applies to Tilde, and what does not — written for fast parsing
+by humans and agents alike. Read the digest first; fetch the source only when
+the digest isn't enough.
+
 ## Shipped-system playbooks
 
 - [Gmail Smart Compose: Real-Time Assisted Writing](https://arxiv.org/abs/1906.00080)
