@@ -223,10 +223,15 @@ final class GhostInputController: IMKInputController {
         )
     }
 
+    /// Resolved once per visible suggestion chain because querying the host's
+    /// text attributes is synchronous cross-process work.
+    private var cachedGhostStyle: [NSAttributedString.Key: Any]?
+
     private func apply(_ effects: [InlineSuggestionState.Effect], to client: IMKTextInput) {
         for effect in effects {
             switch effect {
             case .hide:
+                cachedGhostStyle = nil
                 client.setMarkedText(
                     "",
                     selectionRange: NSRange(location: 0, length: 0),
@@ -236,9 +241,7 @@ final class GhostInputController: IMKInputController {
                 client.insertText(text, replacementRange: Self.unset)
             case let .show(text):
                 client.setMarkedText(
-                    NSAttributedString(string: text, attributes: [
-                        .foregroundColor: NSColor.tertiaryLabelColor,
-                    ]),
+                    NSAttributedString(string: text, attributes: ghostStyle(client)),
                     selectionRange: NSRange(location: 0, length: 0),
                     replacementRange: Self.unset
                 )
@@ -250,6 +253,41 @@ final class GhostInputController: IMKInputController {
                 GhostStats.recordSuggestionAccepted()
             }
         }
+    }
+
+    private func ghostStyle(_ client: IMKTextInput) -> [NSAttributedString.Key: Any] {
+        if let cachedGhostStyle { return cachedGhostStyle }
+
+        var lineRect = NSRect.zero
+        let reported = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineRect)
+        let reportedFont = (reported?[NSAttributedString.Key.font.rawValue]
+            ?? reported?[NSAttributedString.Key.font]) as? NSFont
+
+        let pointSize = CGFloat(InlineGhostFontPolicy.resolvedPointSize(
+            reportedPointSize: reportedFont.map { Double($0.pointSize) },
+            measuredLineHeight: lineRect.height.isFinite ? Double(lineRect.height) : nil,
+            fallbackPointSize: Double(NSFont.systemFontSize)
+        ))
+        let font: NSFont
+        if let reportedFont, reportedFont.pointSize == pointSize {
+            font = reportedFont
+        } else if let reportedFont {
+            font = NSFont(descriptor: reportedFont.fontDescriptor, size: pointSize)
+                ?? .systemFont(ofSize: pointSize)
+        } else {
+            font = .systemFont(ofSize: pointSize)
+        }
+
+        let spec = InlineGhostColorSpec.markedText
+        let style: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor(
+                calibratedWhite: CGFloat(spec.fillWhite),
+                alpha: CGFloat(spec.fillAlpha)
+            ),
+        ]
+        cachedGhostStyle = style
+        return style
     }
 
     private func dismiss(_ client: IMKTextInput) {
