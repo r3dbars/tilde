@@ -47,9 +47,9 @@ struct ContinuationRegisterTests {
     @Test("Register selects its scaffold voice and token budget")
     func registerSelectsScaffoldAndBudget() {
         let chat = RawContinuationPrompt(textBeforeCursor: "yeah ok ", register: .chat)
-        #expect(chat.prompt.contains("real chat messages"))
+        #expect(chat.prompt.contains("Real chat messages"))
         let email = RawContinuationPrompt(textBeforeCursor: "Hi Sarah, ", register: .email)
-        #expect(email.prompt.contains("real emails"))
+        #expect(email.prompt.contains("Real emails"))
         let prose = RawContinuationPrompt(textBeforeCursor: "The report ")
         #expect(prose.prompt.contains("real documents"))
         #expect(ContinuationRegister.chat.generatedTokenBudget < ContinuationRegister.prose.generatedTokenBudget)
