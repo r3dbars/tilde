@@ -36,4 +36,22 @@ struct TildeStatsTests {
 
         #expect(TildeStats.sumWordsAccepted(in: values) == 4)
     }
+
+    @Test("Shown and accepted sum independently across days")
+    func sumsSuggestionCountersIndependently() {
+        let values: [String: Any] = [
+            "stats.2026-08-09": ["suggestionsShown": 10, "suggestionsAccepted": 2],
+            "stats.2026-08-10": ["suggestionsShown": 20, "suggestionsAccepted": 3],
+        ]
+
+        #expect(TildeStats.sumSuggestionsShown(in: values) == 30)
+        #expect(TildeStats.sumSuggestionsAccepted(in: values) == 5)
+    }
+
+    @Test("Acceptance rate rounds to a whole percent and guards zero shown")
+    func acceptanceRateMath() {
+        #expect(TildeStats.acceptanceRate(accepted: 12, shown: 84) == 14)
+        #expect(TildeStats.acceptanceRate(accepted: 1, shown: 3) == 33)
+        #expect(TildeStats.acceptanceRate(accepted: 0, shown: 0) == 0)
+    }
 }

@@ -1,6 +1,7 @@
 import AutocompleteLabCore
 import Cocoa
 import InputMethodKit
+import OSLog
 
 /// A deliberately small IMKit keyboard: marked-text display, type-through,
 /// dictionary suffixes, and phrase requests to Tilde's app-owned model.
@@ -8,6 +9,31 @@ import InputMethodKit
 final class GhostInputController: IMKInputController {
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
     private static let contextLimit = 3_000
+    private static let slowKeyThreshold: TimeInterval = 0.050
+    private static let slowKeyLogger = Logger(
+        subsystem: "bar.r3d.inputmethod.InlineGhost",
+        category: "typing-performance"
+    )
+
+    struct SlowKeyTiming {
+        let totalMilliseconds: Int
+        let queuedMilliseconds: Int
+        let handlerMilliseconds: Int
+    }
+
+    static func slowKeyTiming(
+        eventTimestamp: TimeInterval,
+        handlerStartedAt: TimeInterval,
+        handlerFinishedAt: TimeInterval
+    ) -> SlowKeyTiming? {
+        let total = max(0, handlerFinishedAt - eventTimestamp)
+        guard total >= slowKeyThreshold else { return nil }
+        return SlowKeyTiming(
+            totalMilliseconds: Int((total * 1_000).rounded()),
+            queuedMilliseconds: Int((max(0, handlerStartedAt - eventTimestamp) * 1_000).rounded()),
+            handlerMilliseconds: Int((max(0, handlerFinishedAt - handlerStartedAt) * 1_000).rounded())
+        )
+    }
 
     private struct FallbackOwner: Equatable {
         let bundle: String
@@ -42,6 +68,18 @@ final class GhostInputController: IMKInputController {
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else {
             return false
+        }
+        let handlerStartedAt = ProcessInfo.processInfo.systemUptime
+        defer {
+            if let timing = Self.slowKeyTiming(
+                eventTimestamp: event.timestamp,
+                handlerStartedAt: handlerStartedAt,
+                handlerFinishedAt: ProcessInfo.processInfo.systemUptime
+            ) {
+                Self.slowKeyLogger.notice(
+                    "slow-key totalMilliseconds=\(timing.totalMilliseconds, privacy: .public) queuedMilliseconds=\(timing.queuedMilliseconds, privacy: .public) handlerMilliseconds=\(timing.handlerMilliseconds, privacy: .public)"
+                )
+            }
         }
         let secureInput = IsSecureEventInputEnabled()
         if secureInput {
@@ -223,11 +261,16 @@ final class GhostInputController: IMKInputController {
         )
     }
 
+    /// Resolved once per visible suggestion chain because querying the host's
+    /// text attributes is synchronous cross-process work.
+    private var cachedGhostStyle: [NSAttributedString.Key: Any]?
+
     private func apply(_ effects: [InlineSuggestionState.Effect], to client: IMKTextInput) {
         for effect in effects {
             switch effect {
             case .hide:
                 GhostPanel.candidates?.hide()
+                cachedGhostStyle = nil
                 client.setMarkedText(
                     "",
                     selectionRange: NSRange(location: 0, length: 0),
@@ -241,17 +284,54 @@ final class GhostInputController: IMKInputController {
                     GhostPanel.candidates?.show(kIMKLocateCandidatesBelowHint)
                 } else {
                     client.setMarkedText(
-                        NSAttributedString(string: text, attributes: [
-                            .foregroundColor: NSColor.tertiaryLabelColor,
-                        ]),
+                        NSAttributedString(string: text, attributes: ghostStyle(client)),
                         selectionRange: NSRange(location: 0, length: 0),
                         replacementRange: Self.unset
                     )
                 }
             case let .schedule(afterTyping: grapheme):
                 scheduleSuggestion(for: client, afterUserTyped: grapheme)
+            case .shown:
+                GhostStats.recordSuggestionShown()
+            case .accepted:
+                GhostStats.recordSuggestionAccepted()
             }
         }
+    }
+
+    private func ghostStyle(_ client: IMKTextInput) -> [NSAttributedString.Key: Any] {
+        if let cachedGhostStyle { return cachedGhostStyle }
+
+        var lineRect = NSRect.zero
+        let reported = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineRect)
+        let reportedFont = (reported?[NSAttributedString.Key.font.rawValue]
+            ?? reported?[NSAttributedString.Key.font]) as? NSFont
+
+        let pointSize = CGFloat(InlineGhostFontPolicy.resolvedPointSize(
+            reportedPointSize: reportedFont.map { Double($0.pointSize) },
+            measuredLineHeight: lineRect.height.isFinite ? Double(lineRect.height) : nil,
+            fallbackPointSize: Double(NSFont.systemFontSize)
+        ))
+        let font: NSFont
+        if let reportedFont, reportedFont.pointSize == pointSize {
+            font = reportedFont
+        } else if let reportedFont {
+            font = NSFont(descriptor: reportedFont.fontDescriptor, size: pointSize)
+                ?? .systemFont(ofSize: pointSize)
+        } else {
+            font = .systemFont(ofSize: pointSize)
+        }
+
+        let spec = InlineGhostColorSpec.markedText
+        let style: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor(
+                calibratedWhite: CGFloat(spec.fillWhite),
+                alpha: CGFloat(spec.fillAlpha)
+            ),
+        ]
+        cachedGhostStyle = style
+        return style
     }
 
     private func dismiss(_ client: IMKTextInput) {
