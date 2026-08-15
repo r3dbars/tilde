@@ -228,7 +228,7 @@ extension StatusMenuHost: NSMenuDelegate {
             shown: lifetimeShown
         )
         let lifetimeRateSuffix = lifetimeShown > 0 ? " · \(lifetimeRate)% accept rate" : ""
-        lifetimeItem?.title = lifetime > 0
+        lifetimeItem?.title = (lifetime > 0 || lifetimeShown > 0)
             ? "\(lifetime.formatted()) words accepted\(lifetimeRateSuffix)"
             : "Tilde"
 
