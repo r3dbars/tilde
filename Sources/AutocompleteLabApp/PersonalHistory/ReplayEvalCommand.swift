@@ -93,7 +93,11 @@ struct ReplayEvalCommand {
             -> Result<ReplayEvalOwnedServer, ReplayEvalOwnershipFailure> = ReplayEvalCommand
             .defaultOwnedServer,
         engineFactory: @escaping @Sendable (URL) -> any CompletionSuggesting = {
-            LlamaCompletionEngine(baseURL: $0)
+            // `.disabled`: this command's contract is "no side effects but
+            // the one JSON line on stdout" — never contaminate the shared
+            // operational diagnostics log with synthetic timing/rejection
+            // entries from a replay run.
+            LlamaCompletionEngine(baseURL: $0, diagnostics: .disabled)
         }
     ) {
         self.settings = settings
