@@ -1,4 +1,5 @@
 import AppKit
+import AutocompleteLabCore
 import ServiceManagement
 
 enum TildeLaunchMode: Equatable {
@@ -26,14 +27,23 @@ enum TildeLaunchMode: Equatable {
 enum TildeInvocation: Equatable {
     case application(TildeLaunchMode)
     case personalBrainStatusJSON
+    case replayEvalJSON(limit: Int)
 
     init?(arguments: [String]) {
-        switch Array(arguments.dropFirst()) {
-        case []: self = .application(.production)
-        case ["--release-proof"]: self = .application(.releaseProof)
-        case ["--personal-brain-status-json"]: self = .personalBrainStatusJSON
-        default: return nil
+        let rest = Array(arguments.dropFirst())
+        if rest.isEmpty { self = .application(.production); return }
+        if rest == ["--release-proof"] { self = .application(.releaseProof); return }
+        if rest == ["--personal-brain-status-json"] { self = .personalBrainStatusJSON; return }
+        if rest == ["--replay-eval-json"] {
+            self = .replayEvalJSON(limit: PersonalReplayEval.defaultLimit)
+            return
         }
+        if rest.count == 3, rest[0] == "--replay-eval-json", rest[1] == "--limit",
+           let limit = Int(rest[2]), limit > 0 {
+            self = .replayEvalJSON(limit: limit)
+            return
+        }
+        return nil
     }
 }
 

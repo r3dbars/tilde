@@ -84,11 +84,23 @@ public struct InlineSuggestionState: Equatable, Sendable {
         case insert(String)
         case show(String)
         case schedule(afterTyping: String)
+        /// A fresh presentation became visible: either nothing was visible
+        /// before, or a different suggestion was replaced. The re-show of a
+        /// shortened remainder after a matching keystroke or a Tab accept is
+        /// a continuation of the same presentation and does not repeat this.
+        case shown
+        /// The first word-accept of the current presentation. Later Tab
+        /// presses that walk further through the same presentation do not
+        /// repeat this.
+        case accepted
     }
 
     public private(set) var visibleText = ""
     public private(set) var visibleTicket: InlineSuggestionTicket?
     public private(set) var pendingTicket: InlineSuggestionTicket?
+    /// Whether the current presentation has already recorded its one
+    /// `.accepted` effect. Reset whenever a new presentation begins.
+    private var presentationAccepted = false
 
     public init() {}
 
@@ -108,7 +120,8 @@ public struct InlineSuggestionState: Equatable, Sendable {
             pendingTicket = nil
             visibleText = text
             visibleTicket = ticket
-            return [.show(text)]
+            presentationAccepted = false
+            return [.shown, .show(text)]
 
         case let .type(grapheme, current, advanced):
             pendingTicket = nil
@@ -143,6 +156,8 @@ public struct InlineSuggestionState: Equatable, Sendable {
             }
             let accepted = Self.nextWordPrefix(in: visibleText)
             let remainder = String(visibleText.dropFirst(accepted.count))
+            let recordAccepted = !presentationAccepted
+            presentationAccepted = true
             visibleText = remainder
             visibleTicket = remainder.isEmpty
                 ? nil
@@ -151,9 +166,11 @@ public struct InlineSuggestionState: Equatable, Sendable {
                     boundedContext: boundedContext,
                     utf16Limit: utf16Limit
                 )
-            return remainder.isEmpty
+            var effects: [Effect] = remainder.isEmpty
                 ? [.hide, .insert(accepted)]
                 : [.hide, .insert(accepted), .show(remainder)]
+            if recordAccepted { effects.append(.accepted) }
+            return effects
 
         case .dismiss:
             pendingTicket = nil

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabCore
 
 @Suite("Keyboard installer")
 struct GhostKeyboardInstallerHostTests {
@@ -229,5 +230,18 @@ struct TildeLaunchModeTests {
         #expect(TildeInvocation(arguments: [
             "Tilde", "--personal-brain-status-json", "extra",
         ]) == nil)
+    }
+
+    @Test("Replay eval accepts an optional --limit and rejects malformed forms")
+    func replayEvalInvocation() {
+        #expect(TildeInvocation(arguments: ["Tilde", "--replay-eval-json"])
+            == .replayEvalJSON(limit: PersonalReplayEval.defaultLimit))
+        #expect(TildeInvocation(arguments: ["Tilde", "--replay-eval-json", "--limit", "10"])
+            == .replayEvalJSON(limit: 10))
+        #expect(TildeInvocation(arguments: ["Tilde", "--replay-eval-json", "--limit", "0"]) == nil)
+        #expect(TildeInvocation(arguments: ["Tilde", "--replay-eval-json", "--limit", "-1"]) == nil)
+        #expect(TildeInvocation(arguments: ["Tilde", "--replay-eval-json", "--limit", "nope"]) == nil)
+        #expect(TildeInvocation(arguments: ["Tilde", "--replay-eval-json", "extra"]) == nil)
+        #expect(TildeInvocation(arguments: ["Tilde", "--limit", "10"]) == nil)
     }
 }

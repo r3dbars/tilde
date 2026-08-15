@@ -222,12 +222,22 @@ final class StatusMenuHost: NSObject {
 extension StatusMenuHost: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         let lifetime = TildeStats.lifetimeWordsAccepted()
-        lifetimeItem?.title = lifetime > 0
-            ? "\(lifetime.formatted()) words accepted"
+        let lifetimeShown = TildeStats.lifetimeSuggestionsShown()
+        let lifetimeRate = TildeStats.acceptanceRate(
+            accepted: TildeStats.lifetimeSuggestionsAccepted(),
+            shown: lifetimeShown
+        )
+        let lifetimeRateSuffix = lifetimeShown > 0 ? " · \(lifetimeRate)% accept rate" : ""
+        lifetimeItem?.title = (lifetime > 0 || lifetimeShown > 0)
+            ? "\(lifetime.formatted()) words accepted\(lifetimeRateSuffix)"
             : "Tilde"
 
-        let today = TildeStats.todayWordsAccepted()
-        todayItem?.title = today > 0 ? "Today: \(today) accepted" : "Today: none accepted"
+        let todayAccepted = TildeStats.todaySuggestionsAccepted()
+        let todayShown = TildeStats.todaySuggestionsShown()
+        let todayRate = TildeStats.acceptanceRate(accepted: todayAccepted, shown: todayShown)
+        todayItem?.title = todayShown > 0
+            ? "Today: \(todayAccepted) accepted · \(todayShown) shown (\(todayRate)%)"
+            : "Today: none accepted"
 
         engineItem?.title = appDelegate?.engineStatusLine() ?? "Engine: unknown"
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off

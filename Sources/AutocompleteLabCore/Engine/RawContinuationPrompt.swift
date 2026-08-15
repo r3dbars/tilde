@@ -42,13 +42,10 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         switch register {
         case .chat:
             return """
-            The following are real chat messages being written by their authors, continued naturally in the same casual voice.
+            Real chat messages, continued naturally in the same casual voice.
 
             Text: yeah I think we can
             Continuation: make that work by friday.
-
-            Text: lol ok that's fair,
-            Continuation: let's just ship it and see.
 
             Text: running like 10 min late but
             Continuation: save me a seat, almost there.
@@ -57,16 +54,13 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             """
         case .email:
             return """
-            The following are real emails being written by their authors, continued naturally.
+            Real emails, continued naturally.
 
             Text: I wanted to follow up on our call from
             Continuation: yesterday afternoon about the launch timeline.
 
             Text: Thanks for sending this over — I'll review it
             Continuation: tonight and get you notes by tomorrow.
-
-            Text: Following up on last week's discussion, I think the
-            Continuation: revised timeline is workable if we start now.
 
 
             """
@@ -82,6 +76,15 @@ public struct RawContinuationPrompt: Equatable, Sendable {
 
             Text: The results suggest two things. First, the approach
             Continuation: scales well beyond the original design load.
+
+            Text: It rained most of the weekend, so we ended up
+            Continuation: staying in and finally organizing the garage.
+
+            Text: What surprised me most about the whole trip was
+            Continuation: how quickly the days started to blur together.
+
+            Text: I keep coming back to the same conclusion:
+            Continuation: the simplest version of the plan is the right one.
 
 
             """

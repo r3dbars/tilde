@@ -5,9 +5,11 @@ import Foundation
 final class LlamaCompletionEngine: @unchecked Sendable {
     private let baseURL: URL
     private let cleaner = CompletionOutputCleaner()
+    private let diagnostics: DiagnosticsLog
 
-    init(baseURL: URL) {
+    init(baseURL: URL, diagnostics: DiagnosticsLog = .shared) {
         self.baseURL = baseURL
+        self.diagnostics = diagnostics
     }
 
     func suggestion(
@@ -52,11 +54,11 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             after: textBeforeCursor
         )
         if clean.suggestion == nil, !raw.isEmpty, let reason = clean.rejectionReason {
-            DiagnosticsLog.shared.record("llama-suggestion-rejected", metadata: [
+            diagnostics.record("llama-suggestion-rejected", metadata: [
                 "reason": String(describing: reason),
             ])
         }
-        DiagnosticsLog.shared.record("llama-completion-timing", metadata: [
+        diagnostics.record("llama-completion-timing", metadata: [
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
             "cleanedChars": String(clean.suggestion?.visibleText.count ?? 0),
         ])
