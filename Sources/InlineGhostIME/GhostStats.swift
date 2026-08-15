@@ -13,6 +13,14 @@ enum GhostStats {
         record(count, key: "wordsAccepted")
     }
 
+    static func recordSuggestionShown() {
+        record(1, key: "suggestionsShown")
+    }
+
+    static func recordSuggestionAccepted() {
+        record(1, key: "suggestionsAccepted")
+    }
+
     static func recordFailure(_ outcome: GhostBrainResponse.Outcome) {
         let key: String
         switch outcome {
