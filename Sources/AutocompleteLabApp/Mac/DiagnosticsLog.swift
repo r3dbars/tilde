@@ -3,22 +3,31 @@ import AutocompleteLabCore
 
 final class DiagnosticsLog: @unchecked Sendable {
     static let shared = DiagnosticsLog()
+    /// Discards every event instead of writing it. For callers — like the
+    /// replay-eval CLI — whose contract promises no side effects beyond
+    /// their own single output: they must never contaminate the shared
+    /// operational diagnostics log with synthetic timing/rejection entries.
+    static let disabled = DiagnosticsLog(logURL: FileManager.default.temporaryDirectory, enabled: false)
 
     private let queue = DispatchQueue(label: "bar.r3d.tilde.diagnostics")
     private let logURL: URL
+    private let enabled: Bool
     private let timestampFormatter = ISO8601DateFormatter()
 
     private init() {
         self.logURL = FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Tilde/diagnostics.log")
+        self.enabled = true
     }
 
-    init(logURL: URL) {
+    init(logURL: URL, enabled: Bool = true) {
         self.logURL = logURL
+        self.enabled = enabled
     }
 
     func record(_ event: String, metadata: [String: String] = [:]) {
+        guard enabled else { return }
         queue.async { [self, logURL] in
             do {
                 let line = format(event: event, metadata: metadata)
