@@ -105,7 +105,7 @@ public enum PersonalReplayEval {
         private mutating func consumeScalar(_ scalar: Unicode.Scalar) {
             let letter = PersonalReplayEval.isLetter(scalar)
             if letter, pendingToken.isEmpty, !tokenTooLong {
-                contextBeforeToken = contextText
+                contextBeforeToken = String(contextText.suffix(PersonalReplayEval.maximumContextCharacters))
             }
             let character = Character(scalar)
             appendRaw(String(character))
@@ -154,10 +154,16 @@ public enum PersonalReplayEval {
             guard segmentWords.count > 1 else { return [] }
             var boundaries: [PersonalReplayBoundary] = []
             for index in 1..<segmentWords.count {
-                let goldenWords = segmentWords[index...].prefix(PersonalReplayEval.maximumGoldenWords)
                 let context = String(
                     segmentWords[index].contextBefore.suffix(PersonalReplayEval.maximumContextCharacters)
                 )
+                // Production only ever requests a phrase suggestion when the
+                // caret sits right after whitespace (`GhostInputController`);
+                // a context ending in punctuation such as `'` or `-` (e.g.
+                // mid-"don't", mid-"follow-up") is a case production never
+                // sends, so it would only skew the metrics.
+                guard context.last?.isWhitespace == true else { continue }
+                let goldenWords = segmentWords[index...].prefix(PersonalReplayEval.maximumGoldenWords)
                 boundaries.append(PersonalReplayBoundary(
                     context: context,
                     appBundleIdentifier: appBundleIdentifier,
@@ -180,7 +186,25 @@ public enum PersonalReplayEval {
         ) }
         var perStream: [StreamKey: Accumulator] = [:]
         var order: [StreamKey] = []
-        var allBoundaries: [PersonalReplayBoundary] = []
+        // Only the most recent `limit` boundaries are ever returned, so
+        // retaining every eligible boundary seen across a mature, multi-
+        // megabyte history (each carrying up to `maximumContextCharacters`
+        // of context) would scale memory with total history size instead of
+        // with `limit`. Keep a tail bounded to a small multiple of `limit`
+        // instead, trimming as we go.
+        var tail: [PersonalReplayBoundary] = []
+        var totalEligibleBoundaries = 0
+        let trimThreshold = limit * 4
+
+        func absorb(_ boundaries: [PersonalReplayBoundary]) {
+            guard !boundaries.isEmpty else { return }
+            totalEligibleBoundaries += boundaries.count
+            tail.append(contentsOf: boundaries)
+            if tail.count > trimThreshold {
+                tail.removeFirst(tail.count - limit)
+            }
+        }
+
         for event in events {
             let key = StreamKey(
                 history: event.historyIdentifier, consent: event.consentIdentifier,
@@ -190,17 +214,28 @@ public enum PersonalReplayEval {
                 perStream[key] = Accumulator(appBundleIdentifier: event.appBundleIdentifier)
                 order.append(key)
             }
-            allBoundaries.append(contentsOf: perStream[key]!.consume(event))
+            absorb(perStream[key]!.consume(event))
         }
         var totalSegments = 0
-        for key in order {
-            allBoundaries.append(contentsOf: perStream[key]!.finish())
+        // Flush each stream's still-open final segment in the chronological
+        // order its last event actually occurred, not first-seen-stream
+        // order — otherwise, with several interleaved streams, the tail cut
+        // below could keep an older boundary from one stream over a newer
+        // one from another.
+        let finishOrder = order.sorted {
+            (perStream[$0]!.lastTimestampMilliseconds ?? 0) < (perStream[$1]!.lastTimestampMilliseconds ?? 0)
+        }
+        for key in finishOrder {
+            absorb(perStream[key]!.finish())
             totalSegments += perStream[key]!.segments
         }
+        if tail.count > limit {
+            tail.removeFirst(tail.count - limit)
+        }
         return PersonalReplayEvalExtraction(
-            boundaries: Array(allBoundaries.suffix(limit)),
+            boundaries: tail,
             totalSegments: totalSegments,
-            totalEligibleBoundaries: allBoundaries.count
+            totalEligibleBoundaries: totalEligibleBoundaries
         )
     }
 
