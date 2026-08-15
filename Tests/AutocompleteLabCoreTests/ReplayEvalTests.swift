@@ -173,6 +173,16 @@ struct ReplayEvalTests {
         #expect(extraction.totalEligibleBoundaries == 0)
     }
 
+    @Test("An extremely large limit does not overflow tail trimming")
+    func extremelyLargeLimitDoesNotOverflow() {
+        let extraction = PersonalReplayEval.extract(
+            from: [event(id: "1", text: "hello world ")], limit: .max
+        )
+
+        #expect(extraction.boundaries.count == 1)
+        #expect(extraction.totalEligibleBoundaries == 1)
+    }
+
     // MARK: - Scoring parity with script/golden_eval.py
 
     @Test("Word normalization strips surrounding punctuation and lowercases")

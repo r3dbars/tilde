@@ -194,7 +194,10 @@ public enum PersonalReplayEval {
         // instead, trimming as we go.
         var tail: [PersonalReplayBoundary] = []
         var totalEligibleBoundaries = 0
-        let trimThreshold = limit * 4
+        // Keep the arithmetic safe for a direct caller or CLI user passing
+        // an unusually large positive limit. The history input is bounded by
+        // the caller, so no useful trimming threshold is lost in this case.
+        let trimThreshold = limit <= Int.max / 4 ? limit * 4 : Int.max
 
         func absorb(_ boundaries: [PersonalReplayBoundary]) {
             guard !boundaries.isEmpty else { return }
