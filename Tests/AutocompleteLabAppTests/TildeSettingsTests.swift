@@ -18,6 +18,30 @@ struct TildeSettingsTests {
         #expect(settings.pausedUntil == nil)
         #expect(!settings.personalHistoryEnabled)
         #expect(settings.personalHistoryExcludedApps.isEmpty)
+        // Screen Memory covenant: the master toggle is off by default,
+        // unlike suggestionsEnabled above — a fresh install must never
+        // capture the screen before the user opts in.
+        #expect(!settings.screenMemoryEnabled)
+    }
+
+    @Test("Screen Memory's toggle lands in the keyboard domain, off until explicitly set")
+    func screenMemoryToggle() {
+        let (settings, keyboard) = makeSettings()
+        #expect(!settings.screenMemoryEnabled)
+        settings.screenMemoryEnabled = true
+        #expect(settings.screenMemoryEnabled)
+        #expect(keyboard.object(forKey: "ScreenMemoryEnabled") as? Bool == true)
+        settings.screenMemoryEnabled = false
+        #expect(!settings.screenMemoryEnabled)
+    }
+
+    @Test("Screen Memory shares its exclusion list with Personal History, per the covenant")
+    func screenMemorySharesPersonalHistoryExclusions() {
+        let (settings, _) = makeSettings()
+        settings.personalHistoryExcludedApps = ["com.1password.1password"]
+        // There is deliberately no separate `screenMemoryExcludedApps` —
+        // Screen Memory reads the same set.
+        #expect(settings.personalHistoryExcludedApps == ["com.1password.1password"])
     }
 
     @Test("Personal History controls stay in the keyboard domain")
