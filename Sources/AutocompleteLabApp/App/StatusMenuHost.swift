@@ -23,6 +23,14 @@ final class StatusMenuHost: NSObject {
     private var pauseItem: NSMenuItem?
     private var currentExclusionCandidate: (name: String, bundle: String)?
 
+    // Screen Memory, Phase 1a: capture engine only, nothing persisted or fed
+    // into prompts yet. The full opt-in toggle is Phase 5's rollout; until
+    // then this section only exists behind a dev flag so the TCC flow and
+    // its graceful-degradation status line can be exercised and reviewed.
+    private var screenMemoryItem: NSMenuItem?
+    private var screenMemoryStatusItem: NSMenuItem?
+    private var openScreenRecordingSettingsItem: NSMenuItem?
+
     /// Every setting, its defaults domain, and its fallback live in one tested
     /// type so menu switches cannot silently target keys nothing reads.
     private let settings = TildeSettings()
@@ -76,6 +84,22 @@ final class StatusMenuHost: NSObject {
             "Delete Personal History…",
             #selector(deletePersonalHistory(_:))
         )
+
+        if Self.screenMemoryDevFlagEnabled {
+            menu.addItem(.separator())
+            screenMemoryItem = addAction(
+                to: menu,
+                "Screen Memory (local only) [dev]",
+                #selector(toggleScreenMemory(_:))
+            )
+            screenMemoryStatusItem = addInfoRow(to: menu, "Screen Recording: checking…")
+            openScreenRecordingSettingsItem = addAction(
+                to: menu,
+                "Open Screen Recording Settings…",
+                #selector(openScreenRecordingSettings(_:))
+            )
+            openScreenRecordingSettingsItem?.isHidden = true
+        }
         menu.addItem(.separator())
 
         pauseItem = addAction(
@@ -201,6 +225,39 @@ final class StatusMenuHost: NSObject {
         }
     }
 
+    /// Phase 1a's TCC flow, with graceful degradation at every branch:
+    /// declining the explanation leaves the toggle untouched; declining or
+    /// later revoking the system permission leaves the toggle on but the
+    /// engine simply captures nothing (ScreenCaptureService checks
+    /// `ScreenRecordingPermission.isGranted()` on every trigger) — the
+    /// status line says so instead of the feature failing silently.
+    @objc private func toggleScreenMemory(_ sender: Any?) {
+        if settings.screenMemoryEnabled {
+            settings.screenMemoryEnabled = false
+            refreshScreenMemoryStatus()
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Turn on Screen Memory?"
+        alert.informativeText = """
+        Tilde will read on-screen text on this Mac using on-device OCR — not just what you type — to build better suggestions. Screen text never leaves this Mac, is never uploaded, and in this build is memory-only: nothing is stored yet and no suggestion uses it yet.
+
+        macOS will ask you to grant Screen Recording permission. Secure Event Input and a locked screen always pause capture. Any app on your Personal History exclusion list blocks capture whenever it is visible on screen at all — not only when it is the frontmost window.
+        """
+        alert.addButton(withTitle: "Turn On")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        settings.screenMemoryEnabled = true
+        if !ScreenRecordingPermission.isGranted() {
+            ScreenRecordingPermission.request()
+        }
+        refreshScreenMemoryStatus()
+    }
+
+    @objc private func openScreenRecordingSettings(_ sender: Any?) {
+        NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
+    }
+
     @objc private func togglePause(_ sender: Any?) {
         if settings.pausedUntil != nil {
             settings.resume()
@@ -216,6 +273,12 @@ final class StatusMenuHost: NSObject {
         UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
             .set(true, forKey: "GhostBrainQuietQuit")
         NSApp.terminate(nil)
+    }
+
+    /// Screen Memory's full opt-in toggle ships in Phase 5; until then this
+    /// menu section exists only for review and manual TCC-flow verification.
+    private static var screenMemoryDevFlagEnabled: Bool {
+        ProcessInfo.processInfo.environment["TILDE_SCREEN_MEMORY_DEV"] == "1"
     }
 }
 
@@ -247,6 +310,7 @@ extension StatusMenuHost: NSMenuDelegate {
         refreshExcludedAppsMenu()
         refreshHistorySummary()
         refreshPersonalNextWord()
+        refreshScreenMemoryStatus()
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(until.timeIntervalSinceNow / 60))
@@ -270,6 +334,27 @@ extension StatusMenuHost: NSMenuDelegate {
         currentExclusionCandidate = (app.localizedName ?? bundle, bundle)
         excludeCurrentAppItem?.title = "Exclude \(app.localizedName ?? bundle)"
         excludeCurrentAppItem?.isEnabled = true
+    }
+
+    /// Honest status regardless of which way the degradation happened: off
+    /// by the user's own toggle reads differently from off because macOS
+    /// hasn't granted the permission the toggle asked for.
+    private func refreshScreenMemoryStatus() {
+        guard let screenMemoryItem, let screenMemoryStatusItem else { return }
+        let enabled = settings.screenMemoryEnabled
+        screenMemoryItem.state = enabled ? .on : .off
+        guard enabled else {
+            screenMemoryStatusItem.title = "Screen Recording: off"
+            openScreenRecordingSettingsItem?.isHidden = true
+            return
+        }
+        if ScreenRecordingPermission.isGranted() {
+            screenMemoryStatusItem.title = "Screen Recording: granted"
+            openScreenRecordingSettingsItem?.isHidden = true
+        } else {
+            screenMemoryStatusItem.title = "Screen Recording: not granted — capture is paused"
+            openScreenRecordingSettingsItem?.isHidden = false
+        }
     }
 
     private func refreshExcludedAppsMenu() {

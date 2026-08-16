@@ -1,0 +1,169 @@
+import Foundation
+import Testing
+@testable import AutocompleteLabCore
+
+@Suite("Capture trigger policy")
+struct CaptureTriggerPolicyTests {
+    private let epoch = Date(timeIntervalSince1970: 1_000_000)
+
+    private func decide(
+        trigger: CaptureTriggerPolicy.Trigger = .windowChanged,
+        enabled: Bool = true,
+        screenLocked: Bool = false,
+        secureInputActive: Bool = false,
+        completionSessionActive: Bool = true,
+        visibleWindowOwnerBundleIdentifiers: [String] = ["com.apple.TextEdit"],
+        excludedApps: Set<String> = [],
+        lastCaptureAt: Date? = nil,
+        now: Date? = nil
+    ) -> CaptureTriggerPolicy.Decision {
+        CaptureTriggerPolicy.decision(
+            for: trigger,
+            enabled: enabled,
+            screenLocked: screenLocked,
+            secureInputActive: secureInputActive,
+            completionSessionActive: completionSessionActive,
+            visibleWindowOwnerBundleIdentifiers: visibleWindowOwnerBundleIdentifiers,
+            excludedApps: excludedApps,
+            lastCaptureAt: lastCaptureAt,
+            now: now ?? epoch
+        )
+    }
+
+    @Test("Off by default: the master toggle blocks before anything else is checked")
+    func disabledBlocksFirst() {
+        // Every other gate is wide open; only `enabled` says no.
+        #expect(decide(
+            enabled: false,
+            secureInputActive: true,
+            excludedApps: ["com.apple.TextEdit"]
+        ) == .skip(.disabled))
+    }
+
+    @Test("Screen lock blocks capture")
+    func screenLockedBlocks() {
+        #expect(decide(screenLocked: true) == .skip(.screenLocked))
+    }
+
+    @Test("Secure Event Input blocks capture unconditionally")
+    func secureInputBlocks() {
+        #expect(decide(secureInputActive: true) == .skip(.secureInput))
+    }
+
+    @Test("Window-change fires without requiring an active completion session")
+    func windowChangeIgnoresSessionState() {
+        #expect(decide(trigger: .windowChanged, completionSessionActive: false) == .capture)
+    }
+
+    @Test("Typing pause with no active completion session is not a trigger")
+    func typingPauseRequiresActiveSession() {
+        #expect(decide(
+            trigger: .typingPause(elapsedSeconds: 5),
+            completionSessionActive: false
+        ) == .skip(.noActiveCompletionSession))
+    }
+
+    @Test("Typing pause below the 2s threshold does not fire")
+    func typingPauseBelowThreshold() {
+        #expect(decide(
+            trigger: .typingPause(elapsedSeconds: 1.999),
+            completionSessionActive: true
+        ) == .skip(.belowTypingPauseThreshold))
+    }
+
+    @Test("Typing pause exactly at and above the threshold fires")
+    func typingPauseAtOrAboveThreshold() {
+        #expect(decide(
+            trigger: .typingPause(elapsedSeconds: 2.0),
+            completionSessionActive: true
+        ) == .capture)
+        #expect(decide(
+            trigger: .typingPause(elapsedSeconds: 30),
+            completionSessionActive: true
+        ) == .capture)
+    }
+
+    @Test("A non-frontmost excluded window still blocks capture — capture is full-display")
+    func nonFrontmostExclusionBlocks() {
+        // Signal sits behind the frontmost editor; frontmost is not excluded,
+        // but Signal is, and it is still on screen.
+        #expect(decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.apple.TextEdit", "org.whispersystems.signal-desktop"],
+            excludedApps: ["org.whispersystems.signal-desktop"]
+        ) == .skip(.excludedWindow(appBundleIdentifier: "org.whispersystems.signal-desktop")))
+    }
+
+    @Test("Frontmost window excluded blocks capture too")
+    func frontmostExclusionBlocks() {
+        #expect(decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.1password.1password"],
+            excludedApps: ["com.1password.1password"]
+        ) == .skip(.excludedWindow(appBundleIdentifier: "com.1password.1password")))
+    }
+
+    @Test("No visible window is on the exclusion list: capture proceeds")
+    func noExclusionMatchAllows() {
+        #expect(decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.apple.TextEdit", "com.apple.Safari"],
+            excludedApps: ["org.whispersystems.signal-desktop"]
+        ) == .capture)
+    }
+
+    @Test("First-ever capture (no lastCaptureAt) is never blocked by cadence")
+    func firstCaptureIgnoresCadence() {
+        #expect(decide(lastCaptureAt: nil) == .capture)
+    }
+
+    @Test("A capture within the 5s cadence cap is blocked, with remaining time reported")
+    func cadenceCapBlocksWithinWindow() {
+        let last = epoch
+        let now = epoch.addingTimeInterval(3)
+        let decision = decide(lastCaptureAt: last, now: now)
+        #expect(decision == .skip(.cadence(secondsRemaining: 2)))
+    }
+
+    @Test("A capture exactly at the cadence cap boundary is allowed")
+    func cadenceCapBoundaryAllows() {
+        let last = epoch
+        let now = epoch.addingTimeInterval(CaptureTriggerPolicy.cadenceCapSeconds)
+        #expect(decide(lastCaptureAt: last, now: now) == .capture)
+    }
+
+    @Test("A capture just past the cadence cap boundary is allowed")
+    func cadenceCapPastBoundaryAllows() {
+        let last = epoch
+        let now = epoch.addingTimeInterval(CaptureTriggerPolicy.cadenceCapSeconds + 0.001)
+        #expect(decide(lastCaptureAt: last, now: now) == .capture)
+    }
+
+    @Test("Exclusion is checked before cadence, so a fresh capture attempt against an excluded window reports exclusion, not cadence")
+    func exclusionOutranksCadence() {
+        let last = epoch
+        let now = epoch.addingTimeInterval(3) // inside the cadence window too
+        let decision = decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.1password.1password"],
+            excludedApps: ["com.1password.1password"],
+            lastCaptureAt: last,
+            now: now
+        )
+        #expect(decision == .skip(.excludedWindow(appBundleIdentifier: "com.1password.1password")))
+    }
+
+    @Test("Session-activity window: recent activity reads as active, stale activity does not")
+    func sessionActivityWindow() {
+        #expect(CaptureTriggerPolicy.isCompletionSessionActive(lastActivityAt: nil, now: epoch) == false)
+        #expect(CaptureTriggerPolicy.isCompletionSessionActive(
+            lastActivityAt: epoch,
+            now: epoch.addingTimeInterval(CaptureTriggerPolicy.sessionActivityWindowSeconds)
+        ) == true)
+        #expect(CaptureTriggerPolicy.isCompletionSessionActive(
+            lastActivityAt: epoch,
+            now: epoch.addingTimeInterval(CaptureTriggerPolicy.sessionActivityWindowSeconds + 0.001)
+        ) == false)
+        // Clock skew guard: activity "in the future" relative to now is not trusted.
+        #expect(CaptureTriggerPolicy.isCompletionSessionActive(
+            lastActivityAt: epoch.addingTimeInterval(1),
+            now: epoch
+        ) == false)
+    }
+}

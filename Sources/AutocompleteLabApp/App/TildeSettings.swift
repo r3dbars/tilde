@@ -14,6 +14,7 @@ struct TildeSettings {
         case personalHistoryIdentifier = "PersonalHistoryIdentifier"
         case personalHistoryConsentIdentifier = "PersonalHistoryConsentIdentifier"
         case personalNextWordExperimentIdentifier = "PersonalNextWordExperimentIdentifier"
+        case screenMemoryEnabled = "ScreenMemoryEnabled"
     }
 
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
@@ -81,6 +82,16 @@ struct TildeSettings {
         nonmutating set {
             keyboard.set(newValue, forKey: KeyboardKey.personalNextWordExperimentIdentifier.rawValue)
         }
+    }
+
+    /// The covenant's master toggle: off by default, unlike every other flag
+    /// in this file (`flag()` defaults missing keys to true — Screen Memory
+    /// must not). Exclusions are deliberately NOT a separate key: the
+    /// covenant requires them shared with Personal History, so callers read
+    /// `personalHistoryExcludedApps` for both features.
+    var screenMemoryEnabled: Bool {
+        get { keyboard.bool(forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
     }
 
     var pausedUntil: Date? {

@@ -64,12 +64,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
+    // Screen Memory, Phase 1a: capture engine only, memory-only, off by
+    // default. `enabled`/`excludedApps` read TildeSettings live on every
+    // trigger — the covenant's exclusion list is the SAME one Personal
+    // History uses, per its "shared with Personal History" requirement.
+    private lazy var screenCaptureService = ScreenCaptureService(
+        enabled: { TildeSettings().screenMemoryEnabled },
+        excludedApps: { TildeSettings().personalHistoryExcludedApps }
+    )
+    private var frontmostAppObserver: NSObjectProtocol?
+
     // Phrase continuations go to the llama/Gemma engine. Mid-word completion
     // belongs only to the keyboard's system spell-checker path.
     private lazy var ghostBrainServerHost = GhostBrainServerHost(
         runtime: llamaServerHost,
-        personalHistory: personalHistoryController
+        personalHistory: personalHistoryController,
+        // A bare activity pulse only — see GhostBrainServerHost's doc comment.
+        onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService)
     )
+
+    /// `nonisolated` so the closure it returns has no ambiguous isolation of
+    /// its own to infer — without this, a closure literal written inline
+    /// inside a `@MainActor` class's lazy-var initializer that captures and
+    /// calls an actor-isolated method fails to compile ("default argument
+    /// cannot be both main actor-isolated and actor-isolated"), since the
+    /// compiler cannot tell whether the closure belongs to `AppDelegate`'s
+    /// MainActor or to `ScreenCaptureService`'s own actor.
+    private nonisolated static func completionActivityHandler(
+        for service: ScreenCaptureService
+    ) -> @Sendable () -> Void {
+        { Task { await service.noteCompletionActivity() } }
+    }
 
     init(launchMode: TildeLaunchMode = .production) {
         self.launchMode = launchMode
@@ -90,7 +115,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // keyboard is only as smart as this process is alive.
         ProcessInfo.processInfo.disableAutomaticTermination("Tilde serves the keyboard")
 
-        if launchMode == .production { statusMenuHost.start() }
+        if launchMode == .production {
+            statusMenuHost.start()
+            startObservingFrontmostAppForScreenMemory()
+        }
         llamaServerHost.start()
         if launchMode.allowsDailyDriverMutation {
             registerAsLoginItemIfNeeded()
@@ -114,6 +142,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.flush()
         if launchMode == .production { ghostBrainServerHost.stop() }
         llamaServerHost.stop()
+        if let frontmostAppObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(frontmostAppObserver)
+        }
+    }
+
+    /// The window-change trigger: macOS already tells every app when a
+    /// different app becomes frontmost, so Screen Memory needs no IME/socket
+    /// changes to observe it — `NSWorkspace` gives it directly.
+    private func startObservingFrontmostAppForScreenMemory() {
+        frontmostAppObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [screenCaptureService] _ in
+            Task { await screenCaptureService.noteWindowChanged() }
+        }
     }
 
     /// One line for the status menu: which engine is answering. Honest by
