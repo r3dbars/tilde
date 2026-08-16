@@ -132,6 +132,73 @@ evaluation stores, but they may still contain writing or screenshots at:
 Review those locations before removing them. In particular, treat the iCloud
 folder as user-owned source data, not as an application cache.
 
+## Screen Memory
+
+Status: governance only. This section documents the covenant that will govern
+Screen Memory once it ships; no capture, OCR, or screen-derived storage exists
+in Tilde today. It replaces the prior blanket ban on OCR and Screen Recording
+recorded in `AGENTS.md`; the reversal and its reasoning are on the record
+there.
+
+**The privacy boundary is the device, not the capture.** Because nothing
+Screen Memory sees ever leaves the Mac, Tilde is designed to capture and
+retain more than a cloud product safely could. On-device-only is
+non-negotiable and is proven the same way autocomplete is: the release
+egress proofs stay blocking and unchanged.
+
+**What is captured.** With Screen Memory enabled, Tilde takes a full-display
+screenshot, runs on-device OCR (Vision framework) over it, and keeps only the
+recognized text and its position on screen — never the image itself. State it
+plainly: this includes text belonging to the other side of a conversation
+(a Messages thread, a Slack DM, an email you're reading) whenever it is
+visible on screen, not only text you typed. Tilde cannot tell your writing
+apart from someone else's in a screenshot; if a person or a channel should
+never be captured, exclude the app that shows it.
+
+**When it is captured.** Capture is event-driven, not continuous: on a
+focused-window change, and on a typing pause of two seconds or more while a
+completion session is active, with a hard cap of one capture per five
+seconds. Tilde captures nothing while the master toggle is off (the default),
+while the screen is locked, while macOS Secure Event Input is active, or
+while the frontmost app is on the exclusion list shared with Personal
+History. Tilde makes a best-effort attempt to skip known private-browsing
+windows; browsers vary in whether this is reliably detectable, so private
+windows are a best-effort exclusion, not a guarantee — use app exclusion for
+certainty.
+
+**What never persists.** Redaction runs before any storage and fails closed:
+a structured-secret rules pass (card numbers, IBANs, SSNs, API-key shapes,
+JWTs, PEM blocks) followed by a local span-detection model catch email
+addresses, phone numbers, and other unstructured secrets. Email addresses and
+phone numbers are scrubbed from persisted text by default, the same as other
+detected secrets. If the redactor itself fails to run, the capture is dropped
+entirely rather than stored raw — never the reverse. Password managers and
+password fields (Secure Event Input) are excluded regardless of user
+settings. Raw screen text never appears in logs, diagnostics, or any report.
+
+**Where it lives.** Redacted screen text is stored as its own event type in
+the same encrypted, append-only Personal History store described above, at
+the same path, under the same AES-GCM key in the user's login Keychain, with
+the same owner-only file permissions. It is subject to a rolling retention
+budget — 256 MB by default, oldest-first pruning — separate from and in
+addition to ordinary Personal History's own budget.
+
+**How screen text is used.** Screen-derived text feeds a separate
+conversation-context table used only to give the model a better sense of
+what you're replying to. It never enters the table that models how *you*
+write: only text you actually typed trains that table. Screen text does not
+leave the device, is not used for analytics, and is not used to fine-tune
+the bundled model without a separate, explicit user action.
+
+**Controls and deletion.** Screen Memory ships off by default. When shipped,
+the menu will show a Screen Memory toggle, the same per-app exclusion list
+Personal History uses, and a storage meter ("Screen Memory: N MB · last
+capture ..."). Deleting Personal History deletes Screen Memory's events with
+it — same store, same encrypted file, same Keychain key — and destroying that
+key is what makes the deletion irreversible. As with Personal History, this
+is not a promise of forensic erasure from backups, snapshots, storage
+wear-leveling, or copies made outside Tilde before deletion.
+
 ## Network behavior
 
 Autocomplete does not need internet access. Distributed builds contain the
