@@ -9,10 +9,18 @@ import Foundation
 ///
 /// Screen Memory plan, Phase 2 PR 2a (`docs/plans/screen-memory.md`).
 public enum ScreenScene {
-    /// A unit-square rectangle in the display's coordinate space, origin at
-    /// the top-left, matching Vision's normalized `boundingBox` convention
-    /// (x/y/width/height all in `0...1`). No AppKit/CoreGraphics dependency —
-    /// Core stays framework-free.
+    /// A unit-square rectangle in the display's coordinate space
+    /// (x/y/width/height all in `0...1`), origin at the **top-left** — y
+    /// grows downward, so bottom-of-screen is the largest y. This is
+    /// Core's own convention, chosen because "bottom-most = most recent
+    /// message" (see `conversationTurns`) is more naturally expressed that
+    /// way. It does NOT match `VNRecognizedTextObservation.boundingBox`,
+    /// which is lower-left origin with y growing upward — the caller
+    /// wiring Phase 1 capture (App target, ScreenCaptureKit + Vision) must
+    /// flip y (`y' = 1 - y - height`) when constructing `OCRBlock`s from
+    /// real Vision output, or every ordering/geometry heuristic in this
+    /// file silently inverts. No AppKit/CoreGraphics dependency — Core
+    /// stays framework-free.
     public struct NormalizedRect: Equatable, Sendable {
         public let x: Double
         public let y: Double
@@ -40,17 +48,27 @@ public enum ScreenScene {
         public let boundingBox: NormalizedRect
         public let windowOwnerBundleID: String?
         public let windowTitle: String?
+        /// The owning window's own bounding box, in the same display-
+        /// normalized coordinate space as `boundingBox` — sourced from the
+        /// same SCWindow metadata that resolves `windowOwnerBundleID`, so
+        /// it's `nil` exactly when attribution is `nil`. Left/right speaker
+        /// bucketing needs this: a chat window that isn't fullscreen puts
+        /// every block's *display*-relative centerX on one side regardless
+        /// of which side of the *window* it's actually on.
+        public let windowFrame: NormalizedRect?
 
         public init(
             text: String,
             boundingBox: NormalizedRect,
             windowOwnerBundleID: String? = nil,
-            windowTitle: String? = nil
+            windowTitle: String? = nil,
+            windowFrame: NormalizedRect? = nil
         ) {
             self.text = text
             self.boundingBox = boundingBox
             self.windowOwnerBundleID = windowOwnerBundleID
             self.windowTitle = windowTitle
+            self.windowFrame = windowFrame
         }
     }
 
@@ -121,8 +139,14 @@ public enum ScreenScene {
         fieldText: String
     ) -> Scene {
         if let frontmostBundleID, ContinuationRegister.from(bundleIdentifier: frontmostBundleID) == .chat {
+            // Only positively-attributed frontmost-window blocks may enter a
+            // reply thread. `nil` attribution means "unknown," and treating
+            // unknown as "frontmost" is a fail-open path: an unattributed
+            // block from some other visible app (full-display capture sees
+            // all of them) could get folded into the conversation as if the
+            // user's own chat partner said it. Drop-on-doubt beats guessing.
             let ownWindowBlocks = blocks.filter {
-                $0.windowOwnerBundleID == nil || $0.windowOwnerBundleID == frontmostBundleID
+                $0.windowOwnerBundleID == frontmostBundleID
             }
             if looksLikeMessageList(ownWindowBlocks) {
                 let turns = conversationTurns(from: ownWindowBlocks, fieldText: fieldText)
@@ -142,14 +166,28 @@ public enum ScreenScene {
 
     // MARK: - Replying: message-list geometry + speaker attribution
 
-    /// A message list is at least two bubble-width (not full-bleed) blocks
-    /// spread across at least two distinct vertical bands. Full-width blocks
-    /// (toolbars, banners, a single huge paste) don't count as bubbles.
+    /// A message list is at least two bubble-shaped (not full-bleed, not
+    /// sliver-narrow) blocks spread across at least two distinct vertical
+    /// bands. Full-width blocks (toolbars, banners, a single huge paste)
+    /// don't count as bubbles, and neither do slivers: plain chat chrome —
+    /// a Slack sidebar's channel names, a DM list, a header — is exactly
+    /// two-or-more short OCR lines stacked in different vertical bands, so
+    /// the band/count check alone is satisfied by chrome as readily as by
+    /// an actual message column. Real message text (even a short reply)
+    /// still measures wider than a sidebar label at typical UI font sizes;
+    /// `bubbleMinWidth` is the evidence-of-an-actual-message-column signal
+    /// the plan calls for, not just "narrow enough to not be a banner."
+    private static let bubbleMinWidth = 0.12
     private static let bubbleMaxWidth = 0.85
     private static let verticalBandCount = 10
 
+    private static func isBubbleCandidate(_ block: OCRBlock) -> Bool {
+        let width = block.boundingBox.width
+        return width >= bubbleMinWidth && width <= bubbleMaxWidth && !block.text.isEmpty
+    }
+
     private static func looksLikeMessageList(_ blocks: [OCRBlock]) -> Bool {
-        let bubbleBlocks = blocks.filter { $0.boundingBox.width <= bubbleMaxWidth && !$0.text.isEmpty }
+        let bubbleBlocks = blocks.filter(isBubbleCandidate)
         guard bubbleBlocks.count >= 2 else { return false }
         let bands = Set(bubbleBlocks.map { verticalBand(of: $0.boundingBox) })
         return bands.count >= 2
@@ -166,9 +204,18 @@ public enum ScreenScene {
     /// unknown-other").
     private static let rightBucketMin = 0.58
 
+    /// Bucketing needs the block's horizontal position *within its window*,
+    /// not within the display: a chat window docked to, say, the right
+    /// half of the screen puts every one of its blocks' display-normalized
+    /// centerX past the midpoint, which would read every incoming message
+    /// as `self`. When the window's frame isn't known, there's no honest
+    /// way to recover window-relative position from a display-relative
+    /// coordinate — guessing risks exactly that mislabeling, so this falls
+    /// back to `other` rather than assuming the window is fullscreen.
     private static func speaker(for block: OCRBlock) -> Speaker {
-        let center = block.boundingBox.centerX
-        if center >= rightBucketMin { return .selfSpeaker }
+        guard let windowFrame = block.windowFrame, windowFrame.width > 0 else { return .other }
+        let relativeCenter = (block.boundingBox.centerX - windowFrame.x) / windowFrame.width
+        if relativeCenter >= rightBucketMin { return .selfSpeaker }
         return .other
     }
 
@@ -179,7 +226,7 @@ public enum ScreenScene {
     /// gets truncated ahead of older ones.
     private static func conversationTurns(from blocks: [OCRBlock], fieldText: String) -> [ConversationTurn] {
         let usable = blocks
-            .filter { $0.boundingBox.width <= bubbleMaxWidth && !isDuplicate($0.text, of: fieldText) }
+            .filter { isBubbleCandidate($0) && !isDuplicate($0.text, of: fieldText) }
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { $0.boundingBox.y < $1.boundingBox.y }
 
@@ -272,13 +319,31 @@ public enum ScreenScene {
     // MARK: - Dedupe
 
     /// Skips OCR text that's already visible in the field — no double-
-    /// feeding what IMKit already sees. Short strings are exempted from the
-    /// containment check (e.g. "ok", "yes") since they'd trivially "match"
-    /// almost any field text without actually being the same message.
+    /// feeding what IMKit already sees. Checked both directions (the field
+    /// may be a growing prefix of a longer bubble, or the bubble may be a
+    /// wrapped/truncated fragment of the full field text), case-
+    /// insensitively, and with whitespace/line-wrap differences normalized
+    /// away — OCR and the live field text rarely wrap identically. Short
+    /// strings are exempted from the containment check on whichever side
+    /// is doing the containing (e.g. "ok", "yes") since they'd trivially
+    /// "match" almost any text without actually being the same message.
     private static let dedupeMinimumLength = 6
     private static func isDuplicate(_ candidateText: String, of fieldText: String) -> Bool {
-        let trimmed = candidateText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= dedupeMinimumLength, !fieldText.isEmpty else { return false }
-        return fieldText.contains(trimmed)
+        let candidate = normalizedForDedupe(candidateText)
+        let field = normalizedForDedupe(fieldText)
+        guard !candidate.isEmpty, !field.isEmpty else { return false }
+        if candidate.count >= dedupeMinimumLength, field.contains(candidate) { return true }
+        if field.count >= dedupeMinimumLength, candidate.contains(field) { return true }
+        return false
+    }
+
+    /// Lowercased with all runs of whitespace (including newlines, so a
+    /// wrapped OCR block compares equal to an unwrapped field line)
+    /// collapsed to a single space.
+    private static func normalizedForDedupe(_ text: String) -> String {
+        text
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
     }
 }

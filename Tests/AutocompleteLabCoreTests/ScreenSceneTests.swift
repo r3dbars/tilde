@@ -3,19 +3,31 @@ import Testing
 
 /// Synthetic OCR-block fixtures standing in for real Vision output. Coordinates
 /// are normalized (0...1, top-left origin) to match `ScreenScene.NormalizedRect`.
+///
+/// `windowFrame` defaults to the full display (0,0,1,1) whenever `window` is
+/// non-nil — i.e. "a fullscreen window," matching every existing fixture's
+/// implicit assumption that display-relative and window-relative coordinates
+/// are the same thing. Pass an explicit `windowFrame` to test window-relative
+/// bucketing against a non-fullscreen window; `window` alone with no frame
+/// (or `window: nil`) models attribution that resolved a bundle ID but not a
+/// frame, or didn't resolve at all.
+private let fullDisplay = ScreenScene.NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+
 private func block(
     _ text: String,
     x: Double,
     y: Double,
     width: Double = 0.35,
     window: String? = nil,
-    title: String? = nil
+    title: String? = nil,
+    windowFrame: ScreenScene.NormalizedRect? = nil
 ) -> ScreenScene.OCRBlock {
     ScreenScene.OCRBlock(
         text: text,
         boundingBox: ScreenScene.NormalizedRect(x: x, y: y, width: width, height: 0.05),
         windowOwnerBundleID: window,
-        windowTitle: title
+        windowTitle: title,
+        windowFrame: windowFrame ?? (window != nil ? fullDisplay : nil)
     )
 }
 
@@ -62,6 +74,21 @@ struct ScreenSceneTests {
         #expect(scene.mode == .composing)
     }
 
+    @Test("Narrow sidebar-style labels in different bands don't look like a message list")
+    func narrowSidebarLabelsAreNotAMessageList() {
+        // Two ordinary short OCR lines (e.g. Slack channel names in the
+        // sidebar) in different vertical bands satisfy the old "<=85% width,
+        // >=2 bands" check trivially. They must not flip mode to .replying --
+        // real message text measures wider than a sidebar label.
+        let blocks = [
+            block("general", x: 0.01, y: 0.20, width: 0.06, window: slack),
+            block("random", x: 0.01, y: 0.45, width: 0.05, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .composing)
+        #expect(scene.conversationTurns.isEmpty)
+    }
+
     @Test("Message-list geometry in a non-chat-register app never triggers replying")
     func nonChatAppNeverReplies() {
         let blocks = [
@@ -102,15 +129,59 @@ struct ScreenSceneTests {
         #expect(scene.conversationTurns[1].speaker == .selfSpeaker)
     }
 
-    @Test("Blocks not attributed to any window still count toward the frontmost app's list")
-    func unattributedBlocksCountAsOwnWindow() {
+    @Test("Speaker bucketing is window-relative, not display-relative, for a non-fullscreen window")
+    func speakerBucketingIsWindowRelative() {
+        // The chat window occupies only the right half of the display
+        // (x: 0.5...1.0). Both blocks sit in the LEFT half of that window --
+        // display-normalized centerX would put both past the display
+        // midpoint and misread them as `self`; window-relative centerX
+        // correctly reads both as `other`.
+        let rightHalfWindow = ScreenScene.NormalizedRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        let blocks = [
+            block("hey are you around today", x: 0.52, y: 0.30, width: 0.20, window: slack, windowFrame: rightHalfWindow),
+            block("free to talk later?", x: 0.53, y: 0.60, width: 0.20, window: slack, windowFrame: rightHalfWindow),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.allSatisfy { $0.speaker == .other })
+    }
+
+    @Test("Speaker falls back to other when the window frame is unknown, even with attribution")
+    func speakerFallsBackToOtherWithoutWindowFrame() {
+        // Bypass the `block()` helper's "window implies fullscreen frame"
+        // default -- this constructs bundle-ID attribution WITHOUT a frame,
+        // which SCWindow metadata could in principle produce (or a future
+        // caller could construct), and must not be treated as fullscreen.
+        func blockNoFrame(_ text: String, x: Double, y: Double) -> ScreenScene.OCRBlock {
+            ScreenScene.OCRBlock(
+                text: text,
+                boundingBox: ScreenScene.NormalizedRect(x: x, y: y, width: 0.35, height: 0.05),
+                windowOwnerBundleID: slack,
+                windowFrame: nil
+            )
+        }
+        let blocks = [
+            blockNoFrame("hey are you around today", x: 0.05, y: 0.30),
+            blockNoFrame("yeah free after 3pm works", x: 0.55, y: 0.60),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.allSatisfy { $0.speaker == .other })
+    }
+
+    @Test("Blocks with no window attribution are excluded from the reply thread (unknown != frontmost)")
+    func unattributedBlocksExcludedFromOwnWindow() {
+        // Two unattributed blocks that would otherwise look exactly like a
+        // message list (bubble widths, distinct bands) must NOT be folded
+        // into the frontmost chat app's thread just because attribution
+        // came back nil -- that's a fail-open path against drop-on-doubt.
         let blocks = [
             block("hey are you around today", x: 0.05, y: 0.30, window: nil),
             block("yeah free after 3pm works", x: 0.55, y: 0.60, window: nil),
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
-        #expect(scene.mode == .replying)
-        #expect(scene.conversationTurns.count == 2)
+        #expect(scene.mode == .composing)
+        #expect(scene.conversationTurns.isEmpty)
     }
 
     @Test("A bubble from a different window is excluded from the reply thread")
@@ -190,6 +261,49 @@ struct ScreenSceneTests {
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: fieldText)
         #expect(scene.mode == .replying)
         #expect(scene.conversationTurns.contains { $0.text == "ok" })
+    }
+
+    @Test("Dedupe is case-insensitive")
+    func dedupeIsCaseInsensitive() {
+        let fieldText = "typing a reply about the schedule"
+        let blocks = [
+            block("About The Schedule", x: 0.05, y: 0.30, window: slack), // differs only by case
+            block("yeah free after 3pm works", x: 0.55, y: 0.60, window: slack),
+            block("what time were you thinking", x: 0.05, y: 0.80, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: fieldText)
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 2)
+        #expect(!scene.conversationTurns.contains { $0.text == "About The Schedule" })
+    }
+
+    @Test("Dedupe also excludes a bubble that fully contains the (shorter) field text")
+    func dedupeCatchesReverseContainment() {
+        // The field text is a short in-progress fragment that's fully
+        // contained inside a longer bubble already on screen -- the old
+        // one-directional check (candidate substring of field) missed this.
+        let fieldText = "talk to you at 3pm"
+        let blocks = [
+            block("yeah, sounds good, talk to you at 3pm then", x: 0.05, y: 0.30, window: slack),
+            block("what time were you thinking", x: 0.55, y: 0.60, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: fieldText)
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 1)
+        #expect(scene.conversationTurns.first?.text == "what time were you thinking")
+    }
+
+    @Test("Dedupe tolerates whitespace/line-wrap differences between OCR and field text")
+    func dedupeToleratesWrapping() {
+        let fieldText = "typing a reply about\nthe schedule"
+        let blocks = [
+            block("about   the schedule", x: 0.05, y: 0.30, window: slack), // extra spaces, no newline
+            block("yeah free after 3pm works", x: 0.55, y: 0.60, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: fieldText)
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 1)
+        #expect(!scene.conversationTurns.contains { $0.text == "about   the schedule" })
     }
 
     // MARK: - Referencing
