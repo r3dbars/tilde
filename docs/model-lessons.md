@@ -4,6 +4,21 @@ Durable, measured findings about Tilde's model and evaluation. Newest first.
 Add an entry only with numbers behind it; superseded entries get corrected, not
 deleted.
 
+## 2026-08-16 — screen context (OCR), July evidence — roadmap pointer
+
+Not yet built here. The July lineage (checkout
+`transcripted-autocomplete-lab`, `docs/quiz-lessons.md` entry "Screen context
+(OCR) is worth a lot") measured EM@1 14.5% → 17.2% (+2.7 points) when a
+golden-eval case was given OCR'd screen context alongside the usual prompt —
+the single largest lever found in that lineage. That evidence is why Screen
+Memory (full on-device OCR + redaction + persistence, gated behind a new
+covenant in `AGENTS.md` and `PRIVACY.md`) is now planned rather than shelved.
+Full plan, phased PR series, and ship bars (≥ +2 EM@1 points on the golden
+eval context arm, replicating the July precedent) live in
+`docs/plans/screen-memory.md`. Governance (Phase 0) merges before any capture
+code (Phase 1+) begins; update this entry with real numbers once Phase 4's
+context-arm runs land.
+
 ## 2026-08-15 — Gemma 4 E2B base ships as the bundled model
 
 Head-to-head against the shipped Gemma 2 2B base (both Q4_K_M, same helper,
