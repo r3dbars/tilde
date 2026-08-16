@@ -19,6 +19,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// active" signal; this file otherwise knows nothing about Screen
     /// Memory and never sees a `ScreenSnapshot`.
     private let onCompletionActivity: (@Sendable () -> Void)?
+    /// Screen Memory plan Phase 2 PR 2b: resolves the current request's
+    /// scene, already dev-flag- and settings-gated by whoever constructs
+    /// this host (see `AppDelegate`). `nil` — no provider, or the provider
+    /// itself returning `nil` — means exactly today's (no-context)
+    /// completion behavior; this file never inspects capture state itself.
+    private let sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)?
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
@@ -28,11 +34,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
     init(
         runtime: LlamaServerProcessHost,
         personalHistory: any PersonalHistoryIngesting,
+        sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)? = nil,
         onCompletionActivity: (@Sendable () -> Void)? = nil
     ) {
         self.runtime = runtime
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
         self.personalHistory = personalHistory
+        self.sceneProvider = sceneProvider
         self.onCompletionActivity = onCompletionActivity
     }
 
@@ -160,10 +168,15 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 return
             }
 
+            // Read-only and fast (an actor property read, not a capture) —
+            // resolved before the completion Task starts so the request
+            // that follows already carries whatever context exists.
+            let scene = await self.sceneProvider?(completionRequest.app, completionRequest.context)
             let completion = Task {
                 try await self.engine.suggestion(
                     textBeforeCursor: completionRequest.context,
-                    appBundleIdentifier: completionRequest.app
+                    appBundleIdentifier: completionRequest.app,
+                    scene: scene
                 )
             }
             let disconnect = DispatchSource.makeReadSource(
