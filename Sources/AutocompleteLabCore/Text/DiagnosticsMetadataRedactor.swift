@@ -8,6 +8,16 @@ public enum DiagnosticsMetadataRedactor {
         "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext",
         "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
         "store-corrupt", "key-unavailable", "storage-unavailable", "internal-error",
+        // Screen Memory's `screen-capture-skipped` reason vocabulary
+        // (ScreenCaptureService.describe / CaptureOutcome) — fixed enum
+        // cases with no user data, so they belong in this allowlist same as
+        // everything else here. Without an entry, a value falls through to
+        // `redacted(value)` and prints as e.g. "String(8 chars)" instead of
+        // the literal reason, which is what made every skip look identical
+        // in the log regardless of cause.
+        "disabled", "dev-flag-off", "no-permission", "screen-locked", "secure-input",
+        "no-active-session", "below-threshold", "excluded-app", "cadence",
+        "enumeration-failed", "no-display",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {

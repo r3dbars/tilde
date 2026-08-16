@@ -28,6 +28,7 @@ struct ScreenCaptureServiceTests {
     func disabledSkipsEarly() async {
         let (sink, events) = recordingDiagnostics()
         let service = ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { false },
             excludedApps: { [] },
             permissionGranted: { Issue.record("permissionGranted should not be checked before enabled"); return false },
@@ -42,9 +43,11 @@ struct ScreenCaptureServiceTests {
         #expect(events.values.contains { $0.0 == "screen-capture-skipped" && $0.1["reason"] == "disabled" })
     }
 
-    @Test("Permission not granted skips before enumerating windows")
+    @Test("Permission not granted skips before enumerating windows, and logs the exact reason")
     func permissionNotGrantedSkipsEarly() async {
+        let (sink, events) = recordingDiagnostics()
         let service = ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { true },
             excludedApps: { [] },
             permissionGranted: { false },
@@ -52,15 +55,39 @@ struct ScreenCaptureServiceTests {
             secureInputActive: { false },
             recognizeText: { _ in [] },
             now: { Date() },
-            diagnostics: { _, _ in }
+            diagnostics: sink
         )
         let outcome = await service.noteWindowChanged()
         #expect(outcome == .permissionNotGranted)
+        #expect(events.values.contains { $0.0 == "screen-capture-skipped" && $0.1["reason"] == "no-permission" })
+    }
+
+    @Test("Dev mode disabled skips before ever checking the master toggle, and logs the exact reason")
+    func devModeDisabledSkipsEarly() async {
+        let (sink, events) = recordingDiagnostics()
+        let service = ScreenCaptureService(
+            devModeEnabled: { false },
+            enabled: { Issue.record("enabled should not be checked before devModeEnabled"); return false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: sink
+        )
+        let outcome = await service.noteWindowChanged()
+        #expect(outcome == .devModeDisabled)
+        #expect(events.values.contains { $0.0 == "screen-capture-skipped" && $0.1["reason"] == "dev-flag-off" })
+        // Distinguishable from the master toggle being off: same event,
+        // different literal reason — that distinction is the whole point.
+        #expect(!events.values.contains { $0.1["reason"] == "disabled" })
     }
 
     @Test("noteCompletionActivity does not disturb the enabled/permission gates")
     func completionActivityDoesNotBypassGates() async {
         let service = ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { true },
             excludedApps: { [] },
             permissionGranted: { false },
@@ -79,6 +106,7 @@ struct ScreenCaptureServiceTests {
     func enabledProviderIsReadLive() async {
         let flag = LockedFlag(true)
         let service = ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { flag.value },
             excludedApps: { [] },
             permissionGranted: { false },
@@ -95,9 +123,31 @@ struct ScreenCaptureServiceTests {
         #expect(await service.noteWindowChanged() == .skipped(.disabled))
     }
 
+    @Test("devModeEnabled is read fresh on every trigger, not cached at init")
+    func devModeEnabledProviderIsReadLive() async {
+        let flag = LockedFlag(true)
+        let service = ScreenCaptureService(
+            devModeEnabled: { flag.value },
+            enabled: { true },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+        // Still true: gets past `devModeEnabled`, stops at permission.
+        #expect(await service.noteWindowChanged() == .permissionNotGranted)
+        flag.value = false
+        // Flipped without recreating the service: now stops at `devModeEnabled`.
+        #expect(await service.noteWindowChanged() == .devModeDisabled)
+    }
+
     @Test("latestSnapshot starts nil and is never populated without a successful capture")
     func latestSnapshotStartsNil() async {
         let service = ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { false },
             excludedApps: { [] },
             permissionGranted: { false },
@@ -116,6 +166,7 @@ struct ScreenCaptureServiceTests {
 
     private func makeService() -> ScreenCaptureService {
         ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { false },
             excludedApps: { [] },
             permissionGranted: { false },
@@ -182,6 +233,7 @@ struct ScreenCaptureServiceTests {
     func freshSceneFiltersNewlyExcludedAppBlocks() async {
         let excluded = LockedSet<String>([])
         let service = ScreenCaptureService(
+            devModeEnabled: { true },
             enabled: { false },
             excludedApps: { excluded.value },
             permissionGranted: { false },

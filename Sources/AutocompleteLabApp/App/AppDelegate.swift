@@ -69,12 +69,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // default. `enabled`/`excludedApps` read TildeSettings live on every
     // trigger — the covenant's exclusion list is the SAME one Personal
     // History uses, per its "shared with Personal History" requirement.
-    // `enabled` also requires the SAME dev flag that gates the menu controls
+    // `devModeEnabled` gates the SAME dev flag that gates the menu controls
     // (StatusMenuHost) — otherwise a persisted `ScreenMemoryEnabled=true`
     // from an earlier dev session would keep capturing on later launches
-    // with no visible toggle or status line to turn it back off.
+    // with no visible toggle or status line to turn it back off. Kept as a
+    // separate closure from `enabled` (rather than pre-ANDed into one bool,
+    // as before) so a skip can log/report WHICH of the two gates closed —
+    // "dev-flag-off" vs. "disabled" — instead of collapsing both into one
+    // indistinguishable reason.
     private lazy var screenCaptureService = ScreenCaptureService(
-        enabled: { TildeSettings.screenMemoryDevModeEnabled && TildeSettings().screenMemoryEnabled },
+        devModeEnabled: { TildeSettings.screenMemoryDevModeEnabled() },
+        enabled: { TildeSettings().screenMemoryEnabled },
         excludedApps: { TildeSettings().personalHistoryExcludedApps }
     )
     private var frontmostAppObserver: NSObjectProtocol?
@@ -122,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for service: ScreenCaptureService
     ) -> @Sendable (String?, String) async -> ScreenScene.Scene? {
         { appBundleIdentifier, fieldText in
-            guard TildeSettings.screenMemoryDevModeEnabled, TildeSettings().screenMemoryEnabled else {
+            guard TildeSettings.screenMemoryDevModeEnabled(), TildeSettings().screenMemoryEnabled else {
                 return nil
             }
             return await service.freshScene(frontmostBundleID: appBundleIdentifier, fieldText: fieldText)
