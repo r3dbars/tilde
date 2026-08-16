@@ -27,7 +27,7 @@ struct DiagnosticsMetadataRedactorTests {
         // ScreenCaptureService's actual skip reasons — every one of these
         // was being silently redacted before this fix, which would have
         // made the Phase 1b power probe's TCC-blocked detection always miss.
-        #expect(field("reason", "permission") == "reason=permission")
+        #expect(field("reason", "no-permission") == "reason=no-permission")
         #expect(field("reason", "enumeration-failed") == "reason=enumeration-failed")
         #expect(field("reason", "no-display") == "reason=no-display")
         #expect(field("reason", "disabled") == "reason=disabled")
@@ -35,7 +35,7 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("reason", "secure-input") == "reason=secure-input")
         #expect(field("reason", "no-active-session") == "reason=no-active-session")
         #expect(field("reason", "below-threshold") == "reason=below-threshold")
-        #expect(field("reason", "excluded-window") == "reason=excluded-window")
+        #expect(field("reason", "excluded-app") == "reason=excluded-app")
         #expect(field("reason", "cadence") == "reason=cadence")
     }
 
