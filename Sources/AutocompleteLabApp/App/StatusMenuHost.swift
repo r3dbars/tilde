@@ -225,6 +225,19 @@ final class StatusMenuHost: NSObject {
         }
     }
 
+    /// The consent alert's disclosure of whether a suggestion actually
+    /// consumes screen text — this must track `RawContinuationPrompt`'s
+    /// real behavior, not describe an earlier phase forever. Screen context
+    /// is wired into live suggestions once `screenMemoryDevModeEnabled` is
+    /// set (see `AppDelegate.sceneProvider`), and this menu item itself is
+    /// only ever shown under that same flag, so the alert must say so
+    /// rather than the stale "no suggestion uses it yet."
+    private var consentUsageSentence: String {
+        TildeSettings.screenMemoryDevModeEnabled
+            ? "In this dev build, on-screen text can be folded into your suggestions."
+            : "No suggestion uses it yet."
+    }
+
     /// Phase 1a's TCC flow, with graceful degradation at every branch:
     /// declining the explanation leaves the toggle untouched; declining or
     /// later revoking the system permission leaves the toggle on but the
@@ -240,7 +253,7 @@ final class StatusMenuHost: NSObject {
         let alert = NSAlert()
         alert.messageText = "Turn on Screen Memory?"
         alert.informativeText = """
-        Tilde will read on-screen text on this Mac using on-device OCR — not just what you type — to build better suggestions. Screen text never leaves this Mac, is never uploaded, and in this build is memory-only: nothing is stored yet and no suggestion uses it yet.
+        Tilde will read on-screen text on this Mac using on-device OCR — not just what you type — to build better suggestions. Screen text never leaves this Mac, is never uploaded, and in this build is memory-only: nothing is stored to disk. \(consentUsageSentence)
 
         macOS will ask you to grant Screen Recording permission. Secure Event Input and a locked screen always pause capture. Any app on your Personal History exclusion list blocks capture whenever it is visible on screen at all — not only when it is the frontmost window.
         """

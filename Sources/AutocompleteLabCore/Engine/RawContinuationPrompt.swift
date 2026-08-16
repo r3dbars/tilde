@@ -139,23 +139,56 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     /// truncation only ever bites when the field text has already claimed
     /// most of `maxContextCharacters`, since `ScreenScene` itself already
     /// caps turns/snippets well under `maxSceneContextCharacters`.
+    ///
+    /// OCR'd screen text is untrusted the same way pasted or typed text is:
+    /// it can contain a card number, an API key, a JWT sitting in a log
+    /// pane, etc. `SecretRules.scrub(..., config: .forPromptContext)` runs
+    /// on every turn and snippet before it is interpolated into the prompt
+    /// — structured secrets are replaced with a `⟨redacted:type⟩` token
+    /// (never persisted, never sent to the model) while ordinary
+    /// conversational text passes through unchanged.
     private static func sceneContextBlock(for scene: ScreenScene.Scene?, budget: Int) -> String {
         guard let scene, budget > 0 else { return "" }
-        let raw: String
         switch scene.mode {
         case .replying:
             guard !scene.conversationTurns.isEmpty else { return "" }
             let lines = scene.conversationTurns.map {
-                "\($0.speaker == .selfSpeaker ? "You" : "Them"): \($0.text)"
+                "\($0.speaker == .selfSpeaker ? "You" : "Them"): \(scrubbedForPrompt($0.text))"
             }
-            raw = "Conversation:\n" + lines.joined(separator: "\n") + "\n\n"
+            return truncatedBlock(header: "Conversation:\n", body: lines.joined(separator: "\n"), budget: budget)
         case .referencing:
             guard let snippet = scene.referenceSnippets.first else { return "" }
-            raw = "Reference:\n" + snippet + "\n\n"
+            return truncatedBlock(header: "Reference:\n", body: scrubbedForPrompt(snippet), budget: budget)
         case .composing:
             return ""
         }
-        return String(raw.prefix(budget))
+    }
+
+    private static func scrubbedForPrompt(_ text: String) -> String {
+        SecretRules.scrub(text, config: .forPromptContext).clean
+    }
+
+    /// The blank line that always separates a scene block from the `Text:`
+    /// line that follows it in the assembled prompt.
+    private static let sceneBlockTrailer = "\n\n"
+
+    /// Renders `header + body + sceneBlockTrailer`, truncating only `body`
+    /// when the combination doesn't fit `budget` — the header and trailing
+    /// blank line are never chopped. A truncated header, or a block missing
+    /// its trailing separator, can silently fuse into whatever text follows
+    /// it in the prompt (a chopped `Conversation:` header, or a dangling
+    /// scene fragment running straight into the `Text:` line) — both worse
+    /// than simply omitting screen context for this one request. If there
+    /// isn't even room for the header plus the trailer, the whole block is
+    /// dropped.
+    private static func truncatedBlock(header: String, body: String, budget: Int) -> String {
+        let full = header + body + sceneBlockTrailer
+        guard full.count > budget else { return full }
+        let reserved = header.count + sceneBlockTrailer.count
+        guard reserved < budget else { return "" }
+        let truncatedBody = String(body.prefix(budget - reserved))
+        guard !truncatedBody.isEmpty else { return "" }
+        return header + truncatedBody + sceneBlockTrailer
     }
 
     /// Words a suggestion should never END on — a trailing article/preposition/
