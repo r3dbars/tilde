@@ -188,4 +188,48 @@ struct SecretRulesTests {
         #expect(result.clean == text)
         #expect(result.findings.isEmpty)
     }
+
+    // MARK: - Regression: adjacent-digit / boundary false negatives
+
+    @Test("Card number followed by an adjacent expiry date is still fully redacted")
+    func cardNumberAdjacentToExpiryIsRedacted() {
+        let text = "Card 4111 1111 1111 1111 12/26 on file."
+        let result = SecretRules.scrub(text, config: .forPersistence)
+        #expect(!result.clean.contains("4111 1111 1111 1111"), "card number survived alongside adjacent expiry digits")
+        #expect(result.clean.contains("\u{27E8}redacted:card\u{27E9}"))
+        #expect(result.clean.contains("12/26"), "expiry date should be left alone, only the card redacted")
+    }
+
+    @Test("Full-length IBAN prefix does not truncate at a shorter coincidentally-valid checksum")
+    func ibanFullLengthNotTruncated() {
+        let text = "Wire to FI2112345600000785 please."
+        let result = SecretRules.scrub(text, config: .forPersistence)
+        #expect(!result.clean.contains("5600000785"), "trailing IBAN account digits survived scrubbing")
+        #expect(result.clean.contains("\u{27E8}redacted:iban\u{27E9}"))
+        #expect(!result.clean.contains("785"), "IBAN should be redacted to its full 18-character mandated length")
+    }
+
+    @Test("Temporary AWS ASIA access keys are redacted like AKIA keys")
+    func awsTemporaryAccessKeyRedacted() {
+        let text = "Session key ASIAIOSFODNN7EXAMPLE was on screen."
+        let result = SecretRules.scrub(text, config: .forPersistence)
+        #expect(!result.clean.contains("ASIAIOSFODNN7EXAMPLE"))
+        #expect(result.findings.contains(SecretRules.Finding(type: .apiKey)))
+    }
+
+    @Test("Phone number with parens and no trailing space is redacted")
+    func phoneWithParensNoSpaceIsRedacted() {
+        let text = "Call (415)555-2671 tomorrow."
+        let result = SecretRules.scrub(text, config: .forPersistence)
+        #expect(!result.clean.contains("(415)555-2671"))
+        #expect(result.findings.contains(SecretRules.Finding(type: .phone)))
+    }
+
+    @Test("High-entropy token with a leading base64 symbol is fully redacted")
+    func highEntropyTokenWithLeadingSymbolRedacted() {
+        let text = "Token +aZ9kQ2mN7xL4vB8wT1yR6cJ3hD5sU0gP+f/=zzzz was on screen."
+        let result = SecretRules.scrub(text, config: .forPersistence)
+        #expect(!result.clean.contains("aZ9kQ2mN7xL4vB8wT1yR6cJ3hD5sU0gP"), "token survived, missing its leading symbol")
+        #expect(result.findings.contains(SecretRules.Finding(type: .apiKey)))
+    }
 }
