@@ -117,6 +117,31 @@ struct CompletionOutputCleanerTests {
         }
     }
 
+    /// Live dogfood regression (2026-08-16, "Classify scenes by geometry,
+    /// not host app"): typing "Sure, I will " (trailing space -- last typed
+    /// word is complete) and getting back a raw continuation that re-opens
+    /// with "I will" produced the ghost "I will try to get back to you" --
+    /// a visible echo of what the user had just typed. `replaysContext`
+    /// alone never caught this because it only flags 3+-word overlaps, and
+    /// the whitespace branch of `trimTypedPrefix` used to only strip
+    /// leading whitespace, with no word-echo check of its own. Screen-
+    /// context prompts (a Conversation/Reference block sitting just ahead
+    /// of `Text:`) make this kind of self-echo more likely, since the model
+    /// has more of "the room's own words" to copy from -- but the guard
+    /// belongs in the cleaner so every path gets it, not just the
+    /// screen-context one.
+    @Test("Strips a leading word-for-word echo of the just-typed context, even a short one")
+    func stripsLeadingEchoOfJustTypedWords() {
+        #expect(clean("I will try to get back to you", after: "Sure, I will ")?.visibleText == "try to get back to you")
+        // Single-word echo.
+        #expect(clean("will try to get back to you", after: "Sure, I will ")?.visibleText == "try to get back to you")
+        // No echo at all: suggestion passes through untouched.
+        #expect(clean("try to get back to you", after: "Sure, I will ")?.visibleText == "try to get back to you")
+        // An echo that consumes the ENTIRE suggestion rejects as empty, same
+        // as any other case where trimming leaves nothing behind.
+        #expect(reason("I will", after: "Sure, I will ") == .emptyAfterPrefixTrimming)
+    }
+
     @Test("Does not invent an overlap for an empty trailing fragment")
     func preservesSuggestionAfterPunctuation() {
         #expect(clean("apple", after: ".")?.visibleText == " apple")

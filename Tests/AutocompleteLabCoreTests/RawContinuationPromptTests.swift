@@ -54,6 +54,37 @@ struct ContinuationRegisterTests {
         #expect(prose.prompt.contains("real documents"))
         #expect(ContinuationRegister.chat.generatedTokenBudget < ContinuationRegister.prose.generatedTokenBudget)
     }
+
+    /// Fix for "Classify scenes by geometry, not host app": once the scene
+    /// says the user is replying, the completion register must follow that
+    /// scene rather than the host app's own default -- a chat conversation
+    /// rendered in a browser (not on `ContinuationRegister`'s chat-bundle
+    /// list) still gets the chat scaffold.
+    @Test("Register follows a replying scene, regardless of the host app's own default register")
+    func registerFollowsReplyingSceneOverHostApp() {
+        let replyingScene = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [.init(speaker: .other, text: "hey are you around today")],
+            referenceSnippets: []
+        )
+        // Chrome's own default register is `.prose` -- a chat scene overrides it.
+        #expect(ContinuationRegister.following(scene: replyingScene, hostBundleIdentifier: "com.google.Chrome") == .chat)
+        // Even a chat app's own bundle stays `.chat` either way.
+        #expect(ContinuationRegister.following(scene: replyingScene, hostBundleIdentifier: "com.tinyspeck.slackmacgap") == .chat)
+        // No host app at all: scene still wins.
+        #expect(ContinuationRegister.following(scene: replyingScene, hostBundleIdentifier: nil) == .chat)
+    }
+
+    @Test("Register falls back to the host app's default when the scene is absent, composing, or referencing")
+    func registerFallsBackToHostAppWithoutAReplyingScene() {
+        let composingScene = ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
+        let referencingScene = ScreenScene.Scene(mode: .referencing, conversationTurns: [], referenceSnippets: ["a reference"])
+
+        #expect(ContinuationRegister.following(scene: nil, hostBundleIdentifier: "com.apple.mail") == .email)
+        #expect(ContinuationRegister.following(scene: composingScene, hostBundleIdentifier: "com.apple.mail") == .email)
+        #expect(ContinuationRegister.following(scene: referencingScene, hostBundleIdentifier: "com.apple.TextEdit") == .prose)
+        #expect(ContinuationRegister.following(scene: nil, hostBundleIdentifier: nil) == .prose)
+    }
 }
 
 @Suite("Continuation cutoff repair")

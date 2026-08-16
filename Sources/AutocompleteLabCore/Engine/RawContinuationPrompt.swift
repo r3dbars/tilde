@@ -27,6 +27,22 @@ public enum ContinuationRegister: String, Sendable {
         return .prose
     }
 
+    /// Picks the completion register the way `LlamaCompletionEngine`'s live
+    /// socket path does: the classified SCENE wins whenever it says the
+    /// user is replying — a chat conversation rendered in a browser or
+    /// email client still wants the chat scaffold's short, casual voice,
+    /// regardless of what `from(bundleIdentifier:)` would otherwise say
+    /// about that host app. The host-app register is only the fallback,
+    /// for every other case (`scene` absent/stale, or classified as
+    /// `.composing`/`.referencing`) — exactly today's (pre-Screen-Memory)
+    /// behavior.
+    public static func following(
+        scene: ScreenScene.Scene?,
+        hostBundleIdentifier: String?
+    ) -> ContinuationRegister {
+        scene?.mode == .replying ? .chat : from(bundleIdentifier: hostBundleIdentifier)
+    }
+
     /// Suggested generation budget: chat wants shorter bursts; prose/email get
     /// room to finish the clause (cut-off fragments were the top quality wart).
     public var generatedTokenBudget: Int {

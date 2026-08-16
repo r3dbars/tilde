@@ -138,7 +138,18 @@ public enum ScreenScene {
         frontmostBundleID: String?,
         fieldText: String
     ) -> Scene {
-        if let frontmostBundleID, ContinuationRegister.from(bundleIdentifier: frontmostBundleID) == .chat {
+        // Geometry-first, host-agnostic (fix for the "demo page rendered in
+        // Chrome never gets a Conversation block" bug): a vertical stack of
+        // message-like blocks in the frontmost app's OWN window reads as
+        // "replying" no matter what that app is. A browser or email client
+        // showing a chat-shaped page is exactly as valid a signal as a
+        // native chat client — `ContinuationRegister`'s chat-bundle list is
+        // NOT consulted here at all anymore; it only still matters as the
+        // fallback register (composing/absent scene) that
+        // `LlamaCompletionEngine` picks once mode is known (see
+        // `RawContinuationPrompt`/`LlamaCompletionEngine` — register follows
+        // scene, host app is the fallback).
+        if let frontmostBundleID {
             // Only positively-attributed frontmost-window blocks may enter a
             // reply thread. `nil` attribution means "unknown," and treating
             // unknown as "frontmost" is a fail-open path: an unattributed

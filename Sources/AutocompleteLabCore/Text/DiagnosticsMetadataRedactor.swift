@@ -21,6 +21,10 @@ public enum DiagnosticsMetadataRedactor {
         // The 2026-08-16 first-launch Screen Recording permission prompt's
         // outcome vocabulary (`AppDelegate.presentScreenPermissionPromptIfNeeded`).
         "requested", "settings-opened", "dismissed",
+        // `ScreenScene.Mode`'s raw values, logged by the `scene-classified`
+        // diagnostic (`ScreenCaptureService.freshScene`) so a classification
+        // is never opaque — mode only, never any of the OCR'd text itself.
+        "replying", "referencing", "composing",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
@@ -30,11 +34,11 @@ public enum DiagnosticsMetadataRedactor {
     public static func logSafeField(forKey key: String, value: String) -> String {
         let safe: Bool
         switch key {
-        case "totalMilliseconds", "cleanedChars", "chars":
+        case "totalMilliseconds", "cleanedChars", "chars", "turns", "refs":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
-        case "reason", "status":
+        case "reason", "status", "mode":
             safe = enumValues.contains(value)
         case "app":
             safe = value == "unknown"
