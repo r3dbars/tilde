@@ -12,14 +12,14 @@ import ScreenCaptureKit
 ///
 /// Every capture attempt is routed through `CaptureTriggerPolicy` (Core,
 /// pure) with freshly observed state, so the covenant's non-negotiables —
-/// off by default, Secure Event Input, screen lock, per-app exclusion
-/// against every visible window, the 1/5s cadence cap — are enforced by
-/// tested logic, not re-derived here.
+/// the user's own master toggle (on by default, always visible and
+/// switchable), Secure Event Input, screen lock, per-app exclusion against
+/// every visible window, the 1/5s cadence cap — are enforced by tested
+/// logic, not re-derived here.
 actor ScreenCaptureService {
     enum CaptureOutcome: Equatable, Sendable {
         case captured(blockCount: Int)
         case skipped(CaptureTriggerPolicy.BlockReason)
-        case devModeDisabled
         case permissionNotGranted
         case captureFailed
     }
@@ -36,13 +36,6 @@ actor ScreenCaptureService {
     /// stays the single source of truth — flipping the menu toggle or
     /// editing the (Personal-History-shared) exclusion list takes effect on
     /// the very next trigger with nothing to keep in sync.
-    ///
-    /// `devModeEnabled` and `enabled` are deliberately separate providers
-    /// rather than one pre-ANDed bool: keeping them apart lets a skip name
-    /// WHICH gate closed — "dev-flag-off" (Screen Memory's whole dev-mode
-    /// feature gate is off) vs. "disabled" (the user's own master toggle is
-    /// off) — instead of both collapsing into one indistinguishable reason.
-    private let devModeEnabled: @Sendable () -> Bool
     private let enabled: @Sendable () -> Bool
     private let excludedApps: @Sendable () -> Set<String>
     private let permissionGranted: @Sendable () -> Bool
@@ -62,7 +55,6 @@ actor ScreenCaptureService {
     private let diagnostics: @Sendable (String, [String: String]) -> Void
 
     init(
-        devModeEnabled: @escaping @Sendable () -> Bool,
         enabled: @escaping @Sendable () -> Bool,
         excludedApps: @escaping @Sendable () -> Set<String>,
         permissionGranted: @escaping @Sendable () -> Bool = { ScreenRecordingPermission.isGranted() },
@@ -79,7 +71,6 @@ actor ScreenCaptureService {
             DiagnosticsLog.shared.record(event, metadata: metadata)
         }
     ) {
-        self.devModeEnabled = devModeEnabled
         self.enabled = enabled
         self.excludedApps = excludedApps
         self.permissionGranted = permissionGranted
@@ -172,15 +163,6 @@ actor ScreenCaptureService {
     @discardableResult
     private func attemptCapture(trigger: CaptureTriggerPolicy.Trigger) async -> CaptureOutcome {
         let moment = now()
-
-        // Checked before the master toggle so a skip can say WHICH gate
-        // closed: Screen Memory's whole dev-mode feature gate being off
-        // reads as "dev-flag-off", never as the same "disabled" the user's
-        // own toggle produces.
-        guard devModeEnabled() else {
-            diagnostics("screen-capture-skipped", ["reason": "dev-flag-off"])
-            return .devModeDisabled
-        }
         let isEnabled = enabled()
 
         guard isEnabled else {

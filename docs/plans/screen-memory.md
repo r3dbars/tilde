@@ -21,10 +21,16 @@ Non-negotiables that survive from the old covenant:
   stay blocking and unchanged.
 - Secrets never persist. Redaction runs BEFORE storage, fail-closed: if the
   redactor errors, the capture is dropped, never stored raw.
-- User sovereignty: master toggle (off by default at launch), per-app
-  exclusions (shared with Personal History), one-click delete-everything,
-  visible storage meter. Secure Event Input suspends capture unconditionally.
+- User sovereignty: master toggle (ON by default for new installs as of
+  2026-08-16 — see Phase 5 status update; an existing install's explicit
+  opt-out persists), per-app exclusions (shared with Personal History),
+  one-click delete-everything, visible storage meter. Secure Event Input
+  suspends capture unconditionally.
 - No raw screen text in logs, diagnostics, or any report. Sentinel-tested.
+- 2026-08-16 owner directive: Screen Recording permission is required for
+  Tilde to suggest at all, not merely to enrich a suggestion with screen
+  context — see Phase 5 status update for the full rationale and the
+  degraded-mode design this supersedes.
 
 ## Prior art to port, not rebuild
 
@@ -202,20 +208,60 @@ PR 3c `claude/screen-memory-store`:
 
 ## Phase 5 — Rollout
 
-1. Dev flag dogfood (owner only), 1 week, watching menu accept-rate and
-   `screen-capture-*` counters. Turn the flag on with
-   `defaults write bar.r3d.tilde ScreenMemoryDevMode -bool true` — this is
-   the form that survives a normal Finder/Dock launch (Tilde is an
-   `LSUIElement` app, so it does not inherit a Terminal shell's exported
-   environment). `TILDE_SCREEN_MEMORY_DEV=1` still works for a one-off
-   Terminal-launched run. Either is sufficient; see
-   `TildeSettings.screenMemoryDevModeEnabled`.
-2. Opt-in menu toggle "Screen Memory (local only)", default OFF, shipped
-   through the standard notarized release driver (remember: helper sha
-   re-pin after each release re-sign; GLiNER model becomes a third pinned
-   input).
-3. After 14 days of owner data: keep opt-in vs default-on decision, recorded
-   in docs/model-lessons.md with the numbers.
+**Status update (2026-08-16, owner directive): the dev-flag dogfood plan
+below is superseded.** Screen Memory ships as a first-class, required,
+default-on feature. Rationale (owner's words, paraphrased): Tilde's
+differentiator is screen-context prediction, and local-maximalism (nothing
+leaves the device) removes the reason to treat capture as an exotic opt-in.
+The `TILDE_SCREEN_MEMORY_DEV` environment variable and the
+`ScreenMemoryDevMode` UserDefaults key are removed entirely, not merely
+bypassed — they were also the direct cause of the bug that forced this
+decision: a menu-bar (`LSUIElement`) app does not inherit a Terminal shell's
+exported environment, so the owner could not find the menu item at all and
+44 consecutive captures logged as skipped with no visible explanation
+anywhere.
+
+1. First launch: if Screen Recording permission is not granted, Tilde shows
+   a plain-language explanation (what is captured, that it never leaves the
+   device, that secrets are redacted before use, why the app wants it) with
+   one button that triggers the system permission prompt
+   (`CGRequestScreenCaptureAccess` via `ScreenRecordingPermission.request()`)
+   and one that opens System Settings › Privacy & Security › Screen
+   Recording directly (`ScreenRecordingPermission.systemSettingsURL`). Zero
+   terminal commands required to discover or enable the feature.
+2. Menu toggle "Screen Memory (local only)", default ON for new installs
+   (an existing install's explicit opt-out persists — this changes the
+   default for installs with no persisted key, not a forced flip of anyone's
+   saved preference), always visible in the menu (no dev gate), with the
+   same per-app exclusion list Personal History uses.
+3. **All-or-nothing, by explicit owner decision, overriding an earlier
+   draft of this plan that called for graceful autocomplete-only
+   degradation:** if the toggle is off or Screen Recording permission is
+   missing, Tilde answers every completion request with silence — no ghost
+   text, no completions, not even from typed context alone. The app keeps
+   running (menu bar present, not crashed); its whole visible state becomes
+   the permission ask — a persistent, honest status line
+   (`ScreenMemoryStatus`, Core, pure, tested) plus a one-click path to grant
+   access or open System Settings. Turning the toggle back on, or granting
+   the permission, restores suggestions immediately, with no restart,
+   because the gate (`AppDelegate.suggestionsGate`) is re-evaluated fresh on
+   every completion request rather than cached. This trades a real support
+   cost — a denied permission makes Tilde feel completely silent, which
+   support will have to explain — for never shipping a suggestion made
+   without the screen context the product is built around. The earlier
+   draft's "degraded, not dead" plain-autocomplete fallback was flagged to
+   the owner as the safer default before this decision was made; the owner
+   chose all-or-nothing anyway, deliberately.
+4. Known gap, not yet closed: the release egress proof
+   (`script/package_app.sh`) still only runs its original autocomplete
+   stimulus. Screen Memory now ships and runs by default without the
+   packaged capture-and-redaction stimulus this plan's Phase 0 and
+   `AGENTS.md` require before ship. Track and close this before the next
+   release; PRIVACY.md states the gap plainly in the meantime.
+5. After 14 days of default-on data: record acceptance and interruption
+   deltas versus the pre-screen-context baseline, and how often the
+   first-launch prompt is dismissed versus acted on, in
+   docs/model-lessons.md.
 
 ## PR series summary (order, each small, each reviewed)
 

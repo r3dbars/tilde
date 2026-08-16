@@ -84,51 +84,19 @@ struct TildeSettings {
         }
     }
 
-    /// The covenant's master toggle: off by default, unlike every other flag
-    /// in this file (`flag()` defaults missing keys to true — Screen Memory
-    /// must not). Exclusions are deliberately NOT a separate key: the
-    /// covenant requires them shared with Personal History, so callers read
-    /// `personalHistoryExcludedApps` for both features.
+    /// The covenant's master toggle. On by default (2026-08-16 owner
+    /// directive: Screen Memory is a first-class, required-permission
+    /// feature, not an exotic opt-in) — like every other flag in this file,
+    /// a fresh install with no persisted key reads `flag()`'s default of
+    /// `true`. An existing install that explicitly turned this off keeps
+    /// that choice: this changes the DEFAULT for installs that never set the
+    /// key, not a forced flip of anyone's saved preference. Exclusions are
+    /// deliberately NOT a separate key: the covenant requires them shared
+    /// with Personal History, so callers read `personalHistoryExcludedApps`
+    /// for both features.
     var screenMemoryEnabled: Bool {
-        get { keyboard.bool(forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
+        get { flag(.screenMemoryEnabled) }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
-    }
-
-    /// Screen Memory's full opt-in ships in Phase 5; until then its menu
-    /// controls (StatusMenuHost) AND the capture engine itself (AppDelegate's
-    /// `screenCaptureService`) are gated behind this SAME flag. Without that
-    /// pairing, a persisted `ScreenMemoryEnabled=true` from an earlier dev
-    /// session would keep capturing on every later production launch even
-    /// though the toggle/status menu items that could turn it back off are
-    /// hidden — capture running with no visible status or off switch, which
-    /// the covenant's owner-visible-controls requirement forbids.
-    ///
-    /// Checked two ways, either one sufficient:
-    ///   - `TILDE_SCREEN_MEMORY_DEV=1` in the environment, for a one-off
-    ///     Terminal-launched run.
-    ///   - The `ScreenMemoryDevMode` boolean in the app's own UserDefaults
-    ///     suite (`defaults write bar.r3d.tilde ScreenMemoryDevMode -bool
-    ///     true`), which persists across normal launches.
-    /// The environment-only check (until 2026-08-16) silently failed for
-    /// Tilde's actual deployment shape: it is an `LSUIElement` menu-bar app,
-    /// normally launched by Finder/Dock/LaunchServices, none of which
-    /// inherit a Terminal shell's exported environment — `launchctl setenv`
-    /// did not reach it either. The owner set the env var, relaunched from
-    /// Finder, and the "Screen Memory" menu item never appeared: the dev
-    /// flag was unreachable outside a Terminal-launched run, with no visible
-    /// sign of why. `UserDefaults.standard` for the app's own bundle
-    /// identifier (`bar.r3d.tilde`) is a normal per-user preference that
-    /// LaunchServices always loads regardless of launch path, so the
-    /// `defaults write` form works everywhere the environment variable did
-    /// not.
-    static let screenMemoryDevModeDefaultsKey = "ScreenMemoryDevMode"
-
-    static func screenMemoryDevModeEnabled(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        appDefaults: UserDefaults = .standard
-    ) -> Bool {
-        if environment["TILDE_SCREEN_MEMORY_DEV"] == "1" { return true }
-        return appDefaults.bool(forKey: screenMemoryDevModeDefaultsKey)
     }
 
     var pausedUntil: Date? {
