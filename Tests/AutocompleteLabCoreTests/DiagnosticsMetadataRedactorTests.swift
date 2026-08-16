@@ -21,6 +21,24 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("app", "com.apple.TextEdit") == "app=com.apple.TextEdit")
     }
 
+    @Test("Screen Memory's screen-capture-skipped reasons survive as their literal enum case, not a redacted shape")
+    func keepsScreenCaptureSkipReasons() {
+        // Regression for the bug where `reason=disabled` (exactly 8 chars)
+        // logged as `reason=String(8 chars)`: every skip reason looked
+        // identical regardless of which gate actually blocked capture.
+        #expect(field("reason", "disabled") == "reason=disabled")
+        #expect(field("reason", "dev-flag-off") == "reason=dev-flag-off")
+        #expect(field("reason", "no-permission") == "reason=no-permission")
+        #expect(field("reason", "screen-locked") == "reason=screen-locked")
+        #expect(field("reason", "secure-input") == "reason=secure-input")
+        #expect(field("reason", "no-active-session") == "reason=no-active-session")
+        #expect(field("reason", "below-threshold") == "reason=below-threshold")
+        #expect(field("reason", "excluded-app") == "reason=excluded-app")
+        #expect(field("reason", "cadence") == "reason=cadence")
+        #expect(field("reason", "enumeration-failed") == "reason=enumeration-failed")
+        #expect(field("reason", "no-display") == "reason=no-display")
+    }
+
     @Test("Unknown and text-like fields expose shape only")
     func redactsUnknownFields() {
         #expect(field("selectedText", "private draft") == "metadata=String(13 chars)")

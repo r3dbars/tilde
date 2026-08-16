@@ -1,5 +1,6 @@
 import AutocompleteLabCore
 import AppKit
+import Carbon.HIToolbox.Events
 
 /// Tilde's complete user-facing surface: useful stats, honest engine status,
 /// working controls, pause, and quit. No settings window or panes.
@@ -85,14 +86,14 @@ final class StatusMenuHost: NSObject {
             #selector(deletePersonalHistory(_:))
         )
 
-        if TildeSettings.screenMemoryDevModeEnabled {
+        if TildeSettings.screenMemoryDevModeEnabled() {
             menu.addItem(.separator())
             screenMemoryItem = addAction(
                 to: menu,
                 "Screen Memory (local only) [dev]",
                 #selector(toggleScreenMemory(_:))
             )
-            screenMemoryStatusItem = addInfoRow(to: menu, "Screen Recording: checking…")
+            screenMemoryStatusItem = addInfoRow(to: menu, "Screen Memory: checking…")
             openScreenRecordingSettingsItem = addAction(
                 to: menu,
                 "Open Screen Recording Settings…",
@@ -233,7 +234,7 @@ final class StatusMenuHost: NSObject {
     /// only ever shown under that same flag, so the alert must say so
     /// rather than the stale "no suggestion uses it yet."
     private var consentUsageSentence: String {
-        TildeSettings.screenMemoryDevModeEnabled
+        TildeSettings.screenMemoryDevModeEnabled()
             ? "In this dev build, on-screen text can be folded into your suggestions."
             : "No suggestion uses it yet."
     }
@@ -346,22 +347,41 @@ extension StatusMenuHost: NSMenuDelegate {
 
     /// Honest status regardless of which way the degradation happened: off
     /// by the user's own toggle reads differently from off because macOS
-    /// hasn't granted the permission the toggle asked for.
+    /// hasn't granted the permission the toggle asked for. The parenthetical
+    /// uses the SAME fixed reason vocabulary as `screen-capture-skipped`
+    /// diagnostics (`ScreenCaptureService.describe`, allowlisted in
+    /// `DiagnosticsMetadataRedactor`) so a line read here and a line read in
+    /// the log agree on what "no-permission" or "secure-input" means —
+    /// the whole point is the owner should not have to read the log at all
+    /// to know why capture is paused.
+    ///
+    /// Only reproduces the gates that are cheap and synchronous from here:
+    /// the toggle, TCC permission, screen lock, and Secure Event Input.
+    /// Excluded-app and cadence depend on state that lives elsewhere (live
+    /// visible-window enumeration; the capture actor's own timing) and
+    /// are not cheap to duplicate here — those two stay log-only, visible
+    /// via `screen-capture-skipped` in the diagnostics log.
     private func refreshScreenMemoryStatus() {
         guard let screenMemoryItem, let screenMemoryStatusItem else { return }
         let enabled = settings.screenMemoryEnabled
         screenMemoryItem.state = enabled ? .on : .off
         guard enabled else {
-            screenMemoryStatusItem.title = "Screen Recording: off"
+            screenMemoryStatusItem.title = "Screen Memory: off (disabled)"
             openScreenRecordingSettingsItem?.isHidden = true
             return
         }
-        if ScreenRecordingPermission.isGranted() {
-            screenMemoryStatusItem.title = "Screen Recording: granted"
-            openScreenRecordingSettingsItem?.isHidden = true
-        } else {
-            screenMemoryStatusItem.title = "Screen Recording: not granted — capture is paused"
+        guard ScreenRecordingPermission.isGranted() else {
+            screenMemoryStatusItem.title = "Screen Memory: off (no-permission)"
             openScreenRecordingSettingsItem?.isHidden = false
+            return
+        }
+        openScreenRecordingSettingsItem?.isHidden = true
+        if ScreenLockObserver.isLocked() {
+            screenMemoryStatusItem.title = "Screen Memory: off (screen-locked)"
+        } else if IsSecureEventInputEnabled() {
+            screenMemoryStatusItem.title = "Screen Memory: off (secure-input)"
+        } else {
+            screenMemoryStatusItem.title = "Screen Memory: on"
         }
     }
 

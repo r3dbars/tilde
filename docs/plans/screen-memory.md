@@ -203,7 +203,13 @@ PR 3c `claude/screen-memory-store`:
 ## Phase 5 — Rollout
 
 1. Dev flag dogfood (owner only), 1 week, watching menu accept-rate and
-   `screen-capture-*` counters.
+   `screen-capture-*` counters. Turn the flag on with
+   `defaults write bar.r3d.tilde ScreenMemoryDevMode -bool true` — this is
+   the form that survives a normal Finder/Dock launch (Tilde is an
+   `LSUIElement` app, so it does not inherit a Terminal shell's exported
+   environment). `TILDE_SCREEN_MEMORY_DEV=1` still works for a one-off
+   Terminal-launched run. Either is sufficient; see
+   `TildeSettings.screenMemoryDevModeEnabled`.
 2. Opt-in menu toggle "Screen Memory (local only)", default OFF, shipped
    through the standard notarized release driver (remember: helper sha
    re-pin after each release re-sign; GLiNER model becomes a third pinned
