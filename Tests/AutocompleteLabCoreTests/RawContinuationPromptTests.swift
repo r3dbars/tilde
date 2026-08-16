@@ -237,4 +237,71 @@ struct ScreenContextPromptAssemblyTests {
         let occurrences = prompt.prompt.components(separatedBy: "sure thing").count - 1
         #expect(occurrences == 1)
     }
+
+    // MARK: - Secret scrubbing (structured secrets must never reach the model)
+
+    @Test("A credit card number OCR'd off screen is scrubbed before it reaches the prompt")
+    func creditCardInReferenceSnippetIsScrubbed() {
+        let scene = ScreenScene.Scene(
+            mode: .referencing,
+            conversationTurns: [],
+            referenceSnippets: ["card on file is 4111 1111 1111 1111 for the renewal"]
+        )
+        let prompt = RawContinuationPrompt(textBeforeCursor: "as for the ", scene: scene)
+        #expect(!prompt.prompt.contains("4111 1111 1111 1111"))
+        #expect(prompt.prompt.contains("\u{27E8}redacted:card\u{27E9}"))
+    }
+
+    @Test("An API key OCR'd from a conversation turn is scrubbed before it reaches the prompt")
+    func apiKeyInConversationTurnIsScrubbed() {
+        let scene = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [
+                .init(speaker: .other, text: "here's the key sk-abcdefghijklmnopqrstuvwxyz123456"),
+            ],
+            referenceSnippets: []
+        )
+        let prompt = RawContinuationPrompt(textBeforeCursor: "got it, ", scene: scene)
+        #expect(!prompt.prompt.contains("sk-abcdefghijklmnopqrstuvwxyz123456"))
+        #expect(prompt.prompt.contains("\u{27E8}redacted:api-key\u{27E9}"))
+    }
+
+    @Test("Emails survive scrubbing in prompt context (forPromptContext keeps them as useful vocabulary)")
+    func emailInSceneSurvivesPromptScrub() {
+        let scene = ScreenScene.Scene(
+            mode: .referencing,
+            conversationTurns: [],
+            referenceSnippets: ["reach out to alex@example.com about the launch"]
+        )
+        let prompt = RawContinuationPrompt(textBeforeCursor: "as for the ", scene: scene)
+        #expect(prompt.prompt.contains("alex@example.com"))
+    }
+
+    // MARK: - Truncation safety (never chop the header or drop the trailing separator)
+
+    @Test("A budget too small for the header drops the whole scene block rather than emitting a chopped header")
+    func tooSmallBudgetDropsWholeBlockRatherThanChoppingHeader() {
+        // "Conversation:\n" is 14 chars; leaving the scene only ~5 spare
+        // characters of the 3,000 budget can't fit even the header plus the
+        // trailing blank line, so the block must vanish instead of
+        // surfacing a truncated "Conve" fused onto "Text:".
+        let longTail = String(repeating: "a", count: 3_000 - 5)
+        let prompt = RawContinuationPrompt(textBeforeCursor: longTail, scene: replyingScene)
+        #expect(!prompt.prompt.contains("Conve"))
+        #expect(prompt.prompt.hasSuffix("Text: \(longTail)\nContinuation:"))
+    }
+
+    @Test("A budget that fits the header but not the full body truncates only the body, keeping header and trailing blank line intact")
+    func partialBudgetKeepsHeaderAndTrailerIntact() {
+        // maxContextCharacters is clamped to a floor of 80. A 70-char field
+        // tail against a 100-char total budget leaves the scene exactly 30
+        // characters — more than the 16-char header+trailer reservation, so
+        // the block survives, truncated, with its header and closing blank
+        // line both intact (never a mid-header or mid-fusion chop).
+        let fieldTail = String(repeating: "z", count: 70)
+        let prompt = RawContinuationPrompt(textBeforeCursor: fieldTail, scene: replyingScene, maxContextCharacters: 100)
+        #expect(prompt.prompt.contains("Conversation:\n"))
+        #expect(prompt.prompt.contains("\n\nText: \(fieldTail)\nContinuation:"))
+        #expect(!prompt.prompt.contains("Conversation:\nThem: hey are you around today\nYou: yeah free after 3pm works\n\n"))
+    }
 }
