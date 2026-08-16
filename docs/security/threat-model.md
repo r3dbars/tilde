@@ -1,7 +1,10 @@
 # Tilde Threat Model
 
 Status: current for the simplified IMKit + bundled llama architecture
-(2026-08-12).
+(2026-08-12), extended (2026-08-16) with the Screen Memory covenant. Screen
+Memory itself is planned, not shipped; its entries below describe the model
+this document holds it to once built, per `docs/plans/screen-memory.md` on
+PR #347 (not yet merged — lands separately from this governance PR).
 
 ## System boundary
 
@@ -28,6 +31,10 @@ inference, sync, upload, or analytics path.
 2. Integrity of committed text and the field receiving it.
 3. Integrity of the signed input method, helper, and model.
 4. Privacy-safe settings and diagnostics stored for the local user.
+5. Screen-derived text (OCR output of on-screen content) at rest in the
+   Personal History store and in memory during capture, redaction, and scene
+   classification, once Screen Memory ships. Unlike asset 1, this text is not
+   necessarily the user's own writing — see Screen Memory below.
 
 ## Adversaries
 
@@ -35,6 +42,17 @@ inference, sync, upload, or analytics path.
 - Another process running as the same macOS user.
 - A local user who can inspect or modify another user's files.
 - A network attacker.
+- Once Screen Memory ships: local malware running as the user, reading the
+  screen-text portion of the Personal History store. Mitigated the same way
+  as Personal History today (encryption at rest, owner-only file
+  permissions) — this does not raise a new class of adversary, only a richer
+  asset for the existing one.
+- Once Screen Memory ships: someone physically observing the user's own
+  screen while a capture happens (shoulder-surfing). Tilde does not defend
+  against this directly; macOS's system-level purple screen-recording
+  indicator is the mitigation, by disclosure rather than prevention — it is
+  the same honesty signal any other screen-recording app gives, and Screen
+  Memory does not attempt to hide or suppress it.
 
 Root, a compromised macOS input subsystem, and an attacker with Tilde's signing
 identity are out of scope.
@@ -137,6 +155,74 @@ identity are out of scope.
 - `llama-server`, the model parser, IMKit, and macOS remain complex trusted
   components. Signed packaging reduces tampering risk but cannot remove bugs in
   those components.
+
+## Screen Memory (planned)
+
+Not yet implemented; this section states the controls and residual risks this
+document will hold the feature to once it ships, per
+`docs/plans/screen-memory.md` on PR #347 (not yet merged as of this section —
+see the Status line above). It supersedes the prior blanket OCR/Screen
+Recording ban recorded in `AGENTS.md`.
+
+Controls, once shipped:
+
+- Redaction runs before any persistence and fails closed: a structured-secret
+  rules pass, then a local span-detection model pass, must both complete
+  before redacted text is written; a redactor error drops the capture
+  instead of storing it raw.
+- Capture is suspended unconditionally under the same conditions Personal
+  History already enforces — master toggle off (default) or macOS Secure
+  Event Input active — plus a locked screen and a hard capture-rate cap.
+  Because capture is full-display, the shared exclusion list check cannot be
+  frontmost-only: every visible window's owning app is checked, and capture
+  is suspended if any of them is excluded, so an excluded app stays protected
+  even when a different, non-excluded app is focused on top of it.
+- The on-device-only claim for Screen Memory is not proven by the existing
+  autocomplete egress lane, which is unchanged and never exercises capture,
+  OCR, or redaction code paths for a feature that is off by default. Before
+  ship, `script/package_app.sh`'s egress lane must add a packaged
+  capture-and-redaction stimulus and observe sockets through it; that
+  stimulus, not the unchanged autocomplete-only proof, is what closes this
+  gap.
+- Screen-derived text is stored in the same encrypted, owner-only Personal
+  History file, under the same Keychain key, subject to its own rolling
+  retention budget (256 MB default, oldest-first pruning), and is removed by
+  the same delete-all action that destroys the encryption key.
+- Screen-derived text never trains the table that models the user's own
+  writing; it feeds a separate, bounded conversation-context table only.
+
+Residual risks, stated honestly:
+
+- **Screen Memory will capture other people's words, not just the user's.**
+  Anything visible on screen when a capture fires — the other side of a
+  chat, a document someone else wrote, an email in the reading pane — is
+  captured and OCR'd identically to the user's own text. Tilde cannot
+  distinguish authorship from screen geometry alone. Per-app exclusion is
+  the only control; there is no per-person or per-message control.
+- **Redaction is not 100% recall.** The rules layer targets ≥99% recall on
+  structured secrets (card numbers, API-key shapes, JWTs); the model layer
+  targets ≥90% recall on unstructured secrets (free-text passwords, informal
+  PII). Both bars, and both misses, are measured per release the same way
+  the golden eval is, but neither is a guarantee that no secret ever
+  persists.
+- **OCR quality varies.** Low-contrast text, small retina-scaled text, and
+  unusual fonts degrade recognition; degraded OCR mostly fails the scene
+  classifier silently rather than corrupting a suggestion, but it also means
+  redaction is operating on text Tilde read imperfectly.
+- **The purple indicator is disclosure, not consent enforcement.** macOS
+  shows a system-level indicator whenever screen recording is active, the
+  same as any other screen-recording app. Tilde does not add a stronger
+  signal, and a user who does not notice or understand the indicator is not
+  separately warned by Tilde.
+- **A compromise of the running app while Screen Memory is enabled** exposes
+  the same class of decrypted-recent-window and derived-context risk this
+  document already states for Personal History, extended to screen-derived
+  conversation context.
+- **Best-effort private-browsing exclusion is not a guarantee.** Tilde
+  attempts to detect and skip known browsers' private/incognito windows by
+  window metadata; this is heuristic, not guaranteed across all browsers or
+  browser versions, and a user who needs certainty should add the browser to
+  the app exclusion list instead.
 
 ## Required proof after security-sensitive changes
 
