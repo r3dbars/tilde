@@ -169,6 +169,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launchMode == .production {
             statusMenuHost.start()
             startObservingFrontmostAppForScreenMemory()
+        } else if launchMode == .releaseProof && TildeSettings.screenMemoryDevModeEnabled {
+            // Screen Memory's power probe (script/capture_power_probe.sh,
+            // Phase 1b) needs an isolated instance that actually fires
+            // window-change captures. Production mode cannot be that
+            // instance: launching a second production Tilde alongside the
+            // owner's real daily driver hits the duplicate-instance guard
+            // above and self-terminates before this line — by design, so a
+            // probe run never touches the real app's socket. Release-proof
+            // mode is already the isolated dev/proof lane (dedicated port,
+            // no socket takeover attempt), so wiring the SAME window-change
+            // observer production uses — gated behind the same dev flag that
+            // already gates capture itself — lets the probe exercise the
+            // real trigger path. A normal (non-dev) release-proof launch,
+            // which the release network-egress gate depends on staying
+            // input-method-free, is untouched: this flag is never set there.
+            startObservingFrontmostAppForScreenMemory()
         }
         llamaServerHost.start()
         if launchMode.allowsDailyDriverMutation {
