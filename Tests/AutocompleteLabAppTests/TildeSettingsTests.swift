@@ -18,20 +18,28 @@ struct TildeSettingsTests {
         #expect(settings.pausedUntil == nil)
         #expect(!settings.personalHistoryEnabled)
         #expect(settings.personalHistoryExcludedApps.isEmpty)
-        // Screen Memory covenant: the master toggle is off by default,
-        // unlike suggestionsEnabled above — a fresh install must never
-        // capture the screen before the user opts in.
-        #expect(!settings.screenMemoryEnabled)
+        // 2026-08-16 owner directive: Screen Memory is a first-class,
+        // required-permission feature, not an opt-in — a fresh install with
+        // no persisted key must read ON, same as every other product
+        // default in this file (`suggestionsEnabled` above).
+        #expect(settings.screenMemoryEnabled)
     }
 
-    @Test("Screen Memory's toggle lands in the keyboard domain, off until explicitly set")
+    @Test("Screen Memory's toggle lands in the keyboard domain, on by default, explicitly settable either way")
     func screenMemoryToggle() {
         let (settings, keyboard) = makeSettings()
+        #expect(settings.screenMemoryEnabled)
+        settings.screenMemoryEnabled = false
         #expect(!settings.screenMemoryEnabled)
+        #expect(keyboard.object(forKey: "ScreenMemoryEnabled") as? Bool == false)
         settings.screenMemoryEnabled = true
         #expect(settings.screenMemoryEnabled)
-        #expect(keyboard.object(forKey: "ScreenMemoryEnabled") as? Bool == true)
-        settings.screenMemoryEnabled = false
+    }
+
+    @Test("An existing install that explicitly turned Screen Memory off keeps that choice — the changed default only affects fresh installs with no persisted key")
+    func screenMemoryExplicitOffPersists() {
+        let (settings, keyboard) = makeSettings()
+        keyboard.set(false, forKey: "ScreenMemoryEnabled")
         #expect(!settings.screenMemoryEnabled)
     }
 
@@ -80,74 +88,4 @@ struct TildeSettingsTests {
         )
         #expect(settings.pausedUntil == nil)
     }
-
-    // MARK: - Screen Memory dev-mode flag
-
-    private func makeAppDefaults() -> UserDefaults {
-        let suiteName = "tilde.tests.app.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
-    }
-
-    @Test("Absent everywhere: dev mode reads off")
-    func devModeOffByDefault() {
-        let appDefaults = makeAppDefaults()
-        #expect(!TildeSettings.screenMemoryDevModeEnabled(environment: [:], appDefaults: appDefaults))
-    }
-
-    @Test("TILDE_SCREEN_MEMORY_DEV=1 in the environment turns dev mode on")
-    func devModeOnViaEnvironment() {
-        let appDefaults = makeAppDefaults()
-        #expect(TildeSettings.screenMemoryDevModeEnabled(
-            environment: ["TILDE_SCREEN_MEMORY_DEV": "1"],
-            appDefaults: appDefaults
-        ))
-    }
-
-    @Test("Any other environment value does not turn dev mode on")
-    func devModeEnvironmentRequiresExactlyOne() {
-        let appDefaults = makeAppDefaults()
-        #expect(!TildeSettings.screenMemoryDevModeEnabled(
-            environment: ["TILDE_SCREEN_MEMORY_DEV": "true"],
-            appDefaults: appDefaults
-        ))
-        #expect(!TildeSettings.screenMemoryDevModeEnabled(
-            environment: ["TILDE_SCREEN_MEMORY_DEV": "0"],
-            appDefaults: appDefaults
-        ))
-    }
-
-    /// The regression this exists to fix: `defaults write bar.r3d.tilde
-    /// ScreenMemoryDevMode -bool true` must turn dev mode on with NO
-    /// environment variable at all — a Finder/Dock/LaunchServices launch
-    /// inherits no shell environment, so the env-var-only check left the
-    /// dev flag unreachable outside a Terminal-launched run.
-    @Test("ScreenMemoryDevMode=true in the app's own UserDefaults suite turns dev mode on, with no environment variable set")
-    func devModeOnViaUserDefaults() {
-        let appDefaults = makeAppDefaults()
-        appDefaults.set(true, forKey: TildeSettings.screenMemoryDevModeDefaultsKey)
-        #expect(TildeSettings.screenMemoryDevModeEnabled(environment: [:], appDefaults: appDefaults))
-    }
-
-    @Test("Either signal is sufficient: UserDefaults true with the environment variable absent, or vice versa")
-    func devModeEitherSignalSuffices() {
-        let envOnly = makeAppDefaults()
-        #expect(TildeSettings.screenMemoryDevModeEnabled(
-            environment: ["TILDE_SCREEN_MEMORY_DEV": "1"],
-            appDefaults: envOnly
-        ))
-
-        let defaultsOnly = makeAppDefaults()
-        defaultsOnly.set(true, forKey: TildeSettings.screenMemoryDevModeDefaultsKey)
-        #expect(TildeSettings.screenMemoryDevModeEnabled(environment: [:], appDefaults: defaultsOnly))
-    }
-
-    @Test("ScreenMemoryDevMode explicitly false, with no environment variable, reads off")
-    func devModeExplicitlyOff() {
-        let appDefaults = makeAppDefaults()
-        appDefaults.set(false, forKey: TildeSettings.screenMemoryDevModeDefaultsKey)
-        #expect(!TildeSettings.screenMemoryDevModeEnabled(environment: [:], appDefaults: appDefaults))
-    }
-
 }

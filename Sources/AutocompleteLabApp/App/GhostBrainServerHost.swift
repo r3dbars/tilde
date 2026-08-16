@@ -20,11 +20,23 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// Memory and never sees a `ScreenSnapshot`.
     private let onCompletionActivity: (@Sendable () -> Void)?
     /// Screen Memory plan Phase 2 PR 2b: resolves the current request's
-    /// scene, already dev-flag- and settings-gated by whoever constructs
-    /// this host (see `AppDelegate`). `nil` — no provider, or the provider
-    /// itself returning `nil` — means exactly today's (no-context)
-    /// completion behavior; this file never inspects capture state itself.
+    /// scene, already settings-gated by whoever constructs this host (see
+    /// `AppDelegate`). `nil` — no provider, or the provider itself returning
+    /// `nil` — means exactly today's (no-context) completion behavior; this
+    /// file never inspects capture state itself.
     private let sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)?
+    /// 2026-08-16 owner directive: Screen Recording permission is required
+    /// for Tilde to suggest at all, not merely to enrich suggestions with
+    /// screen context. `nil` means "always allowed" (release-proof mode and
+    /// tests that don't care about this gate); `AppDelegate` wires the real
+    /// closure to `ScreenMemoryStatus.evaluate(...).allowsSuggestions` (Core,
+    /// pure, tested — the same decision `StatusMenuHost`'s status line
+    /// reads, so the menu and the actual suggestion behavior can never
+    /// disagree), read fresh on every request so a permission revoked or a
+    /// toggle flipped mid-session takes effect on the very next completion,
+    /// and a permission granted mid-session resumes suggestions on the next
+    /// completion too — no restart, no cached state to go stale.
+    private let suggestionsGate: (@Sendable () -> Bool)?
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
@@ -35,13 +47,15 @@ final class GhostBrainServerHost: @unchecked Sendable {
         runtime: LlamaServerProcessHost,
         personalHistory: any PersonalHistoryIngesting,
         sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)? = nil,
-        onCompletionActivity: (@Sendable () -> Void)? = nil
+        onCompletionActivity: (@Sendable () -> Void)? = nil,
+        suggestionsGate: (@Sendable () -> Bool)? = nil
     ) {
         self.runtime = runtime
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
         self.onCompletionActivity = onCompletionActivity
+        self.suggestionsGate = suggestionsGate
     }
 
     func start() -> Bool {
@@ -165,6 +179,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
             self.onCompletionActivity?()
             guard await self.runtime.isReadyForCompletion() else {
                 _ = Self.write(.unavailable, to: connection)
+                return
+            }
+            // All-or-nothing gate (2026-08-16 owner directive): `.silence`,
+            // never `.unavailable` — `.unavailable` tells the IME the brain
+            // itself is missing and to try to summon it back
+            // (`GhostInputController.summonBrainIfNeeded`), which is wrong
+            // here: the app and model are fully up, Tilde is simply
+            // withholding a suggestion by policy. `.silence` is the same
+            // "nothing to show this time" outcome an ordinary empty
+            // completion already produces, so the IME does nothing special
+            // and nothing gets logged as a failure.
+            guard self.suggestionsGate?() ?? true else {
+                _ = Self.write(.silence, to: connection)
                 return
             }
 

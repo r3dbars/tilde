@@ -24,10 +24,11 @@ final class StatusMenuHost: NSObject {
     private var pauseItem: NSMenuItem?
     private var currentExclusionCandidate: (name: String, bundle: String)?
 
-    // Screen Memory, Phase 1a: capture engine only, nothing persisted or fed
-    // into prompts yet. The full opt-in toggle is Phase 5's rollout; until
-    // then this section only exists behind a dev flag so the TCC flow and
-    // its graceful-degradation status line can be exercised and reviewed.
+    // Screen Memory: shipped, on by default, and required (2026-08-16 owner
+    // directive) — Screen Recording permission gates whether Tilde
+    // suggests at all, not merely whether screen context enriches a
+    // suggestion. Always present in the menu (no dev flag), and positioned
+    // first among the action items in `start()` for exactly that reason.
     private var screenMemoryItem: NSMenuItem?
     private var screenMemoryStatusItem: NSMenuItem?
     private var openScreenRecordingSettingsItem: NSMenuItem?
@@ -51,6 +52,26 @@ final class StatusMenuHost: NSObject {
         lifetimeItem = addInfoRow(to: menu, "Tilde")
         todayItem = addInfoRow(to: menu, "Today: none accepted")
         engineItem = addInfoRow(to: menu, LlamaRuntimeSnapshot.starting.menuLine)
+        menu.addItem(.separator())
+
+        // Screen Memory sits right after engine status, ahead of the
+        // Suggestions toggle: the 2026-08-16 owner directive made this
+        // permission required for suggestions to flow at all, so when it's
+        // missing this is the single most consequential line in the whole
+        // menu and must be the first thing anyone sees, not something
+        // discovered by scrolling past Personal History.
+        screenMemoryItem = addAction(
+            to: menu,
+            "Screen Memory (local only)",
+            #selector(toggleScreenMemory(_:))
+        )
+        screenMemoryStatusItem = addInfoRow(to: menu, "Screen Memory: checking…")
+        openScreenRecordingSettingsItem = addAction(
+            to: menu,
+            "Open Screen Recording Settings…",
+            #selector(openScreenRecordingSettings(_:))
+        )
+        openScreenRecordingSettingsItem?.isHidden = true
         menu.addItem(.separator())
 
         suggestionsItem = addAction(to: menu, "Suggestions", #selector(toggleSuggestions(_:)))
@@ -85,22 +106,6 @@ final class StatusMenuHost: NSObject {
             "Delete Personal History…",
             #selector(deletePersonalHistory(_:))
         )
-
-        if TildeSettings.screenMemoryDevModeEnabled() {
-            menu.addItem(.separator())
-            screenMemoryItem = addAction(
-                to: menu,
-                "Screen Memory (local only) [dev]",
-                #selector(toggleScreenMemory(_:))
-            )
-            screenMemoryStatusItem = addInfoRow(to: menu, "Screen Memory: checking…")
-            openScreenRecordingSettingsItem = addAction(
-                to: menu,
-                "Open Screen Recording Settings…",
-                #selector(openScreenRecordingSettings(_:))
-            )
-            openScreenRecordingSettingsItem?.isHidden = true
-        }
         menu.addItem(.separator())
 
         pauseItem = addAction(
@@ -226,27 +231,26 @@ final class StatusMenuHost: NSObject {
         }
     }
 
-    /// The consent alert's disclosure of whether a suggestion actually
-    /// consumes screen text — this must track `RawContinuationPrompt`'s
-    /// real behavior, not describe an earlier phase forever. Screen context
-    /// is wired into live suggestions once `screenMemoryDevModeEnabled` is
-    /// set (see `AppDelegate.sceneProvider`), and this menu item itself is
-    /// only ever shown under that same flag, so the alert must say so
-    /// rather than the stale "no suggestion uses it yet."
-    private var consentUsageSentence: String {
-        TildeSettings.screenMemoryDevModeEnabled()
-            ? "In this dev build, on-screen text can be folded into your suggestions."
-            : "No suggestion uses it yet."
-    }
-
-    /// Phase 1a's TCC flow, with graceful degradation at every branch:
-    /// declining the explanation leaves the toggle untouched; declining or
-    /// later revoking the system permission leaves the toggle on but the
-    /// engine simply captures nothing (ScreenCaptureService checks
-    /// `ScreenRecordingPermission.isGranted()` on every trigger) — the
-    /// status line says so instead of the feature failing silently.
+    /// The TCC flow's graceful degradation, both directions: declining the
+    /// turn-on explanation, or declining/later revoking the system
+    /// permission, leaves suggestions off with the status line saying
+    /// exactly why (`refreshScreenMemoryStatus`) rather than the feature
+    /// failing silently. 2026-08-16 owner directive: this toggle now gates
+    /// suggestions entirely, not just screen-context enrichment, so BOTH
+    /// directions get a confirmation — turning off is no longer a free
+    /// action, since unlike before it silences Tilde completely, not just
+    /// its screen awareness.
     @objc private func toggleScreenMemory(_ sender: Any?) {
         if settings.screenMemoryEnabled {
+            let alert = NSAlert()
+            alert.messageText = "Turn off Screen Memory?"
+            alert.informativeText = """
+            Tilde predicts from what's on your screen, so turning this off stops ALL Tilde suggestions — not just screen context. Suggestions resume immediately if you turn this back on.
+            """
+            alert.addButton(withTitle: "Turn Off")
+            alert.addButton(withTitle: "Cancel")
+            alert.alertStyle = .warning
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
             settings.screenMemoryEnabled = false
             refreshScreenMemoryStatus()
             return
@@ -254,7 +258,7 @@ final class StatusMenuHost: NSObject {
         let alert = NSAlert()
         alert.messageText = "Turn on Screen Memory?"
         alert.informativeText = """
-        Tilde will read on-screen text on this Mac using on-device OCR — not just what you type — to build better suggestions. Screen text never leaves this Mac, is never uploaded, and in this build is memory-only: nothing is stored to disk. \(consentUsageSentence)
+        Tilde will read on-screen text on this Mac using on-device OCR — not just what you type — to build better suggestions, and folds it into every suggestion it makes. Screen text never leaves this Mac, is never uploaded, and today is memory-only: nothing is stored to disk.
 
         macOS will ask you to grant Screen Recording permission. Secure Event Input and a locked screen always pause capture. Any app on your Personal History exclusion list blocks capture whenever it is visible on screen at all — not only when it is the frontmost window.
         """
@@ -355,33 +359,59 @@ extension StatusMenuHost: NSMenuDelegate {
     /// the whole point is the owner should not have to read the log at all
     /// to know why capture is paused.
     ///
+    /// 2026-08-16 owner directive: the toggle and the permission are now
+    /// all-or-nothing for suggestions themselves (see
+    /// `AppDelegate.suggestionsGate`), not just for screen context — the
+    /// first two branches below say so explicitly ("Tilde is not
+    /// suggesting") so this line alone answers "why did suggestions stop"
+    /// without the owner needing to correlate it with anything else. Screen
+    /// lock and Secure Event Input, by contrast, only ever paused CAPTURE
+    /// momentarily — they never blocked suggestions before and still don't
+    /// (Secure Event Input independently suspends the whole IME anyway,
+    /// input-method-side, whenever it's active) — so those two stay worded
+    /// as "on" with a capture-paused parenthetical, not as an outage.
+    ///
     /// Only reproduces the gates that are cheap and synchronous from here:
     /// the toggle, TCC permission, screen lock, and Secure Event Input.
     /// Excluded-app and cadence depend on state that lives elsewhere (live
     /// visible-window enumeration; the capture actor's own timing) and
     /// are not cheap to duplicate here — those two stay log-only, visible
     /// via `screen-capture-skipped` in the diagnostics log.
-    private func refreshScreenMemoryStatus() {
+    ///
+    /// Called from `menuWillOpen` (every time the user opens the menu),
+    /// from `toggleScreenMemory` (immediately after the user flips the
+    /// toggle), and from `AppDelegate.applicationDidBecomeActive` (the
+    /// practical proxy for "permission state may have changed" — macOS has
+    /// no push notification for a Screen Recording TCC decision, so
+    /// catching the moment the user switches back to Tilde, e.g. right
+    /// after granting access in System Settings, is the closest available
+    /// signal). Internal, not private, for that last caller.
+    func refreshScreenMemoryStatus() {
         guard let screenMemoryItem, let screenMemoryStatusItem else { return }
         let enabled = settings.screenMemoryEnabled
         screenMemoryItem.state = enabled ? .on : .off
-        guard enabled else {
-            screenMemoryStatusItem.title = "Screen Memory: off (disabled)"
+        let status = ScreenMemoryStatus.evaluate(
+            enabled: enabled,
+            permissionGranted: ScreenRecordingPermission.isGranted(),
+            screenLocked: ScreenLockObserver.isLocked(),
+            secureInputActive: IsSecureEventInputEnabled()
+        )
+        switch status {
+        case .disabled:
+            screenMemoryStatusItem.title = "Screen Memory: off — Tilde is not suggesting (you turned this off)"
             openScreenRecordingSettingsItem?.isHidden = true
-            return
-        }
-        guard ScreenRecordingPermission.isGranted() else {
-            screenMemoryStatusItem.title = "Screen Memory: off (no-permission)"
+        case .noPermission:
+            screenMemoryStatusItem.title = "Screen Memory: needs Screen Recording access — Tilde is not suggesting"
             openScreenRecordingSettingsItem?.isHidden = false
-            return
-        }
-        openScreenRecordingSettingsItem?.isHidden = true
-        if ScreenLockObserver.isLocked() {
-            screenMemoryStatusItem.title = "Screen Memory: off (screen-locked)"
-        } else if IsSecureEventInputEnabled() {
-            screenMemoryStatusItem.title = "Screen Memory: off (secure-input)"
-        } else {
+        case .capturePausedScreenLocked:
+            screenMemoryStatusItem.title = "Screen Memory: on (capture paused — screen locked)"
+            openScreenRecordingSettingsItem?.isHidden = true
+        case .capturePausedSecureInput:
+            screenMemoryStatusItem.title = "Screen Memory: on (capture paused — secure input)"
+            openScreenRecordingSettingsItem?.isHidden = true
+        case .on:
             screenMemoryStatusItem.title = "Screen Memory: on"
+            openScreenRecordingSettingsItem?.isHidden = true
         }
     }
 

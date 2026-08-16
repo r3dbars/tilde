@@ -15,9 +15,12 @@ public enum DiagnosticsMetadataRedactor {
         // `redacted(value)` and prints as e.g. "String(8 chars)" instead of
         // the literal reason, which is what made every skip look identical
         // in the log regardless of cause.
-        "disabled", "dev-flag-off", "no-permission", "screen-locked", "secure-input",
+        "disabled", "no-permission", "screen-locked", "secure-input",
         "no-active-session", "below-threshold", "excluded-app", "cadence",
         "enumeration-failed", "no-display",
+        // The 2026-08-16 first-launch Screen Recording permission prompt's
+        // outcome vocabulary (`AppDelegate.presentScreenPermissionPromptIfNeeded`).
+        "requested", "settings-opened", "dismissed",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
