@@ -158,18 +158,26 @@ public enum SecretRules {
     /// stop, so it happily eats into whatever ordinary prose follows the
     /// real IBAN. Instead this walks forward from each `LL99` header,
     /// collecting alphanumeric characters (allowing single spaces as group
-    /// separators, matching printed IBAN formatting) up to the 34-character
-    /// maximum, then tries the mod-97 checksum at the shortest length ≥15
-    /// first — the real IBAN boundary — so it never over-consumes into
-    /// unrelated text that happens to look alnum-ish.
+    /// separators, matching printed IBAN formatting), but only up to the
+    /// exact length ISO 13616 mandates for that country code — never fewer,
+    /// never more — then validates the mod-97 checksum on the complete
+    /// candidate. Country codes outside the table are skipped rather than
+    /// guessed at: accepting the first mod-97-valid *prefix* (the previous
+    /// approach) can stop short of the true boundary purely by checksum
+    /// coincidence, leaving trailing account digits of the real IBAN
+    /// unredacted.
     private static func ibanMatches(_ text: String) -> [Range<String.Index>] {
         let headers = regexMatches(text, pattern: #"\b[A-Za-z]{2}\d{2}"#)
         var results: [Range<String.Index>] = []
         for header in headers {
+            let countryCode = String(text[header.lowerBound]).uppercased()
+                + String(text[text.index(after: header.lowerBound)]).uppercased()
+            guard let expectedLength = ibanLengthByCountryCode[countryCode] else { continue }
+
             var alnum: [(character: Character, index: String.Index)] = []
             var index = header.lowerBound
             var sawSpace = false
-            while index < text.endIndex, alnum.count < 34 {
+            while index < text.endIndex, alnum.count < expectedLength {
                 let char = text[index]
                 if char.isLetter || char.isNumber {
                     alnum.append((char, index))
@@ -181,22 +189,71 @@ public enum SecretRules {
                 }
                 index = text.index(after: index)
             }
-            guard alnum.count >= 15 else { continue }
-            for length in 15...alnum.count where isValidIBAN(String(alnum.prefix(length).map(\.character))) {
-                let endIndex = text.index(after: alnum[length - 1].index)
-                results.append(header.lowerBound..<endIndex)
-                break
-            }
+            guard alnum.count == expectedLength,
+                  isValidIBAN(String(alnum.map(\.character))) else { continue }
+            let endIndex = text.index(after: alnum[alnum.count - 1].index)
+            results.append(header.lowerBound..<endIndex)
         }
         return results
     }
 
+    /// ISO 13616 fixed field length (letters + digits, spaces excluded) per
+    /// IBAN country code. Deliberately exact rather than a min/max range:
+    /// every issuing country has exactly one mandated length, and matching
+    /// on anything else invites either under- or over-consumption.
+    private static let ibanLengthByCountryCode: [String: Int] = [
+        "AD": 24, "AE": 23, "AL": 28, "AT": 20, "AZ": 28, "BA": 20, "BE": 16, "BG": 22,
+        "BH": 22, "BR": 29, "BY": 28, "CH": 21, "CR": 22, "CY": 28, "CZ": 24, "DE": 22,
+        "DK": 18, "DO": 28, "EE": 20, "EG": 29, "ES": 24, "FI": 18, "FO": 18, "FR": 27,
+        "GB": 22, "GE": 22, "GI": 23, "GL": 18, "GR": 27, "GT": 28, "HR": 21, "HU": 28,
+        "IE": 22, "IL": 23, "IQ": 23, "IS": 26, "IT": 27, "JO": 30, "KW": 30, "KZ": 20,
+        "LB": 28, "LC": 32, "LI": 21, "LT": 20, "LU": 20, "LV": 21, "LY": 25, "MC": 27,
+        "MD": 24, "ME": 22, "MK": 19, "MR": 27, "MT": 31, "MU": 30, "NL": 18, "NO": 15,
+        "PK": 24, "PL": 28, "PS": 29, "PT": 25, "QA": 29, "RO": 24, "RS": 22, "SA": 24,
+        "SC": 31, "SE": 24, "SI": 19, "SK": 24, "SM": 27, "ST": 25, "SV": 28, "TL": 23,
+        "TN": 24, "TR": 26, "UA": 29, "VA": 22, "VG": 24, "XK": 20,
+    ]
+
+    /// Custom scan for the same reason as `ibanMatches`: a single greedy
+    /// regex followed by one Luhn check on the whole match has no way to
+    /// stop before adjacent, differently-shaped digits (e.g. an expiry date
+    /// separated by a space) that happen to fall inside the max digit-count
+    /// window. `"4111 1111 1111 1111 12/26"` would otherwise absorb the
+    /// expiry's `12` into an 18-digit candidate, fail Luhn as a whole, and
+    /// leave the real 16-digit card number completely unredacted. Instead
+    /// this walks forward from each digit run's start, then tries every
+    /// plausible card length (13–19, longest first) against Luhn, accepting
+    /// the first that validates — so a valid card prefix wins even when
+    /// trailing unrelated digits made the maximal span invalid.
     private static func creditCardMatches(_ text: String) -> [Range<String.Index>] {
-        regexMatches(
-            text,
-            pattern: #"(?<!\d)\d(?:[ -]?\d){11,18}(?!\d)"#,
-            validate: isValidLuhn
-        )
+        let starts = regexMatches(text, pattern: #"(?<!\d)\d"#)
+        var results: [Range<String.Index>] = []
+        for start in starts {
+            var digits: [(character: Character, index: String.Index)] = []
+            var index = start.lowerBound
+            var sawSeparator = false
+            while index < text.endIndex, digits.count < 19 {
+                let char = text[index]
+                if char.isNumber {
+                    digits.append((char, index))
+                    sawSeparator = false
+                } else if (char == " " || char == "-"), !sawSeparator, !digits.isEmpty {
+                    sawSeparator = true
+                } else {
+                    break
+                }
+                index = text.index(after: index)
+            }
+            guard digits.count >= 13 else { continue }
+            for length in stride(from: digits.count, through: 13, by: -1) {
+                let candidate = String(digits.prefix(length).map(\.character))
+                guard isValidLuhn(candidate) else { continue }
+                let endIndex = text.index(after: digits[length - 1].index)
+                results.append(start.lowerBound..<endIndex)
+                break
+            }
+        }
+        return results
     }
 
     private static func ssnMatches(_ text: String) -> [Range<String.Index>] {
@@ -207,8 +264,12 @@ public enum SecretRules {
         )
     }
 
+    /// `AKIA` is a long-lived access key; `ASIA` is the temporary/STS variant
+    /// (same 16-char suffix shape). Both must be caught here because at 20
+    /// total characters neither is long enough to fall back on the generic
+    /// ≥32-char high-entropy rule.
     private static func awsAccessKeyMatches(_ text: String) -> [Range<String.Index>] {
-        regexMatches(text, pattern: #"\bAKIA[0-9A-Z]{16}\b"#)
+        regexMatches(text, pattern: #"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"#)
     }
 
     private static func openAIKeyMatches(_ text: String) -> [Range<String.Index>] {
@@ -224,10 +285,18 @@ public enum SecretRules {
     /// Shannon entropy so long English words, URLs, hex hashes, and UUIDs
     /// (all low-diversity or low-entropy) don't trip it — see the
     /// false-positive corpus test.
+    ///
+    /// Boundaries are defined by the token's own alphabet, not `\b`: `\b`
+    /// only fires on a transition between `\w` and non-`\w`, but `+` and `/`
+    /// (both legal leading/trailing base64 symbols) are themselves non-`\w`.
+    /// A token starting with `+` preceded by whitespace has no `\w`/non-`\w`
+    /// transition there, so `\b` silently declines to match at that
+    /// position, the engine starts one character later, the token comes up
+    /// one character short of 32, and the whole secret survives.
     private static func highEntropyTokenMatches(_ text: String) -> [Range<String.Index>] {
         regexMatches(
             text,
-            pattern: #"\b[A-Za-z0-9+/_=-]{32,}\b"#,
+            pattern: #"(?<![A-Za-z0-9+/_=-])[A-Za-z0-9+/_=-]{32,}(?![A-Za-z0-9+/_=-])"#,
             validate: isHighEntropySecretShape
         )
     }
@@ -241,11 +310,14 @@ public enum SecretRules {
 
     /// Requires an explicit separator between digit groups (space, dot,
     /// dash, or parens around the area code) so a bare 10-digit run — an
-    /// order number, an ID — never matches.
+    /// order number, an ID — never matches. The area code alternation
+    /// treats a closing paren as a separator in its own right: `(415)`
+    /// immediately followed by `555-2671` is a normal, common phone-number
+    /// layout, not one that also needs a space/dot/dash after the `)`.
     private static func phoneMatches(_ text: String) -> [Range<String.Index>] {
         regexMatches(
             text,
-            pattern: #"(?<!\d)(?:\+1[-.\s])?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"#
+            pattern: #"(?<!\d)(?:\+1[-.\s])?(?:\(\d{3}\)[-.\s]?|\d{3}[-.\s])\d{3}[-.\s]\d{4}(?!\d)"#
         )
     }
 
