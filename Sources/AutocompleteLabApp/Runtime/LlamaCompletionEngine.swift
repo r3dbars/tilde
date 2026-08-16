@@ -12,15 +12,35 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         self.diagnostics = diagnostics
     }
 
+    /// `CompletionSuggesting`'s exact two-parameter signature — kept
+    /// separate from the scene-aware overload below (rather than a
+    /// defaulted third parameter) because Swift protocol conformance
+    /// matches on exact signature, and `ReplayEvalCommand` conforms via
+    /// `extension LlamaCompletionEngine: CompletionSuggesting {}`. Replay
+    /// has no live screen to consult, so `scene: nil` here is exactly
+    /// correct, not a stand-in.
     func suggestion(
         textBeforeCursor: String,
         appBundleIdentifier: String?
+    ) async throws -> CompletionSuggestion? {
+        try await suggestion(textBeforeCursor: textBeforeCursor, appBundleIdentifier: appBundleIdentifier, scene: nil)
+    }
+
+    /// The live socket path's entry point (`GhostBrainServerHost`): `scene`
+    /// is whatever `ScreenCaptureService.freshScene` returned for this
+    /// request — `nil` whenever capture is off, ungranted, or stale,
+    /// reproducing today's behavior exactly.
+    func suggestion(
+        textBeforeCursor: String,
+        appBundleIdentifier: String?,
+        scene: ScreenScene.Scene?
     ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
         let register = ContinuationRegister.from(bundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
-            register: register
+            register: register,
+            scene: scene
         )
         guard !recipe.prompt.isEmpty else { return nil }
 

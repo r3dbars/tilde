@@ -1,3 +1,4 @@
+import AutocompleteLabCore
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
@@ -109,6 +110,67 @@ struct ScreenCaptureServiceTests {
         #expect(await service.latestSnapshot == nil)
         _ = await service.noteWindowChanged()
         #expect(await service.latestSnapshot == nil)
+    }
+
+    // MARK: - freshScene (Screen Memory plan Phase 2 PR 2b)
+
+    private func makeService() -> ScreenCaptureService {
+        ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+    }
+
+    @Test("freshScene reads whatever the last successful capture stored, without triggering a new one")
+    func freshSceneReadsLatestSnapshotOnly() async {
+        let service = makeService()
+        let referenceMoment = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = ScreenSnapshot(
+            capturedAt: referenceMoment,
+            displayID: 1,
+            blocks: [
+                ScreenSnapshot.TextBlock(
+                    text: "hey are you around today",
+                    boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+                ScreenSnapshot.TextBlock(
+                    text: "yeah free after 3pm works",
+                    boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+            ]
+        )
+        await service.setLatestSnapshotForTesting(snapshot)
+
+        let fresh = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(5)
+        )
+        #expect(fresh?.mode == .replying)
+
+        let stale = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(25)
+        )
+        #expect(stale == nil)
+    }
+
+    @Test("freshScene with no captured snapshot yet returns nil — today's behavior")
+    func freshSceneWithNoSnapshotReturnsNil() async {
+        let service = makeService()
+        let fresh = await service.freshScene(frontmostBundleID: "com.apple.TextEdit", fieldText: "hello")
+        #expect(fresh == nil)
     }
 }
 

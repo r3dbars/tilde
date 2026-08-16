@@ -83,3 +83,158 @@ func emptyContextStaysSilent() {
     let whitespaceOnly = RawContinuationPrompt(textBeforeCursor: "   ", register: .chat)
     #expect(whitespaceOnly.prompt.isEmpty)
 }
+
+/// Screen Memory plan Phase 2 PR 2b: `RawContinuationPrompt`'s screen-context
+/// block. Covers per-mode prompt shape, budget math (field text always wins
+/// ties, scene capped at 1,000), and that a `nil`/composing scene reproduces
+/// today's prompt exactly.
+@Suite("Screen context prompt assembly")
+struct ScreenContextPromptAssemblyTests {
+    private let replyingScene = ScreenScene.Scene(
+        mode: .replying,
+        conversationTurns: [
+            .init(speaker: .other, text: "hey are you around today"),
+            .init(speaker: .selfSpeaker, text: "yeah free after 3pm works"),
+        ],
+        referenceSnippets: []
+    )
+
+    private let referencingScene = ScreenScene.Scene(
+        mode: .referencing,
+        conversationTurns: [],
+        referenceSnippets: ["Q3 launch timeline moved to the 14th per the doc"]
+    )
+
+    private let composingScene = ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
+
+    // MARK: - Per-mode shape
+
+    @Test("A nil scene reproduces today's prompt exactly, byte for byte")
+    func nilSceneMatchesLegacyPrompt() {
+        let withoutScene = RawContinuationPrompt(textBeforeCursor: "since we ", register: .chat)
+        let withNilScene = RawContinuationPrompt(textBeforeCursor: "since we ", register: .chat, scene: nil)
+        #expect(withoutScene == withNilScene)
+        #expect(!withoutScene.prompt.contains("Conversation:"))
+        #expect(!withoutScene.prompt.contains("Reference:"))
+    }
+
+    @Test("A composing-mode scene contributes no context block")
+    func composingSceneContributesNothing() {
+        let prompt = RawContinuationPrompt(textBeforeCursor: "since we ", register: .chat, scene: composingScene)
+        #expect(!prompt.prompt.contains("Conversation:"))
+        #expect(!prompt.prompt.contains("Reference:"))
+        #expect(prompt.prompt.hasSuffix("Text: since we\nContinuation:"))
+    }
+
+    @Test("Replying scene renders a labeled Conversation block ahead of Text:")
+    func replyingSceneRendersConversationBlock() {
+        let prompt = RawContinuationPrompt(textBeforeCursor: "sure, ", register: .chat, scene: replyingScene)
+
+        #expect(prompt.prompt.contains(
+            "Conversation:\nThem: hey are you around today\nYou: yeah free after 3pm works\n\n"
+        ))
+        // Context sits between the scaffold and the field text.
+        let conversationRange = prompt.prompt.range(of: "Conversation:")
+        let textRange = prompt.prompt.range(of: "Text: sure,")
+        #expect(conversationRange != nil && textRange != nil)
+        #expect(conversationRange!.lowerBound < textRange!.lowerBound)
+        #expect(prompt.prompt.hasSuffix("Text: sure,\nContinuation:"))
+    }
+
+    @Test("Referencing scene renders a labeled Reference block")
+    func referencingSceneRendersReferenceBlock() {
+        let prompt = RawContinuationPrompt(textBeforeCursor: "as for the ", register: .email, scene: referencingScene)
+        #expect(prompt.prompt.contains("Reference:\nQ3 launch timeline moved to the 14th per the doc\n\n"))
+        #expect(prompt.prompt.hasSuffix("Text: as for the\nContinuation:"))
+    }
+
+    @Test("An empty-turns replying scene and an empty-snippet referencing scene contribute nothing")
+    func emptyPayloadScenesContributeNothing() {
+        let emptyReplying = ScreenScene.Scene(mode: .replying, conversationTurns: [], referenceSnippets: [])
+        let emptyReferencing = ScreenScene.Scene(mode: .referencing, conversationTurns: [], referenceSnippets: [])
+
+        let a = RawContinuationPrompt(textBeforeCursor: "hi ", scene: emptyReplying)
+        let b = RawContinuationPrompt(textBeforeCursor: "hi ", scene: emptyReferencing)
+        #expect(!a.prompt.contains("Conversation:"))
+        #expect(!b.prompt.contains("Reference:"))
+    }
+
+    // MARK: - Budget math
+
+    @Test("Field text always wins ties: a long field leaves little or no room for scene context")
+    func fieldTextWinsTiesUnderTightBudget() {
+        let longTail = String(repeating: "a", count: 2_990) // leaves only 10 of a 3,000 budget
+        let prompt = RawContinuationPrompt(textBeforeCursor: longTail, scene: replyingScene)
+
+        // The full field tail always survives untouched...
+        #expect(prompt.prompt.hasSuffix("Text: \(longTail)\nContinuation:"))
+        // ...and the scene contributes at most the 10 leftover characters,
+        // nowhere near its full "Conversation:\n...\n\n" rendering.
+        #expect(!prompt.prompt.contains("Conversation:\nThem: hey are you around today"))
+    }
+
+    @Test("A field that fully consumes the budget leaves the scene no room at all")
+    func fieldTextConsumingWholeBudgetLeavesNoRoomForScene() {
+        let tail = String(repeating: "b", count: 3_000)
+        let prompt = RawContinuationPrompt(textBeforeCursor: tail, scene: replyingScene)
+        #expect(!prompt.prompt.contains("Conversation:"))
+        #expect(prompt.prompt.hasSuffix("Text: \(tail)\nContinuation:"))
+    }
+
+    @Test("Scene context is capped at 1,000 characters even when far more budget remains")
+    func sceneContextCappedAtOneThousandRegardlessOfRemainingBudget() {
+        let manyTurns = (1...40).map {
+            ScreenScene.ConversationTurn(speaker: $0.isMultiple(of: 2) ? .selfSpeaker : .other, text: "turn number \($0) with some extra words padding it out")
+        }
+        // ScreenScene itself caps turns to 3 / 600 chars, but this proves
+        // RawContinuationPrompt's OWN cap holds independently of that,
+        // against a scene built directly (not through ScreenScene.classify).
+        let bigScene = ScreenScene.Scene(mode: .replying, conversationTurns: manyTurns, referenceSnippets: [])
+        let prompt = RawContinuationPrompt(textBeforeCursor: "short ", scene: bigScene, maxContextCharacters: 3000)
+
+        let contextStart = prompt.prompt.range(of: "Conversation:")!.lowerBound
+        let textStart = prompt.prompt.range(of: "Text: short")!.lowerBound
+        let contextLength = prompt.prompt.distance(from: contextStart, to: textStart)
+        #expect(contextLength == RawContinuationPrompt.maxSceneContextCharacters)
+    }
+
+    @Test("Shrinking maxContextCharacters shrinks the scene's share, never the field text's")
+    func totalBudgetShrinksSceneShareFirst() {
+        // 80 is the floor `maxContextCharacters` is clamped to (see the
+        // "long context is trimmed from the left" precedent test). A
+        // 50-char field tail leaves exactly 30 of that 80 for the scene —
+        // well under the untruncated "Reference:\n...\n\n" block's own
+        // length, so this proves the shortfall is spent shrinking the
+        // scene's share, not the field's.
+        let fieldTail = String(repeating: "x", count: 50)
+        let prompt = RawContinuationPrompt(
+            textBeforeCursor: fieldTail,
+            scene: referencingScene,
+            maxContextCharacters: 80
+        )
+        #expect(prompt.prompt.hasSuffix("Text: \(fieldTail)\nContinuation:"))
+        let contextStart = prompt.prompt.range(of: "Reference:")!.lowerBound
+        let textStart = prompt.prompt.range(of: "Text: \(fieldTail)")!.lowerBound
+        let contextLength = prompt.prompt.distance(from: contextStart, to: textStart)
+        #expect(contextLength == 30)
+    }
+
+    // MARK: - Dedupe stays intact end to end
+
+    @Test("A scene turn identical to the field text (as ScreenScene would already have deduped) still composes a valid prompt")
+    func dedupedUpstreamSceneStillComposesCleanly() {
+        // ScreenScene.classify is responsible for dropping OCR text that
+        // duplicates the field (see ScreenSceneTests); this proves
+        // RawContinuationPrompt doesn't reintroduce a duplicate of its own
+        // when handed an already-deduped scene whose remaining turn is
+        // wholly distinct from the field text.
+        let scene = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [.init(speaker: .other, text: "totally different topic")],
+            referenceSnippets: []
+        )
+        let prompt = RawContinuationPrompt(textBeforeCursor: "sure thing ", scene: scene)
+        let occurrences = prompt.prompt.components(separatedBy: "sure thing").count - 1
+        #expect(occurrences == 1)
+    }
+}

@@ -91,13 +91,32 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         }
     }
 
+    /// Screen Memory plan Phase 2 PR 2b: the most a screen-context block may
+    /// spend of the shared budget, regardless of how much the field text
+    /// left over. Keeps a near-empty field from handing the whole 3,000-char
+    /// budget to OCR'd screen text.
+    public static let maxSceneContextCharacters = 1_000
+
     /// `register` selects the scaffold voice from the host app's identity.
+    /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
+    /// 2a) — `nil` (no capture, capture disabled, or stale) reproduces
+    /// today's prompt exactly, byte for byte; this is the fallback behavior
+    /// the covenant's dev-flag gating relies on.
+    ///
+    /// Budgeting: field text is computed first, from the full
+    /// `maxContextCharacters` budget, same as before Screen Memory existed —
+    /// it always gets everything it needs (up to that budget) and is never
+    /// shrunk to make room for screen context. The scene context block only
+    /// spends what's left of that same budget afterward, capped at
+    /// `maxSceneContextCharacters` — "field text always wins ties."
     public init(
         textBeforeCursor: String,
         register: ContinuationRegister = .prose,
+        scene: ScreenScene.Scene? = nil,
         maxContextCharacters: Int = 3000
     ) {
-        let tail = String(textBeforeCursor.suffix(max(80, maxContextCharacters)))
+        let totalBudget = max(80, maxContextCharacters)
+        let tail = String(textBeforeCursor.suffix(totalBudget))
         let trimmed = String(
             tail.reversed().drop(while: { $0.isWhitespace }).reversed()
         )
@@ -108,7 +127,35 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             return
         }
 
-        prompt = Self.scaffold(for: register) + "Text: " + trimmed + "\nContinuation:"
+        let remainingForScene = max(0, totalBudget - trimmed.count)
+        let sceneBudget = min(Self.maxSceneContextCharacters, remainingForScene)
+        let sceneBlock = Self.sceneContextBlock(for: scene, budget: sceneBudget)
+
+        prompt = Self.scaffold(for: register) + sceneBlock + "Text: " + trimmed + "\nContinuation:"
+    }
+
+    /// Renders the classified scene into the prompt shape the plan
+    /// specifies per mode, then truncates to whatever budget is left —
+    /// truncation only ever bites when the field text has already claimed
+    /// most of `maxContextCharacters`, since `ScreenScene` itself already
+    /// caps turns/snippets well under `maxSceneContextCharacters`.
+    private static func sceneContextBlock(for scene: ScreenScene.Scene?, budget: Int) -> String {
+        guard let scene, budget > 0 else { return "" }
+        let raw: String
+        switch scene.mode {
+        case .replying:
+            guard !scene.conversationTurns.isEmpty else { return "" }
+            let lines = scene.conversationTurns.map {
+                "\($0.speaker == .selfSpeaker ? "You" : "Them"): \($0.text)"
+            }
+            raw = "Conversation:\n" + lines.joined(separator: "\n") + "\n\n"
+        case .referencing:
+            guard let snippet = scene.referenceSnippets.first else { return "" }
+            raw = "Reference:\n" + snippet + "\n\n"
+        case .composing:
+            return ""
+        }
+        return String(raw.prefix(budget))
     }
 
     /// Words a suggestion should never END on — a trailing article/preposition/

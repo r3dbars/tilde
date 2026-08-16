@@ -93,6 +93,33 @@ actor ScreenCaptureService {
     /// serving the user, which is the "session" the typing-pause trigger
     /// requires. This does not read or forward the request's content — it
     /// is purely a timestamp pulse.
+    /// Screen Memory plan Phase 2 PR 2b: the completion path's read of the
+    /// capture pipeline. Purely reads `latestSnapshot` and hands it to
+    /// `ScreenScene.freshScene`'s staleness gate — never triggers
+    /// `attemptCapture`, so a completion request can call this and get an
+    /// answer immediately, whether or not a capture happens to be in
+    /// flight.
+    func freshScene(
+        frontmostBundleID: String?,
+        fieldText: String,
+        now: Date = Date()
+    ) -> ScreenScene.Scene? {
+        ScreenScene.freshScene(
+            from: latestSnapshot,
+            now: now,
+            frontmostBundleID: frontmostBundleID,
+            fieldText: fieldText
+        )
+    }
+
+    /// Test seam: injects a snapshot directly, bypassing the entire
+    /// ScreenCaptureKit/Vision pipeline that a unit test cannot drive.
+    /// Production code always reaches `latestSnapshot` through a real
+    /// `attemptCapture`; nothing outside tests calls this.
+    func setLatestSnapshotForTesting(_ snapshot: ScreenSnapshot?) {
+        latestSnapshot = snapshot
+    }
+
     func noteCompletionActivity() {
         let stamp = now()
         lastActivityAt = stamp
@@ -221,7 +248,8 @@ actor ScreenCaptureService {
                     text: block.text,
                     boundingBox: block.boundingBox,
                     windowOwnerBundleIdentifier: owner?.bundleIdentifier,
-                    windowTitle: owner?.title
+                    windowTitle: owner?.title,
+                    windowFrame: owner?.frame
                 )
             }
             let snapshot = ScreenSnapshot(
