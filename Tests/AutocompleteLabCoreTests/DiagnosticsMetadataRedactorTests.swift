@@ -27,7 +27,6 @@ struct DiagnosticsMetadataRedactorTests {
         // logged as `reason=String(8 chars)`: every skip reason looked
         // identical regardless of which gate actually blocked capture.
         #expect(field("reason", "disabled") == "reason=disabled")
-        #expect(field("reason", "dev-flag-off") == "reason=dev-flag-off")
         #expect(field("reason", "no-permission") == "reason=no-permission")
         #expect(field("reason", "screen-locked") == "reason=screen-locked")
         #expect(field("reason", "secure-input") == "reason=secure-input")
@@ -37,6 +36,13 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("reason", "cadence") == "reason=cadence")
         #expect(field("reason", "enumeration-failed") == "reason=enumeration-failed")
         #expect(field("reason", "no-display") == "reason=no-display")
+    }
+
+    @Test("The first-launch screen-permission-prompt outcome survives as its literal enum case")
+    func keepsScreenPermissionPromptOutcomes() {
+        #expect(field("status", "requested") == "status=requested")
+        #expect(field("status", "settings-opened") == "status=settings-opened")
+        #expect(field("status", "dismissed") == "status=dismissed")
     }
 
     @Test("Unknown and text-like fields expose shape only")

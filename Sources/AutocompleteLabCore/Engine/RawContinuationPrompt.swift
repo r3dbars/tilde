@@ -99,9 +99,10 @@ public struct RawContinuationPrompt: Equatable, Sendable {
 
     /// `register` selects the scaffold voice from the host app's identity.
     /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
-    /// 2a) — `nil` (no capture, capture disabled, or stale) reproduces
-    /// today's prompt exactly, byte for byte; this is the fallback behavior
-    /// the covenant's dev-flag gating relies on.
+    /// 2a) — `nil` (no capture, capture disabled/no-permission, or stale)
+    /// reproduces today's prompt exactly, byte for byte; this is the
+    /// fallback behavior degraded mode (Screen Recording permission denied,
+    /// or the user's own toggle off) relies on.
     ///
     /// Budgeting: field text is computed first, from the full
     /// `maxContextCharacters` budget, same as before Screen Memory existed —

@@ -17,22 +17,28 @@ safer, or simpler.
 - Inference is app-owned and bundled. Users must not install Ollama, llama.cpp,
   Python, or a separate model server.
 - Screen Memory covenant (supersedes the old blanket OCR/Screen Recording
-  ban): Tilde may capture on-device screen text under these non-negotiables —
+  ban; 2026-08-16 owner directive made Screen Memory required, not opt-in):
+  Tilde may capture on-device screen text under these non-negotiables —
   on-device only, no cloud, no network egress, ever, and before ship the
   release egress proof must be extended with a packaged capture/redaction
-  stimulus so the gate actually exercises Screen Memory's code paths (an
-  unchanged autocomplete-only proof does not exercise or prove anything about
-  a feature that is off by default); redaction runs before persistence and
-  fails closed, so a redactor error drops the capture rather than storing it
-  raw; capture is excluded whenever macOS Secure Event Input is active, or
-  any visible window — not just the frontmost one, since capture is
-  full-display — belongs to an app on the exclusion list (shared with
-  Personal History); no raw screen text may appear in logs, diagnostics, or
-  any report; and owner-visible controls are mandatory — a master toggle (off
-  by default), per-app exclusions, a visible storage meter, and one-click
-  delete-everything. Do not add cloud sync, accept sounds, or hidden
-  telemetry. Personal History and Screen Memory must both remain explicit,
-  local, and user-controlled.
+  stimulus so the gate actually exercises Screen Memory's code paths;
+  redaction runs before persistence and fails closed, so a redactor error
+  drops the capture rather than storing it raw; capture is excluded whenever
+  macOS Secure Event Input is active, or any visible window — not just the
+  frontmost one, since capture is full-display — belongs to an app on the
+  exclusion list (shared with Personal History); no raw screen text may
+  appear in logs, diagnostics, or any report; and owner-visible controls are
+  mandatory — a master toggle (ON by default for new installs; an existing
+  install's explicit choice persists), per-app exclusions, a visible storage
+  meter, and one-click delete-everything. Screen Recording permission is
+  required for Tilde to suggest at all: while the toggle is off or the OS
+  permission is missing, Tilde answers every completion request with
+  silence instead of a suggestion — a deliberate all-or-nothing product
+  decision, not a bug — and the menu bar carries a persistent, honest status
+  line with a one-click path to grant access or open System Settings, plus a
+  first-launch explanation dialog offering the same two actions. Do not add
+  cloud sync, accept sounds, or hidden telemetry. Personal History and
+  Screen Memory must both remain explicit, local, and user-controlled.
 - Show app, helper, and model status in the menu, and record input-method and
   runtime failures in privacy-safe diagnostics.
 

@@ -65,20 +65,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
 
-    // Screen Memory, Phase 1a: capture engine only, memory-only, off by
-    // default. `enabled`/`excludedApps` read TildeSettings live on every
-    // trigger — the covenant's exclusion list is the SAME one Personal
-    // History uses, per its "shared with Personal History" requirement.
-    // `devModeEnabled` gates the SAME dev flag that gates the menu controls
-    // (StatusMenuHost) — otherwise a persisted `ScreenMemoryEnabled=true`
-    // from an earlier dev session would keep capturing on later launches
-    // with no visible toggle or status line to turn it back off. Kept as a
-    // separate closure from `enabled` (rather than pre-ANDed into one bool,
-    // as before) so a skip can log/report WHICH of the two gates closed —
-    // "dev-flag-off" vs. "disabled" — instead of collapsing both into one
-    // indistinguishable reason.
+    // Screen Memory: capture engine, memory-only (nothing persisted yet —
+    // Phase 3 of docs/plans/screen-memory.md), on by default per the
+    // 2026-08-16 owner directive making Screen Memory a first-class,
+    // required-permission feature rather than an opt-in. `enabled` reads
+    // TildeSettings live on every trigger, so flipping the menu toggle off
+    // takes effect on the very next trigger with nothing to keep in sync.
+    // `excludedApps` is the SAME list Personal History uses, per the
+    // covenant's "shared with Personal History" requirement.
     private lazy var screenCaptureService = ScreenCaptureService(
-        devModeEnabled: { TildeSettings.screenMemoryDevModeEnabled() },
         enabled: { TildeSettings().screenMemoryEnabled },
         excludedApps: { TildeSettings().personalHistoryExcludedApps }
     )
@@ -100,8 +95,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalHistory: personalHistoryController,
         sceneProvider: Self.sceneProvider(for: screenCaptureService),
         // A bare activity pulse only — see GhostBrainServerHost's doc comment.
-        onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService)
+        onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService),
+        suggestionsGate: Self.suggestionsGate
     )
+
+    /// 2026-08-16 owner directive: Screen Recording permission is now
+    /// required for Tilde to suggest at all — see `GhostBrainServerHost`'s
+    /// `suggestionsGate` doc comment for why this returns `.silence`
+    /// upstream rather than anything more drastic. `ScreenMemoryStatus`
+    /// (Core, pure, tested) is the single source of truth this and
+    /// `StatusMenuHost`'s status line both defer to, so the two can never
+    /// disagree. Read fresh on every completion request (never cached), so
+    /// this is deliberately a plain function, not a stored property
+    /// capturing a snapshot at init time.
+    private nonisolated static func suggestionsGate() -> Bool {
+        ScreenMemoryStatus.evaluate(
+            enabled: TildeSettings().screenMemoryEnabled,
+            permissionGranted: ScreenRecordingPermission.isGranted()
+        ).allowsSuggestions
+    }
 
     /// `nonisolated` so the closure it returns has no ambiguous isolation of
     /// its own to infer — without this, a closure literal written inline
@@ -116,20 +128,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         { Task { await service.noteCompletionActivity() } }
     }
 
-    /// Screen Memory plan Phase 2 PR 2b: the SAME dev flag + settings gate
+    /// Screen Memory plan Phase 2 PR 2b: the SAME settings gate
     /// `screenCaptureService`'s own `enabled` closure uses (see its doc
     /// comment) — a request must never surface screen context capture
     /// itself would refuse to have started. `GhostBrainServerHost` and
     /// `LlamaCompletionEngine` know nothing about `TildeSettings`; this is
     /// the one place that decision is made for the whole live-suggestion
-    /// path.
+    /// path. When the toggle is off, or Screen Recording permission was
+    /// never granted (so `screenCaptureService` never produced a snapshot in
+    /// the first place), `freshScene` naturally returns `nil` and the prompt
+    /// falls back to plain autocomplete — degraded, not dead.
     private nonisolated static func sceneProvider(
         for service: ScreenCaptureService
     ) -> @Sendable (String?, String) async -> ScreenScene.Scene? {
         { appBundleIdentifier, fieldText in
-            guard TildeSettings.screenMemoryDevModeEnabled(), TildeSettings().screenMemoryEnabled else {
-                return nil
-            }
+            guard TildeSettings().screenMemoryEnabled else { return nil }
             return await service.freshScene(frontmostBundleID: appBundleIdentifier, fieldText: fieldText)
         }
     }
@@ -170,6 +183,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             launchMode == .production ? "launch" : "release-proof-launch",
             metadata: [:]
         )
+        if launchMode == .production {
+            // Runs last: everything the daily driver actually needs (socket,
+            // login item, keyboard install) is already underway, so a modal
+            // the user might sit on for a while never delays those. See the
+            // method doc for why this shows on every launch rather than only
+            // the very first one.
+            presentScreenPermissionPromptIfNeeded()
+        }
+    }
+
+    /// The discoverability fix for the bug that motivated requiring this
+    /// permission: Screen Memory used to be reachable only behind a dev flag
+    /// that a menu-bar (`LSUIElement`) app cannot pick up from a Terminal
+    /// shell's environment, so the owner had no UI to find at all and 44
+    /// consecutive captures logged as silently skipped. Now Screen Memory is
+    /// shipped, on by default, and required (2026-08-16 owner directive:
+    /// Tilde withholds suggestions entirely without this permission — see
+    /// `AppDelegate.suggestionsGate` and `GhostBrainServerHost`), so the
+    /// equivalent failure mode is a user who never sees a system permission
+    /// dialog because nothing ever asked, and experiences a silently
+    /// suggestion-less app with no idea why — this makes the ask itself
+    /// impossible to miss.
+    ///
+    /// Shown on every production launch while the toggle is on and the
+    /// permission is still missing, not merely once: the point of this
+    /// screen is maximum discoverability, and a one-time flag risks the same
+    /// invisibility bug in a new shape (dismissed once during a confused
+    /// first run, then never surfaced with equal prominence again). A user
+    /// who wants it to stop asking has a one-click, equally discoverable
+    /// off-ramp: turn the "Screen Memory (local only)" menu toggle off,
+    /// which also stops this prompt (see the `screenMemoryEnabled` guard
+    /// below) — that is a deliberate, plainly-labeled choice to run without
+    /// suggestions, not a way to keep suggestions while dodging the ask.
+    private func presentScreenPermissionPromptIfNeeded() {
+        guard TildeSettings().screenMemoryEnabled else { return }
+        guard !ScreenRecordingPermission.isGranted() else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Tilde needs Screen Recording access to suggest"
+        alert.informativeText = """
+        Tilde predicts from what's on your screen, using on-device OCR — not just what you type — so it can understand what you're replying to or referencing. That's the whole idea behind Tilde, so without this permission Tilde will not suggest anything at all.
+
+        Screen text never leaves this Mac. It is redacted for secrets before it is used, and you can turn Screen Memory off, exclude specific apps, or delete everything at any time from the Tilde menu.
+
+        You can grant access now, or open System Settings directly. Either way, this is not something Tilde did wrong — macOS just needs you to say yes once.
+        """
+        alert.addButton(withTitle: "Grant Screen Recording Access")
+        alert.addButton(withTitle: "Open System Settings…")
+        alert.addButton(withTitle: "Not Now")
+
+        let choice: String
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            ScreenRecordingPermission.request()
+            choice = "requested"
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
+            choice = "settings-opened"
+        default:
+            choice = "dismissed"
+        }
+        DiagnosticsLog.shared.record("screen-permission-prompt", metadata: ["status": choice])
+    }
+
+    /// One of the three required Screen Recording permission checkpoints
+    /// (2026-08-16 owner directive; the other two are launch and the menu's
+    /// own `toggleScreenMemory`/`menuWillOpen`): macOS has no push
+    /// notification for a Screen Recording TCC decision, so re-checking
+    /// when Tilde becomes the frontmost app is the practical proxy — the
+    /// common path back from granting access in System Settings is
+    /// switching back to Tilde (or, for this `LSUIElement` menu-bar app,
+    /// simply clicking its status item, which activates it before the menu
+    /// opens). This only refreshes the already-built menu's status text; it
+    /// never polls in a loop and never re-requests the system prompt on its
+    /// own, so a user who denied access is not re-nagged just for switching
+    /// apps — only `presentScreenPermissionPromptIfNeeded` (launch) and the
+    /// user's own menu click do that.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard launchMode == .production else { return }
+        statusMenuHost.refreshScreenMemoryStatus()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
