@@ -130,12 +130,30 @@ actor ScreenCaptureService {
                 blocks: keptBlocks
             )
         }
-        return ScreenScene.freshScene(
+        let scene = ScreenScene.freshScene(
             from: filteredSnapshot,
             now: now,
             frontmostBundleID: frontmostBundleID,
             fieldText: fieldText
         )
+        // Count-only diagnostics (2026-08-16 dogfood fix): mode plus two
+        // integers, never the OCR'd text itself, so a classification going
+        // wrong live is never opaque again — this was the exact gap that
+        // made tonight's bug take a live dogfood session plus a manual
+        // "hand the model the block directly" test to even confirm.
+        // `DiagnosticsMetadataRedactor`'s allowlist enforces the fixed
+        // vocabulary/integers-only shape at the log-writing layer, but the
+        // event is only fired here, after a real classification ran (a
+        // `nil` scene -- no snapshot yet, or too stale -- logs nothing,
+        // matching every other "no signal" path in this file).
+        if let scene {
+            diagnostics("scene-classified", [
+                "mode": scene.mode.rawValue,
+                "turns": String(scene.conversationTurns.count),
+                "refs": String(scene.referenceSnippets.count),
+            ])
+        }
+        return scene
     }
 
     /// Test seam: injects a snapshot directly, bypassing the entire
