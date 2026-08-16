@@ -45,6 +45,19 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("status", "dismissed") == "status=dismissed")
     }
 
+    @Test("Scene classification diagnostics survive as fixed vocabulary and integers, never OCR'd text")
+    func keepsSceneClassifiedFields() {
+        #expect(field("mode", "replying") == "mode=replying")
+        #expect(field("mode", "referencing") == "mode=referencing")
+        #expect(field("mode", "composing") == "mode=composing")
+        #expect(field("turns", "3") == "turns=3")
+        #expect(field("turns", "0") == "turns=0")
+        #expect(field("refs", "1") == "refs=1")
+        // Nothing free-text ever gets through the "mode"/"turns"/"refs" keys.
+        #expect(field("mode", "hey are you around") == "mode=String(18 chars)")
+        #expect(field("turns", "3 (Slack)") == "turns=String(9 chars)")
+    }
+
     @Test("Unknown and text-like fields expose shape only")
     func redactsUnknownFields() {
         #expect(field("selectedText", "private draft") == "metadata=String(13 chars)")

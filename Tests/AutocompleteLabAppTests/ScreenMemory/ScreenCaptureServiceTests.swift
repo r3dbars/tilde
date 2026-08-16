@@ -168,6 +168,76 @@ struct ScreenCaptureServiceTests {
         #expect(stale == nil)
     }
 
+    /// Fix item 4 of "Classify scenes by geometry, not host app": a
+    /// classification must never be opaque again. Count-only -- mode plus
+    /// two integers, never any of the OCR'd text.
+    @Test("freshScene logs a count-only scene-classified diagnostic after a real classification")
+    func freshSceneLogsCountOnlyDiagnostic() async {
+        let (sink, events) = recordingDiagnostics()
+        let service = ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: sink
+        )
+        let referenceMoment = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = ScreenSnapshot(
+            capturedAt: referenceMoment,
+            displayID: 1,
+            blocks: [
+                ScreenSnapshot.TextBlock(
+                    text: "hey are you around today",
+                    boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+                ScreenSnapshot.TextBlock(
+                    text: "yeah free after 3pm works",
+                    boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+            ]
+        )
+        await service.setLatestSnapshotForTesting(snapshot)
+
+        let scene = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(5)
+        )
+        #expect(scene?.mode == .replying)
+
+        let logged = events.values.first { $0.0 == "scene-classified" }
+        #expect(logged?.1["mode"] == "replying")
+        #expect(logged?.1["turns"] == "2")
+        #expect(logged?.1["refs"] == "0")
+        // Never the OCR'd text itself.
+        #expect(logged?.1.values.contains { $0.contains("hey are you around") } != true)
+    }
+
+    @Test("freshScene logs nothing when there is no snapshot to classify")
+    func freshSceneLogsNothingWithoutASnapshot() async {
+        let (sink, events) = recordingDiagnostics()
+        let service = ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: sink
+        )
+        let scene = await service.freshScene(frontmostBundleID: "com.apple.TextEdit", fieldText: "hello")
+        #expect(scene == nil)
+        #expect(!events.values.contains { $0.0 == "scene-classified" })
+    }
+
     @Test("freshScene with no captured snapshot yet returns nil — today's behavior")
     func freshSceneWithNoSnapshotReturnsNil() async {
         let service = makeService()

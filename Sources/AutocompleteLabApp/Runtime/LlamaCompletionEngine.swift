@@ -36,7 +36,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         scene: ScreenScene.Scene?
     ) async throws -> CompletionSuggestion? {
         let startedAt = Date()
-        let register = ContinuationRegister.from(bundleIdentifier: appBundleIdentifier)
+        let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
             register: register,

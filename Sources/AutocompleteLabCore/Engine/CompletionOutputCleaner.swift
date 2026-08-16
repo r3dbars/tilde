@@ -126,7 +126,21 @@ public struct CompletionOutputCleaner: Sendable {
 
     private func trimTypedPrefix(_ suggestion: String, after context: String) -> String {
         if context.last?.isWhitespace == true {
-            return String(suggestion.drop(while: \.isWhitespace))
+            let dropped = String(suggestion.drop(while: \.isWhitespace))
+            // The word-boundary-only echo guard: when the cursor sits right
+            // after whitespace, the last typed word is complete, so unlike
+            // the branch below there is no partial-word case to consider —
+            // only "does the suggestion open by re-typing the tail of what's
+            // already on screen." Screen-context prompts (Conversation/
+            // Reference blocks ahead of `Text:`) make this common: a model
+            // echoing its own just-read context back is exactly the
+            // observed live bug (typed "Sure, I will " -> ghost "I will try
+            // to get back to you", a 2-word echo `replaysContext` never sees
+            // because that check only fires on 3+-word overlaps). Any
+            // leading run of fully-repeated words — down to a single word —
+            // gets stripped here, before `replaysContext`'s coarser check
+            // ever runs.
+            return stripLeadingWordEcho(dropped, typedContext: context)
         }
         // A punctuation-only trailing token has no fragment. Treating its
         // normalized empty string as a prefix used to drop the first character.
@@ -158,6 +172,28 @@ public struct CompletionOutputCleaner: Sendable {
                 limitedBy: range.upperBound
             ) else { continue }
             return String(suggestion[start...])
+        }
+        return suggestion
+    }
+
+    /// Strips a leading run of whole words in `suggestion` that exactly
+    /// repeats the tail of `typedContext`, longest match first (so "I will"
+    /// trims as one unit rather than leaving a dangling "will"). Only exact,
+    /// case/punctuation-normalized whole-word matches count — this runs only
+    /// when `typedContext` ends in whitespace, so there is no partial last
+    /// word to reason about the way `trimTypedPrefix`'s other branch does.
+    private func stripLeadingWordEcho(_ suggestion: String, typedContext: String) -> String {
+        let contextWords = normalizedWords(in: typedContext)
+        let suggestionRanges = wordRanges(in: suggestion)
+        let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
+        guard !contextWords.isEmpty, !suggestionWords.isEmpty else { return suggestion }
+
+        for count in stride(from: min(contextWords.count, suggestionWords.count), through: 1, by: -1) {
+            let typed = Array(contextWords.suffix(count))
+            let offered = Array(suggestionWords.prefix(count))
+            guard typed == offered else { continue }
+            guard count < suggestionRanges.count else { return "" }
+            return String(suggestion[suggestionRanges[count].lowerBound...])
         }
         return suggestion
     }

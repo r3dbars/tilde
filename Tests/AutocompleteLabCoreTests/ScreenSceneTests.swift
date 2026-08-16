@@ -89,14 +89,78 @@ struct ScreenSceneTests {
         #expect(scene.conversationTurns.isEmpty)
     }
 
-    @Test("Message-list geometry in a non-chat-register app never triggers replying")
-    func nonChatAppNeverReplies() {
+    @Test("Message-list geometry triggers replying in ANY frontmost app, not just a chat-register one")
+    func geometryTriggersReplyingRegardlessOfHostApp() {
+        // Fix for the live dogfood bug: a chat-shaped conversation rendered
+        // in a browser (or any other non-chat-register app) must still
+        // classify as replying -- the chat-bundle list is a confidence
+        // signal for the completion register downstream, never a gate on
+        // whether the scene itself is "replying." `textEdit` here stands in
+        // for any host app, including a browser rendering a demo chat page.
         let blocks = [
-            block("hey are you around", x: 0.05, y: 0.30, window: textEdit),
-            block("yeah free after 3", x: 0.55, y: 0.60, window: textEdit),
+            block("hey are you around today", x: 0.05, y: 0.30, window: textEdit), // left -> other, oldest
+            block("yeah free after 3pm works", x: 0.55, y: 0.60, window: textEdit), // right -> self, newest
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: textEdit, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 2)
+        #expect(scene.conversationTurns[0].speaker == .other)
+        #expect(scene.conversationTurns[1].speaker == .selfSpeaker)
+    }
+
+    @Test("Geometry triggers replying for a chat page rendered in a browser bundle ID")
+    func browserRenderedChatPageIsReplying() {
+        // The exact live-bug shape: a chat conversation rendered inside
+        // Chrome, which is neither in `ContinuationRegister`'s chat list nor
+        // any other special-cased bundle -- geometry alone must be enough.
+        let chrome = "com.google.Chrome"
+        let blocks = [
+            block("Sure, I can bring a second car", x: 0.05, y: 0.35, window: chrome),
+            block("thanks that helps a lot", x: 0.55, y: 0.65, window: chrome),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: chrome, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 2)
+    }
+
+    @Test("Geometry triggers replying for a message stack rendered in an email client's own thread view")
+    func emailThreadMessageStackIsReplying() {
+        // An email thread with short, bubble-width, back-and-forth replies
+        // (not a full paragraph of prose) is message-list-shaped even
+        // though the app is an email client, not a chat app -- geometry
+        // decides, not the host app's register.
+        let mail = "com.apple.mail"
+        let blocks = [
+            block("sounds good, see you then", x: 0.08, y: 0.25, window: mail),
+            block("great, I'll bring the slides", x: 0.50, y: 0.55, window: mail),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: mail, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 2)
+    }
+
+    @Test("A document pane next to a compose split does not read as a message list")
+    func documentWithComposeSplitIsNotAMessageList() {
+        // A document/reading-pane layout: one or two full-bleed paragraph
+        // blocks (not bubble-width) above a compose field. This must not
+        // false-positive into `.replying` just because there happen to be
+        // two blocks in two different vertical bands -- the plan's
+        // full-width exclusion (`isBubbleCandidate`) is exactly what keeps
+        // a document pane from looking like a chat.
+        let notesApp = "com.apple.Notes"
+        let blocks = [
+            block(
+                "Q3 planning notes: the launch timeline moved to the 14th per the latest doc revision",
+                x: 0.02, y: 0.10, width: 0.95, window: notesApp
+            ),
+            block(
+                "Action items: confirm budget, follow up with design, schedule the review",
+                x: 0.02, y: 0.45, width: 0.95, window: notesApp
+            ),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: notesApp, fieldText: "")
         #expect(scene.mode == .composing)
+        #expect(scene.conversationTurns.isEmpty)
     }
 
     // MARK: - Replying: mode, ordering, speaker attribution
