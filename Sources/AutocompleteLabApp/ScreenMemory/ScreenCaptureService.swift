@@ -126,11 +126,33 @@ actor ScreenCaptureService {
             now: moment
         )
 
+        // Reserve the cadence slot BEFORE the first suspension point below.
+        // Actor reentrancy means another trigger can run its own synchronous
+        // prefix while this call is suspended on `await shareableContent()`;
+        // without reserving here, both calls would read the same stale
+        // `lastCaptureAt`, both pass the 1-per-5s cadence check, and both go
+        // on to capture. Recording `moment` now closes that window; if this
+        // attempt turns out not to actually capture (enumeration failure,
+        // excluded window, etc.), the reservation is rolled back below.
+        let priorCaptureAt = lastCaptureAt
+        if let priorCaptureAt {
+            let sinceLastCapture = moment.timeIntervalSince(priorCaptureAt)
+            if sinceLastCapture < CaptureTriggerPolicy.cadenceCapSeconds {
+                let reason = CaptureTriggerPolicy.BlockReason.cadence(
+                    secondsRemaining: CaptureTriggerPolicy.cadenceCapSeconds - sinceLastCapture
+                )
+                record(.skip(reason))
+                return .skipped(reason)
+            }
+        }
+        lastCaptureAt = moment
+
         // Visible-window enumeration is required to honor "exclude if ANY
         // visible window belongs to an excluded app" — not just frontmost.
         // If we cannot enumerate, we cannot prove the exclusion list is
         // satisfied, so this fails closed rather than capturing blind.
         guard let content = try? await shareableContent() else {
+            lastCaptureAt = priorCaptureAt
             diagnostics("screen-capture-skipped", ["reason": "enumeration-failed"])
             return .captureFailed
         }
@@ -144,19 +166,24 @@ actor ScreenCaptureService {
             completionSessionActive: sessionActive,
             visibleWindowOwnerBundleIdentifiers: visibleOwners,
             excludedApps: excludedApps(),
-            lastCaptureAt: lastCaptureAt,
+            // Cadence was already enforced above (and its slot reserved);
+            // passing `nil` here avoids re-checking it against the
+            // now-reserved `lastCaptureAt`, which would always read as "too
+            // soon" since it was just set to `moment`.
+            lastCaptureAt: nil,
             now: moment
         )
         guard case let .skip(reason) = decision else {
             // decision is exhaustively .capture or .skip — reaching here means .capture.
             return await performCapture(content: content, moment: moment)
         }
+        lastCaptureAt = priorCaptureAt
         record(.skip(reason))
         return .skipped(reason)
     }
 
     private func performCapture(content: SCShareableContent, moment: Date) async -> CaptureOutcome {
-        guard let display = content.displays.first else {
+        guard let display = Self.activeDisplay(in: content) else {
             diagnostics("screen-capture-skipped", ["reason": "no-display"])
             return .captureFailed
         }
@@ -227,6 +254,27 @@ actor ScreenCaptureService {
         case .excludedWindow: return "excluded-window"
         case .cadence: return "cadence"
         }
+    }
+
+    /// Picks the display holding the focused window, not just "whichever
+    /// display SCShareableContent listed first" — on a multi-monitor setup
+    /// that's frequently the wrong screen, so capture would OCR an idle
+    /// display and miss the content the user is actually looking at. The
+    /// frontmost window (lowest `windowLayer`, same front-to-back proxy used
+    /// elsewhere in this type) locates the active display by which display's
+    /// frame contains that window's center point. Falls back to the first
+    /// display if there are no windows to locate, or none of their frames
+    /// land inside a known display (e.g. a stale/off-screen window frame).
+    private static func activeDisplay(in content: SCShareableContent) -> SCDisplay? {
+        guard content.displays.count > 1 else { return content.displays.first }
+        let frontToBack = content.windows.sorted { $0.windowLayer < $1.windowLayer }
+        for window in frontToBack {
+            let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+            if let match = content.displays.first(where: { $0.frame.contains(center) }) {
+                return match
+            }
+        }
+        return content.displays.first
     }
 
     /// `SCWindow.frame` is in global desktop points; `display.frame` is that

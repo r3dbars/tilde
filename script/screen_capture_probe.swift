@@ -159,11 +159,17 @@ func attribute(_ box: CGRect) -> WindowInfo? {
     }
 }
 
+// No raw screen text (window titles included — they are user-visible text
+// too, e.g. document names, email subjects, browser tab titles) ever hits
+// stdout here, matching the covenant's "no raw screen text in logs,
+// diagnostics, or any report." Only counts, timings, and bounding boxes are
+// printed — enough to judge OCR/attribution quality without printing what
+// was actually on screen.
 print("Windows (front-to-back, by windowLayer):")
 for window in windows.prefix(15) {
     let owner = window.bundleIdentifier ?? "(no owner)"
-    let title = window.title ?? "(no title)"
-    print("  \(owner) — \(title) — frame \(window.frame)")
+    let hasTitle = (window.title?.isEmpty == false) ? "titled" : "untitled"
+    print("  \(owner) — \(hasTitle) — frame \(window.frame)")
 }
 if windows.count > 15 { print("  … and \(windows.count - 15) more") }
 print("")
@@ -171,14 +177,12 @@ print("")
 print("OCR blocks with window attribution:")
 for (text, box) in blocks.prefix(40) {
     let owner = attribute(box)?.bundleIdentifier ?? "(unattributed)"
-    let snippet = text.count > 60 ? String(text.prefix(60)) + "…" : text
-    print("  [\(owner)] \(snippet)")
+    print("  [\(owner)] \(text.count) chars — box \(box)")
 }
 if blocks.count > 40 { print("  … and \(blocks.count - 40) more blocks") }
 
 print("")
-print("Reminder: this prints your own screen's text to your own terminal only —")
-print("nothing here is written to a file, logged, or sent anywhere. Do not paste")
-print("this output somewhere else without checking what it captured first.")
+print("Reminder: this probe never prints screen text (window titles or OCR content)")
+print("to the terminal or anywhere else — only counts, timings, and bounding boxes.")
 print("If OCR quality looks poor, check display scaling and font contrast first —")
 print("PR 1b's job is measuring and tuning capture resolution/cadence, not this probe.")
