@@ -143,8 +143,16 @@ there.
 **The privacy boundary is the device, not the capture.** Because nothing
 Screen Memory sees ever leaves the Mac, Tilde is designed to capture and
 retain more than a cloud product safely could. On-device-only is
-non-negotiable and is proven the same way autocomplete is: the release
-egress proofs stay blocking and unchanged.
+non-negotiable, but it is not proven the same way autocomplete is. Screen
+Memory ships off by default and fires only on focus changes and typing
+pauses, so today's unchanged autocomplete egress lane
+(`script/package_app.sh`) never runs a single capture, OCR, or redaction code
+path — a network call added there would pass that gate untested. Before
+Screen Memory ships, the release egress proof must be extended with a
+packaged capture-and-redaction stimulus (enable the toggle, trigger a
+synthetic capture and a redaction pass, observe open sockets throughout) in
+addition to the existing autocomplete stimulus. Screen Memory's on-device-only
+claim is not proven until that stimulus exists and is blocking.
 
 **What is captured.** With Screen Memory enabled, Tilde takes a full-display
 screenshot, runs on-device OCR (Vision framework) over it, and keeps only the
@@ -159,12 +167,15 @@ never be captured, exclude the app that shows it.
 focused-window change, and on a typing pause of two seconds or more while a
 completion session is active, with a hard cap of one capture per five
 seconds. Tilde captures nothing while the master toggle is off (the default),
-while the screen is locked, while macOS Secure Event Input is active, or
-while the frontmost app is on the exclusion list shared with Personal
-History. Tilde makes a best-effort attempt to skip known private-browsing
-windows; browsers vary in whether this is reliably detectable, so private
-windows are a best-effort exclusion, not a guarantee — use app exclusion for
-certainty.
+while the screen is locked, or while macOS Secure Event Input is active.
+Because capture is full-display, exclusion cannot check only the frontmost
+app: Tilde skips the capture entirely if *any* visible window — frontmost or
+behind it — belongs to an app on the exclusion list shared with Personal
+History, so an excluded app (a password manager, a chat client) stays
+protected even when some other, non-excluded app is focused on top of it.
+Tilde makes a best-effort attempt to skip known private-browsing windows;
+browsers vary in whether this is reliably detectable, so private windows are
+a best-effort exclusion, not a guarantee — use app exclusion for certainty.
 
 **What never persists.** Redaction runs before any storage and fails closed:
 a structured-secret rules pass (card numbers, IBANs, SSNs, API-key shapes,

@@ -18,16 +18,21 @@ safer, or simpler.
   Python, or a separate model server.
 - Screen Memory covenant (supersedes the old blanket OCR/Screen Recording
   ban): Tilde may capture on-device screen text under these non-negotiables —
-  on-device only, no cloud, no network egress, ever, and release egress
-  proofs stay blocking and unchanged; redaction runs before persistence and
+  on-device only, no cloud, no network egress, ever, and before ship the
+  release egress proof must be extended with a packaged capture/redaction
+  stimulus so the gate actually exercises Screen Memory's code paths (an
+  unchanged autocomplete-only proof does not exercise or prove anything about
+  a feature that is off by default); redaction runs before persistence and
   fails closed, so a redactor error drops the capture rather than storing it
-  raw; capture is excluded whenever macOS Secure Event Input is active or the
-  frontmost app is on the exclusion list (shared with Personal History); no
-  raw screen text may appear in logs, diagnostics, or any report; and owner-
-  visible controls are mandatory — a master toggle (off by default), per-app
-  exclusions, a visible storage meter, and one-click delete-everything. Do
-  not add cloud sync, accept sounds, or hidden telemetry. Personal History
-  and Screen Memory must both remain explicit, local, and user-controlled.
+  raw; capture is excluded whenever macOS Secure Event Input is active, or
+  any visible window — not just the frontmost one, since capture is
+  full-display — belongs to an app on the exclusion list (shared with
+  Personal History); no raw screen text may appear in logs, diagnostics, or
+  any report; and owner-visible controls are mandatory — a master toggle (off
+  by default), per-app exclusions, a visible storage meter, and one-click
+  delete-everything. Do not add cloud sync, accept sounds, or hidden
+  telemetry. Personal History and Screen Memory must both remain explicit,
+  local, and user-controlled.
 - Show app, helper, and model status in the menu, and record input-method and
   runtime failures in privacy-safe diagnostics.
 

@@ -15,9 +15,11 @@ Memory (full on-device OCR + redaction + persistence, gated behind a new
 covenant in `AGENTS.md` and `PRIVACY.md`) is now planned rather than shelved.
 Full plan, phased PR series, and ship bars (≥ +2 EM@1 points on the golden
 eval context arm, replicating the July precedent) live in
-`docs/plans/screen-memory.md`. Governance (Phase 0) merges before any capture
-code (Phase 1+) begins; update this entry with real numbers once Phase 4's
-context-arm runs land.
+`docs/plans/screen-memory.md` on PR #347 (not yet merged as of this entry —
+that plan lands separately from this Phase 0 governance PR, so the path does
+not resolve on `main` until #347 merges). Governance (Phase 0, this PR) merges
+before any capture code (Phase 1+) begins; update this entry with real numbers
+once Phase 4's context-arm runs land.
 
 ## 2026-08-15 — Gemma 4 E2B base ships as the bundled model
 

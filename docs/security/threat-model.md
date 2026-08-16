@@ -3,7 +3,8 @@
 Status: current for the simplified IMKit + bundled llama architecture
 (2026-08-12), extended (2026-08-16) with the Screen Memory covenant. Screen
 Memory itself is planned, not shipped; its entries below describe the model
-this document holds it to once built, per `docs/plans/screen-memory.md`.
+this document holds it to once built, per `docs/plans/screen-memory.md` on
+PR #347 (not yet merged — lands separately from this governance PR).
 
 ## System boundary
 
@@ -159,7 +160,8 @@ identity are out of scope.
 
 Not yet implemented; this section states the controls and residual risks this
 document will hold the feature to once it ships, per
-`docs/plans/screen-memory.md`. It supersedes the prior blanket OCR/Screen
+`docs/plans/screen-memory.md` on PR #347 (not yet merged as of this section —
+see the Status line above). It supersedes the prior blanket OCR/Screen
 Recording ban recorded in `AGENTS.md`.
 
 Controls, once shipped:
@@ -169,9 +171,19 @@ Controls, once shipped:
   before redacted text is written; a redactor error drops the capture
   instead of storing it raw.
 - Capture is suspended unconditionally under the same conditions Personal
-  History already enforces — master toggle off (default), macOS Secure Event
-  Input active, or frontmost app on the shared exclusion list — plus a
-  locked screen and a hard capture-rate cap.
+  History already enforces — master toggle off (default) or macOS Secure
+  Event Input active — plus a locked screen and a hard capture-rate cap.
+  Because capture is full-display, the shared exclusion list check cannot be
+  frontmost-only: every visible window's owning app is checked, and capture
+  is suspended if any of them is excluded, so an excluded app stays protected
+  even when a different, non-excluded app is focused on top of it.
+- The on-device-only claim for Screen Memory is not proven by the existing
+  autocomplete egress lane, which is unchanged and never exercises capture,
+  OCR, or redaction code paths for a feature that is off by default. Before
+  ship, `script/package_app.sh`'s egress lane must add a packaged
+  capture-and-redaction stimulus and observe sockets through it; that
+  stimulus, not the unchanged autocomplete-only proof, is what closes this
+  gap.
 - Screen-derived text is stored in the same encrypted, owner-only Personal
   History file, under the same Keychain key, subject to its own rolling
   retention budget (256 MB default, oldest-first pruning), and is removed by
