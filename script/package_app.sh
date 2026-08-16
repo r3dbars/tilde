@@ -82,6 +82,9 @@ while (($#)); do
   shift
 done
 
+[[ "$VERSION" != *-dev* ]] \
+  || { echo "release version must not carry the -dev suffix; that labels script/package_dev.sh builds" >&2; exit 2; }
+
 normalize_sha256() {
   local label="$1"
   local value
