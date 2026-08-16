@@ -14,6 +14,7 @@ struct TildeSettings {
         case personalHistoryIdentifier = "PersonalHistoryIdentifier"
         case personalHistoryConsentIdentifier = "PersonalHistoryConsentIdentifier"
         case personalNextWordExperimentIdentifier = "PersonalNextWordExperimentIdentifier"
+        case screenMemoryEnabled = "ScreenMemoryEnabled"
     }
 
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
@@ -81,6 +82,28 @@ struct TildeSettings {
         nonmutating set {
             keyboard.set(newValue, forKey: KeyboardKey.personalNextWordExperimentIdentifier.rawValue)
         }
+    }
+
+    /// The covenant's master toggle: off by default, unlike every other flag
+    /// in this file (`flag()` defaults missing keys to true — Screen Memory
+    /// must not). Exclusions are deliberately NOT a separate key: the
+    /// covenant requires them shared with Personal History, so callers read
+    /// `personalHistoryExcludedApps` for both features.
+    var screenMemoryEnabled: Bool {
+        get { keyboard.bool(forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
+    }
+
+    /// Screen Memory's full opt-in ships in Phase 5; until then its menu
+    /// controls (StatusMenuHost) AND the capture engine itself (AppDelegate's
+    /// `screenCaptureService`) are gated behind this SAME flag. Without that
+    /// pairing, a persisted `ScreenMemoryEnabled=true` from an earlier dev
+    /// session would keep capturing on every later production launch even
+    /// though the toggle/status menu items that could turn it back off are
+    /// hidden — capture running with no visible status or off switch, which
+    /// the covenant's owner-visible-controls requirement forbids.
+    static var screenMemoryDevModeEnabled: Bool {
+        ProcessInfo.processInfo.environment["TILDE_SCREEN_MEMORY_DEV"] == "1"
     }
 
     var pausedUntil: Date? {

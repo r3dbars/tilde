@@ -13,16 +13,27 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private let runtime: LlamaServerProcessHost
     private let engine: LlamaCompletionEngine
     private let personalHistory: any PersonalHistoryIngesting
+    /// Fired whenever a completion request reaches the socket — a bare
+    /// timestamp pulse, never the request's content. Screen Memory's
+    /// typing-pause trigger uses this as its "is a completion session
+    /// active" signal; this file otherwise knows nothing about Screen
+    /// Memory and never sees a `ScreenSnapshot`.
+    private let onCompletionActivity: (@Sendable () -> Void)?
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
     private var source: DispatchSourceRead?
     private var ownsSocket = false
 
-    init(runtime: LlamaServerProcessHost, personalHistory: any PersonalHistoryIngesting) {
+    init(
+        runtime: LlamaServerProcessHost,
+        personalHistory: any PersonalHistoryIngesting,
+        onCompletionActivity: (@Sendable () -> Void)? = nil
+    ) {
         self.runtime = runtime
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
         self.personalHistory = personalHistory
+        self.onCompletionActivity = onCompletionActivity
     }
 
     func start() -> Bool {
@@ -143,6 +154,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 return
             }
             guard case let .completion(completionRequest) = request else { return }
+            self.onCompletionActivity?()
             guard await self.runtime.isReadyForCompletion() else {
                 _ = Self.write(.unavailable, to: connection)
                 return
