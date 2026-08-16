@@ -85,7 +85,7 @@ final class StatusMenuHost: NSObject {
             #selector(deletePersonalHistory(_:))
         )
 
-        if Self.screenMemoryDevFlagEnabled {
+        if TildeSettings.screenMemoryDevModeEnabled {
             menu.addItem(.separator())
             screenMemoryItem = addAction(
                 to: menu,
@@ -275,11 +275,6 @@ final class StatusMenuHost: NSObject {
         NSApp.terminate(nil)
     }
 
-    /// Screen Memory's full opt-in toggle ships in Phase 5; until then this
-    /// menu section exists only for review and manual TCC-flow verification.
-    private static var screenMemoryDevFlagEnabled: Bool {
-        ProcessInfo.processInfo.environment["TILDE_SCREEN_MEMORY_DEV"] == "1"
-    }
 }
 
 extension StatusMenuHost: NSMenuDelegate {
