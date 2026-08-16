@@ -91,13 +91,32 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         }
     }
 
+    /// Screen Memory plan Phase 2 PR 2b: the most a screen-context block may
+    /// spend of the shared budget, regardless of how much the field text
+    /// left over. Keeps a near-empty field from handing the whole 3,000-char
+    /// budget to OCR'd screen text.
+    public static let maxSceneContextCharacters = 1_000
+
     /// `register` selects the scaffold voice from the host app's identity.
+    /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
+    /// 2a) — `nil` (no capture, capture disabled, or stale) reproduces
+    /// today's prompt exactly, byte for byte; this is the fallback behavior
+    /// the covenant's dev-flag gating relies on.
+    ///
+    /// Budgeting: field text is computed first, from the full
+    /// `maxContextCharacters` budget, same as before Screen Memory existed —
+    /// it always gets everything it needs (up to that budget) and is never
+    /// shrunk to make room for screen context. The scene context block only
+    /// spends what's left of that same budget afterward, capped at
+    /// `maxSceneContextCharacters` — "field text always wins ties."
     public init(
         textBeforeCursor: String,
         register: ContinuationRegister = .prose,
+        scene: ScreenScene.Scene? = nil,
         maxContextCharacters: Int = 3000
     ) {
-        let tail = String(textBeforeCursor.suffix(max(80, maxContextCharacters)))
+        let totalBudget = max(80, maxContextCharacters)
+        let tail = String(textBeforeCursor.suffix(totalBudget))
         let trimmed = String(
             tail.reversed().drop(while: { $0.isWhitespace }).reversed()
         )
@@ -108,7 +127,68 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             return
         }
 
-        prompt = Self.scaffold(for: register) + "Text: " + trimmed + "\nContinuation:"
+        let remainingForScene = max(0, totalBudget - trimmed.count)
+        let sceneBudget = min(Self.maxSceneContextCharacters, remainingForScene)
+        let sceneBlock = Self.sceneContextBlock(for: scene, budget: sceneBudget)
+
+        prompt = Self.scaffold(for: register) + sceneBlock + "Text: " + trimmed + "\nContinuation:"
+    }
+
+    /// Renders the classified scene into the prompt shape the plan
+    /// specifies per mode, then truncates to whatever budget is left —
+    /// truncation only ever bites when the field text has already claimed
+    /// most of `maxContextCharacters`, since `ScreenScene` itself already
+    /// caps turns/snippets well under `maxSceneContextCharacters`.
+    ///
+    /// OCR'd screen text is untrusted the same way pasted or typed text is:
+    /// it can contain a card number, an API key, a JWT sitting in a log
+    /// pane, etc. `SecretRules.scrub(..., config: .forPromptContext)` runs
+    /// on every turn and snippet before it is interpolated into the prompt
+    /// — structured secrets are replaced with a `⟨redacted:type⟩` token
+    /// (never persisted, never sent to the model) while ordinary
+    /// conversational text passes through unchanged.
+    private static func sceneContextBlock(for scene: ScreenScene.Scene?, budget: Int) -> String {
+        guard let scene, budget > 0 else { return "" }
+        switch scene.mode {
+        case .replying:
+            guard !scene.conversationTurns.isEmpty else { return "" }
+            let lines = scene.conversationTurns.map {
+                "\($0.speaker == .selfSpeaker ? "You" : "Them"): \(scrubbedForPrompt($0.text))"
+            }
+            return truncatedBlock(header: "Conversation:\n", body: lines.joined(separator: "\n"), budget: budget)
+        case .referencing:
+            guard let snippet = scene.referenceSnippets.first else { return "" }
+            return truncatedBlock(header: "Reference:\n", body: scrubbedForPrompt(snippet), budget: budget)
+        case .composing:
+            return ""
+        }
+    }
+
+    private static func scrubbedForPrompt(_ text: String) -> String {
+        SecretRules.scrub(text, config: .forPromptContext).clean
+    }
+
+    /// The blank line that always separates a scene block from the `Text:`
+    /// line that follows it in the assembled prompt.
+    private static let sceneBlockTrailer = "\n\n"
+
+    /// Renders `header + body + sceneBlockTrailer`, truncating only `body`
+    /// when the combination doesn't fit `budget` — the header and trailing
+    /// blank line are never chopped. A truncated header, or a block missing
+    /// its trailing separator, can silently fuse into whatever text follows
+    /// it in the prompt (a chopped `Conversation:` header, or a dangling
+    /// scene fragment running straight into the `Text:` line) — both worse
+    /// than simply omitting screen context for this one request. If there
+    /// isn't even room for the header plus the trailer, the whole block is
+    /// dropped.
+    private static func truncatedBlock(header: String, body: String, budget: Int) -> String {
+        let full = header + body + sceneBlockTrailer
+        guard full.count > budget else { return full }
+        let reserved = header.count + sceneBlockTrailer.count
+        guard reserved < budget else { return "" }
+        let truncatedBody = String(body.prefix(budget - reserved))
+        guard !truncatedBody.isEmpty else { return "" }
+        return header + truncatedBody + sceneBlockTrailer
     }
 
     /// Words a suggestion should never END on — a trailing article/preposition/

@@ -1,3 +1,4 @@
+import AutocompleteLabCore
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
@@ -110,6 +111,126 @@ struct ScreenCaptureServiceTests {
         _ = await service.noteWindowChanged()
         #expect(await service.latestSnapshot == nil)
     }
+
+    // MARK: - freshScene (Screen Memory plan Phase 2 PR 2b)
+
+    private func makeService() -> ScreenCaptureService {
+        ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+    }
+
+    @Test("freshScene reads whatever the last successful capture stored, without triggering a new one")
+    func freshSceneReadsLatestSnapshotOnly() async {
+        let service = makeService()
+        let referenceMoment = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = ScreenSnapshot(
+            capturedAt: referenceMoment,
+            displayID: 1,
+            blocks: [
+                ScreenSnapshot.TextBlock(
+                    text: "hey are you around today",
+                    boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+                ScreenSnapshot.TextBlock(
+                    text: "yeah free after 3pm works",
+                    boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+            ]
+        )
+        await service.setLatestSnapshotForTesting(snapshot)
+
+        let fresh = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(5)
+        )
+        #expect(fresh?.mode == .replying)
+
+        let stale = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(25)
+        )
+        #expect(stale == nil)
+    }
+
+    @Test("freshScene with no captured snapshot yet returns nil — today's behavior")
+    func freshSceneWithNoSnapshotReturnsNil() async {
+        let service = makeService()
+        let fresh = await service.freshScene(frontmostBundleID: "com.apple.TextEdit", fieldText: "hello")
+        #expect(fresh == nil)
+    }
+
+    /// Covenant regression: a capture taken BEFORE an app was added to the
+    /// exclusion list must not keep serving that app's text for the rest of
+    /// the 20s staleness window once the exclusion list changes.
+    /// `excludedApps` is a live provider, so `freshScene` must consult its
+    /// CURRENT value on every read, not whatever was true at capture time.
+    @Test("freshScene drops blocks from an app that became excluded after the snapshot was captured")
+    func freshSceneFiltersNewlyExcludedAppBlocks() async {
+        let excluded = LockedSet<String>([])
+        let service = ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { excluded.value },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+        let referenceMoment = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = ScreenSnapshot(
+            capturedAt: referenceMoment,
+            displayID: 1,
+            blocks: [
+                ScreenSnapshot.TextBlock(
+                    text: "hey are you around today",
+                    boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+                ScreenSnapshot.TextBlock(
+                    text: "yeah free after 3pm works",
+                    boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                    windowOwnerBundleIdentifier: "com.tinyspeck.slackmacgap",
+                    windowFrame: NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+                ),
+            ]
+        )
+        await service.setLatestSnapshotForTesting(snapshot)
+
+        // Not yet excluded: the snapshot classifies normally.
+        let beforeExclusion = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(2)
+        )
+        #expect(beforeExclusion?.mode == .replying)
+
+        // The user excludes the app; the SAME cached (still-fresh) snapshot
+        // must no longer surface its text, even though nothing re-captured.
+        excluded.value = ["com.tinyspeck.slackmacgap"]
+        let afterExclusion = await service.freshScene(
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: "",
+            now: referenceMoment.addingTimeInterval(4)
+        )
+        #expect(afterExclusion?.mode == .composing)
+        #expect(afterExclusion?.conversationTurns.isEmpty == true)
+    }
 }
 
 /// Thread-safe box for capturing diagnostics calls made from actor-isolated code.
@@ -139,6 +260,20 @@ final class LockedFlag: @unchecked Sendable {
     init(_ initial: Bool) { storage = initial }
 
     var value: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return storage }
+        set { lock.lock(); storage = newValue; lock.unlock() }
+    }
+}
+
+/// Thread-safe mutable Set, same purpose as `LockedFlag` but for
+/// `excludedApps`-shaped providers.
+final class LockedSet<Element: Hashable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Set<Element>
+
+    init(_ initial: Set<Element>) { storage = initial }
+
+    var value: Set<Element> {
         get { lock.lock(); defer { lock.unlock() }; return storage }
         set { lock.lock(); storage = newValue; lock.unlock() }
     }

@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var ghostBrainServerHost = GhostBrainServerHost(
         runtime: llamaServerHost,
         personalHistory: personalHistoryController,
+        sceneProvider: Self.sceneProvider(for: screenCaptureService),
         // A bare activity pulse only — see GhostBrainServerHost's doc comment.
         onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService)
     )
@@ -108,6 +109,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for service: ScreenCaptureService
     ) -> @Sendable () -> Void {
         { Task { await service.noteCompletionActivity() } }
+    }
+
+    /// Screen Memory plan Phase 2 PR 2b: the SAME dev flag + settings gate
+    /// `screenCaptureService`'s own `enabled` closure uses (see its doc
+    /// comment) — a request must never surface screen context capture
+    /// itself would refuse to have started. `GhostBrainServerHost` and
+    /// `LlamaCompletionEngine` know nothing about `TildeSettings`; this is
+    /// the one place that decision is made for the whole live-suggestion
+    /// path.
+    private nonisolated static func sceneProvider(
+        for service: ScreenCaptureService
+    ) -> @Sendable (String?, String) async -> ScreenScene.Scene? {
+        { appBundleIdentifier, fieldText in
+            guard TildeSettings.screenMemoryDevModeEnabled, TildeSettings().screenMemoryEnabled else {
+                return nil
+            }
+            return await service.freshScene(frontmostBundleID: appBundleIdentifier, fieldText: fieldText)
+        }
     }
 
     init(launchMode: TildeLaunchMode = .production) {

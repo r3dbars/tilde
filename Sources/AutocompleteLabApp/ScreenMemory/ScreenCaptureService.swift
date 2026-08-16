@@ -93,6 +93,58 @@ actor ScreenCaptureService {
     /// serving the user, which is the "session" the typing-pause trigger
     /// requires. This does not read or forward the request's content — it
     /// is purely a timestamp pulse.
+    /// Screen Memory plan Phase 2 PR 2b: the completion path's read of the
+    /// capture pipeline. Purely reads `latestSnapshot` and hands it to
+    /// `ScreenScene.freshScene`'s staleness gate — never triggers
+    /// `attemptCapture`, so a completion request can call this and get an
+    /// answer immediately, whether or not a capture happens to be in
+    /// flight.
+    ///
+    /// Exclusion is re-checked here against `excludedApps()`'s CURRENT
+    /// value, not just at capture time: a snapshot can be up to
+    /// `ScreenScene.defaultStalenessCapSeconds` (20s) old, and the
+    /// exclusion list can change at any moment in between (the user adding
+    /// an app to it right after a capture must not leave that app's text
+    /// readable from the cached snapshot for the rest of the staleness
+    /// window). Blocks owned by a now-excluded app are dropped before
+    /// classification ever sees them.
+    func freshScene(
+        frontmostBundleID: String?,
+        fieldText: String,
+        now: Date = Date()
+    ) -> ScreenScene.Scene? {
+        guard let snapshot = latestSnapshot else { return nil }
+        let currentlyExcluded = excludedApps()
+        let filteredSnapshot: ScreenSnapshot
+        if currentlyExcluded.isEmpty {
+            filteredSnapshot = snapshot
+        } else {
+            let keptBlocks = snapshot.blocks.filter {
+                guard let owner = $0.windowOwnerBundleIdentifier else { return true }
+                return !currentlyExcluded.contains(owner)
+            }
+            filteredSnapshot = ScreenSnapshot(
+                capturedAt: snapshot.capturedAt,
+                displayID: snapshot.displayID,
+                blocks: keptBlocks
+            )
+        }
+        return ScreenScene.freshScene(
+            from: filteredSnapshot,
+            now: now,
+            frontmostBundleID: frontmostBundleID,
+            fieldText: fieldText
+        )
+    }
+
+    /// Test seam: injects a snapshot directly, bypassing the entire
+    /// ScreenCaptureKit/Vision pipeline that a unit test cannot drive.
+    /// Production code always reaches `latestSnapshot` through a real
+    /// `attemptCapture`; nothing outside tests calls this.
+    func setLatestSnapshotForTesting(_ snapshot: ScreenSnapshot?) {
+        latestSnapshot = snapshot
+    }
+
     func noteCompletionActivity() {
         let stamp = now()
         lastActivityAt = stamp
@@ -158,9 +210,17 @@ actor ScreenCaptureService {
         }
         let visibleOwners = content.windows.compactMap(\.owningApplication?.bundleIdentifier)
 
+        // Re-read `enabled()` here rather than reusing the `isEnabled`
+        // captured above: `shareableContent()` just suspended this call,
+        // and the user can flip the Screen Memory toggle off during that
+        // window. Deciding off a value read before the only await point in
+        // this method would let a capture that started while enabled land
+        // — and get stored into `latestSnapshot` — after the toggle reads
+        // off everywhere else in the app.
+        let stillEnabled = enabled()
         let decision = CaptureTriggerPolicy.decision(
             for: trigger,
-            enabled: isEnabled,
+            enabled: stillEnabled,
             screenLocked: screenLocked(),
             secureInputActive: secureInputActive(),
             completionSessionActive: sessionActive,
@@ -221,7 +281,8 @@ actor ScreenCaptureService {
                     text: block.text,
                     boundingBox: block.boundingBox,
                     windowOwnerBundleIdentifier: owner?.bundleIdentifier,
-                    windowTitle: owner?.title
+                    windowTitle: owner?.title,
+                    windowFrame: owner?.frame
                 )
             }
             let snapshot = ScreenSnapshot(

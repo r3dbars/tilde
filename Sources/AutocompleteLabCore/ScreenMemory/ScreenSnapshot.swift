@@ -41,17 +41,25 @@ public struct ScreenSnapshot: Equatable, Sendable {
         public let boundingBox: NormalizedDisplayRect
         public let windowOwnerBundleIdentifier: String?
         public let windowTitle: String?
+        /// The owning window's own frame, same normalized/display-relative
+        /// space as `boundingBox` — `nil` exactly when attribution is `nil`.
+        /// Phase 2's scene classifier needs this to bucket a message bubble
+        /// as self/other by its position *within its window*, not within
+        /// the display (see `ScreenScene.OCRBlock.windowFrame`).
+        public let windowFrame: NormalizedDisplayRect?
 
         public init(
             text: String,
             boundingBox: NormalizedDisplayRect,
             windowOwnerBundleIdentifier: String? = nil,
-            windowTitle: String? = nil
+            windowTitle: String? = nil,
+            windowFrame: NormalizedDisplayRect? = nil
         ) {
             self.text = text
             self.boundingBox = boundingBox
             self.windowOwnerBundleIdentifier = windowOwnerBundleIdentifier
             self.windowTitle = windowTitle
+            self.windowFrame = windowFrame
         }
     }
 
