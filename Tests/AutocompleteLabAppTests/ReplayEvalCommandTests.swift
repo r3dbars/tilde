@@ -116,6 +116,25 @@ struct ReplayEvalCommandTests {
         #expect(engine.calls.allSatisfy { $0.appBundleIdentifier == "com.apple.mail" })
     }
 
+    @Test("A password-manager bundle id is excluded from replay-eval even when the caller's own exclusion list is empty")
+    func alwaysExcludedAppIsFilteredEvenWithEmptyConfiguredExclusions() async throws {
+        // `settings.personalHistoryExcludedApps` is never set here (stays
+        // empty) — this is exactly the configuration in which the
+        // always-excluded (password manager / Keychain) set used to be
+        // silently skipped, because the filter checked
+        // `excludedApps.contains(...)` directly instead of going through
+        // `DefaultExcludedApps`.
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.store.append([
+            fixture.event(text: "hello world foo ", app: "com.1password.1password"),
+        ])
+
+        let result = await fixture.command().execute()
+
+        #expect(result == .failure(Self.unavailableJSON(reason: "history-empty")))
+    }
+
     @Test("An engine failure counts as silent, not a crash")
     func engineFailureCountsAsSilent() async throws {
         let fixture = try Fixture()

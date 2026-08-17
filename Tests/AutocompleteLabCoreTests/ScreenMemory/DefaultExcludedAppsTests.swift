@@ -52,4 +52,25 @@ struct DefaultExcludedAppsTests {
         // this test guards against a future refactor to prefix matching.
         #expect(!DefaultExcludedApps.isAlwaysExcluded("com.1password.1password.helper"))
     }
+
+    @Test("isAlwaysExcluded matches regardless of case, since bundle identifier casing is not force-normalized in the stored list")
+    func isAlwaysExcludedIsCaseInsensitive() {
+        #expect(DefaultExcludedApps.isAlwaysExcluded("com.1password.1password".uppercased()))
+        #expect(DefaultExcludedApps.isAlwaysExcluded("COM.APPLE.KEYCHAINACCESS"))
+        #expect(DefaultExcludedApps.isAlwaysExcluded("com.apple.passwords"))
+    }
+
+    @Test("isExcluded is true for an always-excluded app even when the caller's configured set is empty")
+    func isExcludedCoversAlwaysExcludedWithEmptyConfiguredSet() {
+        #expect(DefaultExcludedApps.isExcluded("com.1password.1password", configuredExcludedApps: []))
+        #expect(!DefaultExcludedApps.isExcluded("com.example.Editor", configuredExcludedApps: []))
+    }
+
+    @Test("isExcluded is also true for the caller's own configured set")
+    func isExcludedCoversConfiguredSet() {
+        #expect(DefaultExcludedApps.isExcluded(
+            "com.example.CustomApp",
+            configuredExcludedApps: ["com.example.CustomApp"]
+        ))
+    }
 }

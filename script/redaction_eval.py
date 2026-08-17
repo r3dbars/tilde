@@ -13,14 +13,16 @@ blocking bars:
                                medical condition, date of birth, employer)
                                that only the GLiNER model layer can catch
 
-Recall is measured by SUBSTRING ABSENCE: a planted secret string "recalls"
-if it no longer appears verbatim, anywhere, in the redacted output for that
-record. This is deliberately simpler than span-overlap scoring and doesn't
-require the corpus to know anything about token boundaries — it directly
-answers the question the bar cares about ("did this leak"), and it is
-exactly as strict for partial-overlap cases: if only half of a planted
-string got redacted, the other half is still a verbatim substring of the
-original, so it still counts as a miss.
+Recall is measured by PER-FRAGMENT ABSENCE: a planted secret string
+"recalls" only if EVERY meaningful fragment of it (each alphanumeric run of
+3+ characters — see `secret_fragments`) no longer appears verbatim,
+anywhere, in the redacted output for that record. A whole-string-only check
+(`secret not in redacted`) under-counts: "John Smith" redacted down to just
+"Smith" (only the "John" span got applied) is NOT a substring match for the
+full "John Smith" string, so a whole-string check would score it a hit even
+though a real name fragment is still sitting in the output. Per-fragment
+scoring catches that: "Smith" is still present, so the secret is NOT fully
+redacted, and it counts as a miss.
 
 Recall is reported both PER-CATEGORY (structured/unstructured) and
 IN AGGREGATE per the plan's "report aggregate-only" requirement — this
@@ -57,6 +59,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -66,6 +69,32 @@ DEFAULT_CORPUS = ROOT_DIR / "script/testdata/redaction_eval_corpus.jsonl"
 
 STRUCTURED_BAR = 0.99
 UNSTRUCTURED_BAR = 0.90
+
+_FRAGMENT_PATTERN = re.compile(r"[A-Za-z0-9]+")
+
+
+def secret_fragments(secret: str) -> list[str]:
+    """Break a planted secret into the pieces that must ALL be gone from the
+    redacted output for a hit. Splitting on runs of non-alphanumeric
+    characters (whitespace, `-`, `@`, `.`, etc.) catches partial redactions
+    a whole-string check misses — see the module docstring for the
+    "John Smith" -> "Smith" example. Fragments shorter than 3 characters are
+    dropped: a lone digit or two-letter piece is common enough as an
+    incidental substring elsewhere in ordinary text that requiring its
+    absence would manufacture false misses, and on its own it rarely
+    identifies anyone. If a secret has no fragment that long (e.g. a very
+    short planted value), fall back to the whole secret so it is still
+    scored on something.
+    """
+    fragments = [fragment for fragment in _FRAGMENT_PATTERN.findall(secret) if len(fragment) >= 3]
+    return fragments or ([secret] if secret else [])
+
+
+def is_fully_redacted(secret: str, redacted: str) -> bool:
+    """A secret counts as a hit only if every meaningful fragment of it
+    (see `secret_fragments`) is absent from the redacted output — not just
+    the exact, whole-string secret."""
+    return all(fragment not in redacted for fragment in secret_fragments(secret))
 
 
 def load_corpus(path: Path) -> list[dict]:
@@ -117,39 +146,51 @@ def score(corpus: list[dict], outputs: list[dict]) -> dict:
         redacted = output.get("redacted") or ""
         for secret in record["structured_secrets"]:
             structured_total += 1
-            if secret not in redacted:
+            if is_fully_redacted(secret, redacted):
                 structured_hits += 1
         for secret in record["unstructured_secrets"]:
             unstructured_total += 1
-            if secret not in redacted:
+            if is_fully_redacted(secret, redacted):
                 unstructured_hits += 1
-
-    structured_rate = structured_hits / structured_total if structured_total else 1.0
-    unstructured_rate = unstructured_hits / unstructured_total if unstructured_total else 1.0
 
     return {
         "schema": "tilde.redaction-eval.v1",
         "corpus": {"records": len(corpus), "dropped_records": dropped_records},
-        "structured": {
-            "recall_count": structured_hits,
-            "total": structured_total,
-            "rate": structured_rate,
-            "bar": STRUCTURED_BAR,
-            "meets_bar": structured_rate >= STRUCTURED_BAR,
-        },
-        "unstructured": {
-            "recall_count": unstructured_hits,
-            "total": unstructured_total,
-            "rate": unstructured_rate,
-            "bar": UNSTRUCTURED_BAR,
-            "meets_bar": unstructured_rate >= UNSTRUCTURED_BAR,
-        },
+        "structured": category_report(structured_hits, structured_total, STRUCTURED_BAR),
+        "unstructured": category_report(unstructured_hits, unstructured_total, UNSTRUCTURED_BAR),
         "privacy": {
             "aggregate_only": True,
             "contains_raw_text": False,
             "contains_matched_secrets": False,
             "contains_per_record_breakdown": False,
         },
+    }
+
+
+def category_report(hits: int, total: int, bar: float) -> dict:
+    """Per-category recall report. An EMPTY category (`total == 0`) is a
+    hard eval failure, not a free 100% — a category with nothing planted in
+    the corpus means the corpus never actually exercised that redactor, so
+    passing here would be measuring nothing and calling it a pass. Report
+    `rate: 0.0` and `meets_bar: False` with an explicit `error` so this
+    shows up loudly instead of silently inflating the aggregate bar.
+    """
+    if total == 0:
+        return {
+            "recall_count": hits,
+            "total": total,
+            "rate": 0.0,
+            "bar": bar,
+            "meets_bar": False,
+            "error": "empty category: corpus has zero planted secrets for this redactor — cannot be scored as a pass",
+        }
+    rate = hits / total
+    return {
+        "recall_count": hits,
+        "total": total,
+        "rate": rate,
+        "bar": bar,
+        "meets_bar": rate >= bar,
     }
 
 

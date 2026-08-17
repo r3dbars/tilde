@@ -76,6 +76,15 @@ final class GLiNERRedactionHelperHost: GLiNERSpanDetecting, @unchecked Sendable 
     }
 
     func detectSpans(in text: String) async -> [GLiNERSpan]? {
+        // `RedactionService.redact` — the redaction HOST that owns this
+        // helper — already short-circuits empty/whitespace-only text
+        // before it ever calls this method, so in practice this call
+        // always carries real text to scan. This method still has to cope
+        // gracefully with a `missing-text` reply below regardless (see
+        // there for why), both as defense in depth for any other caller of
+        // `GLiNERSpanDetecting` and because sending literally empty text
+        // is exactly what used to make a single call permanently break
+        // redaction for the rest of the launch.
         guard let channel = await ensureLaunched() else { return nil }
         let request = RedactionHelperRequest(text: text, labels: nil, threshold: nil)
         guard let requestLine = try? JSONEncoder().encode(request) else {
@@ -92,15 +101,32 @@ final class GLiNERRedactionHelperHost: GLiNERSpanDetecting, @unchecked Sendable 
             DiagnosticsLog.shared.record("redaction-helper-unavailable", metadata: ["reason": "timeout"])
             return nil
         }
-        guard let reply = try? JSONDecoder().decode(RedactionHelperResponse.self, from: replyLine),
-              reply.ok == true, let spans = reply.spans else {
+        guard let reply = try? JSONDecoder().decode(RedactionHelperResponse.self, from: replyLine) else {
             markBroken()
             DiagnosticsLog.shared.record("redaction-helper-unavailable", metadata: ["reason": "inference-error"])
             return nil
         }
-        return spans.map {
-            GLiNERSpan(unicodeScalarStart: $0.start, unicodeScalarEnd: $0.end, label: $0.label, score: $0.score)
+        if reply.ok == true, let spans = reply.spans {
+            return spans.map {
+                GLiNERSpan(unicodeScalarStart: $0.start, unicodeScalarEnd: $0.end, label: $0.label, score: $0.score)
+            }
         }
+        // "missing-text" is a well-formed, expected reply (the helper is
+        // alive and answered correctly — there was simply nothing to
+        // redact in what it was sent) and MUST NOT be treated as a
+        // process/protocol fault: `markBroken` tears down redaction for
+        // every later call in this launch, and a benign "you gave me
+        // nothing" reply is not evidence the model layer is untrustworthy.
+        // Every other `ok:false` reason (`bad-json`, `inference-error`)
+        // stays fatal — those DO mean this reply, and by this host's
+        // policy every later one too, cannot be trusted.
+        if reply.ok == false, reply.reason == RedactionHelperMissingTextReason {
+            DiagnosticsLog.shared.record("redaction-helper-empty-text", metadata: [:])
+            return []
+        }
+        markBroken()
+        DiagnosticsLog.shared.record("redaction-helper-unavailable", metadata: ["reason": "inference-error"])
+        return nil
     }
 
     /// Lazily launches the child on first use and reuses it afterward.
@@ -210,6 +236,15 @@ final class GLiNERRedactionHelperHost: GLiNERSpanDetecting, @unchecked Sendable 
     }
 }
 
+/// The exact `reason` code `script/redaction_helper.py`'s `REASON_MISSING_TEXT`
+/// emits for `{"ok": false, "reason": "missing-text"}` — the one `ok:false`
+/// reason `detectSpans` treats as benign rather than a process fault. Kept
+/// as a named constant (not inlined at the one call site) so it reads as
+/// "the protocol's fixed vocabulary word for this", matching the helper
+/// script's own `REASON_MISSING_TEXT`/`REASON_BAD_JSON`/`REASON_INFERENCE_ERROR`
+/// naming rather than a bare string literal.
+private let RedactionHelperMissingTextReason = "missing-text"
+
 private struct RedactionHelperRequest: Encodable {
     let text: String
     let labels: [String]?
@@ -235,6 +270,11 @@ private struct RedactionHelperResponse: Decodable {
     let ok: Bool?
     let spans: [Span]?
     let ready: Bool?
+    /// Only present on `ok:false` (or a failed `ready` handshake) replies —
+    /// see `script/redaction_helper.py`'s fixed reason vocabulary
+    /// (`bad-json`, `missing-text`, `inference-error`). Never contains
+    /// request text or a stack trace by protocol contract.
+    let reason: String?
 }
 
 /// Non-blocking line-delimited JSON channel over a child process's

@@ -96,4 +96,64 @@ struct GLiNERRedactionHelperHostTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
         return script
     }
+
+    @Test("A well-formed ok:false reason:missing-text reply is NOT fatal — it does not mark the host broken")
+    func missingTextReplyDoesNotMarkBroken() async throws {
+        // Mirrors `redaction_helper.py`'s real behavior for an empty
+        // `text` field: `{"ok": false, "reason": "missing-text"}`. Every
+        // OTHER call still gets the normal successful reply, so this
+        // fixture proves one benign missing-text reply cannot poison
+        // later calls the way any other `ok:false` reason (or a
+        // transport failure) intentionally does.
+        let fixture = try Self.writeAlwaysMissingTextThenSuccessInterpreter()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+
+        let directAssets = GLiNERRedactionHelperHost.Assets(
+            interpreter: fixture.path,
+            script: "--ignored",
+            model: "--ignored",
+            tokenizerDir: fixture.deletingLastPathComponent().path
+        )
+        let host = GLiNERRedactionHelperHost(assetResolver: { directAssets })
+        defer { host.stop() }
+
+        // First call: the fixture replies missing-text. Must come back as
+        // an explicit "found nothing" — NOT nil/unavailable.
+        let firstResult = await host.detectSpans(in: "some text the fixture will call missing-text")
+        #expect(firstResult == [])
+
+        // Second call on the SAME host: proves the first reply did not
+        // call `markBroken()` — a broken host always returns nil.
+        let secondResult = await host.detectSpans(in: "some other text")
+        #expect(secondResult != nil)
+        #expect(secondResult?.first?.label == "fixture_label")
+    }
+
+    /// A fixture interpreter that answers the FIRST request with a
+    /// well-formed `{"ok": false, "reason": "missing-text"}` (exactly what
+    /// `redaction_helper.py` sends for empty input) and every later
+    /// request with a normal successful reply — regardless of what text
+    /// it was actually sent, so the test can drive the missing-text branch
+    /// on demand without depending on this host's own empty-text handling.
+    private static func writeAlwaysMissingTextThenSuccessInterpreter() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let script = dir.appendingPathComponent("fixture_missing_text_helper.sh")
+        let contents = """
+        #!/bin/sh
+        echo '{"ready": true}'
+        first=1
+        while IFS= read -r line; do
+          if [ "$first" = "1" ]; then
+            echo '{"ok": false, "reason": "missing-text"}'
+            first=0
+          else
+            echo '{"ok": true, "spans": [{"start": 0, "end": 5, "label": "fixture_label", "score": 0.9}]}'
+          fi
+        done
+        """
+        try contents.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        return script
+    }
 }
