@@ -142,6 +142,68 @@ struct CompletionOutputCleanerTests {
         #expect(reason("I will", after: "Sure, I will ") == .emptyAfterPrefixTrimming)
     }
 
+    /// Live dogfood regression (build 2705, demo scenario 10, rapid-fire
+    /// chat): the other party had sent "up?", "lol", "u there", "??"; the
+    /// user typed "Hey I am" and the ghost offered " here, I am here." —
+    /// the suggestion's own final clause re-states its opening clause.
+    /// `replaysContext` never fires here because it only compares the
+    /// suggestion against the TYPED context, not against the suggestion's
+    /// own earlier words.
+    @Test("Trims a suggestion that repeats its own words within itself")
+    func trimsInternalSelfRepetition() {
+        // The literal live case: trimmed back to just the opening clause.
+        #expect(clean(" here, I am here.", after: "Hey I am")?.visibleText == " here")
+        // A clause repeated verbatim.
+        #expect(clean("sounds good, sounds good", after: nil)?.visibleText == " sounds good")
+        // A 3-word run repeated back-to-back.
+        #expect(clean("let me know let me know soon", after: nil)?.visibleText == " let me know")
+        // Ordinary prose that merely reuses a common word is left alone.
+        #expect(clean("the plan and the timeline", after: nil)?.visibleText == " the plan and the timeline")
+        #expect(clean("ready. Then we can send it", after: nil)?.visibleText == " ready. Then we can send it")
+        // Trimming that leaves nothing readable rejects instead.
+        #expect(reason("$, price $", after: nil) == .repeatsItself)
+    }
+
+    /// Guards from the independent review pass: repetition trimming must
+    /// never rewrite what a suggestion MEANS. Deliberate parallel rhetoric
+    /// repeats a word run without looping, and an echo behind a negation
+    /// ("done" vs "not done") would ship the opposite claim if trimmed.
+    @Test("Self-repetition trimming spares parallel rhetoric and negated echoes")
+    func sparesParallelismAndNegatedEchoes() {
+        let untouched = [
+            "the more you practice, the more you improve",
+            "done. It is not done",
+            "ready? I am not ready",
+            "okay, but not okay",
+        ]
+        for output in untouched {
+            #expect(clean(output, after: nil)?.visibleText == " " + output)
+        }
+        // A negation shared by both sides is a genuine loop, not a reversal.
+        #expect(clean("not sure, I am not sure", after: nil)?.visibleText == " not sure")
+    }
+
+    /// Code review regression (P2, correctness): the final-clause-echo rule
+    /// was too aggressive, guarded only by the negator check above. Two
+    /// confirmed false positives, both cases where the words leading into
+    /// the echo are new content -- a new instruction, a qualifying clause --
+    /// not a degenerate loop: "Ready? Get ready" was trimmed down to
+    /// "Ready?", deleting the actual instruction ("Get ready"), and "it is
+    /// ready, or at least they say it is ready" lost its entire qualifier
+    /// clause. Both must now survive untouched.
+    @Test("Self-repetition trimming spares a short echo preceded by new content words")
+    func sparesShortEchoWithNewLeadingContent() {
+        #expect(clean("Ready? Get ready", after: nil)?.visibleText == " Ready? Get ready")
+        // Kept to 8 words so the assertion isolates the repetition-trimming
+        // fix from CompletionSuggestion's unrelated default 8-word display
+        // cap; the reviewer's original longer example ("it is ready, or at
+        // least they say it is ready") exercises the identical code path.
+        #expect(
+            clean("it is ready, they say it is ready", after: nil)?.visibleText
+                == " it is ready, they say it is ready"
+        )
+    }
+
     @Test("Does not invent an overlap for an empty trailing fragment")
     func preservesSuggestionAfterPunctuation() {
         #expect(clean("apple", after: ".")?.visibleText == " apple")

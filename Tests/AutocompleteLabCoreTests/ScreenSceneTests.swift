@@ -261,6 +261,55 @@ struct ScreenSceneTests {
         #expect(!scene.conversationTurns.contains { $0.text.contains("unrelated note") })
     }
 
+    // MARK: - Replying: wrapped OCR lines vs genuinely separate turns
+
+    /// Code review regression (P2, verify-then-fix): Vision's
+    /// `VNRecognizeTextRequest` recognizes text line by line, so a real
+    /// multi-line chat bubble arrives here as several adjacent `OCRBlock`s
+    /// from the same speaker, not one. Left unmerged, a long three-line
+    /// reply would look exactly like three short "terse" turns to
+    /// `RawContinuationPrompt`'s terse-room clamp and wrongly shrink
+    /// generation to a single short burst. Tightly stacked same-speaker
+    /// blocks (small vertical gap relative to line height) must fold into
+    /// one conversation turn.
+    @Test("Tightly stacked same-speaker OCR lines merge into one wrapped-bubble turn")
+    func wrappedBubbleLinesMergeIntoOneTurn() {
+        let blocks = [
+            block("I think we should probably wait until", x: 0.05, y: 0.30, window: slack),
+            block("everyone gets back from the trip before", x: 0.05, y: 0.36, window: slack),
+            block("we finalize the schedule for next quarter", x: 0.05, y: 0.42, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 1)
+        #expect(scene.conversationTurns.first?.speaker == .other)
+        #expect(
+            scene.conversationTurns.first?.text
+                == "I think we should probably wait until everyone gets back from the trip before we finalize the schedule for next quarter"
+        )
+    }
+
+    /// The other half of the same fix: consecutive SHORT messages from the
+    /// same speaker with ordinary bubble spacing -- the "up?" / "lol" /
+    /// "u there" rapid-fire dogfood shape -- must stay as distinct turns.
+    /// Merging on speaker alone (ignoring geometry) would wrongly collapse
+    /// a genuinely terse room into one long-looking turn and defeat the
+    /// clamp it exists to trigger.
+    @Test("Separate same-speaker messages with ordinary spacing stay as distinct turns")
+    func separateSameSpeakerMessagesStayDistinct() {
+        let blocks = [
+            block("up?", x: 0.05, y: 0.10, window: slack),
+            block("lol", x: 0.05, y: 0.20, window: slack),
+            block("u there", x: 0.05, y: 0.30, window: slack),
+            block("??", x: 0.05, y: 0.40, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        // Capped at maxTurns (3), but none of the survivors got concatenated.
+        #expect(scene.conversationTurns.count == 3)
+        #expect(scene.conversationTurns.map(\.text) == ["lol", "u there", "??"])
+    }
+
     // MARK: - Replying: caps
 
     @Test("At most 3 turns survive, keeping the most recent (bottom-most) ones")

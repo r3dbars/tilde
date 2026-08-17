@@ -7,6 +7,7 @@ public enum CompletionCleanRejectionReason: String, Sendable {
     case promptInstructionEcho
     case emptyAfterPrefixTrimming
     case replaysContext
+    case repeatsItself
 }
 
 public enum CompletionCleanResult: Sendable {
@@ -78,6 +79,14 @@ public struct CompletionOutputCleaner: Sendable {
         }
         if let textBeforeCursor, replaysContext(continuation, context: textBeforeCursor) {
             return .rejected(.replaysContext)
+        }
+
+        let deduped = trimmingSelfRepetition(continuation)
+        if deduped != continuation {
+            guard deduped.contains(where: { $0.isLetter || $0.isNumber }) else {
+                return .rejected(.repeatsItself)
+            }
+            continuation = deduped
         }
 
         return .accepted(CompletionSuggestion(text: continuation, maxVisibleWords: maxVisibleWords))
@@ -210,6 +219,128 @@ public struct CompletionOutputCleaner: Sendable {
         return offered.indices.dropLast(3).contains { index in
             contains(Array(offered[index..<offered.index(index, offsetBy: 4)]), in: typed)
         }
+    }
+
+    /// Live dogfood regression (build 2705, rapid-fire chat): typed
+    /// "Hey I am", ghost offered " here, I am here." — the suggestion's own
+    /// tail re-states its opening clause. `replaysContext` only compares
+    /// against the TYPED context, so a model looping on its own words sails
+    /// through. This trims the suggestion at the point where it starts
+    /// repeating itself: a 3-word run repeated back-to-back ("let me know
+    /// let me know"), a clause identical to an earlier clause ("sounds
+    /// good, sounds good"), or a final clause that ENDS by re-stating a
+    /// whole earlier clause (the observed "here, … here." loop). Three
+    /// deliberate false-positive guards, all from independent review:
+    /// the run rule requires ADJACENT repetition, so parallel rhetoric
+    /// ("the more you practice, the more you improve") survives; the
+    /// end-anchored rule stands down when the echo sits behind a negator
+    /// the earlier clause didn't have ("done. It is not done"), where
+    /// trimming would ship the OPPOSITE of what the model said; and the
+    /// end-anchored rule ALSO stands down when the words leading into the
+    /// echo carry new content, not just function words -- code review
+    /// caught two false positives this closes: "Ready? Get ready" was
+    /// trimmed to "Ready?" (deleting the action word "Get"), and "it is
+    /// ready, or at least they say it is ready" lost its whole qualifying
+    /// clause. Both echo a single earlier clause, but the words in front of
+    /// the echo ("Get" / "or at least they say") are new information, not a
+    /// degenerate loop -- unlike the "here, I am here." case, where "I am"
+    /// ahead of the echoed "here" is pure connective tissue.
+    private func trimmingSelfRepetition(_ suggestion: String) -> String {
+        let clauseBreaks: Set<Character> = [",", ".", ";", ":", "!", "?"]
+        var wordStarts: [String.Index] = []
+        var words: [String] = []
+        var endsClause: [Bool] = []
+        for range in wordRanges(in: suggestion) {
+            let token = String(suggestion[range])
+            let word = normalized(token)
+            let breaksHere = token.last.map(clauseBreaks.contains) ?? false
+            if !word.isEmpty {
+                wordStarts.append(range.lowerBound)
+                words.append(word)
+                endsClause.append(breaksHere)
+            } else if breaksHere, !endsClause.isEmpty {
+                // A detached punctuation token still closes the clause of
+                // the word before it.
+                endsClause[endsClause.count - 1] = true
+            }
+        }
+        guard words.count >= 2 else { return suggestion }
+
+        var cut = words.count
+
+        if words.count >= 6 {
+            for start in 3...(words.count - 3) where Array(words[start - 3..<start]) == Array(words[start..<start + 3]) {
+                cut = start
+                break
+            }
+        }
+
+        var clauses: [[Int]] = [[]]
+        for index in words.indices {
+            clauses[clauses.count - 1].append(index)
+            if endsClause[index], index < words.count - 1 {
+                clauses.append([])
+            }
+        }
+        for j in 1..<clauses.count {
+            let clause = clauses[j].map { words[$0] }
+            let earlier = clauses[0..<j].map { indices in indices.map { words[$0] } }
+            let exactRepeat = earlier.contains { $0 == clause }
+            let finalClauseEndsOnEarlierClause = j == clauses.count - 1 && earlier.contains { earlierClause in
+                guard clause.count > earlierClause.count,
+                      Array(clause.suffix(earlierClause.count)) == earlierClause else { return false }
+                let beforeEcho = clause.prefix(clause.count - earlierClause.count)
+                // Only a genuinely substantive earlier clause (one with real
+                // content of its own, not just a symbol) is worth guarding
+                // this way -- a symbol-only "clause" isn't legitimate
+                // rhetoric being introduced, it's still a degenerate loop.
+                if earlierClause.contains(where: isContentWord), beforeEcho.contains(where: isContentWord) {
+                    return false
+                }
+                return !beforeEcho.contains(where: isNegator) || earlierClause.contains(where: isNegator)
+            }
+            guard exactRepeat || finalClauseEndsOnEarlierClause else { continue }
+            cut = min(cut, clauses[j][0])
+            break
+        }
+
+        guard cut < words.count else { return suggestion }
+        var trimmed = String(suggestion[..<wordStarts[cut]])
+        while let last = trimmed.last, last.isWhitespace || last == "," || last == ";" || last == ":" {
+            trimmed.removeLast()
+        }
+        return trimmed
+    }
+
+    private static let negators: Set<String> = ["not", "no", "never", "none", "cannot", "nor"]
+
+    private func isNegator(_ word: String) -> Bool {
+        Self.negators.contains(word) || word.hasSuffix("n't") || word.hasSuffix("n\u{2019}t")
+    }
+
+    /// Function words only: pronouns, "to be"/modal auxiliaries, articles,
+    /// and the most common conjunctions/prepositions. Anything NOT in this
+    /// list -- verbs like "get", nouns/adjectives like "least" -- counts as
+    /// content the final clause is introducing, not just connective tissue
+    /// stitching it to the echoed clause. Deliberately small and generic
+    /// (not this codebase's message-content stopword list): it exists only
+    /// to tell "the ready. It is ready" (pure restatement) apart from
+    /// "Ready? Get ready" (a new instruction that happens to end on an
+    /// earlier word).
+    private static let functionWords: Set<String> = [
+        "i", "you", "he", "she", "it", "we", "they",
+        "me", "him", "her", "us", "them",
+        "my", "your", "his", "its", "our", "their",
+        "this", "that", "these", "those",
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must",
+        "a", "an", "the",
+        "and", "or", "but", "nor", "so", "yet",
+        "to", "of", "in", "on", "at", "by", "from", "with", "as", "for",
+    ]
+
+    private func isContentWord(_ word: String) -> Bool {
+        word.contains(where: \.isLetter) && !Self.functionWords.contains(word) && !isNegator(word)
     }
 
     private func contains(_ needle: [String], in words: [String]) -> Bool {
