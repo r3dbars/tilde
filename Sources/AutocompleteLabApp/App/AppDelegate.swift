@@ -29,6 +29,7 @@ enum TildeInvocation: Equatable {
     case application(TildeLaunchMode)
     case personalBrainStatusJSON
     case replayEvalJSON(limit: Int)
+    case redactionEvalJSON(corpusPath: String)
 
     init?(arguments: [String]) {
         let rest = Array(arguments.dropFirst())
@@ -42,6 +43,10 @@ enum TildeInvocation: Equatable {
         if rest.count == 3, rest[0] == "--replay-eval-json", rest[1] == "--limit",
            let limit = Int(rest[2]), limit > 0 {
             self = .replayEvalJSON(limit: limit)
+            return
+        }
+        if rest.count == 2, rest[0] == "--redaction-eval-json" {
+            self = .redactionEvalJSON(corpusPath: rest[1])
             return
         }
         return nil
