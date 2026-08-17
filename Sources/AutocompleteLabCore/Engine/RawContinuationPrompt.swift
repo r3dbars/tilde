@@ -72,6 +72,23 @@ public enum ContinuationRegister: String, Sendable {
         return min(generatedTokenBudget, Self.terseReplyTokenBudget)
     }
 
+    /// Trusts `turns` as already representing real messages, one per turn.
+    /// Code review (P2, verify-then-fix): this was checked against a
+    /// concern that `ScreenScene`/`ScreenTextRecognizer` might hand this
+    /// function one turn per wrapped Vision OCR *line*, which would make an
+    /// ordinary multi-line chat bubble look like several short "terse"
+    /// turns and wrongly clamp generation. Verified NOT the case: Vision's
+    /// `VNRecognizeTextRequest` does recognize text line by line (see
+    /// `ScreenTextRecognizer`), but `ScreenScene.classify` re-groups
+    /// adjacent same-speaker OCR lines whose vertical gap is small relative
+    /// to their own height back into one `ConversationTurn` before this
+    /// function ever runs (see `mergeWrappedLines` in `ScreenScene.swift`),
+    /// while genuinely separate same-speaker messages (ordinary bubble
+    /// spacing) stay distinct so a real rapid-fire room still clamps. See
+    /// `ScreenSceneTests.wrappedBubbleLinesMergeIntoOneTurn` /
+    /// `.separateSameSpeakerMessagesStayDistinct` for the upstream proof,
+    /// and `terseClampSurvivesAWrappedMultiLineBubble` below for an
+    /// end-to-end version through this function.
     private static func medianTurnWordCount(_ turns: [ScreenScene.ConversationTurn]) -> Double? {
         let counts = turns
             .map { $0.text.split(whereSeparator: \.isWhitespace).count }

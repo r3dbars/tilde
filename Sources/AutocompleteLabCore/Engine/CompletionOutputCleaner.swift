@@ -229,13 +229,22 @@ public struct CompletionOutputCleaner: Sendable {
     /// repeating itself: a 3-word run repeated back-to-back ("let me know
     /// let me know"), a clause identical to an earlier clause ("sounds
     /// good, sounds good"), or a final clause that ENDS by re-stating a
-    /// whole earlier clause (the observed "here, … here." loop). Two
-    /// deliberate false-positive guards, both from independent review:
+    /// whole earlier clause (the observed "here, … here." loop). Three
+    /// deliberate false-positive guards, all from independent review:
     /// the run rule requires ADJACENT repetition, so parallel rhetoric
-    /// ("the more you practice, the more you improve") survives; and the
+    /// ("the more you practice, the more you improve") survives; the
     /// end-anchored rule stands down when the echo sits behind a negator
     /// the earlier clause didn't have ("done. It is not done"), where
-    /// trimming would ship the OPPOSITE of what the model said.
+    /// trimming would ship the OPPOSITE of what the model said; and the
+    /// end-anchored rule ALSO stands down when the words leading into the
+    /// echo carry new content, not just function words -- code review
+    /// caught two false positives this closes: "Ready? Get ready" was
+    /// trimmed to "Ready?" (deleting the action word "Get"), and "it is
+    /// ready, or at least they say it is ready" lost its whole qualifying
+    /// clause. Both echo a single earlier clause, but the words in front of
+    /// the echo ("Get" / "or at least they say") are new information, not a
+    /// degenerate loop -- unlike the "here, I am here." case, where "I am"
+    /// ahead of the echoed "here" is pure connective tissue.
     private func trimmingSelfRepetition(_ suggestion: String) -> String {
         let clauseBreaks: Set<Character> = [",", ".", ";", ":", "!", "?"]
         var wordStarts: [String.Index] = []
@@ -281,6 +290,13 @@ public struct CompletionOutputCleaner: Sendable {
                 guard clause.count > earlierClause.count,
                       Array(clause.suffix(earlierClause.count)) == earlierClause else { return false }
                 let beforeEcho = clause.prefix(clause.count - earlierClause.count)
+                // Only a genuinely substantive earlier clause (one with real
+                // content of its own, not just a symbol) is worth guarding
+                // this way -- a symbol-only "clause" isn't legitimate
+                // rhetoric being introduced, it's still a degenerate loop.
+                if earlierClause.contains(where: isContentWord), beforeEcho.contains(where: isContentWord) {
+                    return false
+                }
                 return !beforeEcho.contains(where: isNegator) || earlierClause.contains(where: isNegator)
             }
             guard exactRepeat || finalClauseEndsOnEarlierClause else { continue }
@@ -300,6 +316,31 @@ public struct CompletionOutputCleaner: Sendable {
 
     private func isNegator(_ word: String) -> Bool {
         Self.negators.contains(word) || word.hasSuffix("n't") || word.hasSuffix("n\u{2019}t")
+    }
+
+    /// Function words only: pronouns, "to be"/modal auxiliaries, articles,
+    /// and the most common conjunctions/prepositions. Anything NOT in this
+    /// list -- verbs like "get", nouns/adjectives like "least" -- counts as
+    /// content the final clause is introducing, not just connective tissue
+    /// stitching it to the echoed clause. Deliberately small and generic
+    /// (not this codebase's message-content stopword list): it exists only
+    /// to tell "the ready. It is ready" (pure restatement) apart from
+    /// "Ready? Get ready" (a new instruction that happens to end on an
+    /// earlier word).
+    private static let functionWords: Set<String> = [
+        "i", "you", "he", "she", "it", "we", "they",
+        "me", "him", "her", "us", "them",
+        "my", "your", "his", "its", "our", "their",
+        "this", "that", "these", "those",
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must",
+        "a", "an", "the",
+        "and", "or", "but", "nor", "so", "yet",
+        "to", "of", "in", "on", "at", "by", "from", "with", "as", "for",
+    ]
+
+    private func isContentWord(_ word: String) -> Bool {
+        word.contains(where: \.isLetter) && !Self.functionWords.contains(word) && !isNegator(word)
     }
 
     private func contains(_ needle: [String], in words: [String]) -> Bool {
