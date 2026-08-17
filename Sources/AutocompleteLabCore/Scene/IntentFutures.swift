@@ -30,6 +30,7 @@ public struct IntentFuture: Equatable, Sendable {
 /// deterministic, and framework-free so replay can grade it exactly.
 public enum IntentFuturesPlanner {
     public static let maximumFutures = 4
+    private static let englishLocale = Locale(identifier: "en_US_POSIX")
 
     public static func futures(
         scene: ScreenScene.Scene?,
@@ -74,7 +75,7 @@ public enum IntentFuturesPlanner {
             scores[.accept, default: 0] += 1.10
             scores[.acknowledge, default: 0] += 0.35
         }
-        if hasAnyPrefix(typed, ["n", "no", "nah", "can't", "cannot", "won't", "unfortunately"]) {
+        if hasAnyPrefix(typed, ["no", "nah", "can't", "cannot", "won't", "unfortunately"]) {
             scores[.decline, default: 0] += 1.10
         }
         if hasAnyPrefix(typed, ["what", "which", "when", "where", "who", "why", "how", "do you mean"]) {
@@ -120,7 +121,7 @@ public enum IntentFuturesPlanner {
     }
 
     private static func folded(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: englishLocale)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -131,12 +132,12 @@ public enum IntentFuturesPlanner {
 
     private static func asksForCommitment(_ text: String) -> Bool {
         ["can you ", "could you ", "would you ", "will you ", "are you able", "does ", "work for you", "still coming", "make it", "send ", "have it by"]
-            .contains(where: text.contains)
+            .contains(where: { text.contains($0) })
     }
 
     private static func asksForOpinion(_ text: String) -> Bool {
         ["what do you think", "thoughts", "your take", "do you think", "how do you feel", "would you rather"]
-            .contains(where: text.contains)
+            .contains(where: { text.contains($0) })
     }
 
     private static func hasAnyPrefix(_ text: String, _ prefixes: [String]) -> Bool {
