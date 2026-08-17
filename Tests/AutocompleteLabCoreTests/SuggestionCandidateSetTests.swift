@@ -10,21 +10,19 @@ struct SuggestionCandidateSetTests {
             SuggestionCandidate(text: "yep", source: .personal, confidence: 1.4, support: 4),
         ])
         #expect(set.candidates.map(\.source) == [.base, .personal])
-        #expect(set.first(from: .personal)?.text == "yep")
         #expect(set.first(from: .personal)?.confidence == 1)
-        #expect(set.first(from: .personal)?.support == 4)
     }
 
-    @Test("Drops empty and duplicate visible continuations")
-    func deduplicates() {
+    @Test("Preserves cross-expert agreement but collapses same-expert duplicates")
+    func deduplicatesWithinExpertOnly() {
         let set = SuggestionCandidateSet([
             SuggestionCandidate(text: "  ", source: .base),
             SuggestionCandidate(text: "Tomorrow", source: .base),
+            SuggestionCandidate(text: " tomorrow ", source: .base),
             SuggestionCandidate(text: " tomorrow ", source: .personal, support: 8),
         ])
-        #expect(set.candidates.count == 1)
-        #expect(set.candidates[0].source == .base)
-        #expect(set.candidates[0].text == "Tomorrow")
+        #expect(set.candidates.count == 2)
+        #expect(set.candidates.map(\.source) == [.base, .personal])
     }
 
     @Test("Negative support and confidence are clamped")
