@@ -48,6 +48,41 @@ public enum ContinuationRegister: String, Sendable {
     public var generatedTokenBudget: Int {
         return self == .chat ? 14 : 20
     }
+
+    /// A replying scene reads as rapid-fire when the visible turns' median
+    /// length is at or under this many words ("up?", "lol", "u there").
+    public static let terseReplyMedianWordThreshold = 3.0
+    /// The clamped budget for rapid-fire rooms: one short burst, not a
+    /// sentence. Live dogfood (build 2705) showed chat's 14 tokens producing
+    /// "here, I am here."-length ghosts in rooms speaking two-word turns.
+    public static let terseReplyTokenBudget = 5
+
+    /// Scene-aware budget: same as `generatedTokenBudget` except when the
+    /// classified scene says the user is replying to a conversation whose
+    /// turns are terse — then the ghost should match the room's rhythm, so
+    /// the budget clamps down to `terseReplyTokenBudget`. A `nil`, composing,
+    /// or referencing scene (and a replying scene with no measurable turns)
+    /// changes nothing.
+    public func generatedTokenBudget(scene: ScreenScene.Scene?) -> Int {
+        guard let scene, scene.mode == .replying,
+              let median = Self.medianTurnWordCount(scene.conversationTurns),
+              median <= Self.terseReplyMedianWordThreshold else {
+            return generatedTokenBudget
+        }
+        return min(generatedTokenBudget, Self.terseReplyTokenBudget)
+    }
+
+    private static func medianTurnWordCount(_ turns: [ScreenScene.ConversationTurn]) -> Double? {
+        let counts = turns
+            .map { $0.text.split(whereSeparator: \.isWhitespace).count }
+            .filter { $0 > 0 }
+            .sorted()
+        guard !counts.isEmpty else { return nil }
+        let middle = counts.count / 2
+        return counts.count.isMultiple(of: 2)
+            ? Double(counts[middle - 1] + counts[middle]) / 2
+            : Double(counts[middle])
+    }
 }
 
 public struct RawContinuationPrompt: Equatable, Sendable {

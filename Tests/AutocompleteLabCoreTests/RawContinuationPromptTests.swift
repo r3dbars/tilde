@@ -75,6 +75,76 @@ struct ContinuationRegisterTests {
         #expect(ContinuationRegister.following(scene: replyingScene, hostBundleIdentifier: nil) == .chat)
     }
 
+    /// Live dogfood regression (build 2705, demo scenario 10): a rapid-fire
+    /// room ("up?", "lol", "u there", "??") got a 14-token chat-budget ghost
+    /// ("here, I am here.") that read long-winded against two-word turns.
+    /// When the scene says replying AND the visible turns are terse, the
+    /// budget clamps to a single short burst.
+    @Test("Terse replying turns clamp the token budget; ordinary turns keep chat's")
+    func terseReplyingSceneClampsTokenBudget() {
+        let rapidFire = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [
+                .init(speaker: .other, text: "up?"),
+                .init(speaker: .other, text: "lol"),
+                .init(speaker: .other, text: "u there"),
+                .init(speaker: .other, text: "??"),
+            ],
+            referenceSnippets: []
+        )
+        let leisurely = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [
+                .init(speaker: .other, text: "hey are you around today or tomorrow"),
+                .init(speaker: .selfSpeaker, text: "yeah free after 3pm works for me too"),
+            ],
+            referenceSnippets: []
+        )
+
+        #expect(ContinuationRegister.chat.generatedTokenBudget(scene: rapidFire) == ContinuationRegister.terseReplyTokenBudget)
+        #expect(ContinuationRegister.chat.generatedTokenBudget(scene: leisurely) == ContinuationRegister.chat.generatedTokenBudget)
+    }
+
+    @Test("The clamp keys off the MEDIAN turn length, so one long turn in a terse room doesn't defeat it")
+    func medianNotMeanDrivesTheClamp() {
+        let mostlyTerse = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [
+                .init(speaker: .other, text: "ok"),
+                .init(speaker: .other, text: "here is one much longer message with many words in it"),
+                .init(speaker: .other, text: "u there"),
+            ],
+            referenceSnippets: []
+        )
+        #expect(ContinuationRegister.chat.generatedTokenBudget(scene: mostlyTerse) == ContinuationRegister.terseReplyTokenBudget)
+
+        // Even-count boundary: word counts [3, 5] give a median of 4 — over
+        // the threshold, so the full chat budget stands.
+        let borderline = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [
+                .init(speaker: .other, text: "see you soon"),
+                .init(speaker: .other, text: "the meeting moved to five"),
+            ],
+            referenceSnippets: []
+        )
+        #expect(ContinuationRegister.chat.generatedTokenBudget(scene: borderline) == ContinuationRegister.chat.generatedTokenBudget)
+    }
+
+    @Test("Absent, composing, referencing, and empty-turn scenes leave the budget untouched")
+    func nonTerseScenesKeepTheRegisterBudget() {
+        let composing = ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
+        let referencing = ScreenScene.Scene(mode: .referencing, conversationTurns: [], referenceSnippets: ["short note"])
+        let emptyReplying = ScreenScene.Scene(mode: .replying, conversationTurns: [], referenceSnippets: [])
+
+        for register in [ContinuationRegister.chat, .email, .prose] {
+            #expect(register.generatedTokenBudget(scene: nil) == register.generatedTokenBudget)
+            #expect(register.generatedTokenBudget(scene: composing) == register.generatedTokenBudget)
+            #expect(register.generatedTokenBudget(scene: referencing) == register.generatedTokenBudget)
+            #expect(register.generatedTokenBudget(scene: emptyReplying) == register.generatedTokenBudget)
+        }
+    }
+
     @Test("Register falls back to the host app's default when the scene is absent, composing, or referencing")
     func registerFallsBackToHostAppWithoutAReplyingScene() {
         let composingScene = ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
