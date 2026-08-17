@@ -194,7 +194,14 @@ public struct PersonalHistoryCapturePolicy: Equatable, Sendable {
               PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier) else {
             return .blocked(.missingOrInvalidApp)
         }
-        guard !excludedApps.contains(appBundleIdentifier) else {
+        // Same always-excluded check as Screen Memory's CaptureTriggerPolicy
+        // — password managers and Keychain Access are blocked regardless of
+        // what the caller passed in. Routed through the one shared helper
+        // (`DefaultExcludedApps.isExcluded`) so every other Personal
+        // History call site (`PersonalHistoryController.ingestSerially`,
+        // `finishReplay`) that needs the same check cannot silently drift
+        // to checking `excludedApps` alone.
+        guard !DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: excludedApps) else {
             return .blocked(.excludedApp)
         }
         return .allowed(appBundleIdentifier: appBundleIdentifier)

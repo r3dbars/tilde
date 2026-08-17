@@ -145,6 +145,23 @@ struct PersonalHistoryEventTests {
         ) == .allowed(appBundleIdentifier: app))
     }
 
+    @Test("Password managers are blocked even with an empty user exclusion list")
+    func capturePolicyAlwaysExcludesPasswordManagers() {
+        let policy = PersonalHistoryCapturePolicy()
+        #expect(policy.decision(
+            enabled: true,
+            secureInput: false,
+            appBundleIdentifier: "com.1password.1password",
+            excludedApps: []
+        ) == .blocked(.excludedApp))
+        #expect(policy.decision(
+            enabled: true,
+            secureInput: false,
+            appBundleIdentifier: "com.apple.keychainaccess",
+            excludedApps: []
+        ) == .blocked(.excludedApp))
+    }
+
     @Test("Typed chunks can grow only within the event text bound")
     func boundedChunkGrowth() {
         let event = makeEvent(text: String(repeating: "x", count: 500))

@@ -120,7 +120,8 @@ struct ReplayEvalCommand {
             return unavailable(Self.safeReason(for: error))
         }
         let events = replay.events.filter {
-            $0.historyIdentifier == historyID && !excludedApps.contains($0.appBundleIdentifier)
+            $0.historyIdentifier == historyID
+                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: excludedApps)
         }
         guard !events.isEmpty else { return unavailable(.historyEmpty) }
 
