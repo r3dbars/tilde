@@ -12,29 +12,39 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         self.diagnostics = diagnostics
     }
 
-    /// `CompletionSuggesting`'s exact two-parameter signature — kept
-    /// separate from the scene-aware overload below (rather than a
-    /// defaulted third parameter) because Swift protocol conformance
-    /// matches on exact signature, and `ReplayEvalCommand` conforms via
-    /// `extension LlamaCompletionEngine: CompletionSuggesting {}`. Replay
-    /// has no live screen to consult, so `scene: nil` here is exactly
-    /// correct, not a stand-in.
     func suggestion(
         textBeforeCursor: String,
         appBundleIdentifier: String?
     ) async throws -> CompletionSuggestion? {
-        try await suggestion(textBeforeCursor: textBeforeCursor, appBundleIdentifier: appBundleIdentifier, scene: nil)
+        try await evidence(
+            textBeforeCursor: textBeforeCursor,
+            appBundleIdentifier: appBundleIdentifier,
+            scene: nil
+        ).suggestion
     }
 
-    /// The live socket path's entry point (`GhostBrainServerHost`): `scene`
-    /// is whatever `ScreenCaptureService.freshScene` returned for this
-    /// request — `nil` whenever capture is off, ungranted, or stale,
-    /// reproducing today's behavior exactly.
     func suggestion(
         textBeforeCursor: String,
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?
     ) async throws -> CompletionSuggestion? {
+        try await evidence(
+            textBeforeCursor: textBeforeCursor,
+            appBundleIdentifier: appBundleIdentifier,
+            scene: scene
+        ).suggestion
+    }
+
+    /// Same completion the user already receives, plus a memory-only token
+    /// uncertainty trace. `temperature: -1` is llama-server's documented
+    /// greedy mode; with `n_probs > 0` it also returns a simple softmax of the
+    /// logits, giving Tilde useful uncertainty without sampling a different
+    /// visible answer or issuing extra model calls.
+    func evidence(
+        textBeforeCursor: String,
+        appBundleIdentifier: String?,
+        scene: ScreenScene.Scene?
+    ) async throws -> CompletionEvidence {
         let startedAt = Date()
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
@@ -42,12 +52,13 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             register: register,
             scene: scene
         )
-        guard !recipe.prompt.isEmpty else { return nil }
+        guard !recipe.prompt.isEmpty else { return CompletionEvidence(suggestion: nil, tokens: []) }
 
         let body: [String: Any] = [
             "prompt": recipe.prompt,
             "n_predict": register.generatedTokenBudget,
-            "temperature": 0,
+            "temperature": -1,
+            "n_probs": 8,
             "cache_prompt": true,
             "stop": ["\n"],
             "stream": false,
@@ -64,16 +75,18 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let raw = object["content"] as? String else {
+        let decoded: (content: String, tokens: [CompletionTokenEvidence])
+        do {
+            decoded = try LlamaCompletionEvidenceParser.decode(data)
+        } catch {
             throw URLError(.cannotParseResponse)
         }
 
         let clean = cleaner.cleanWithReason(
-            recipe.normalizedContinuation(raw),
+            recipe.normalizedContinuation(decoded.content),
             after: textBeforeCursor
         )
-        if clean.suggestion == nil, !raw.isEmpty, let reason = clean.rejectionReason {
+        if clean.suggestion == nil, !decoded.content.isEmpty, let reason = clean.rejectionReason {
             diagnostics.record("llama-suggestion-rejected", metadata: [
                 "reason": String(describing: reason),
             ])
@@ -82,6 +95,6 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
             "cleanedChars": String(clean.suggestion?.visibleText.count ?? 0),
         ])
-        return clean.suggestion
+        return CompletionEvidence(suggestion: clean.suggestion, tokens: decoded.tokens)
     }
 }
