@@ -25,6 +25,10 @@ public enum DiagnosticsMetadataRedactor {
         // diagnostic (`ScreenCaptureService.freshScene`) so a classification
         // is never opaque — mode only, never any of the OCR'd text itself.
         "replying", "referencing", "composing",
+        // `SensitiveScenePolicy`'s suppression reason, logged by the
+        // `suggestion-suppressed` diagnostic (`GhostBrainServerHost`) —
+        // count-only, never the matched category or any scene text.
+        "sensitive-scene",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
