@@ -41,6 +41,17 @@ struct PersonalSuggestionPolicyTests {
         #expect(result.source == .base)
     }
 
+    @Test("Candidate handoff carries base and personal evidence without changing serving")
+    func candidateHandoff() {
+        let set = PersonalSuggestionPolicy.candidateSet(
+            baseGhost: "sounds good to me",
+            personalPrediction: PersonalNextWordPrediction(word: "yep", support: 3, total: 4)
+        )
+        #expect(set.candidates.map(\.source) == [.base, .personal])
+        #expect(set.first(from: .personal)?.support == 3)
+        #expect(set.first(from: .personal)?.confidence == 0.75)
+    }
+
     @Test("tailWords takes the trailing normalized words, bounded by maximumWords")
     func tailWordsTrailingBounded() {
         #expect(PersonalSuggestionPolicy.tailWords(fromContext: "See you Tomorrow, ") == ["you", "tomorrow"])
