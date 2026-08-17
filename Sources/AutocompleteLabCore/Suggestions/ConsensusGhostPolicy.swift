@@ -25,11 +25,11 @@ public enum ConsensusGhostPolicy {
         for token in tokens {
             guard token.probability >= bar else {
                 var completeWords = wordCount(in: safeText)
+                let unsafeBeginsWhitespace = token.text.first?.isWhitespace ?? false
+                let safeEndsWhitespace = safeText.last?.isWhitespace ?? true
                 // If the first unsafe token continues the current lexical
                 // token, the trailing safe fragment is not a whole word yet.
-                if !token.text.first.map(\.isWhitespace, default: false),
-                   !safeText.last.map(\.isWhitespace, default: true),
-                   completeWords > 0 {
+                if !unsafeBeginsWhitespace, !safeEndsWhitespace, completeWords > 0 {
                     completeWords -= 1
                 }
                 let budget = max(1, completeWords)
@@ -42,14 +42,5 @@ public enum ConsensusGhostPolicy {
 
     private static func wordCount(in text: String) -> Int {
         text.split(whereSeparator: \.isWhitespace).count
-    }
-}
-
-private extension Optional where Wrapped == Bool {
-    func map(_ transform: (Bool) -> Bool, default fallback: Bool) -> Bool {
-        switch self {
-        case let .some(value): transform(value)
-        case .none: fallback
-        }
     }
 }
