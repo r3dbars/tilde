@@ -3,7 +3,7 @@ import Foundation
 /// One plausible continuation from one Tilde expert. Candidate text stays
 /// memory-only; this value is never diagnostics-safe and must never be logged.
 public struct SuggestionCandidate: Equatable, Sendable {
-    public enum Source: String, Equatable, Sendable {
+    public enum Source: String, Equatable, Hashable, Sendable {
         case base
         case personal
         case screen
@@ -29,21 +29,19 @@ public struct SuggestionCandidate: Equatable, Sendable {
 }
 
 /// The production hand-off between candidate generation and selection.
-///
-/// Today it carries the base model plus the conservative personal next-word
-/// expert. Future experts can join without changing the serving contract.
-/// Construction removes empty and duplicate candidates while preserving the
-/// first source's ordering, so downstream ranking never wastes work comparing
-/// the same visible continuation twice.
+/// Duplicate text from DIFFERENT experts is intentionally preserved: agreement
+/// is evidence the arbiter needs. Only empty candidates and duplicate outputs
+/// from the same expert are collapsed.
 public struct SuggestionCandidateSet: Equatable, Sendable {
     public let candidates: [SuggestionCandidate]
 
     public init(_ candidates: [SuggestionCandidate]) {
-        var seen = Set<String>()
+        struct Key: Hashable { let source: SuggestionCandidate.Source; let text: String }
+        var seen = Set<Key>()
         self.candidates = candidates.filter { candidate in
-            let key = Self.normalized(candidate.text)
-            guard !key.isEmpty, seen.insert(key).inserted else { return false }
-            return true
+            let text = Self.normalized(candidate.text)
+            guard !text.isEmpty else { return false }
+            return seen.insert(Key(source: candidate.source, text: text)).inserted
         }
     }
 
