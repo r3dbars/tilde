@@ -54,8 +54,19 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         )
         guard !recipe.prompt.isEmpty else { return CompletionEvidence(suggestion: nil, tokens: []) }
 
+        // Intent Futures v1 adds only fixed-vocabulary semantic directions
+        // immediately before the live Continuation marker. The conversation
+        // itself remains owned by ScreenScene's existing redacted context
+        // block. As the user types, this hint is recomputed and the future
+        // weights collapse without a second model call.
+        let prompt = Self.promptByAddingIntentFutures(
+            to: recipe.prompt,
+            scene: scene,
+            textBeforeCursor: textBeforeCursor
+        )
+
         let body: [String: Any] = [
-            "prompt": recipe.prompt,
+            "prompt": prompt,
             "n_predict": register.generatedTokenBudget,
             "temperature": -1,
             "n_probs": 8,
@@ -113,5 +124,19 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
         ])
         return CompletionEvidence(suggestion: suggestion, tokens: decoded.tokens)
+    }
+
+    static func promptByAddingIntentFutures(
+        to prompt: String,
+        scene: ScreenScene.Scene?,
+        textBeforeCursor: String
+    ) -> String {
+        let hint = IntentPromptHint.block(scene: scene, textBeforeCursor: textBeforeCursor)
+        guard !hint.isEmpty,
+              let marker = prompt.range(of: "Continuation:", options: .backwards)
+        else { return prompt }
+        var result = prompt
+        result.insert(contentsOf: hint, at: marker.lowerBound)
+        return result
     }
 }
