@@ -1,0 +1,75 @@
+import Testing
+@testable import AutocompleteLabCore
+
+@Suite("Intent futures")
+struct IntentFuturesTests {
+    private func replyScene(_ text: String) -> ScreenScene.Scene {
+        .init(
+            mode: .replying,
+            conversationTurns: [.init(speaker: .other, text: text)],
+            referenceSnippets: []
+        )
+    }
+
+    @Test("A commitment question produces several plausible futures")
+    func commitmentQuestion() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("Can you send the deck before the call?"),
+            textBeforeCursor: ""
+        )
+        let kinds = futures.map(\.kind)
+        #expect(kinds.contains(.answer))
+        #expect(kinds.contains(.accept))
+        #expect(kinds.contains(.commit))
+        #expect(futures.count <= IntentFuturesPlanner.maximumFutures)
+        #expect(abs(futures.reduce(0) { $0 + $1.weight } - 1) < 0.0001)
+    }
+
+    @Test("Typing yes collapses toward acceptance")
+    func yesCollapses() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("Are you still coming tonight?"),
+            textBeforeCursor: "Ye"
+        )
+        #expect(futures.first?.kind == .accept)
+    }
+
+    @Test("Typing a question collapses toward clarification")
+    func questionCollapses() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("Can you send the latest one?"),
+            textBeforeCursor: "Which"
+        )
+        #expect(futures.first?.kind == .clarify)
+        #expect(futures.contains { $0.kind == .question })
+    }
+
+    @Test("Typing a commitment collapses toward commit")
+    func commitCollapses() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("Could you have it by Friday?"),
+            textBeforeCursor: "I'll"
+        )
+        #expect(futures.first?.kind == .commit)
+    }
+
+    @Test("Non-reply scenes stay out of the way")
+    func composingDoesNotInventIntent() {
+        let scene = ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
+        let futures = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: "I think")
+        #expect(futures == [.init(kind: .continueWriting, weight: 1)])
+        #expect(IntentFuturesPlanner.promptHint(for: futures).isEmpty)
+    }
+
+    @Test("Prompt hint contains labels only")
+    func promptHintIsContentFree() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("What do you think about delaying launch?"),
+            textBeforeCursor: "I think"
+        )
+        let hint = IntentFuturesPlanner.promptHint(for: futures)
+        #expect(hint.contains("answer:"))
+        #expect(!hint.contains("launch"))
+        #expect(!hint.contains("delaying"))
+    }
+}
