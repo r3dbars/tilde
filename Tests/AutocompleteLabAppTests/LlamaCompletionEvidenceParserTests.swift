@@ -20,7 +20,7 @@ struct LlamaCompletionEvidenceParserTests {
 
     @Test("Missing probability trace fails open")
     func missingProbabilities() throws {
-        let json = """{"content":"hello"}"""
+        let json = "{\"content\":\"hello\"}"
         let decoded = try LlamaCompletionEvidenceParser.decode(Data(json.utf8))
         #expect(decoded.content == "hello")
         #expect(decoded.tokens.isEmpty)
