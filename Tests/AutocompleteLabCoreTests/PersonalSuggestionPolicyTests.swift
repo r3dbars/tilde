@@ -1,0 +1,53 @@
+import Foundation
+import Testing
+@testable import AutocompleteLabCore
+
+@Suite("Personal suggestion serving policy")
+struct PersonalSuggestionPolicyTests {
+    @Test("A confident personal word that disagrees replaces the ghost")
+    func disagreementReplacesWithSinglePersonalWord() {
+        let result = PersonalSuggestionPolicy.apply(
+            baseGhost: "afternoon works great for me",
+            personalPrediction: PersonalNextWordPrediction(word: "tomorrow", support: 4, total: 4)
+        )
+        #expect(result.text == "tomorrow")
+        #expect(result.source == .personal)
+    }
+
+    @Test("Agreement keeps the base ghost untouched, including its extra words")
+    func agreementKeepsTheLongerBaseGhost() {
+        let result = PersonalSuggestionPolicy.apply(
+            baseGhost: "Tomorrow works great for me",
+            personalPrediction: PersonalNextWordPrediction(word: "tomorrow", support: 3, total: 3)
+        )
+        #expect(result.text == "Tomorrow works great for me")
+        #expect(result.source == .agreed)
+    }
+
+    @Test("No personal candidate serves the base ghost untouched")
+    func noPersonalCandidateServesBase() {
+        let result = PersonalSuggestionPolicy.apply(baseGhost: "sounds good", personalPrediction: nil)
+        #expect(result.text == "sounds good")
+        #expect(result.source == .base)
+    }
+
+    @Test("An empty base ghost is never turned into a suggestion")
+    func emptyBaseGhostStaysSilent() {
+        let result = PersonalSuggestionPolicy.apply(
+            baseGhost: "",
+            personalPrediction: PersonalNextWordPrediction(word: "tomorrow", support: 4, total: 4)
+        )
+        #expect(result.text.isEmpty)
+        #expect(result.source == .base)
+    }
+
+    @Test("tailWords takes the trailing normalized words, bounded by maximumWords")
+    func tailWordsTrailingBounded() {
+        #expect(PersonalSuggestionPolicy.tailWords(fromContext: "See you Tomorrow, ") == ["you", "tomorrow"])
+        #expect(
+            PersonalSuggestionPolicy.tailWords(fromContext: "one two three four ", maximumWords: 3)
+                == ["two", "three", "four"]
+        )
+        #expect(PersonalSuggestionPolicy.tailWords(fromContext: "solo ") == ["solo"])
+    }
+}

@@ -16,6 +16,8 @@ final class StatusMenuHost: NSObject {
     private var suggestionsItem: NSMenuItem?
     private var personalHistoryItem: NSMenuItem?
     private var personalNextWordItem: NSMenuItem?
+    private var personalSuggestionsItem: NSMenuItem?
+    private var personalSuggestionsSplitItem: NSMenuItem?
     private var historySizeItem: NSMenuItem?
     private var historyLocationItem: NSMenuItem?
     private var excludeCurrentAppItem: NSMenuItem?
@@ -88,6 +90,14 @@ final class StatusMenuHost: NSObject {
             "Next-word test: waiting for fresh writing · shadow-only"
         )
         personalNextWordItem?.isHidden = true
+        personalSuggestionsItem = addAction(
+            to: menu,
+            "Personal suggestions (experimental)",
+            #selector(togglePersonalSuggestions(_:))
+        )
+        personalSuggestionsItem?.isHidden = true
+        personalSuggestionsSplitItem = addInfoRow(to: menu, "Personal suggestions: none served today")
+        personalSuggestionsSplitItem?.isHidden = true
         historyLocationItem = addInfoRow(
             to: menu,
             "Location: \(NSString(string: personalHistory.location.path).abbreviatingWithTildeInPath)"
@@ -191,6 +201,29 @@ final class StatusMenuHost: NSObject {
         if alert.runModal() == .alertFirstButtonReturn {
             personalHistory.isEnabled = true
         }
+    }
+
+    /// v1 feel-it experiment (`docs/plans/road-to-paid.md` Phase 3): a
+    /// confident personal next word can replace the ghost's first word.
+    /// Only reachable while Personal History itself is on — see
+    /// `personalSuggestionsItem?.isHidden` in `menuWillOpen` — so this
+    /// never needs to re-explain what Personal History already explained.
+    @objc private func togglePersonalSuggestions(_ sender: Any?) {
+        if settings.personalSuggestionsServingEnabled {
+            settings.personalSuggestionsServingEnabled = false
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Turn on personal suggestions?"
+        alert.informativeText = """
+        Tilde will sometimes replace its suggestion's first word with a word from your own personal writing history, when that personal word is well-supported and disagrees with the general suggestion. This is separate from the ongoing Next-word test, which keeps running either way and never changes what you see.
+
+        Turning this off returns to plain suggestions immediately.
+        """
+        alert.addButton(withTitle: "Turn On")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        settings.personalSuggestionsServingEnabled = true
     }
 
     @objc private func excludeCurrentApp(_ sender: Any?) {
@@ -319,10 +352,13 @@ extension StatusMenuHost: NSMenuDelegate {
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
         personalHistoryItem?.state = personalHistory.isEnabled ? .on : .off
         personalNextWordItem?.isHidden = !personalHistory.isEnabled
+        personalSuggestionsItem?.isHidden = !personalHistory.isEnabled
+        personalSuggestionsItem?.state = settings.personalSuggestionsServingEnabled ? .on : .off
         refreshCurrentExclusionCandidate()
         refreshExcludedAppsMenu()
         refreshHistorySummary()
         refreshPersonalNextWord()
+        refreshPersonalSuggestionsSplit()
         refreshScreenMemoryStatus()
 
         if let until = settings.pausedUntil {
@@ -464,6 +500,22 @@ extension StatusMenuHost: NSMenuDelegate {
         historySizeItem?.title = line
         deleteHistoryItem?.isEnabled = true
         return true
+    }
+
+    /// Count-only, same as the underlying `PersonalSuggestionStats` store —
+    /// never reads or shows any suggested text, only today's split across
+    /// `PersonalSuggestionSource`'s three fixed cases.
+    private func refreshPersonalSuggestionsSplit() {
+        let visible = personalHistory.isEnabled && settings.personalSuggestionsServingEnabled
+        personalSuggestionsSplitItem?.isHidden = !visible
+        guard visible else { return }
+        let counts = PersonalSuggestionStats.todayCounts()
+        let personal = counts[PersonalSuggestionSource.personal.rawValue, default: 0]
+        let agreed = counts[PersonalSuggestionSource.agreed.rawValue, default: 0]
+        let base = counts[PersonalSuggestionSource.base.rawValue, default: 0]
+        personalSuggestionsSplitItem?.title = personal + agreed + base > 0
+            ? "Personal suggestions today: \(personal) personal · \(agreed) agreed · \(base) base"
+            : "Personal suggestions: none served today"
     }
 
     private func refreshPersonalNextWord() {

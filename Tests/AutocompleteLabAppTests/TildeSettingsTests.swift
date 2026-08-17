@@ -18,6 +18,10 @@ struct TildeSettingsTests {
         #expect(settings.pausedUntil == nil)
         #expect(!settings.personalHistoryEnabled)
         #expect(settings.personalHistoryExcludedApps.isEmpty)
+        // "Personal suggestions (experimental)" (docs/plans/road-to-paid.md
+        // Phase 3) defaults OFF, unlike Screen Memory's ON default below —
+        // a feel-it experiment should never turn itself on for anyone.
+        #expect(!settings.personalSuggestionsServingEnabled)
         // 2026-08-16 owner directive: Screen Memory is a first-class,
         // required-permission feature, not an opt-in — a fresh install with
         // no persisted key must read ON, same as every other product
@@ -64,6 +68,17 @@ struct TildeSettingsTests {
         #expect(keyboard.object(forKey: "PersonalHistoryEnabled") as? Bool == true)
         #expect(keyboard.stringArray(forKey: "PersonalHistoryExcludedApps") == ["com.example.Editor"])
         #expect(settings.personalNextWordExperimentIdentifier == "experiment-id")
+    }
+
+    @Test("Personal suggestions serving toggle is explicitly settable and stays in the keyboard domain")
+    func personalSuggestionsServingToggle() {
+        let (settings, keyboard) = makeSettings()
+        #expect(!settings.personalSuggestionsServingEnabled)
+        settings.personalSuggestionsServingEnabled = true
+        #expect(settings.personalSuggestionsServingEnabled)
+        #expect(keyboard.object(forKey: "PersonalSuggestionsServingEnabled") as? Bool == true)
+        settings.personalSuggestionsServingEnabled = false
+        #expect(!settings.personalSuggestionsServingEnabled)
     }
 
     @Test("Keyboard settings stay in the keyboard defaults domain")
