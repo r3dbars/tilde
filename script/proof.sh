@@ -156,6 +156,7 @@ run_blocking "personal brain Messages decoder self-test" xcrun swift script/pers
 run_blocking "bundle signing parser self-test" bash script/check_app_bundle.sh --selftest
 run_blocking "development signing selector self-test" bash script/signing_identity.sh --selftest
 run_blocking "release-proof cleanup parser self-test" bash script/restart_app.sh --selftest
+run_blocking "capture power probe measurement self-test" bash script/capture_power_probe.sh --selftest
 run_swift
 
 summarize_and_exit

@@ -169,6 +169,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launchMode == .production {
             statusMenuHost.start()
             startObservingFrontmostAppForScreenMemory()
+        } else if launchMode == .releaseProof
+            && ProcessInfo.processInfo.environment["TILDE_SCREEN_MEMORY_DEV"] == "1"
+        {
+            // Screen Memory's power probe (script/capture_power_probe.sh,
+            // Phase 1b) needs an isolated instance that actually fires
+            // window-change captures. Production mode cannot be that
+            // instance: launching a second production Tilde alongside the
+            // owner's real daily driver hits the duplicate-instance guard
+            // above and self-terminates before this line — by design, so a
+            // probe run never touches the real app's socket. Release-proof
+            // mode is already the isolated dev/proof lane (dedicated port,
+            // no socket takeover attempt), so wiring the SAME window-change
+            // observer production uses — gated behind an env var the probe
+            // alone sets — lets the probe exercise the real trigger path. A
+            // normal (non-probe) release-proof launch, which the release
+            // network-egress gate depends on staying input-method-free, is
+            // untouched: this env var is never set there.
+            //
+            // This checks the environment directly rather than through
+            // TildeSettings: PR #357 (2026-08-16) deleted TildeSettings'
+            // persisted `ScreenMemoryDevMode` / `TILDE_SCREEN_MEMORY_DEV`
+            // gate entirely, since Screen Memory's capture engine itself is
+            // now on-by-default in production and needs no dev flag to
+            // enable it. The probe's need is narrower and unrelated to that
+            // product gate — an ephemeral, session-only opt-in for wiring
+            // observation into an otherwise-headless release-proof lane —
+            // so it reads the environment variable directly instead of
+            // resurrecting a persisted UserDefaults flag.
+            startObservingFrontmostAppForScreenMemory()
+            // The probe (script/capture_power_probe.sh) expects THIS launch
+            // to trigger the system Screen Recording consent dialog on a
+            // fresh, never-answered bundle. Production only asks via the
+            // Settings toggle's confirmation flow
+            // (StatusMenuHost.toggleScreenMemory), which this headless dev
+            // lane never runs — without asking here, a fresh bundle could
+            // sit at permission=false forever with nothing to prompt it.
+            // request() is a no-op once the user has already answered for
+            // this exact code signature, so this is safe to call every run.
+            if !ScreenRecordingPermission.isGranted() {
+                ScreenRecordingPermission.request()
+            }
         }
         llamaServerHost.start()
         if launchMode.allowsDailyDriverMutation {

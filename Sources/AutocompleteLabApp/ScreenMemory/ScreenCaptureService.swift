@@ -274,12 +274,26 @@ actor ScreenCaptureService {
         configuration.showsCursor = false
         configuration.capturesAudio = false
 
+        // Duty-cycle instrumentation (Phase 1b, docs/plans/screen-memory.md):
+        // wall-clock time for capture+OCR only, in whole milliseconds, no
+        // screen text. This is the number the power probe harness
+        // (script/capture_power_probe.sh) reads back out of the diagnostics
+        // log to check the <250ms OCR p95 budget — reuses the same
+        // injectable `now` clock tests already control, rather than adding a
+        // second time source.
+        let dutyCycleStart = now()
+
         do {
             let image = try await SCScreenshotManager.captureImage(
                 contentFilter: filter,
                 configuration: configuration
             )
             let recognized = try await recognizeText(image)
+            // Stop the clock the instant OCR returns — everything after this
+            // (window attribution, block mapping) is pure/deterministic and
+            // not part of the "capture+OCR" duty cycle the plan's power
+            // budget assertions (script/capture_power_probe.sh) measure.
+            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             // `SCShareableContent.windows` documents no ordering guarantee.
             // `windowLayer` (mirrors CGWindowLevel) is the closest available
             // front-to-back proxy: lower layers sit in front for normal
@@ -311,12 +325,32 @@ actor ScreenCaptureService {
             )
             latestSnapshot = snapshot
             lastCaptureAt = moment
-            diagnostics("screen-capture-completed", ["blocks": String(blocks.count)])
+            diagnostics(
+                "screen-capture-completed",
+                ["blocks": String(blocks.count), "duration_ms": String(dutyCycleMilliseconds)]
+            )
             return .captured(blockCount: blocks.count)
         } catch {
-            diagnostics("screen-capture-failed", [:])
+            // Failed attempts still spent wall-clock time in
+            // ScreenCaptureKit/Vision (e.g. a slow timeout) and count toward
+            // the duty cycle the power probe measures, so the same
+            // duration_ms field is attached here too.
+            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
+            diagnostics("screen-capture-failed", ["duration_ms": String(dutyCycleMilliseconds)])
             return .captureFailed
         }
+    }
+
+    /// Whole milliseconds between two instants, floored at zero so a clock
+    /// that does not advance (the common case in tests, which hold `now`
+    /// fixed) reports `0` rather than a negative number. Internal, not
+    /// private, so `ScreenCaptureServiceTests` can prove the rounding/floor
+    /// behavior directly — `performCapture` itself stays untestable at unit
+    /// level like the rest of ScreenCaptureKit-shaped code in this type (see
+    /// the type doc comment), so this is the one piece of the duty-cycle
+    /// math that CAN be proven without a live display.
+    static func milliseconds(from start: Date, to end: Date) -> Int {
+        max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
     }
 
     private func record(_ decision: CaptureTriggerPolicy.Decision) {

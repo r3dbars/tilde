@@ -38,7 +38,7 @@ public enum DiagnosticsMetadataRedactor {
     public static func logSafeField(forKey key: String, value: String) -> String {
         let safe: Bool
         switch key {
-        case "totalMilliseconds", "cleanedChars", "chars", "turns", "refs":
+        case "totalMilliseconds", "cleanedChars", "chars", "turns", "refs", "duration_ms", "blocks":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
