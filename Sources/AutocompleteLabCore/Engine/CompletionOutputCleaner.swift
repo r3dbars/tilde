@@ -7,6 +7,7 @@ public enum CompletionCleanRejectionReason: String, Sendable {
     case promptInstructionEcho
     case emptyAfterPrefixTrimming
     case replaysContext
+    case repeatsItself
 }
 
 public enum CompletionCleanResult: Sendable {
@@ -78,6 +79,14 @@ public struct CompletionOutputCleaner: Sendable {
         }
         if let textBeforeCursor, replaysContext(continuation, context: textBeforeCursor) {
             return .rejected(.replaysContext)
+        }
+
+        let deduped = trimmingSelfRepetition(continuation)
+        if deduped != continuation {
+            guard deduped.contains(where: { $0.isLetter || $0.isNumber }) else {
+                return .rejected(.repeatsItself)
+            }
+            continuation = deduped
         }
 
         return .accepted(CompletionSuggestion(text: continuation, maxVisibleWords: maxVisibleWords))
@@ -210,6 +219,75 @@ public struct CompletionOutputCleaner: Sendable {
         return offered.indices.dropLast(3).contains { index in
             contains(Array(offered[index..<offered.index(index, offsetBy: 4)]), in: typed)
         }
+    }
+
+    /// Live dogfood regression (build 2705, rapid-fire chat): typed
+    /// "Hey I am", ghost offered " here, I am here." — the suggestion's own
+    /// tail re-states its opening clause. `replaysContext` only compares
+    /// against the TYPED context, so a model looping on its own words sails
+    /// through. This trims the suggestion at the point where it starts
+    /// repeating itself: a 3-word run it already said (same threshold
+    /// `replaysContext` uses), a clause identical to an earlier clause
+    /// ("sounds good, sounds good"), or a final clause that ENDS by
+    /// re-stating a whole earlier clause (the observed "here, … here."
+    /// loop). The end-anchored rule is what keeps ordinary prose safe: a
+    /// common word merely reappearing mid-clause never triggers it.
+    private func trimmingSelfRepetition(_ suggestion: String) -> String {
+        let clauseBreaks: Set<Character> = [",", ".", ";", ":", "!", "?"]
+        var wordStarts: [String.Index] = []
+        var words: [String] = []
+        var endsClause: [Bool] = []
+        for range in wordRanges(in: suggestion) {
+            let token = String(suggestion[range])
+            let word = normalized(token)
+            let breaksHere = token.last.map(clauseBreaks.contains) ?? false
+            if !word.isEmpty {
+                wordStarts.append(range.lowerBound)
+                words.append(word)
+                endsClause.append(breaksHere)
+            } else if breaksHere, !endsClause.isEmpty {
+                // A detached punctuation token still closes the clause of
+                // the word before it.
+                endsClause[endsClause.count - 1] = true
+            }
+        }
+        guard words.count >= 2 else { return suggestion }
+
+        var cut = words.count
+
+        if words.count >= 6 {
+            for start in 3...(words.count - 3) {
+                guard contains(Array(words[start..<start + 3]), in: Array(words[0..<start])) else { continue }
+                cut = start
+                break
+            }
+        }
+
+        var clauses: [[Int]] = [[]]
+        for index in words.indices {
+            clauses[clauses.count - 1].append(index)
+            if endsClause[index], index < words.count - 1 {
+                clauses.append([])
+            }
+        }
+        for j in 1..<clauses.count {
+            let clause = clauses[j].map { words[$0] }
+            let earlier = clauses[0..<j].map { indices in indices.map { words[$0] } }
+            let exactRepeat = earlier.contains { $0 == clause }
+            let finalClauseEndsOnEarlierClause = j == clauses.count - 1 && earlier.contains {
+                clause.count >= $0.count && Array(clause.suffix($0.count)) == $0
+            }
+            guard exactRepeat || finalClauseEndsOnEarlierClause else { continue }
+            cut = min(cut, clauses[j][0])
+            break
+        }
+
+        guard cut < words.count else { return suggestion }
+        var trimmed = String(suggestion[..<wordStarts[cut]])
+        while let last = trimmed.last, last.isWhitespace || last == "," || last == ";" || last == ":" {
+            trimmed.removeLast()
+        }
+        return trimmed
     }
 
     private func contains(_ needle: [String], in words: [String]) -> Bool {
