@@ -54,11 +54,6 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         )
         guard !recipe.prompt.isEmpty else { return CompletionEvidence(suggestion: nil, tokens: []) }
 
-        // Intent Futures v1 adds only fixed-vocabulary semantic directions
-        // immediately before the live Continuation marker. The conversation
-        // itself remains owned by ScreenScene's existing redacted context
-        // block. As the user types, this hint is recomputed and the future
-        // weights collapse without a second model call.
         let prompt = Self.promptByAddingIntentFutures(
             to: recipe.prompt,
             scene: scene,
@@ -97,10 +92,6 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
         var suggestion = clean.suggestion
 
-        // Consensus Ghost v1: only shorten when the cleaned visible text is a
-        // literal prefix of the generated continuation. If the cleaner had to
-        // rewrite/strip an echo, token positions no longer line up cleanly, so
-        // stand down rather than apply confidence evidence to the wrong text.
         if let current = suggestion {
             let normalizedVisible = String(normalized.drop(while: \.isWhitespace))
             let visibleWords = current.visibleText.split(whereSeparator: \.isWhitespace).count
@@ -131,10 +122,15 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         scene: ScreenScene.Scene?,
         textBeforeCursor: String
     ) -> String {
-        let hint = IntentPromptHint.block(scene: scene, textBeforeCursor: textBeforeCursor)
-        guard !hint.isEmpty,
+        let futures = IntentFutureCache.shared.futures(
+            scene: scene,
+            textBeforeCursor: textBeforeCursor
+        )
+        let summary = IntentFuturesPlanner.promptHint(for: futures)
+        guard !summary.isEmpty,
               let marker = prompt.range(of: "Continuation:", options: .backwards)
         else { return prompt }
+        let hint = "Likely response directions: \(summary)\n"
         var result = prompt
         result.insert(contentsOf: hint, at: marker.lowerBound)
         return result
