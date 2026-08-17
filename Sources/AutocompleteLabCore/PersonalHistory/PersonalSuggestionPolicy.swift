@@ -1,34 +1,18 @@
 import Foundation
 
-/// Which engine's word actually reached the user, for the count-only
-/// `suggestion-served` diagnostic's `source` field
-/// (`DiagnosticsMetadataRedactor`). Only ever emitted when the "Personal
-/// suggestions (experimental)" toggle is on; toggle-off behavior stays
-/// byte-identical to before this feature existed (no `source` field at
-/// all).
 public enum PersonalSuggestionSource: String, Equatable, Sendable {
     case base
     case personal
     case agreed
 }
 
-/// v1 policy for serving the Personal History next-word model's prediction
-/// alongside the base ghost (`docs/plans/road-to-paid.md` Phase 3). Pure and
-/// stateless: a comparison of two already-computed strings. Deliberately
-/// does not touch `PersonalNextWordShadow`'s paired A/B scoring in any way —
-/// that experiment keeps running untouched regardless of this policy's
-/// outcome (`docs/evaluation.md`).
+/// Conservative v1 selection policy. The important architectural change is
+/// that serving now crosses a CandidateSet boundary: generation and selection
+/// are separate concepts, so replay and future experts can inspect the same
+/// alternatives without changing what the user sees.
 public enum PersonalSuggestionPolicy {
-    /// Matches `PersonalNextWordShadow.predictNextWord`'s own context
-    /// window (the conservative baseline recipe's 2-word lookback).
     public static let maximumTailWords = 2
 
-    /// Up to `maximumWords` trailing words from field text that ends in
-    /// whitespace (the same precondition `GhostBrainRequest` enforces on
-    /// the wire — see `GhostBrainServerHost`'s request validation), each
-    /// cleaned the same way replay scoring cleans a golden word
-    /// (`PersonalReplayEval.normalizeWord`) so the lookup's vocabulary
-    /// roughly matches what the shadow model learned from typed text.
     public static func tailWords(
         fromContext context: String,
         maximumWords: Int = maximumTailWords
@@ -37,37 +21,46 @@ public enum PersonalSuggestionPolicy {
         return tokens.suffix(maximumWords).map { PersonalReplayEval.normalizeWord($0) }
     }
 
-    /// The v1 blend, deliberately simple (a feel-it experiment, not the
-    /// final Smart-Compose-style interpolation Phase 3 describes):
-    /// - No personal candidate, or nothing to compare against (empty base
-    ///   ghost — i.e. the base engine is already silent): serve the base
-    ///   ghost untouched, `source: .base`. This policy never turns a
-    ///   silence into a suggestion.
-    /// - The personal candidate's word agrees with the base ghost's first
-    ///   word: serve the base ghost untouched, `source: .agreed` —
-    ///   agreement IS the confidence signal, so the (possibly longer) base
-    ///   ghost is kept rather than truncated to one word.
-    /// - The personal candidate disagrees with the base ghost's first word:
-    ///   replace the ghost with just the single personal word, `source:
-    ///   .personal` — a confident personal word beats a plausible-but-generic
-    ///   phrase, but only that one word, never a personal phrase the model
-    ///   hasn't actually vetted beyond the next token.
+    public static func candidateSet(
+        baseGhost: String,
+        personalPrediction: PersonalNextWordPrediction?
+    ) -> SuggestionCandidateSet {
+        var candidates = [SuggestionCandidate(text: baseGhost, source: .base)]
+        if let personalPrediction {
+            let confidence = personalPrediction.total > 0
+                ? Double(personalPrediction.support) / Double(personalPrediction.total)
+                : nil
+            candidates.append(SuggestionCandidate(
+                text: personalPrediction.word,
+                source: .personal,
+                confidence: confidence,
+                support: personalPrediction.support
+            ))
+        }
+        return SuggestionCandidateSet(candidates)
+    }
+
+    /// Keeps the pre-CandidateSet user-visible behavior byte-for-byte:
+    /// personal disagreement serves one personal word; agreement keeps the
+    /// longer base ghost; no personal evidence keeps base; base silence stays
+    /// silent. Only the internal hand-off changed.
     public static func apply(
         baseGhost: String,
         personalPrediction: PersonalNextWordPrediction?
     ) -> (text: String, source: PersonalSuggestionSource) {
-        guard !baseGhost.isEmpty, let personalPrediction else {
-            return (baseGhost, .base)
-        }
-        let normalizedPersonal = PersonalReplayEval.normalizeWord(personalPrediction.word)
+        let set = candidateSet(baseGhost: baseGhost, personalPrediction: personalPrediction)
+        guard let base = set.first(from: .base) else { return ("", .base) }
+        guard let personal = set.first(from: .personal) else { return (base.text, .base) }
+
+        let normalizedPersonal = PersonalReplayEval.normalizeWord(personal.text)
         guard !normalizedPersonal.isEmpty,
-              let baseFirstWord = baseGhost.split(whereSeparator: \.isWhitespace).first else {
-            return (baseGhost, .base)
+              let baseFirstWord = base.text.split(whereSeparator: \.isWhitespace).first else {
+            return (base.text, .base)
         }
         let normalizedBase = PersonalReplayEval.normalizeWord(baseFirstWord)
         if normalizedBase == normalizedPersonal {
-            return (baseGhost, .agreed)
+            return (base.text, .agreed)
         }
-        return (personalPrediction.word, .personal)
+        return (personal.text, .personal)
     }
 }
