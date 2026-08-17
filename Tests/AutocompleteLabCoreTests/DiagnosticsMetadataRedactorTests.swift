@@ -50,6 +50,15 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("reason", "sensitive-scene") == "reason=sensitive-scene")
     }
 
+    @Test("The personal-suggestion source vocabulary survives as its literal enum case")
+    func keepsPersonalSuggestionSourceValues() {
+        #expect(field("source", "base") == "source=base")
+        #expect(field("source", "personal") == "source=personal")
+        #expect(field("source", "agreed") == "source=agreed")
+        // Nothing free-text ever gets through the "source" key either.
+        #expect(field("source", "tomorrow") == "source=String(8 chars)")
+    }
+
     @Test("Scene classification diagnostics survive as fixed vocabulary and integers, never OCR'd text")
     func keepsSceneClassifiedFields() {
         #expect(field("mode", "replying") == "mode=replying")

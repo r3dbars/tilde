@@ -96,8 +96,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sceneProvider: Self.sceneProvider(for: screenCaptureService),
         // A bare activity pulse only — see GhostBrainServerHost's doc comment.
         onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService),
-        suggestionsGate: Self.suggestionsGate
+        suggestionsGate: Self.suggestionsGate,
+        personalSuggestionsGate: Self.personalSuggestionsGate,
+        personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController)
     )
+
+    /// "Personal suggestions (experimental)" (`docs/plans/road-to-paid.md`
+    /// Phase 3): both the feature toggle AND Personal History's own master
+    /// toggle must be on — the menu only ever shows the experimental toggle
+    /// while Personal History is enabled, but this gate re-checks both live
+    /// on every completion request, the same discipline `suggestionsGate`
+    /// applies to Screen Recording permission, so a toggle flipped mid-
+    /// session takes effect on the very next request with nothing cached.
+    private nonisolated static func personalSuggestionsGate() -> Bool {
+        let settings = TildeSettings()
+        return settings.personalHistoryEnabled && settings.personalSuggestionsServingEnabled
+    }
+
+    /// `nonisolated` for the same reason `sceneProvider`/
+    /// `completionActivityHandler` are: the closure captures and calls an
+    /// actor-isolated method (`PersonalHistoryController.
+    /// personalNextWordPrediction`) from inside a `@MainActor` lazy-var
+    /// initializer. Per-app exclusions are enforced on the other side of
+    /// this closure, inside the controller — see its doc comment.
+    private nonisolated static func personalNextWordProvider(
+        for controller: PersonalHistoryController
+    ) -> @Sendable ([String], String?) async -> PersonalNextWordPrediction? {
+        { tailWords, appBundleIdentifier in
+            await controller.personalNextWordPrediction(
+                afterTailWords: tailWords,
+                appBundleIdentifier: appBundleIdentifier
+            )
+        }
+    }
 
     /// 2026-08-16 owner directive: Screen Recording permission is now
     /// required for Tilde to suggest at all — see `GhostBrainServerHost`'s

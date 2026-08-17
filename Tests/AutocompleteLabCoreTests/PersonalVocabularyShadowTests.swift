@@ -720,6 +720,50 @@ struct PersonalNextWordShadowTests {
         #expect(shadow.snapshot.opportunities == beforeProtectedRetry.opportunities + 1)
     }
 
+    @Test("predictNextWord serves a well-supported context and never perturbs consume's scoring")
+    func predictNextWordServesWellSupportedContext() {
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        shadow.consume([
+            event(id: "training", text: " three four Finish three four Finish ", time: 100, session: "a"),
+        ])
+        let before = shadow.snapshot
+
+        let prediction = shadow.predictNextWord(afterTailWords: ["three", "four"])
+        #expect(prediction?.word == "Finish")
+        #expect(prediction?.support == 2)
+        #expect(prediction?.total == 2)
+
+        // Calling the read-only lookup repeatedly must never change what
+        // `consume`'s paired A/B scoring later reports.
+        for _ in 0..<5 { _ = shadow.predictNextWord(afterTailWords: ["three", "four"]) }
+        #expect(shadow.snapshot == before)
+
+        shadow.consume([event(id: "score", text: " three four ", time: cutover, session: "live")])
+        #expect(shadow.snapshot.opportunities == before.opportunities + 1)
+    }
+
+    @Test("predictNextWord withholds low-support and ambiguous contexts")
+    func predictNextWordWithholdsWeakEvidence() {
+        var singleton = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        singleton.consume([event(id: "single", text: " three four Finish ", time: 100, session: "a")])
+        #expect(singleton.predictNextWord(afterTailWords: ["three", "four"]) == nil)
+
+        var ambiguous = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        ambiguous.consume([
+            event(id: "finish-a", text: " three four Finish ", time: 100, session: "a"),
+            event(id: "finish-b", text: " three four Finish ", time: 100, session: "b"),
+            event(id: "other-a", text: " three four Other ", time: 100, session: "c"),
+            event(id: "other-b", text: " three four Other ", time: 100, session: "d"),
+        ])
+        #expect(ambiguous.predictNextWord(afterTailWords: ["three", "four"]) == nil)
+    }
+
+    @Test("predictNextWord has no answer for an unseen context")
+    func predictNextWordUnseenContextIsNil() {
+        let shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        #expect(shadow.predictNextWord(afterTailWords: ["never", "seen"]) == nil)
+    }
+
     private func modelCountsForAlphaBetaTraining() -> (contexts: Int, transitions: Int) {
         var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
         shadow.consume([

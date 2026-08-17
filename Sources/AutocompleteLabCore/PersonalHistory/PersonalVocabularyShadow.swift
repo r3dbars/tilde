@@ -369,6 +369,15 @@ public struct PersonalNextWordShadowSnapshot: Equatable, Sendable {
     }
 }
 
+/// A single production-serving lookup result from `predictNextWord`. Not
+/// part of the paired shadow experiment's scoring types above — this is the
+/// read-only path the "Personal suggestions (experimental)" toggle uses.
+public struct PersonalNextWordPrediction: Equatable, Sendable {
+    public let word: String
+    public let support: Int
+    public let total: Int
+}
+
 /// One parser and count model score the conservative baseline and the candidate.
 public struct PersonalNextWordShadow: Sendable {
     public static let baselineRecipeID = "r1435-live-v1"
@@ -649,6 +658,40 @@ public struct PersonalNextWordShadow: Sendable {
         maximumContext: Int,
         minimumRatio: Int
     ) -> String? {
+        Self.winningPrediction(
+            in: model,
+            after: history,
+            maximumContext: maximumContext,
+            minimumRatio: minimumRatio
+        )?.word
+    }
+
+    /// Read-only production lookup for experimental personal-word serving
+    /// (`docs/plans/road-to-paid.md` Phase 3, the "Personal suggestions
+    /// (experimental)" menu toggle). Deliberately reuses the shadow
+    /// experiment's own conservative "baseline" recipe parameters
+    /// (`baselineRecipeID`'s 2-word context, 2x-support-over-runner-up
+    /// ratio) rather than the looser candidate recipe still under live A/B
+    /// test — serving a real suggestion should never lean on a threshold
+    /// that hasn't itself been vetted as a safe production bar. Purely a
+    /// lookup over `model`: no mutation, no interaction with `consume`'s
+    /// paired scoring, callable any number of times with no side effects.
+    public func predictNextWord(afterTailWords tailWords: [String]) -> PersonalNextWordPrediction? {
+        let folded = tailWords.suffix(Self.maximumContextWords).map(Self.folded)
+        return Self.winningPrediction(
+            in: model,
+            after: Array(folded),
+            maximumContext: 2,
+            minimumRatio: 2
+        )
+    }
+
+    private static func winningPrediction(
+        in model: [ContextKey: TargetBag],
+        after history: [String],
+        maximumContext: Int,
+        minimumRatio: Int
+    ) -> PersonalNextWordPrediction? {
         let maximum = min(maximumContext, history.count)
         for order in stride(from: maximum, through: 0, by: -1) {
             guard let winner = model[Self.contextKey(order: order, history: history)]?.winner else {
@@ -661,7 +704,7 @@ public struct PersonalNextWordShadow: Sendable {
             if winner.support >= Self.minimumWinnerSupport,
                winner.support >= requiredShare,
                meetsRatio {
-                return winner.surface
+                return PersonalNextWordPrediction(word: winner.surface, support: winner.support, total: winner.total)
             }
         }
         return nil
