@@ -263,6 +263,45 @@ anywhere.
    first-launch prompt is dismissed versus acted on, in
    docs/model-lessons.md.
 
+### Sensitive scenes
+
+Trust-critical fix, 2026-08-16 dogfood (build 2705, Screen Memory active). A
+demo conversation had the other party write "my dad passed away this
+morning" and "funeral is going to be next week." Two failures followed:
+
+- **Case A:** the user typed "I am so sorry, I will be at the funeral" and
+  the ghost offered "of my friend, I will be there" — a garbled relationship
+  guess (it was Alex's dad, not the user's friend) plus a redundant echo of
+  words the user had already typed.
+- **Case B, worse:** the user typed only "I'm so" and the ghost offered
+  "sorry I'm late, I" — a lateness cliché completing straight over visible
+  grief context. Owner verdict: "this doesn't work well."
+
+A wrong suggestion in a grief conversation is a product-killing event, not
+an ordinary miss. Small on-device models cannot reliably do relationship
+reasoning or match register in a grief/medical-crisis/emergency
+conversation, so the shipped fix is suppression, not a smarter guess: when
+`SensitiveScenePolicy` (Core, pure, tested —
+`Sources/AutocompleteLabCore/Scene/SensitiveScenePolicy.swift`) finds a
+bereavement, medical-crisis, emergency, breakup/divorce, or job-loss phrase
+in the current scene's conversation turns, `GhostBrainServerHost` answers
+`.silence` and never starts the completion at all, logging only a count-only
+`suggestion-suppressed reason=sensitive-scene` diagnostic. This is the same
+"silence and noise are both failures" rule from `AGENTS.md` applied at the
+scene level: here noise is catastrophic and silence is the respectful
+outcome. When no scene is available (plain typing with no screen context),
+the policy never fires — ordinary autocomplete is unaffected.
+
+v1 is deliberately blunt: word-boundary, case-insensitive phrase matching
+against a single flat table, no register or context modeling. It will both
+miss unusually-phrased sensitive scenes and occasionally fire on look-alike
+phrasing (documented tradeoff: "the surgery went perfectly, best raid of the
+season" trips the medical-crisis phrase "surgery went" even in a gaming
+context). Given the asymmetry between the two failure modes — a wrong
+suggestion in a grief conversation is product-killing, an unnecessary
+silence is invisible to the user — erring toward suppression is the
+correct v1 shape.
+
 ## PR series summary (order, each small, each reviewed)
 
 0. governance (docs only)

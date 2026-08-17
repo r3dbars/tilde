@@ -199,6 +199,23 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // resolved before the completion Task starts so the request
             // that follows already carries whatever context exists.
             let scene = await self.sceneProvider?(completionRequest.app, completionRequest.context)
+
+            // Trust-critical fix (2026-08-16, build 2705 dogfood): a grief
+            // conversation produced a garbled-relationship suggestion and,
+            // worse, a lateness cliché overpowering visible grief context.
+            // Small models cannot reliably do relationship reasoning or
+            // grief register, so when the current scene is emotionally
+            // sensitive Tilde stays silent rather than guesses — same
+            // `.silence` outcome (never `.unavailable`) as the permission
+            // gate above, so the IME treats it as an ordinary empty
+            // completion. Count-only diagnostic: never the matched category
+            // or any scene text, only that suppression happened.
+            if SensitiveScenePolicy.isSensitive(scene: scene) {
+                _ = Self.write(.silence, to: connection)
+                DiagnosticsLog.shared.record("suggestion-suppressed", metadata: ["reason": "sensitive-scene"])
+                return
+            }
+
             let completion = Task {
                 try await self.engine.suggestion(
                     textBeforeCursor: completionRequest.context,

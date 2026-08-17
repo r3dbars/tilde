@@ -45,6 +45,11 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("status", "dismissed") == "status=dismissed")
     }
 
+    @Test("The sensitive-scene suppression reason survives as its literal enum case")
+    func keepsSensitiveSceneSuppressionReason() {
+        #expect(field("reason", "sensitive-scene") == "reason=sensitive-scene")
+    }
+
     @Test("Scene classification diagnostics survive as fixed vocabulary and integers, never OCR'd text")
     func keepsSceneClassifiedFields() {
         #expect(field("mode", "replying") == "mode=replying")
