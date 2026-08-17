@@ -11,11 +11,11 @@ struct IntentFuturesPromptIntegrationTests {
             conversationTurns: [.init(speaker: .other, text: "Can you send it tonight?")],
             referenceSnippets: []
         )
-        let recipe = RawContinuationPrompt(textBeforeCursor: "I can", register: .chat, scene: scene)
+        let recipe = RawContinuationPrompt(textBeforeCursor: "I can ", register: .chat, scene: scene)
         let prompt = LlamaCompletionEngine.promptByAddingIntentFutures(
             to: recipe.prompt,
             scene: scene,
-            textBeforeCursor: "I can"
+            textBeforeCursor: "I can "
         )
 
         let occurrences = prompt.components(separatedBy: "Likely response directions:").count - 1
