@@ -82,19 +82,36 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             throw URLError(.cannotParseResponse)
         }
 
-        let clean = cleaner.cleanWithReason(
-            recipe.normalizedContinuation(decoded.content),
-            after: textBeforeCursor
-        )
-        if clean.suggestion == nil, !decoded.content.isEmpty, let reason = clean.rejectionReason {
+        let normalized = recipe.normalizedContinuation(decoded.content)
+        let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
+        var suggestion = clean.suggestion
+
+        // Consensus Ghost v1: only shorten when the cleaned visible text is a
+        // literal prefix of the generated continuation. If the cleaner had to
+        // rewrite/strip an echo, token positions no longer line up cleanly, so
+        // stand down rather than apply confidence evidence to the wrong text.
+        if let current = suggestion {
+            let normalizedVisible = String(normalized.drop(while: \.isWhitespace))
+            let visibleWords = current.visibleText.split(whereSeparator: \.isWhitespace).count
+            if normalizedVisible.hasPrefix(current.visibleText),
+               let budget = ConsensusGhostPolicy.visibleWordBudget(
+                   tokens: decoded.tokens,
+                   currentVisibleWords: visibleWords
+               ) {
+                let shortened = CompletionSuggestion(text: current.visibleText, maxVisibleWords: budget)
+                if !shortened.visibleText.isEmpty { suggestion = shortened }
+            }
+        }
+
+        if suggestion == nil, !decoded.content.isEmpty, let reason = clean.rejectionReason {
             diagnostics.record("llama-suggestion-rejected", metadata: [
                 "reason": String(describing: reason),
             ])
         }
         diagnostics.record("llama-completion-timing", metadata: [
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
-            "cleanedChars": String(clean.suggestion?.visibleText.count ?? 0),
+            "cleanedChars": String(suggestion?.visibleText.count ?? 0),
         ])
-        return CompletionEvidence(suggestion: clean.suggestion, tokens: decoded.tokens)
+        return CompletionEvidence(suggestion: suggestion, tokens: decoded.tokens)
     }
 }
