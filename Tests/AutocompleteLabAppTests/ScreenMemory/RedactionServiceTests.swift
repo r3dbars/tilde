@@ -107,6 +107,54 @@ struct RedactionServiceTests {
         #expect(!result.text.contains("Smith"))
     }
 
+    @Test("Empty text short-circuits to a trivially-clean result and never reaches the model layer")
+    func emptyTextShortCircuitsWithoutCallingModelLayer() async {
+        let called = LockedBox(false)
+        let detector = FakeSpanDetector(.spans([]), onDetect: { _ in called.value = true })
+        let service = RedactionService(spanDetector: detector)
+        let outcome = await service.redact("")
+        guard case let .redacted(result) = outcome else { Issue.record("expected redacted, not dropped"); return }
+        #expect(result.text.isEmpty)
+        #expect(result.modelSpanCount == 0)
+        #expect(!called.value, "empty text must never reach the model layer — a well-formed missing-text reply must not be able to markBroken() the whole session")
+    }
+
+    @Test("Whitespace-only text short-circuits to a trivially-clean result and never reaches the model layer")
+    func whitespaceOnlyTextShortCircuitsWithoutCallingModelLayer() async {
+        let called = LockedBox(false)
+        let detector = FakeSpanDetector(.spans([]), onDetect: { _ in called.value = true })
+        let service = RedactionService(spanDetector: detector)
+        let outcome = await service.redact("   \n\t  ")
+        guard case .redacted = outcome else { Issue.record("expected redacted, not dropped"); return }
+        #expect(!called.value)
+    }
+
+    @Test("A structurally invalid span (offsets past the end of the text) drops the WHOLE capture, never a partial redaction")
+    func malformedSpanDropsWholeCapture() async {
+        let text = "hi Priya, see you Friday"
+        // Way past the end of `text` — a malformed/out-of-range reply from
+        // the model layer, as if the helper mis-scored offsets for a
+        // different (longer) input than the one it was actually given.
+        let outOfRange = GLiNERSpan(unicodeScalarStart: 500, unicodeScalarEnd: 900, label: "person_name", score: 0.9)
+        let service = RedactionService(spanDetector: FakeSpanDetector(.spans([outOfRange])))
+        let outcome = await service.redact(text)
+        #expect(outcome == .dropped(.modelUnavailable))
+    }
+
+    @Test("One malformed span drops the capture even alongside other well-formed, valid spans — no partial redaction")
+    func malformedSpanDropsCaptureEvenWithOtherValidSpans() async {
+        let text = "hi Priya, see you Friday"
+        let scalars = Array(text.unicodeScalars)
+        let validStart = 3
+        let validEnd = 8
+        #expect(String(String.UnicodeScalarView(scalars[validStart..<validEnd])) == "Priya")
+        let valid = GLiNERSpan(unicodeScalarStart: validStart, unicodeScalarEnd: validEnd, label: "person_name", score: 0.9)
+        let malformed = GLiNERSpan(unicodeScalarStart: 500, unicodeScalarEnd: 900, label: "person_name", score: 0.9)
+        let service = RedactionService(spanDetector: FakeSpanDetector(.spans([valid, malformed])))
+        let outcome = await service.redact(text)
+        #expect(outcome == .dropped(.modelUnavailable))
+    }
+
     @Test("Redaction result never contains the raw scrubbed secret substring in any field")
     func redactionResultCarriesNoRawSecret() async {
         let service = RedactionService(spanDetector: FakeSpanDetector(.spans([])))
