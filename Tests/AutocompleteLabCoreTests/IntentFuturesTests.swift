@@ -25,30 +25,30 @@ struct IntentFuturesTests {
         #expect(abs(futures.reduce(0) { $0 + $1.weight } - 1) < 0.0001)
     }
 
-    @Test("Typing yes collapses toward acceptance")
+    @Test("First completed acceptance word collapses toward accept")
     func yesCollapses() {
         let futures = IntentFuturesPlanner.futures(
             scene: replyScene("Are you still coming tonight?"),
-            textBeforeCursor: "Ye"
+            textBeforeCursor: "Yep "
         )
         #expect(futures.first?.kind == .accept)
     }
 
-    @Test("Typing a question collapses toward clarification")
+    @Test("First completed question word collapses toward clarification")
     func questionCollapses() {
         let futures = IntentFuturesPlanner.futures(
             scene: replyScene("Can you send the latest one?"),
-            textBeforeCursor: "Which"
+            textBeforeCursor: "Which "
         )
         #expect(futures.first?.kind == .clarify)
         #expect(futures.contains { $0.kind == .question })
     }
 
-    @Test("Typing a commitment collapses toward commit")
+    @Test("First completed commitment phrase collapses toward commit")
     func commitCollapses() {
         let futures = IntentFuturesPlanner.futures(
             scene: replyScene("Could you have it by Friday?"),
-            textBeforeCursor: "I'll"
+            textBeforeCursor: "I can "
         )
         #expect(futures.first?.kind == .commit)
     }
@@ -56,7 +56,7 @@ struct IntentFuturesTests {
     @Test("Non-reply scenes stay out of the way")
     func composingDoesNotInventIntent() {
         let scene = ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
-        let futures = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: "I think")
+        let futures = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: "I think ")
         #expect(futures == [.init(kind: .continueWriting, weight: 1)])
         #expect(IntentFuturesPlanner.promptHint(for: futures).isEmpty)
     }
@@ -65,7 +65,7 @@ struct IntentFuturesTests {
     func promptHintIsContentFree() {
         let futures = IntentFuturesPlanner.futures(
             scene: replyScene("What do you think about delaying launch?"),
-            textBeforeCursor: "I think"
+            textBeforeCursor: "I think "
         )
         let hint = IntentFuturesPlanner.promptHint(for: futures)
         #expect(hint.contains("answer:"))
