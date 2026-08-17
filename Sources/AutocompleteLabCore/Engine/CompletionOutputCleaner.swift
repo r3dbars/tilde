@@ -226,12 +226,16 @@ public struct CompletionOutputCleaner: Sendable {
     /// tail re-states its opening clause. `replaysContext` only compares
     /// against the TYPED context, so a model looping on its own words sails
     /// through. This trims the suggestion at the point where it starts
-    /// repeating itself: a 3-word run it already said (same threshold
-    /// `replaysContext` uses), a clause identical to an earlier clause
-    /// ("sounds good, sounds good"), or a final clause that ENDS by
-    /// re-stating a whole earlier clause (the observed "here, … here."
-    /// loop). The end-anchored rule is what keeps ordinary prose safe: a
-    /// common word merely reappearing mid-clause never triggers it.
+    /// repeating itself: a 3-word run repeated back-to-back ("let me know
+    /// let me know"), a clause identical to an earlier clause ("sounds
+    /// good, sounds good"), or a final clause that ENDS by re-stating a
+    /// whole earlier clause (the observed "here, … here." loop). Two
+    /// deliberate false-positive guards, both from independent review:
+    /// the run rule requires ADJACENT repetition, so parallel rhetoric
+    /// ("the more you practice, the more you improve") survives; and the
+    /// end-anchored rule stands down when the echo sits behind a negator
+    /// the earlier clause didn't have ("done. It is not done"), where
+    /// trimming would ship the OPPOSITE of what the model said.
     private func trimmingSelfRepetition(_ suggestion: String) -> String {
         let clauseBreaks: Set<Character> = [",", ".", ";", ":", "!", "?"]
         var wordStarts: [String.Index] = []
@@ -256,8 +260,7 @@ public struct CompletionOutputCleaner: Sendable {
         var cut = words.count
 
         if words.count >= 6 {
-            for start in 3...(words.count - 3) {
-                guard contains(Array(words[start..<start + 3]), in: Array(words[0..<start])) else { continue }
+            for start in 3...(words.count - 3) where Array(words[start - 3..<start]) == Array(words[start..<start + 3]) {
                 cut = start
                 break
             }
@@ -274,8 +277,11 @@ public struct CompletionOutputCleaner: Sendable {
             let clause = clauses[j].map { words[$0] }
             let earlier = clauses[0..<j].map { indices in indices.map { words[$0] } }
             let exactRepeat = earlier.contains { $0 == clause }
-            let finalClauseEndsOnEarlierClause = j == clauses.count - 1 && earlier.contains {
-                clause.count >= $0.count && Array(clause.suffix($0.count)) == $0
+            let finalClauseEndsOnEarlierClause = j == clauses.count - 1 && earlier.contains { earlierClause in
+                guard clause.count > earlierClause.count,
+                      Array(clause.suffix(earlierClause.count)) == earlierClause else { return false }
+                let beforeEcho = clause.prefix(clause.count - earlierClause.count)
+                return !beforeEcho.contains(where: isNegator) || earlierClause.contains(where: isNegator)
             }
             guard exactRepeat || finalClauseEndsOnEarlierClause else { continue }
             cut = min(cut, clauses[j][0])
@@ -288,6 +294,12 @@ public struct CompletionOutputCleaner: Sendable {
             trimmed.removeLast()
         }
         return trimmed
+    }
+
+    private static let negators: Set<String> = ["not", "no", "never", "none", "cannot", "nor"]
+
+    private func isNegator(_ word: String) -> Bool {
+        Self.negators.contains(word) || word.hasSuffix("n't") || word.hasSuffix("n\u{2019}t")
     }
 
     private func contains(_ needle: [String], in words: [String]) -> Bool {

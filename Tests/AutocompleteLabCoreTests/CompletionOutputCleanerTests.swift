@@ -155,13 +155,32 @@ struct CompletionOutputCleanerTests {
         #expect(clean(" here, I am here.", after: "Hey I am")?.visibleText == " here")
         // A clause repeated verbatim.
         #expect(clean("sounds good, sounds good", after: nil)?.visibleText == " sounds good")
-        // A 3-word run the suggestion already said.
+        // A 3-word run repeated back-to-back.
         #expect(clean("let me know let me know soon", after: nil)?.visibleText == " let me know")
         // Ordinary prose that merely reuses a common word is left alone.
         #expect(clean("the plan and the timeline", after: nil)?.visibleText == " the plan and the timeline")
         #expect(clean("ready. Then we can send it", after: nil)?.visibleText == " ready. Then we can send it")
         // Trimming that leaves nothing readable rejects instead.
         #expect(reason("$, price $", after: nil) == .repeatsItself)
+    }
+
+    /// Guards from the independent review pass: repetition trimming must
+    /// never rewrite what a suggestion MEANS. Deliberate parallel rhetoric
+    /// repeats a word run without looping, and an echo behind a negation
+    /// ("done" vs "not done") would ship the opposite claim if trimmed.
+    @Test("Self-repetition trimming spares parallel rhetoric and negated echoes")
+    func sparesParallelismAndNegatedEchoes() {
+        let untouched = [
+            "the more you practice, the more you improve",
+            "done. It is not done",
+            "ready? I am not ready",
+            "okay, but not okay",
+        ]
+        for output in untouched {
+            #expect(clean(output, after: nil)?.visibleText == " " + output)
+        }
+        // A negation shared by both sides is a genuine loop, not a reversal.
+        #expect(clean("not sure, I am not sure", after: nil)?.visibleText == " not sure")
     }
 
     @Test("Does not invent an overlap for an empty trailing fragment")
