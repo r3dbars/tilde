@@ -105,6 +105,38 @@ struct ContinuationRegisterTests {
         #expect(ContinuationRegister.chat.generatedTokenBudget(scene: leisurely) == ContinuationRegister.chat.generatedTokenBudget)
     }
 
+    /// Code review regression (P2, verify-then-fix): end-to-end version of
+    /// the wrapped-OCR-line concern, going through the REAL
+    /// `ScreenScene.classify` pipeline (not hand-built turns like the tests
+    /// above) so a regression in the upstream line-merging would show up
+    /// here too. A single long reply that Vision recognized as three
+    /// stacked lines must not read as a terse room.
+    @Test("A wrapped multi-line bubble classified through ScreenScene does not trip the terse clamp")
+    func terseClampSurvivesAWrappedMultiLineBubble() {
+        let fullDisplay = ScreenScene.NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+        func wrappedLine(_ text: String, y: Double) -> ScreenScene.OCRBlock {
+            ScreenScene.OCRBlock(
+                text: text,
+                boundingBox: ScreenScene.NormalizedRect(x: 0.05, y: y, width: 0.35, height: 0.05),
+                windowOwnerBundleID: "com.tinyspeck.slackmacgap",
+                windowFrame: fullDisplay
+            )
+        }
+        let blocks = [
+            wrappedLine("I think we should probably wait until", y: 0.30),
+            wrappedLine("everyone gets back from the trip before", y: 0.36),
+            wrappedLine("we finalize the schedule for next quarter", y: 0.42),
+        ]
+        let scene = ScreenScene.classify(
+            blocks: blocks,
+            frontmostBundleID: "com.tinyspeck.slackmacgap",
+            fieldText: ""
+        )
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 1)
+        #expect(ContinuationRegister.chat.generatedTokenBudget(scene: scene) == ContinuationRegister.chat.generatedTokenBudget)
+    }
+
     @Test("The clamp keys off the MEDIAN turn length, so one long turn in a terse room doesn't defeat it")
     func medianNotMeanDrivesTheClamp() {
         let mostlyTerse = ScreenScene.Scene(

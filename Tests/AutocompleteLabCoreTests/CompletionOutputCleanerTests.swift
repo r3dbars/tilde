@@ -183,6 +183,27 @@ struct CompletionOutputCleanerTests {
         #expect(clean("not sure, I am not sure", after: nil)?.visibleText == " not sure")
     }
 
+    /// Code review regression (P2, correctness): the final-clause-echo rule
+    /// was too aggressive, guarded only by the negator check above. Two
+    /// confirmed false positives, both cases where the words leading into
+    /// the echo are new content -- a new instruction, a qualifying clause --
+    /// not a degenerate loop: "Ready? Get ready" was trimmed down to
+    /// "Ready?", deleting the actual instruction ("Get ready"), and "it is
+    /// ready, or at least they say it is ready" lost its entire qualifier
+    /// clause. Both must now survive untouched.
+    @Test("Self-repetition trimming spares a short echo preceded by new content words")
+    func sparesShortEchoWithNewLeadingContent() {
+        #expect(clean("Ready? Get ready", after: nil)?.visibleText == " Ready? Get ready")
+        // Kept to 8 words so the assertion isolates the repetition-trimming
+        // fix from CompletionSuggestion's unrelated default 8-word display
+        // cap; the reviewer's original longer example ("it is ready, or at
+        // least they say it is ready") exercises the identical code path.
+        #expect(
+            clean("it is ready, they say it is ready", after: nil)?.visibleText
+                == " it is ready, they say it is ready"
+        )
+    }
+
     @Test("Does not invent an overlap for an empty trailing fragment")
     func preservesSuggestionAfterPunctuation() {
         #expect(clean("apple", after: ".")?.visibleText == " apple")

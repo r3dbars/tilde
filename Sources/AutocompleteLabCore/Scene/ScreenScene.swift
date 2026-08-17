@@ -241,7 +241,7 @@ public enum ScreenScene {
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { $0.boundingBox.y < $1.boundingBox.y }
 
-        let mostRecent = Array(usable.suffix(maxTurns))
+        let mostRecent = Array(mergeWrappedLines(usable).suffix(maxTurns))
 
         var remainingBudget = maxTurnsCharacterBudget
         var truncated: [(block: OCRBlock, text: String)] = []
@@ -254,6 +254,60 @@ public enum ScreenScene {
         }
 
         return truncated.reversed().map { ConversationTurn(speaker: speaker(for: $0.block), text: $0.text) }
+    }
+
+    /// Vision's `VNRecognizeTextRequest` recognizes text LINE by line, not
+    /// paragraph by paragraph -- a single multi-line chat bubble surfaces as
+    /// several adjacent `OCRBlock`s, one per wrapped line, all from the same
+    /// speaker (see `ScreenTextRecognizer`). Left as separate turns, a long
+    /// three-line reply would look exactly like three short back-to-back
+    /// messages to `RawContinuationPrompt`'s terse-room detector and wrongly
+    /// clamp generation to a single short burst (verified: nothing between
+    /// Vision and here re-groups wrapped lines back into one block).
+    /// Distinguishing a wrapped continuation line from a genuinely separate
+    /// next message needs geometry, not just text: lines within one bubble
+    /// sit almost flush against each other (ordinary line-height spacing),
+    /// while separate bubbles/messages -- even rapid-fire ones from the same
+    /// person, like the "up?" / "lol" / "u there" dogfood case -- carry
+    /// visible bubble padding and inter-message margin between them. Blocks
+    /// from the same speaker whose vertical gap is small relative to their
+    /// own height are folded into one logical turn before anything
+    /// downstream (including the terse-room median) ever sees them;
+    /// everything else, including consecutive short messages from one
+    /// speaker with normal spacing, stays as distinct turns.
+    private static let wrappedLineMaxGapRatio = 0.6
+
+    private static func mergeWrappedLines(_ sortedBlocks: [OCRBlock]) -> [OCRBlock] {
+        var merged: [OCRBlock] = []
+        for block in sortedBlocks {
+            if let last = merged.last,
+               last.windowOwnerBundleID == block.windowOwnerBundleID,
+               speaker(for: last) == speaker(for: block) {
+                let gap = block.boundingBox.y - (last.boundingBox.y + last.boundingBox.height)
+                let referenceHeight = max(last.boundingBox.height, block.boundingBox.height)
+                if referenceHeight > 0, gap <= referenceHeight * wrappedLineMaxGapRatio {
+                    let bottom = max(
+                        last.boundingBox.y + last.boundingBox.height,
+                        block.boundingBox.y + block.boundingBox.height
+                    )
+                    merged[merged.count - 1] = OCRBlock(
+                        text: last.text + " " + block.text,
+                        boundingBox: NormalizedRect(
+                            x: min(last.boundingBox.x, block.boundingBox.x),
+                            y: last.boundingBox.y,
+                            width: max(last.boundingBox.width, block.boundingBox.width),
+                            height: bottom - last.boundingBox.y
+                        ),
+                        windowOwnerBundleID: last.windowOwnerBundleID,
+                        windowTitle: last.windowTitle,
+                        windowFrame: last.windowFrame
+                    )
+                    continue
+                }
+            }
+            merged.append(block)
+        }
+        return merged
     }
 
     // MARK: - Referencing: cross-window shared-rare-word snippet
