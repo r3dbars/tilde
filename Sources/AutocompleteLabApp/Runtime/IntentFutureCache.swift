@@ -14,6 +14,7 @@ final class IntentFutureCache: @unchecked Sendable {
 
     func futures(scene: ScreenScene.Scene?, textBeforeCursor: String) -> [IntentFuture] {
         guard let scene else {
+            reset()
             return IntentFuturesPlanner.futures(scene: nil, textBeforeCursor: textBeforeCursor)
         }
 
