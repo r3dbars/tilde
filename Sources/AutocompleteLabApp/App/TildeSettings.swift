@@ -14,6 +14,7 @@ struct TildeSettings {
         case personalHistoryIdentifier = "PersonalHistoryIdentifier"
         case personalHistoryConsentIdentifier = "PersonalHistoryConsentIdentifier"
         case personalNextWordExperimentIdentifier = "PersonalNextWordExperimentIdentifier"
+        case personalSuggestionsServingEnabled = "PersonalSuggestionsServingEnabled"
         case screenMemoryEnabled = "ScreenMemoryEnabled"
     }
 
@@ -82,6 +83,18 @@ struct TildeSettings {
         nonmutating set {
             keyboard.set(newValue, forKey: KeyboardKey.personalNextWordExperimentIdentifier.rawValue)
         }
+    }
+
+    /// "Personal suggestions (experimental)" (`docs/plans/road-to-paid.md`
+    /// Phase 3, the feel-it experiment ahead of the final blend). Default
+    /// OFF, same raw-`bool(forKey:)` pattern as `personalHistoryEnabled` —
+    /// a fresh install with no persisted key reads `false`, never `true`.
+    /// Only takes effect when `personalHistoryEnabled` is ALSO true; the
+    /// menu only shows this toggle in that state, and the serving gate
+    /// re-checks both live on every completion request.
+    var personalSuggestionsServingEnabled: Bool {
+        get { keyboard.bool(forKey: KeyboardKey.personalSuggestionsServingEnabled.rawValue) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.personalSuggestionsServingEnabled.rawValue) }
     }
 
     /// The covenant's master toggle. On by default (2026-08-16 owner

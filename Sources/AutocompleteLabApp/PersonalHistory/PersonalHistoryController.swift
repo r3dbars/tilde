@@ -279,6 +279,27 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         try? await store.summary()
     }
 
+    /// Read-only production lookup for the "Personal suggestions
+    /// (experimental)" toggle (`docs/plans/road-to-paid.md` Phase 3). Goes
+    /// through the SAME actor that owns the live trained model — no new
+    /// state, no separate copy — but only ever calls
+    /// `PersonalNextWordShadow.predictNextWord`, a non-mutating lookup, so
+    /// it can never perturb `nextWordStatus`'s paired shadow scoring.
+    /// Per-app exclusions gate this exactly like they gate capture (the
+    /// covenant): an excluded or missing app, or the feature/master toggle
+    /// being off, always returns `nil` — the caller then serves the base
+    /// ghost untouched.
+    func personalNextWordPrediction(
+        afterTailWords tailWords: [String],
+        appBundleIdentifier: String?
+    ) async -> PersonalNextWordPrediction? {
+        let configuration = configurationState.snapshot()
+        guard configuration.enabled,
+              let appBundleIdentifier, PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
+              !configuration.excludedApps.contains(appBundleIdentifier) else { return nil }
+        return await operations.predictNextWord(afterTailWords: tailWords, configuration: configuration)
+    }
+
     func nextWordStatus() async -> PersonalNextWordShadowStatus {
         let configuration = configurationState.snapshot()
         let status = await operations.nextWordStatus(configuration: configuration)
@@ -494,6 +515,19 @@ private actor PersistenceOperations {
         replayBacklog.removeAll(keepingCapacity: true)
         nextWord.reset()
         nextWordPhase = .unavailable
+    }
+
+    /// Non-mutating: `nextWord.predictNextWord` reads `model` only, so this
+    /// leaves `nextWord`, `nextWordPhase`, `totals`, and `days` exactly as
+    /// they were — the paired shadow experiment's own scoring
+    /// (`nextWordStatus`) is unaffected by whether or how often this is
+    /// called.
+    func predictNextWord(
+        afterTailWords tailWords: [String],
+        configuration: PersonalHistoryConfiguration
+    ) -> PersonalNextWordPrediction? {
+        guard configuration.revision == configurationRevision, nextWordPhase == .ready else { return nil }
+        return nextWord.predictNextWord(afterTailWords: tailWords)
     }
 
     func nextWordStatus(

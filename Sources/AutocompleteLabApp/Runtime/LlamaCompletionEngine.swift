@@ -12,29 +12,39 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         self.diagnostics = diagnostics
     }
 
-    /// `CompletionSuggesting`'s exact two-parameter signature — kept
-    /// separate from the scene-aware overload below (rather than a
-    /// defaulted third parameter) because Swift protocol conformance
-    /// matches on exact signature, and `ReplayEvalCommand` conforms via
-    /// `extension LlamaCompletionEngine: CompletionSuggesting {}`. Replay
-    /// has no live screen to consult, so `scene: nil` here is exactly
-    /// correct, not a stand-in.
     func suggestion(
         textBeforeCursor: String,
         appBundleIdentifier: String?
     ) async throws -> CompletionSuggestion? {
-        try await suggestion(textBeforeCursor: textBeforeCursor, appBundleIdentifier: appBundleIdentifier, scene: nil)
+        try await evidence(
+            textBeforeCursor: textBeforeCursor,
+            appBundleIdentifier: appBundleIdentifier,
+            scene: nil
+        ).suggestion
     }
 
-    /// The live socket path's entry point (`GhostBrainServerHost`): `scene`
-    /// is whatever `ScreenCaptureService.freshScene` returned for this
-    /// request — `nil` whenever capture is off, ungranted, or stale,
-    /// reproducing today's behavior exactly.
     func suggestion(
         textBeforeCursor: String,
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?
     ) async throws -> CompletionSuggestion? {
+        try await evidence(
+            textBeforeCursor: textBeforeCursor,
+            appBundleIdentifier: appBundleIdentifier,
+            scene: scene
+        ).suggestion
+    }
+
+    /// Same completion the user already receives, plus a memory-only token
+    /// uncertainty trace. `temperature: -1` is llama-server's documented
+    /// greedy mode; with `n_probs > 0` it also returns a simple softmax of the
+    /// logits, giving Tilde useful uncertainty without sampling a different
+    /// visible answer or issuing extra model calls.
+    func evidence(
+        textBeforeCursor: String,
+        appBundleIdentifier: String?,
+        scene: ScreenScene.Scene?
+    ) async throws -> CompletionEvidence {
         let startedAt = Date()
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
@@ -42,12 +52,19 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             register: register,
             scene: scene
         )
-        guard !recipe.prompt.isEmpty else { return nil }
+        guard !recipe.prompt.isEmpty else { return CompletionEvidence(suggestion: nil, tokens: []) }
+
+        let prompt = Self.promptByAddingIntentFutures(
+            to: recipe.prompt,
+            scene: scene,
+            textBeforeCursor: textBeforeCursor
+        )
 
         let body: [String: Any] = [
-            "prompt": recipe.prompt,
+            "prompt": prompt,
             "n_predict": register.generatedTokenBudget(scene: scene),
-            "temperature": 0,
+            "temperature": -1,
+            "n_probs": 8,
             "cache_prompt": true,
             "stop": ["\n"],
             "stream": false,
@@ -64,24 +81,77 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let raw = object["content"] as? String else {
+        let decoded: (content: String, tokens: [CompletionTokenEvidence])
+        do {
+            decoded = try LlamaCompletionEvidenceParser.decode(data)
+        } catch {
             throw URLError(.cannotParseResponse)
         }
 
-        let clean = cleaner.cleanWithReason(
-            recipe.normalizedContinuation(raw),
-            after: textBeforeCursor
-        )
-        if clean.suggestion == nil, !raw.isEmpty, let reason = clean.rejectionReason {
+        let normalized = recipe.normalizedContinuation(decoded.content)
+        let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
+        var suggestion = clean.suggestion
+
+        if let current = suggestion {
+            let normalizedVisible = String(normalized.drop(while: \.isWhitespace))
+            let visibleWords = current.visibleText.split(whereSeparator: \.isWhitespace).count
+            if normalizedVisible.hasPrefix(current.visibleText),
+               let budget = ConsensusGhostPolicy.visibleWordBudget(
+                   tokens: decoded.tokens,
+                   currentVisibleWords: visibleWords
+               ) {
+                let shortened = CompletionSuggestion(text: current.visibleText, maxVisibleWords: budget)
+                if !shortened.visibleText.isEmpty { suggestion = shortened }
+            }
+        }
+
+        if suggestion == nil, !decoded.content.isEmpty, let reason = clean.rejectionReason {
             diagnostics.record("llama-suggestion-rejected", metadata: [
                 "reason": String(describing: reason),
             ])
         }
         diagnostics.record("llama-completion-timing", metadata: [
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
-            "cleanedChars": String(clean.suggestion?.visibleText.count ?? 0),
+            "cleanedChars": String(suggestion?.visibleText.count ?? 0),
         ])
-        return clean.suggestion
+        return CompletionEvidence(suggestion: suggestion, tokens: decoded.tokens)
+    }
+
+    static func promptByAddingIntentFutures(
+        to prompt: String,
+        scene: ScreenScene.Scene?,
+        textBeforeCursor: String
+    ) -> String {
+        let futures = intentFutures(scene: scene, textBeforeCursor: textBeforeCursor)
+        let summary = IntentFuturesPlanner.promptHint(for: futures)
+        guard !summary.isEmpty,
+              let marker = prompt.range(of: "Continuation:", options: .backwards)
+        else { return prompt }
+        let hint = "Likely response directions: \(summary)\n"
+        var result = prompt
+        result.insert(contentsOf: hint, at: marker.lowerBound)
+        return result
+    }
+
+    /// Blends the scene-only prior (what Tilde already believed about this
+    /// conversation before the user typed anything this turn) with the
+    /// live, text-conditioned read — see `IntentFutureFusion`. This used to
+    /// run through `IntentFutureCache`, a process-global lock-guarded cache
+    /// keyed on the current scene; but `IntentFuturesPlanner.futures` is a
+    /// pure, cheap function of `scene` alone, so recomputing the prior on
+    /// every call produces exactly the value the cache would have served —
+    /// the cache added a lock and mutable global state for no measurable
+    /// benefit, and its "warm prior" was always discarded the moment the
+    /// scene changed anyway. Call the planner directly.
+    private static func intentFutures(
+        scene: ScreenScene.Scene?,
+        textBeforeCursor: String
+    ) -> [IntentFuture] {
+        guard scene != nil else {
+            return IntentFuturesPlanner.futures(scene: nil, textBeforeCursor: textBeforeCursor)
+        }
+        let prior = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: "")
+        let live = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: textBeforeCursor)
+        return IntentFutureFusion.fuse(prior: prior, live: live)
     }
 }
