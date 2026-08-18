@@ -9,12 +9,17 @@ public enum PersonalSuggestionSource: String, Equatable, Sendable {
 public enum PersonalSuggestionPolicy {
     public static let maximumTailWords = 2
 
+    /// The model was trained on `PersonalNextWordShadow`'s letter-run
+    /// tokens ("don't" learned as `["don", "t"]`, never `["don't"]`), so
+    /// serving must split context the same way — reusing that tokenizer
+    /// rather than a second, looser word-splitter keeps the keys serving
+    /// looks up in the model the keys the model actually has.
     public static func tailWords(
         fromContext context: String,
         maximumWords: Int = maximumTailWords
     ) -> [String] {
-        let tokens = context.split(whereSeparator: \.isWhitespace)
-        return tokens.suffix(maximumWords).map { PersonalReplayEval.normalizeWord($0) }
+        let tokens = PersonalNextWordShadow.tokenize(context)
+        return Array(tokens.suffix(maximumWords))
     }
 
     public static func candidateSet(

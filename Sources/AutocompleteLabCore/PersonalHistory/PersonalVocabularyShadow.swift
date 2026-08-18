@@ -676,24 +676,75 @@ public struct PersonalNextWordShadow: Sendable {
     /// that hasn't itself been vetted as a safe production bar. Purely a
     /// lookup over `model`: no mutation, no interaction with `consume`'s
     /// paired scoring, callable any number of times with no side effects.
+    /// Splits `text` into the same letter-run tokens `consume` extracts one
+    /// keystroke at a time while training the model: a run of Unicode
+    /// letters is one token (a combining mark only extends it when the
+    /// combination stays all-letters, matching `consumeTyped`'s rule), and
+    /// everything else — whitespace, punctuation, apostrophes, hyphens,
+    /// digits — is a separator. Serving must tokenize context with this
+    /// exact rule, not a looser one: "don't" was learned as two
+    /// transitions, `["don", "t"]`, never as one token `["don't"]`.
+    public static func tokenize(_ text: String) -> [String] {
+        var tokens: [String] = []
+        var token = ""
+        for scalar in text.precomposedStringWithCanonicalMapping.unicodeScalars {
+            if isLetter(scalar) {
+                token.unicodeScalars.append(scalar)
+                continue
+            }
+            if isMark(scalar), !token.isEmpty {
+                let combined = surface(token + String(scalar))
+                if combined.unicodeScalars.allSatisfy(isLetter) {
+                    token = combined
+                    continue
+                }
+            }
+            if !token.isEmpty {
+                tokens.append(surface(token))
+                token = ""
+            }
+        }
+        if !token.isEmpty { tokens.append(surface(token)) }
+        return tokens
+    }
+
+    /// English contraction remainders the letter-run tokenizer produces
+    /// when it splits on the apostrophe ("I'll" -> `["i", "ll"]`, "don't"
+    /// -> `["don", "t"]`). These are real transitions the model needs for
+    /// context, but never a legitimate whole next word on their own —
+    /// serving one verbatim glues onto whatever the user is mid-typing
+    /// next ("I think I " -> "ll").
+    private static let contractionFragments: Set<String> = ["t", "s", "d", "m", "ll", "re", "ve"]
+
     public func predictNextWord(afterTailWords tailWords: [String]) -> PersonalNextWordPrediction? {
         let folded = tailWords.suffix(Self.maximumContextWords).map(Self.folded)
-        return Self.winningPrediction(
+        guard let prediction = Self.winningPrediction(
             in: model,
             after: Array(folded),
             maximumContext: 2,
-            minimumRatio: 2
-        )
+            minimumRatio: 2,
+            // Never fall all the way back to the empty-context global
+            // unigram bag for a served suggestion — a single globally
+            // dominant word (e.g. a name typed constantly) would otherwise
+            // surface in totally unrelated contexts. The shadow's own A/B
+            // recipe evaluation below still backs off to order 0 by
+            // default; this bound only tightens what's actually served.
+            minimumOrder: 1
+        ) else { return nil }
+        guard !Self.contractionFragments.contains(Self.folded(prediction.word)) else { return nil }
+        return prediction
     }
 
     private static func winningPrediction(
         in model: [ContextKey: TargetBag],
         after history: [String],
         maximumContext: Int,
-        minimumRatio: Int
+        minimumRatio: Int,
+        minimumOrder: Int = 0
     ) -> PersonalNextWordPrediction? {
         let maximum = min(maximumContext, history.count)
-        for order in stride(from: maximum, through: 0, by: -1) {
+        guard maximum >= minimumOrder else { return nil }
+        for order in stride(from: maximum, through: minimumOrder, by: -1) {
             guard let winner = model[Self.contextKey(order: order, history: history)]?.winner else {
                 continue
             }

@@ -250,7 +250,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
                     return nil
                 }
-                let tailWords = PersonalSuggestionPolicy.tailWords(fromContext: completionRequest.context)
+                let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
                 guard !tailWords.isEmpty else { return nil }
                 return Task { await provider(tailWords, completionRequest.app) }
             }()
@@ -268,7 +268,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             disconnect.resume()
             let result = await completion.result
-            let personalPrediction = await personalPredictionTask?.value ?? nil
+            let personalPrediction: PersonalNextWordPrediction?
+            switch result {
+            case .success:
+                personalPrediction = await Self.awaitPersonalPrediction(personalPredictionTask)
+            case .failure:
+                // This result is about to become an error/timeout response
+                // and the personal prediction would be discarded either
+                // way — don't let a slow personal lookup hold up writing it.
+                personalPredictionTask?.cancel()
+                personalPrediction = nil
+            }
             await withCheckedContinuation { continuation in
                 disconnect.setCancelHandler { continuation.resume() }
                 disconnect.cancel()
@@ -310,6 +320,46 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// The personal model must only ever see finished words. Mid-word
+    /// requests (cursor inside a word, no trailing whitespace) never reach
+    /// here today — the wire parser (`readRequest`) only accepts
+    /// word-boundary context — but this path must not depend on that
+    /// incidentally: a partial word fed to the model as a finished tail
+    /// word could resolve to a confident prediction that gets glued onto
+    /// the very word still being typed (e.g. "tomo" + "tomorrow" →
+    /// "tomotomorrow"). `internal`, not `private`, so it is directly
+    /// testable.
+    static func personalTailWords(fromContext context: String) -> [String] {
+        guard RawContinuationPrompt.endsAtWordBoundary(context) else { return [] }
+        return PersonalSuggestionPolicy.tailWords(fromContext: context)
+    }
+
+    /// The most a ready base ghost may be held up by a still-running
+    /// personal-history lookup. `PersonalHistoryController` is a single
+    /// actor shared with ingest/training work, so it can be busy; this
+    /// keeps that from ever lengthening a request past a short, fixed
+    /// budget — past the deadline the base ghost serves alone (`.base`
+    /// source), exactly as if personal suggestions had produced nothing.
+    private static let personalPredictionDeadlineNanoseconds: UInt64 = 250_000_000
+
+    private static func awaitPersonalPrediction(
+        _ task: Task<PersonalNextWordPrediction?, Never>?
+    ) async -> PersonalNextWordPrediction? {
+        guard let task else { return nil }
+        let prediction = await withTaskGroup(of: PersonalNextWordPrediction?.self) { group in
+            group.addTask { await task.value }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: personalPredictionDeadlineNanoseconds)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        task.cancel()
+        return prediction
     }
 
     /// Adds `source` only when the "Personal suggestions (experimental)"
