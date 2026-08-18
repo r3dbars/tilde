@@ -37,6 +37,21 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// and a permission granted mid-session resumes suggestions on the next
     /// completion too — no restart, no cached state to go stale.
     private let suggestionsGate: (@Sendable () -> Bool)?
+    /// "Personal suggestions (experimental)" (`docs/plans/road-to-paid.md`
+    /// Phase 3). Read fresh on every completion request, same shape and
+    /// contract as `suggestionsGate`: `nil` means "always off" (release-
+    /// proof mode and tests that don't care about this feature), so
+    /// existing call sites are unaffected by this feature's addition.
+    private let personalSuggestionsGate: (@Sendable () -> Bool)?
+    /// The read-only lookup into `PersonalHistoryController`'s live trained
+    /// model (see its `personalNextWordPrediction` doc comment). Takes the
+    /// already-extracted tail words and the request's app bundle
+    /// identifier — per-app exclusions are checked on the other end of this
+    /// closure, inside the controller, using the exact same
+    /// `personalHistoryExcludedApps` list capture already enforces (the
+    /// covenant). `nil` means "no personal serving available" (release-
+    /// proof mode and tests).
+    private let personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)?
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
@@ -48,7 +63,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
         personalHistory: any PersonalHistoryIngesting,
         sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)? = nil,
         onCompletionActivity: (@Sendable () -> Void)? = nil,
-        suggestionsGate: (@Sendable () -> Bool)? = nil
+        suggestionsGate: (@Sendable () -> Bool)? = nil,
+        personalSuggestionsGate: (@Sendable () -> Bool)? = nil,
+        personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil
     ) {
         self.runtime = runtime
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
@@ -56,6 +73,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
         self.sceneProvider = sceneProvider
         self.onCompletionActivity = onCompletionActivity
         self.suggestionsGate = suggestionsGate
+        self.personalSuggestionsGate = personalSuggestionsGate
+        self.personalNextWordProvider = personalNextWordProvider
     }
 
     func start() -> Bool {
@@ -223,6 +242,18 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     scene: scene
                 )
             }
+            // Read fresh, before either task starts, so the personal lookup
+            // (if any) runs CONCURRENTLY with the llama call, not after it —
+            // "never lengthen latency" (docs/plans/road-to-paid.md Phase 3).
+            let personalSuggestionsEnabled = self.personalSuggestionsGate?() ?? false
+            let personalPredictionTask: Task<PersonalNextWordPrediction?, Never>? = {
+                guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
+                    return nil
+                }
+                let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
+                guard !tailWords.isEmpty else { return nil }
+                return Task { await provider(tailWords, completionRequest.app) }
+            }()
             let disconnect = DispatchSource.makeReadSource(
                 fileDescriptor: connection,
                 queue: .global(qos: .userInitiated)
@@ -232,10 +263,22 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 let count = recv(connection, &byte, 1, MSG_PEEK | MSG_DONTWAIT)
                 if count == 0 || (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
                     completion.cancel()
+                    personalPredictionTask?.cancel()
                 }
             }
             disconnect.resume()
             let result = await completion.result
+            let personalPrediction: PersonalNextWordPrediction?
+            switch result {
+            case .success:
+                personalPrediction = await Self.awaitPersonalPrediction(personalPredictionTask)
+            case .failure:
+                // This result is about to become an error/timeout response
+                // and the personal prediction would be discarded either
+                // way — don't let a slow personal lookup hold up writing it.
+                personalPredictionTask?.cancel()
+                personalPrediction = nil
+            }
             await withCheckedContinuation { continuation in
                 disconnect.setCancelHandler { continuation.resume() }
                 disconnect.cancel()
@@ -244,16 +287,27 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
             let response: GhostBrainResponse
             let servedMetadata: [String: String]?
+            var source: PersonalSuggestionSource?
             switch result {
             case let .success(suggestion):
-                let text = suggestion.map {
+                let baseText = suggestion.map {
                     String($0.visibleText.drop(while: \Character.isWhitespace))
                 } ?? ""
+                var text = baseText
+                if personalSuggestionsEnabled {
+                    let applied = PersonalSuggestionPolicy.apply(
+                        baseGhost: baseText,
+                        personalPrediction: personalPrediction
+                    )
+                    text = applied.text
+                    source = applied.source
+                }
                 response = .suggestion(text)
-                servedMetadata = text.isEmpty ? nil : [
-                    "app": completionRequest.app ?? "unknown",
-                    "chars": String(text.count),
-                ]
+                servedMetadata = text.isEmpty ? nil : Self.servedMetadata(
+                    app: completionRequest.app,
+                    text: text,
+                    source: source
+                )
             case let .failure(error):
                 self.runtime.reportCompletionFailure()
                 response = (error as? URLError)?.code == .timedOut ? .timeout : .error
@@ -261,8 +315,68 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             if Self.write(response, to: connection), let servedMetadata {
                 DiagnosticsLog.shared.record("suggestion-served", metadata: servedMetadata)
+                if let source {
+                    PersonalSuggestionStats.record(source: source)
+                }
             }
         }
+    }
+
+    /// The personal model must only ever see finished words. Mid-word
+    /// requests (cursor inside a word, no trailing whitespace) never reach
+    /// here today — the wire parser (`readRequest`) only accepts
+    /// word-boundary context — but this path must not depend on that
+    /// incidentally: a partial word fed to the model as a finished tail
+    /// word could resolve to a confident prediction that gets glued onto
+    /// the very word still being typed (e.g. "tomo" + "tomorrow" →
+    /// "tomotomorrow"). `internal`, not `private`, so it is directly
+    /// testable.
+    static func personalTailWords(fromContext context: String) -> [String] {
+        guard RawContinuationPrompt.endsAtWordBoundary(context) else { return [] }
+        return PersonalSuggestionPolicy.tailWords(fromContext: context)
+    }
+
+    /// The most a ready base ghost may be held up by a still-running
+    /// personal-history lookup. `PersonalHistoryController` is a single
+    /// actor shared with ingest/training work, so it can be busy; this
+    /// keeps that from ever lengthening a request past a short, fixed
+    /// budget — past the deadline the base ghost serves alone (`.base`
+    /// source), exactly as if personal suggestions had produced nothing.
+    private static let personalPredictionDeadlineNanoseconds: UInt64 = 250_000_000
+
+    private static func awaitPersonalPrediction(
+        _ task: Task<PersonalNextWordPrediction?, Never>?
+    ) async -> PersonalNextWordPrediction? {
+        guard let task else { return nil }
+        let prediction = await withTaskGroup(of: PersonalNextWordPrediction?.self) { group in
+            group.addTask { await task.value }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: personalPredictionDeadlineNanoseconds)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        task.cancel()
+        return prediction
+    }
+
+    /// Adds `source` only when the "Personal suggestions (experimental)"
+    /// toggle was actually consulted this request — toggle-off behavior
+    /// stays byte-identical to before this feature existed, no `source`
+    /// key appears at all.
+    private static func servedMetadata(
+        app: String?,
+        text: String,
+        source: PersonalSuggestionSource?
+    ) -> [String: String] {
+        var metadata = [
+            "app": app ?? "unknown",
+            "chars": String(text.count),
+        ]
+        if let source { metadata["source"] = source.rawValue }
+        return metadata
     }
 
     private enum ValidatedRequest {

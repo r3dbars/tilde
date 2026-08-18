@@ -683,6 +683,56 @@ struct PersonalHistoryControllerTests {
         #expect(status.predictions == 0)
     }
 
+    @Test("Personal next-word prediction gates on exclusions and never perturbs shadow scoring")
+    func personalNextWordPredictionGatesAndDoesNotPerturbScoring() async {
+        let fixture = Fixture(enabled: true, excludedApps: ["com.example.Blocked"])
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        let trainingText = " three four Finish three four Finish "
+        #expect(await fixture.controller.ingest([fixture.event(text: trainingText)]))
+        let before = await settledStatus(fixture.controller).snapshot
+
+        let allowed = await fixture.controller.personalNextWordPrediction(
+            afterTailWords: ["three", "four"],
+            appBundleIdentifier: "com.example.Editor"
+        )
+        #expect(allowed?.word == "Finish")
+        #expect(allowed?.support == 2)
+
+        let excluded = await fixture.controller.personalNextWordPrediction(
+            afterTailWords: ["three", "four"],
+            appBundleIdentifier: "com.example.Blocked"
+        )
+        #expect(excluded == nil)
+
+        let missingApp = await fixture.controller.personalNextWordPrediction(
+            afterTailWords: ["three", "four"],
+            appBundleIdentifier: nil
+        )
+        #expect(missingApp == nil)
+
+        // Repeated read-only lookups must never perturb the paired shadow
+        // experiment's own scoring — the whole point of routing this
+        // through the same actor without any new state.
+        for _ in 0..<5 {
+            _ = await fixture.controller.personalNextWordPrediction(
+                afterTailWords: ["three", "four"],
+                appBundleIdentifier: "com.example.Editor"
+            )
+        }
+        let after = await settledStatus(fixture.controller).snapshot
+        #expect(after == before)
+    }
+
+    @Test("Disabled Personal History never serves a personal prediction")
+    func disabledHistoryNeverServesPersonalPrediction() async {
+        let fixture = Fixture(enabled: false)
+        let prediction = await fixture.controller.personalNextWordPrediction(
+            afterTailWords: ["three", "four"],
+            appBundleIdentifier: "com.example.Editor"
+        )
+        #expect(prediction == nil)
+    }
+
     private actor MemoryStore: PersonalHistoryStore {
         nonisolated let location = URL(fileURLWithPath: "/tmp/tilde-personal-history-test")
         private(set) var events: [PersonalHistoryEvent]

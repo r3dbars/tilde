@@ -29,6 +29,12 @@ public enum DiagnosticsMetadataRedactor {
         // `suggestion-suppressed` diagnostic (`GhostBrainServerHost`) —
         // count-only, never the matched category or any scene text.
         "sensitive-scene",
+        // `PersonalSuggestionSource`'s fixed vocabulary, logged as the
+        // `source` field on `suggestion-served` only when the "Personal
+        // suggestions (experimental)" toggle is on
+        // (`PersonalSuggestionPolicy.apply`, `GhostBrainServerHost`) — which
+        // engine's word actually reached the user, never the word itself.
+        "base", "personal", "agreed",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
@@ -42,7 +48,7 @@ public enum DiagnosticsMetadataRedactor {
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
-        case "reason", "status", "mode":
+        case "reason", "status", "mode", "source":
             safe = enumValues.contains(value)
         case "app":
             safe = value == "unknown"

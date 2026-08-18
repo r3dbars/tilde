@@ -720,6 +720,87 @@ struct PersonalNextWordShadowTests {
         #expect(shadow.snapshot.opportunities == beforeProtectedRetry.opportunities + 1)
     }
 
+    @Test("predictNextWord serves a well-supported context and never perturbs consume's scoring")
+    func predictNextWordServesWellSupportedContext() {
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        shadow.consume([
+            event(id: "training", text: " three four Finish three four Finish ", time: 100, session: "a"),
+        ])
+        let before = shadow.snapshot
+
+        let prediction = shadow.predictNextWord(afterTailWords: ["three", "four"])
+        #expect(prediction?.word == "Finish")
+        #expect(prediction?.support == 2)
+        #expect(prediction?.total == 2)
+
+        // Calling the read-only lookup repeatedly must never change what
+        // `consume`'s paired A/B scoring later reports.
+        for _ in 0..<5 { _ = shadow.predictNextWord(afterTailWords: ["three", "four"]) }
+        #expect(shadow.snapshot == before)
+
+        shadow.consume([event(id: "score", text: " three four ", time: cutover, session: "live")])
+        #expect(shadow.snapshot.opportunities == before.opportunities + 1)
+    }
+
+    @Test("predictNextWord withholds low-support and ambiguous contexts")
+    func predictNextWordWithholdsWeakEvidence() {
+        var singleton = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        singleton.consume([event(id: "single", text: " three four Finish ", time: 100, session: "a")])
+        #expect(singleton.predictNextWord(afterTailWords: ["three", "four"]) == nil)
+
+        var ambiguous = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        ambiguous.consume([
+            event(id: "finish-a", text: " three four Finish ", time: 100, session: "a"),
+            event(id: "finish-b", text: " three four Finish ", time: 100, session: "b"),
+            event(id: "other-a", text: " three four Other ", time: 100, session: "c"),
+            event(id: "other-b", text: " three four Other ", time: 100, session: "d"),
+        ])
+        #expect(ambiguous.predictNextWord(afterTailWords: ["three", "four"]) == nil)
+    }
+
+    @Test("predictNextWord has no answer for an unseen context")
+    func predictNextWordUnseenContextIsNil() {
+        let shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        #expect(shadow.predictNextWord(afterTailWords: ["never", "seen"]) == nil)
+    }
+
+    @Test("predictNextWord never serves a contraction remainder split off a larger token")
+    func predictNextWordRefusesContractionFragments() {
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        shadow.consume([
+            event(id: "train-a", text: " I'll be there ", time: 100, session: "a"),
+            event(id: "train-b", text: " I'll be there ", time: 100, session: "b"),
+        ])
+
+        // The letter-run tokenizer really did split "I'll" into ["I", "ll"]
+        // and learn "I" -> "ll" with support 2 — comfortably enough to win
+        // on its own. But "ll" was never a whole word the user typed, so
+        // serving must never hand it back as if it were.
+        let tailWords = PersonalSuggestionPolicy.tailWords(fromContext: "I think I ")
+        #expect(tailWords == ["think", "I"])
+        #expect(shadow.predictNextWord(afterTailWords: tailWords) == nil)
+        #expect(shadow.predictNextWord(afterTailWords: ["I"]) == nil)
+    }
+
+    @Test("predictNextWord never backs off to the empty-context global bag")
+    func predictNextWordNeverServesFromOrderZero() {
+        // Mirrors "Order four predicts and an ineligible context backs off
+        // to order zero" above, but through the production-facing
+        // predictNextWord entry point: "common" is globally dominant
+        // (learned far more often than anything else) yet has no relation
+        // to the live "cue" context. The shadow's own baseline/candidate
+        // A/B recipes are still allowed to fall back that far (that
+        // backoff is exactly what the older test above exercises); a
+        // served suggestion must not.
+        var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
+        shadow.consume([
+            event(id: "rare", text: " cue rare ", time: 100, session: "rare"),
+            event(id: "common", text: " common common common ", time: 100, session: "common"),
+        ])
+        #expect(shadow.predictNextWord(afterTailWords: ["cue"]) == nil)
+        #expect(shadow.predictNextWord(afterTailWords: []) == nil)
+    }
+
     private func modelCountsForAlphaBetaTraining() -> (contexts: Int, transitions: Int) {
         var shadow = PersonalNextWordShadow(evaluationStartMilliseconds: cutover)
         shadow.consume([
