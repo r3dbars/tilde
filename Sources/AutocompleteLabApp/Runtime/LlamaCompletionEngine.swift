@@ -70,7 +70,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let consensusEnabled = TildeSettings().consensusShorteningEnabled
         var body: [String: Any] = [
             "prompt": prompt,
-            "n_predict": register.generatedTokenBudget(scene: scene),
+            "n_predict": register.generatedTokenBudget,
             "temperature": consensusEnabled ? -1 : 0,
             "cache_prompt": true,
             "stop": ["\n"],
