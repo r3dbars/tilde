@@ -8,7 +8,7 @@ struct ConsensusGhostPolicyTests {
         let tokens = [
             CompletionTokenEvidence(text: " I", probability: 0.9),
             CompletionTokenEvidence(text: " think", probability: 0.8),
-            CompletionTokenEvidence(text: " we", probability: 0.3),
+            CompletionTokenEvidence(text: " we", probability: 0.1),
         ]
         #expect(ConsensusGhostPolicy.visibleWordBudget(tokens: tokens, currentVisibleWords: 6) == 2)
     }
@@ -17,7 +17,7 @@ struct ConsensusGhostPolicyTests {
     func dropsPartialTrailingWord() {
         let tokens = [
             CompletionTokenEvidence(text: " comp", probability: 0.9),
-            CompletionTokenEvidence(text: "lete", probability: 0.2),
+            CompletionTokenEvidence(text: "lete", probability: 0.1),
         ]
         #expect(ConsensusGhostPolicy.visibleWordBudget(tokens: tokens, currentVisibleWords: 4) == 1)
     }
@@ -34,7 +34,7 @@ struct ConsensusGhostPolicyTests {
 
     @Test("Threshold is bounded and policy never lengthens")
     func boundedThreshold() {
-        let tokens = [CompletionTokenEvidence(text: " hello", probability: 0.4)]
+        let tokens = [CompletionTokenEvidence(text: " hello", probability: 0.1)]
         #expect(ConsensusGhostPolicy.visibleWordBudget(tokens: tokens, currentVisibleWords: 1) == nil)
         #expect(ConsensusGhostPolicy.visibleWordBudget(tokens: tokens, currentVisibleWords: 3, threshold: 2) == 1)
     }

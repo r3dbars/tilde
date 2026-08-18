@@ -7,9 +7,13 @@ import Foundation
 /// a ghost, never invents text, and an unavailable trace returns `nil` so the
 /// caller preserves today's behavior.
 public enum ConsensusGhostPolicy {
-    /// First dogfood bar. This is deliberately simple and lives in one place
-    /// so replay can sweep it rather than scattering confidence gates.
-    public static let minimumTokenProbability = 0.50
+    /// Dogfood bar. Greedy-decode prose routinely carries top-token
+    /// probabilities in the 0.3–0.5 band on perfectly good continuations
+    /// (measured live 2026-08-17: " to the team." ran 0.53/0.45/0.18), so the
+    /// first bar of 0.50 trimmed nearly every ghost to one word. Cut only
+    /// where certainty genuinely collapses. Lives in one place so replay can
+    /// sweep it rather than scattering confidence gates.
+    public static let minimumTokenProbability = 0.20
 
     /// Returns `nil` when no shortening is justified. Otherwise returns the
     /// maximum whole-word budget the caller should expose.
