@@ -305,15 +305,15 @@ struct ScreenSceneTests {
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.mode == .replying)
-        // Capped at maxTurns (3), but none of the survivors got concatenated.
-        #expect(scene.conversationTurns.count == 3)
-        #expect(scene.conversationTurns.map(\.text) == ["lol", "u there", "??"])
+        // All four fit under maxTurns, and none of them got concatenated.
+        #expect(scene.conversationTurns.count == 4)
+        #expect(scene.conversationTurns.map(\.text) == ["up?", "lol", "u there", "??"])
     }
 
     // MARK: - Replying: caps
 
-    @Test("At most 3 turns survive, keeping the most recent (bottom-most) ones")
-    func capsAtThreeMostRecentTurns() {
+    @Test("At most maxTurns turns survive, keeping the most recent (bottom-most) ones")
+    func capsAtMostRecentTurns() {
         let blocks = [
             block("message one oldest", x: 0.05, y: 0.10, window: slack),
             block("message two", x: 0.55, y: 0.30, window: slack),
@@ -323,13 +323,13 @@ struct ScreenSceneTests {
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.mode == .replying)
-        #expect(scene.conversationTurns.count == 3)
+        #expect(scene.conversationTurns.count == ScreenScene.maxTurns)
         let texts = scene.conversationTurns.map(\.text)
-        #expect(texts == ["message three", "message four", "message five newest"])
+        #expect(texts == ["message two", "message three", "message four", "message five newest"])
     }
 
-    @Test("Turn text is capped to a 600-character combined budget, freshest kept fullest")
-    func turnsShareA600CharacterBudget() {
+    @Test("Turn text is capped to the shared character budget, freshest kept fullest")
+    func turnsShareTheCharacterBudget() {
         let oldest = String(repeating: "a", count: 300)
         let middle = String(repeating: "b", count: 300)
         let newest = String(repeating: "c", count: 300)
@@ -344,9 +344,45 @@ struct ScreenSceneTests {
         // Newest turn is spent first and kept fully intact.
         #expect(scene.conversationTurns.last?.text == newest)
         #expect(scene.conversationTurns.last?.text.count == 300)
-        // Combined budget (600) leaves only 300 left for everything older than newest,
-        // so the oldest turn is the one that gets dropped or truncated first.
-        #expect(scene.conversationTurns.count <= 2)
+        // The 800 budget covers newest + middle in full and leaves 200 for
+        // the oldest, which is the one that gets truncated.
+        #expect(scene.conversationTurns.map(\.text.count) == [200, 300, 300])
+    }
+
+    /// Live bug 2026-08-18: the merged block's own growing height was the
+    /// gap reference, so after two wrapped lines joined, ordinary paragraph
+    /// spacing passed the check and a paragraph-style conversation
+    /// (Claude/ChatGPT-like, no bubbles, one speaker column) collapsed into
+    /// a single mega-turn. The reference must be the LAST LINE's height.
+    @Test("Paragraph-style messages stay distinct turns; only wrapped lines merge")
+    func paragraphMessagesStayDistinctTurns() {
+        let blocks = [
+            block("first paragraph line one which wraps", x: 0.05, y: 0.10, window: slack),
+            block("first paragraph line two", x: 0.05, y: 0.16, window: slack),
+            block("first paragraph line three", x: 0.05, y: 0.22, window: slack),
+            block("second paragraph line one after a gap", x: 0.05, y: 0.32, window: slack),
+            block("second paragraph line two", x: 0.05, y: 0.38, window: slack),
+            block("second paragraph line three", x: 0.05, y: 0.44, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 2)
+        #expect(scene.conversationTurns.first?.text.hasPrefix("first paragraph") == true)
+        #expect(scene.conversationTurns.last?.text.hasPrefix("second paragraph") == true)
+    }
+
+    @Test("A newest turn over budget keeps its tail, not its head")
+    func newestTurnOverBudgetKeepsItsTail() {
+        let older = "short older message"
+        let newest = String(repeating: "a", count: ScreenScene.maxTurnsCharacterBudget - 10) + " tail marker"
+        let blocks = [
+            block(older, x: 0.05, y: 0.10, window: slack),
+            block(newest, x: 0.05, y: 0.70, window: slack),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        let last = scene.conversationTurns.last?.text ?? ""
+        #expect(last.count == ScreenScene.maxTurnsCharacterBudget)
+        #expect(last.hasSuffix("tail marker"))
     }
 
     @Test("A bubble duplicating field text is excluded from the reply thread (dedupe)")
