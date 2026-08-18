@@ -54,6 +54,15 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public let prompt: String
     public let contextEndedInWhitespace: Bool
 
+    /// Whether `text` ends at a word boundary — the same predicate that
+    /// produces `contextEndedInWhitespace` above, exposed statically so
+    /// callers that never build a full prompt (e.g. the socket host's
+    /// personal-suggestion gate) can still ask "is the last word actually
+    /// finished?" before treating the tail as complete words.
+    public static func endsAtWordBoundary(_ text: String) -> Bool {
+        text.last?.isWhitespace ?? false
+    }
+
     public static func scaffold(for register: ContinuationRegister) -> String {
         switch register {
         case .chat:

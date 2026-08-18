@@ -7,7 +7,14 @@ import Foundation
 enum LlamaCompletionEvidenceParser {
     struct Payload: Decodable {
         let content: String
+        let completionProbabilities: [TokenProbability]?
         let probs: [TokenProbability]?
+
+        enum CodingKeys: String, CodingKey {
+            case content
+            case completionProbabilities = "completion_probabilities"
+            case probs
+        }
     }
 
     struct TokenProbability: Decodable {
@@ -28,7 +35,8 @@ enum LlamaCompletionEvidenceParser {
 
     static func decode(_ data: Data) throws -> (content: String, tokens: [CompletionTokenEvidence]) {
         let payload = try JSONDecoder().decode(Payload.self, from: data)
-        let tokens = payload.probs?.compactMap { item -> CompletionTokenEvidence? in
+        let rawTokens = payload.completionProbabilities ?? payload.probs
+        let tokens = rawTokens?.compactMap { item -> CompletionTokenEvidence? in
             guard let logprob = item.logprob else { return nil }
             let alternatives = (item.topLogprobs ?? []).map {
                 CompletionTokenEvidence.Alternative(text: $0.token, probability: exp($0.logprob))

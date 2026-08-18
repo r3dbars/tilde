@@ -122,10 +122,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         scene: ScreenScene.Scene?,
         textBeforeCursor: String
     ) -> String {
-        let futures = IntentFutureCache.shared.futures(
-            scene: scene,
-            textBeforeCursor: textBeforeCursor
-        )
+        let futures = intentFutures(scene: scene, textBeforeCursor: textBeforeCursor)
         let summary = IntentFuturesPlanner.promptHint(for: futures)
         guard !summary.isEmpty,
               let marker = prompt.range(of: "Continuation:", options: .backwards)
@@ -134,5 +131,27 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         var result = prompt
         result.insert(contentsOf: hint, at: marker.lowerBound)
         return result
+    }
+
+    /// Blends the scene-only prior (what Tilde already believed about this
+    /// conversation before the user typed anything this turn) with the
+    /// live, text-conditioned read — see `IntentFutureFusion`. This used to
+    /// run through `IntentFutureCache`, a process-global lock-guarded cache
+    /// keyed on the current scene; but `IntentFuturesPlanner.futures` is a
+    /// pure, cheap function of `scene` alone, so recomputing the prior on
+    /// every call produces exactly the value the cache would have served —
+    /// the cache added a lock and mutable global state for no measurable
+    /// benefit, and its "warm prior" was always discarded the moment the
+    /// scene changed anyway. Call the planner directly.
+    private static func intentFutures(
+        scene: ScreenScene.Scene?,
+        textBeforeCursor: String
+    ) -> [IntentFuture] {
+        guard scene != nil else {
+            return IntentFuturesPlanner.futures(scene: nil, textBeforeCursor: textBeforeCursor)
+        }
+        let prior = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: "")
+        let live = IntentFuturesPlanner.futures(scene: scene, textBeforeCursor: textBeforeCursor)
+        return IntentFutureFusion.fuse(prior: prior, live: live)
     }
 }

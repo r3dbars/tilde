@@ -52,13 +52,25 @@ struct PersonalSuggestionPolicyTests {
         #expect(set.first(from: .personal)?.confidence == 0.75)
     }
 
-    @Test("tailWords takes the trailing normalized words, bounded by maximumWords")
+    @Test("tailWords takes the trailing letter-run tokens, bounded by maximumWords")
     func tailWordsTrailingBounded() {
-        #expect(PersonalSuggestionPolicy.tailWords(fromContext: "See you Tomorrow, ") == ["you", "tomorrow"])
+        #expect(PersonalSuggestionPolicy.tailWords(fromContext: "See you Tomorrow, ") == ["you", "Tomorrow"])
         #expect(
             PersonalSuggestionPolicy.tailWords(fromContext: "one two three four ", maximumWords: 3)
                 == ["two", "three", "four"]
         )
         #expect(PersonalSuggestionPolicy.tailWords(fromContext: "solo ") == ["solo"])
+    }
+
+    @Test("tailWords splits contractions the same way training does: two tokens, not one")
+    func tailWordsSplitsContractions() {
+        // PersonalNextWordShadow learns "don't" as the two letter-run
+        // tokens ["don", "t"] — an apostrophe is neither a letter nor a
+        // combining mark, so it separates tokens exactly like whitespace.
+        // Serving must produce the same keys or a trained model can never
+        // match after any contraction, hyphenated word, or word with a
+        // digit in it.
+        #expect(PersonalSuggestionPolicy.tailWords(fromContext: "I don't ") == ["don", "t"])
+        #expect(PersonalSuggestionPolicy.tailWords(fromContext: "let's meet up ") == ["meet", "up"])
     }
 }

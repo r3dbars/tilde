@@ -61,6 +61,24 @@ struct IntentFuturesTests {
         #expect(IntentFuturesPlanner.promptHint(for: futures).isEmpty)
     }
 
+    @Test("\"Not a problem\" is not misread as a decline because it starts with \"no\"")
+    func notIsNotMisclassifiedAsDecline() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("Sorry I forgot to reply earlier."),
+            textBeforeCursor: "Not a problem "
+        )
+        #expect(!futures.contains { $0.kind == .decline })
+    }
+
+    @Test("\"You too\" is not misread as an accept because it starts with \"y\"")
+    func youIsNotMisclassifiedAsAccept() {
+        let futures = IntentFuturesPlanner.futures(
+            scene: replyScene("Thanks for helping me move last weekend."),
+            textBeforeCursor: "You too "
+        )
+        #expect(!futures.contains { $0.kind == .accept })
+    }
+
     @Test("Prompt hint contains labels only")
     func promptHintIsContentFree() {
         let futures = IntentFuturesPlanner.futures(

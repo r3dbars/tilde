@@ -71,11 +71,11 @@ public enum IntentFuturesPlanner {
         // The user's first few characters collapse the semantic tree. These
         // are intentionally tiny starter cues, not a language model hidden in
         // a switch statement.
-        if hasAnyPrefix(typed, ["y", "ye", "yes", "yep", "yeah", "sure", "absolutely", "sounds good"]) {
+        if hasAnyPrefix(typed, ["yes", "yep", "yeah", "sure", "absolutely", "sounds good"]) {
             scores[.accept, default: 0] += 1.10
             scores[.acknowledge, default: 0] += 0.35
         }
-        if hasAnyPrefix(typed, ["no", "nah", "can't", "cannot", "won't", "unfortunately"]) {
+        if hasAnyPrefix(typed, ["nah", "can't", "cannot", "won't", "unfortunately"]) {
             scores[.decline, default: 0] += 1.10
         }
         if hasAnyPrefix(typed, ["what", "which", "when", "where", "who", "why", "how", "do you mean"]) {
@@ -140,10 +140,31 @@ public enum IntentFuturesPlanner {
             .contains(where: { text.contains($0) })
     }
 
-    private static func hasAnyPrefix(_ text: String, _ prefixes: [String]) -> Bool {
+    /// Cues shorter than 3 letters ("y", "no") are dropped from the cue
+    /// lists above rather than matched here: even on a whole-word boundary
+    /// a one- or two-letter fragment is too often the true start of a
+    /// longer, unrelated word ("no" vs. "not"/"nobody") to serve as
+    /// reliable early-typing evidence, and the two- and three-letter
+    /// alternatives already in each list ("yes"/"yep"/"yeah", "nah")
+    /// cover the same intent without that ambiguity.
+    private static func hasAnyPrefix(_ text: String, _ cues: [String]) -> Bool {
         guard !text.isEmpty else { return false }
-        return prefixes.contains { prefix in
-            text.hasPrefix(prefix) || prefix.hasPrefix(text)
+        let word = String(text.prefix { $0 != " " })
+        return cues.contains { cue in
+            guard !cue.contains(" ") else {
+                // Multi-word phrase cues ("sounds good", "do you mean")
+                // stay a whole-string two-way prefix match: either the
+                // phrase has already appeared, or the user hasn't finished
+                // typing it yet.
+                return text.hasPrefix(cue) || cue.hasPrefix(text)
+            }
+            // A single-word cue must land on the user's actual first
+            // word — either they've finished typing exactly that word, or
+            // they're still typing it and haven't gone past its length
+            // yet. A longer, different first word that merely starts with
+            // the same letters ("not" vs. "no", "you" vs. "yes") must
+            // never match.
+            return word == cue || (word.count < cue.count && cue.hasPrefix(word))
         }
     }
 }
