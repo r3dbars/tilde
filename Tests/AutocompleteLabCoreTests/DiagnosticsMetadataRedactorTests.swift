@@ -98,6 +98,31 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("kind", "fullscreen") == "kind=String(10 chars)")
     }
 
+    @Test("P99-at-every-section timing fields survive as whole milliseconds")
+    func keepsStageTimingFields() {
+        // Scene classification (`ScreenCaptureService.freshScene`).
+        #expect(field("milliseconds", "4") == "milliseconds=4")
+        // Capture/OCR split (`ScreenCaptureService.performWindowCapture`/
+        // `performFullDisplayCapture`).
+        #expect(field("ocrMilliseconds", "112") == "ocrMilliseconds=112")
+        // Personal-brain race (`GhostBrainServerHost.awaitPersonalPrediction`).
+        #expect(field("waitedMilliseconds", "250") == "waitedMilliseconds=250")
+        // Socket request total (`GhostBrainServerHost`'s `ghost-request-timing`).
+        #expect(field("requestMilliseconds", "38") == "requestMilliseconds=38")
+        // Nothing free-text ever gets through any of these keys either.
+        #expect(field("milliseconds", "private") == "milliseconds=String(7 chars)")
+        #expect(field("waitedMilliseconds", "-5") == "waitedMilliseconds=String(2 chars)")
+    }
+
+    @Test("The personal-lookup-timing outcome vocabulary survives as its literal enum case")
+    func keepsPersonalLookupOutcomeValues() {
+        #expect(field("outcome", "resolved") == "outcome=resolved")
+        #expect(field("outcome", "timeout") == "outcome=timeout")
+        #expect(field("outcome", "disabled") == "outcome=disabled")
+        // Nothing free-text ever gets through the "outcome" key either.
+        #expect(field("outcome", "maybe") == "outcome=String(5 chars)")
+    }
+
     @Test("Unknown and text-like fields expose shape only")
     func redactsUnknownFields() {
         #expect(field("selectedText", "private draft") == "metadata=String(13 chars)")
