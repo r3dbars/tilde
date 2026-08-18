@@ -29,6 +29,19 @@ actor ScreenCaptureService {
     private(set) var latestSnapshot: ScreenSnapshot?
     private var pendingTypingPauseTask: Task<Void, Never>?
 
+    /// Counts every capture that reaches `performCapture` (cadence/exclusion
+    /// already cleared it). Referencing needs OTHER windows' text, which a
+    /// single-window capture can never see by construction — the filter
+    /// physically excludes every other window's pixels — so this forces a
+    /// full-display pass on every Nth capture to keep referencing fed. `3` is
+    /// a simple, documented choice: frequent enough that referenceSnippets
+    /// stay usable within the 20s staleness window (`ScreenScene`'s
+    /// `defaultStalenessCapSeconds`), infrequent enough that most captures
+    /// still get the window-only path's ~2x OCR speedup and exact
+    /// attribution.
+    private var captureCounter = 0
+    private static let fullDisplayCaptureInterval = 3
+
     /// Injectable for tests: the real system checks (TCC, lock screen,
     /// secure input, ScreenCaptureKit itself) are not something a unit test
     /// should have to actually perform on a display. `enabled` and
@@ -261,12 +274,98 @@ actor ScreenCaptureService {
         return .skipped(reason)
     }
 
+    /// Chooses window-only vs full-display capture and dispatches to the
+    /// matching path. `captureCounter` decides the periodic full-display
+    /// pass (see its doc comment); on any capture that isn't forced full,
+    /// `frontmostWindow` still has to actually find a layer-0 window or this
+    /// falls back to full-display anyway — a window-only capture is never
+    /// attempted blind.
     private func performCapture(content: SCShareableContent, moment: Date) async -> CaptureOutcome {
         guard let display = Self.activeDisplay(in: content) else {
             diagnostics("screen-capture-skipped", ["reason": "no-display"])
             return .captureFailed
         }
 
+        captureCounter += 1
+        let forceFullDisplay = captureCounter % Self.fullDisplayCaptureInterval == 0
+        let zRanks = Self.onScreenZOrderRanks()
+
+        if !forceFullDisplay, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
+            return await performWindowCapture(window: window, display: display, moment: moment)
+        }
+        return await performFullDisplayCapture(content: content, display: display, zRanks: zRanks, moment: moment)
+    }
+
+    /// Captures ONLY the frontmost app's frontmost layer-0 window
+    /// (`SCContentFilter(desktopIndependentWindow:)`) — the captured image
+    /// physically contains that one window's pixels, so every OCR block is
+    /// stamped with that window's bundle id and frame directly, with no
+    /// per-block attribution guessing (contrast `performFullDisplayCapture`,
+    /// which still needs `WindowAttribution` because it can see several
+    /// windows at once). Roughly halves OCR latency too: Vision has one
+    /// window's worth of pixels to walk instead of the whole display.
+    private func performWindowCapture(window: SCWindow, display: SCDisplay, moment: Date) async -> CaptureOutcome {
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let configuration = SCStreamConfiguration()
+        configuration.width = max(1, Int(window.frame.width.rounded()))
+        configuration.height = max(1, Int(window.frame.height.rounded()))
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+
+        let dutyCycleStart = now()
+        do {
+            let image = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: configuration
+            )
+            let recognized = try await recognizeText(image)
+            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
+            // Vision's boxes are normalized against the captured WINDOW
+            // image here, not the display — map each one through the
+            // window's own display-normalized frame before it becomes a
+            // `TextBlock`, or every downstream consumer (bubble-width gates,
+            // speaker bucketing in `ScreenScene`) silently misreads
+            // window-relative widths as display-relative ones.
+            let windowFrame = Self.normalize(window.frame, in: display.frame)
+            let ownerBundleIdentifier = window.owningApplication?.bundleIdentifier
+            let blocks = recognized.map { block -> ScreenSnapshot.TextBlock in
+                ScreenSnapshot.TextBlock(
+                    text: block.text,
+                    boundingBox: WindowAttribution.mapWindowRelativeBox(block.boundingBox, windowFrame: windowFrame),
+                    windowOwnerBundleIdentifier: ownerBundleIdentifier,
+                    windowTitle: window.title,
+                    windowFrame: windowFrame
+                )
+            }
+            let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
+            latestSnapshot = snapshot
+            lastCaptureAt = moment
+            diagnostics(
+                "screen-capture-completed",
+                ["blocks": String(blocks.count), "duration_ms": String(dutyCycleMilliseconds), "kind": "window"]
+            )
+            return .captured(blockCount: blocks.count)
+        } catch {
+            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
+            diagnostics(
+                "screen-capture-failed",
+                ["duration_ms": String(dutyCycleMilliseconds), "kind": "window"]
+            )
+            return .captureFailed
+        }
+    }
+
+    /// The original full-display path, unchanged in behavior: captures the
+    /// active display, OCRs everything visible on it, and attributes each
+    /// block to a window via `WindowAttribution`'s z-order-aware geometry
+    /// match. This is what keeps "referencing" fed — it is the only path
+    /// that can ever see a window other than the frontmost one.
+    private func performFullDisplayCapture(
+        content: SCShareableContent,
+        display: SCDisplay,
+        zRanks: [CGWindowID: Int],
+        moment: Date
+    ) async -> CaptureOutcome {
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
         configuration.width = display.width
@@ -305,8 +404,10 @@ actor ScreenCaptureService {
             // whole conversation). `CGWindowListCopyWindowInfo` with
             // `.optionOnScreenOnly` IS documented front-to-back; rank by
             // it, keeping `windowLayer` only as the fallback for windows
-            // missing from that list.
-            let zRanks = Self.onScreenZOrderRanks()
+            // missing from that list. `zRanks` is a parameter here (computed
+            // once in `performCapture`, the same ranks used to pick the
+            // frontmost window for the window-only path) rather than
+            // recomputed.
             let frontToBackWindows = content.windows.sorted {
                 Self.frontToBackPrecedes($0, $1, zRanks: zRanks)
             }
@@ -336,7 +437,7 @@ actor ScreenCaptureService {
             lastCaptureAt = moment
             diagnostics(
                 "screen-capture-completed",
-                ["blocks": String(blocks.count), "duration_ms": String(dutyCycleMilliseconds)]
+                ["blocks": String(blocks.count), "duration_ms": String(dutyCycleMilliseconds), "kind": "display"]
             )
             return .captured(blockCount: blocks.count)
         } catch {
@@ -345,7 +446,7 @@ actor ScreenCaptureService {
             // the duty cycle the power probe measures, so the same
             // duration_ms field is attached here too.
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
-            diagnostics("screen-capture-failed", ["duration_ms": String(dutyCycleMilliseconds)])
+            diagnostics("screen-capture-failed", ["duration_ms": String(dutyCycleMilliseconds), "kind": "display"])
             return .captureFailed
         }
     }
@@ -434,6 +535,22 @@ actor ScreenCaptureService {
         case (nil, .some): return false
         case (nil, nil): return a.windowLayer < b.windowLayer
         }
+    }
+
+    /// The window the window-only capture path targets: the top-ranked
+    /// normal-layer (`0`) window, front-to-back. This does not scope to a
+    /// caller-supplied frontmost bundle id — `attemptCapture`'s trigger flow
+    /// (`noteWindowChanged`/`noteCompletionActivity`) does not carry one
+    /// through to `performCapture`, unlike `freshScene`, which only learns it
+    /// from the completion request at read time — so this uses the same
+    /// "top-ranked layer-0 window overall" proxy `AppDelegate.currentFrontWindowIdentity()`
+    /// already relies on elsewhere for the same purpose. Layer-0 excludes
+    /// menu bar extras, the dock, and other chrome that would otherwise win
+    /// on raw z-order alone.
+    private static func frontmostWindow(among windows: [SCWindow], zRanks: [CGWindowID: Int]) -> SCWindow? {
+        windows
+            .sorted { frontToBackPrecedes($0, $1, zRanks: zRanks) }
+            .first { $0.windowLayer == 0 }
     }
 
     /// `SCWindow.frame` is in global desktop points; `display.frame` is that
