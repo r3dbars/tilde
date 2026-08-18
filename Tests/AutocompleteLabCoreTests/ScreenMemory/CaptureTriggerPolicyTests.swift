@@ -114,12 +114,13 @@ struct CaptureTriggerPolicyTests {
         #expect(decide(lastCaptureAt: nil) == .capture)
     }
 
-    @Test("A capture within the 5s cadence cap is blocked, with remaining time reported")
+    @Test("A capture within the cadence cap is blocked, with remaining time reported")
     func cadenceCapBlocksWithinWindow() {
         let last = epoch
-        let now = epoch.addingTimeInterval(3)
+        let elapsed = CaptureTriggerPolicy.cadenceCapSeconds / 2
+        let now = epoch.addingTimeInterval(elapsed)
         let decision = decide(lastCaptureAt: last, now: now)
-        #expect(decision == .skip(.cadence(secondsRemaining: 2)))
+        #expect(decision == .skip(.cadence(secondsRemaining: CaptureTriggerPolicy.cadenceCapSeconds - elapsed)))
     }
 
     @Test("A capture exactly at the cadence cap boundary is allowed")
