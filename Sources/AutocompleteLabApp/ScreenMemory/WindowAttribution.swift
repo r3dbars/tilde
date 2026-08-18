@@ -24,4 +24,26 @@ enum WindowAttribution {
     static func attribute(boundingBox: NormalizedDisplayRect, frontToBackWindows windows: [WindowInfo]) -> WindowInfo? {
         windows.first { $0.frame.contains(x: boundingBox.centerX, y: boundingBox.centerY) }
     }
+
+    /// Maps a Vision OCR box back to display-relative space when the capture
+    /// itself was scoped to a single window (`SCContentFilter(desktopIndependentWindow:)`).
+    /// In that path Vision's `boundingBox` is normalized 0...1 against the
+    /// *captured window image*, not the display — every downstream consumer
+    /// (attribution, `ScreenScene`'s bubble-width gates, speaker bucketing)
+    /// assumes display-relative boxes, so this affine-transforms the
+    /// window-relative box through the window's own display-normalized frame
+    /// before a `ScreenSnapshot.TextBlock` is ever built. Pure geometry, no
+    /// ScreenCaptureKit/Vision types, so it is testable without a live
+    /// display.
+    static func mapWindowRelativeBox(
+        _ box: NormalizedDisplayRect,
+        windowFrame: NormalizedDisplayRect
+    ) -> NormalizedDisplayRect {
+        NormalizedDisplayRect(
+            x: windowFrame.x + box.x * windowFrame.width,
+            y: windowFrame.y + box.y * windowFrame.height,
+            width: box.width * windowFrame.width,
+            height: box.height * windowFrame.height
+        )
+    }
 }

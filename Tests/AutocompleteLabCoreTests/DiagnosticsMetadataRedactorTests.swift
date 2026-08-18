@@ -90,6 +90,14 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("turns", "3 (Slack)") == "turns=String(9 chars)")
     }
 
+    @Test("The screen-capture-completed/-failed kind field survives as its literal enum case")
+    func keepsScreenCaptureKindValues() {
+        #expect(field("kind", "window") == "kind=window")
+        #expect(field("kind", "display") == "kind=display")
+        // Nothing free-text ever gets through the "kind" key either.
+        #expect(field("kind", "fullscreen") == "kind=String(10 chars)")
+    }
+
     @Test("Unknown and text-like fields expose shape only")
     func redactsUnknownFields() {
         #expect(field("selectedText", "private draft") == "metadata=String(13 chars)")

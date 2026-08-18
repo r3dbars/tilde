@@ -35,6 +35,10 @@ public enum DiagnosticsMetadataRedactor {
         // (`PersonalSuggestionPolicy.apply`, `GhostBrainServerHost`) — which
         // engine's word actually reached the user, never the word itself.
         "base", "personal", "agreed",
+        // `screen-capture-completed`/`screen-capture-failed`'s `kind` field
+        // (`ScreenCaptureService.performWindowCapture`/`performFullDisplayCapture`)
+        // — which capture path ran, never any captured text.
+        "window", "display",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
@@ -48,7 +52,7 @@ public enum DiagnosticsMetadataRedactor {
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
-        case "reason", "status", "mode", "source":
+        case "reason", "status", "mode", "source", "kind":
             safe = enumValues.contains(value)
         case "app":
             safe = value == "unknown"
