@@ -216,6 +216,9 @@ struct ScreenCaptureServiceTests {
         #expect(logged?.1["mode"] == "replying")
         #expect(logged?.1["turns"] == "2")
         #expect(logged?.1["refs"] == "0")
+        // "P99 at every section" (2026-08-18): the classification call is
+        // timed too, as a non-negative whole-millisecond integer.
+        #expect(logged?.1["milliseconds"].flatMap { Int($0) }.map { $0 >= 0 } == true)
         // Never the OCR'd text itself.
         #expect(logged?.1.values.contains { $0.contains("hey are you around") } != true)
     }

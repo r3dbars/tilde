@@ -195,6 +195,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 return
             }
             guard case let .completion(completionRequest) = request else { return }
+            // "P99 at every section" (2026-08-18): request total, parse to
+            // response write. `defer` — not a single emit call at the
+            // bottom of the closure — so every early return below (runtime
+            // not ready, suggestions gate silence, sensitive-scene silence,
+            // plus the normal completed path) still reports its own
+            // duration, the same way `defer { close(connection) }` above
+            // already guarantees cleanup on every exit.
+            let requestStartedAt = Date()
+            defer {
+                DiagnosticsLog.shared.record("ghost-request-timing", metadata: [
+                    "requestMilliseconds": String(Self.milliseconds(from: requestStartedAt, to: Date())),
+                ])
+            }
             self.onCompletionActivity?()
             guard await self.runtime.isReadyForCompletion() else {
                 _ = Self.write(.unavailable, to: connection)
@@ -344,22 +357,74 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// source), exactly as if personal suggestions had produced nothing.
     private static let personalPredictionDeadlineNanoseconds: UInt64 = 250_000_000
 
-    private static func awaitPersonalPrediction(
-        _ task: Task<PersonalNextWordPrediction?, Never>?
+    /// One arm of the 250ms race actually decided the request; the other
+    /// resolving too (or not at all) is irrelevant to the outcome. A plain
+    /// `PersonalNextWordPrediction??` cannot tell "the model resolved with
+    /// nothing" apart from "the deadline fired first" — both read as `nil`
+    /// — so the race itself has to report which branch won, not just the
+    /// value it produced.
+    private enum PersonalLookupRaceResult {
+        case predicted(PersonalNextWordPrediction?)
+        case timedOut
+    }
+
+    /// `now`/`diagnostics` are injectable for testability, same pattern as
+    /// `ScreenCaptureService`'s clock/diagnostics closures — production call
+    /// sites take the defaults (`Date.init`, `DiagnosticsLog.shared.record`)
+    /// unchanged. Internal, not private, so `waitedMilliseconds`/`outcome`
+    /// can be proven directly without a live socket.
+    static func awaitPersonalPrediction(
+        _ task: Task<PersonalNextWordPrediction?, Never>?,
+        now: @Sendable () -> Date = Date.init,
+        diagnostics: @Sendable (String, [String: String]) -> Void = { event, metadata in
+            DiagnosticsLog.shared.record(event, metadata: metadata)
+        }
     ) async -> PersonalNextWordPrediction? {
-        guard let task else { return nil }
-        let prediction = await withTaskGroup(of: PersonalNextWordPrediction?.self) { group in
-            group.addTask { await task.value }
+        guard let task else {
+            // No provider, the gate was off, or the context had no tail
+            // words — no race ever ran, so `waitedMilliseconds` is exactly
+            // 0, not "however long the caller happened to take to get here".
+            diagnostics("personal-lookup-timing", ["waitedMilliseconds": "0", "outcome": "disabled"])
+            return nil
+        }
+        let waitStartedAt = now()
+        let raceResult = await withTaskGroup(of: PersonalLookupRaceResult.self) { group in
+            group.addTask { .predicted(await task.value) }
             group.addTask {
                 try? await Task.sleep(nanoseconds: personalPredictionDeadlineNanoseconds)
-                return nil
+                return .timedOut
             }
-            let first = await group.next() ?? nil
+            let first = await group.next() ?? .timedOut
             group.cancelAll()
             return first
         }
         task.cancel()
+        let waitedMilliseconds = milliseconds(from: waitStartedAt, to: now())
+        let prediction: PersonalNextWordPrediction?
+        let outcome: String
+        switch raceResult {
+        case let .predicted(value):
+            prediction = value
+            outcome = "resolved"
+        case .timedOut:
+            prediction = nil
+            outcome = "timeout"
+        }
+        diagnostics("personal-lookup-timing", [
+            "waitedMilliseconds": String(waitedMilliseconds),
+            "outcome": outcome,
+        ])
         return prediction
+    }
+
+    /// Whole milliseconds between two instants, floored at zero — same
+    /// rounding/floor behavior as `ScreenCaptureService.milliseconds`,
+    /// duplicated here rather than shared because the two types have no
+    /// common module to host it in without a bigger refactor than this
+    /// change warrants. Internal, not private, so the rounding is directly
+    /// testable.
+    static func milliseconds(from start: Date, to end: Date) -> Int {
+        max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
     }
 
     /// Adds `source` only when the "Personal suggestions (experimental)"
