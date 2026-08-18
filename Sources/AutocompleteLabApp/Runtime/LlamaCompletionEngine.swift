@@ -62,7 +62,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         let body: [String: Any] = [
             "prompt": prompt,
-            "n_predict": register.generatedTokenBudget,
+            "n_predict": register.generatedTokenBudget(scene: scene),
             "temperature": -1,
             "n_probs": 8,
             "cache_prompt": true,

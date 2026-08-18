@@ -19,6 +19,24 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("reason", "storage-unavailable") == "reason=storage-unavailable")
         #expect(field("reason", "internal-error") == "reason=internal-error")
         #expect(field("app", "com.apple.TextEdit") == "app=com.apple.TextEdit")
+        // Screen Memory duty-cycle instrumentation (Phase 1b): counts and
+        // timings only, no screen text, so the power probe harness can read
+        // them back out of the diagnostics log.
+        #expect(field("duration_ms", "187") == "duration_ms=187")
+        #expect(field("blocks", "12") == "blocks=12")
+        // ScreenCaptureService's actual skip reasons — every one of these
+        // was being silently redacted before this fix, which would have
+        // made the Phase 1b power probe's TCC-blocked detection always miss.
+        #expect(field("reason", "no-permission") == "reason=no-permission")
+        #expect(field("reason", "enumeration-failed") == "reason=enumeration-failed")
+        #expect(field("reason", "no-display") == "reason=no-display")
+        #expect(field("reason", "disabled") == "reason=disabled")
+        #expect(field("reason", "screen-locked") == "reason=screen-locked")
+        #expect(field("reason", "secure-input") == "reason=secure-input")
+        #expect(field("reason", "no-active-session") == "reason=no-active-session")
+        #expect(field("reason", "below-threshold") == "reason=below-threshold")
+        #expect(field("reason", "excluded-app") == "reason=excluded-app")
+        #expect(field("reason", "cadence") == "reason=cadence")
     }
 
     @Test("Screen Memory's screen-capture-skipped reasons survive as their literal enum case, not a redacted shape")
@@ -87,6 +105,7 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("app", "com.apple.TextEdit\n") == "app=String(19 chars)")
         #expect(field("status", "enabled\nprivate") == "status=String(15 chars)")
         #expect(field("reason", "-50") == "reason=String(3 chars)")
+        #expect(field("duration_ms", "private") == "duration_ms=String(7 chars)")
     }
 
     @Test("Event names are single fixed tokens")

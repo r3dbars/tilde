@@ -166,4 +166,24 @@ struct CaptureTriggerPolicyTests {
             now: epoch
         ) == false)
     }
+
+    @Test("Password managers are excluded even with an empty user exclusion list")
+    func alwaysExcludedAppsBlockWithNoUserConfiguration() {
+        #expect(decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.1password.1password"],
+            excludedApps: []
+        ) == .skip(.excludedWindow(appBundleIdentifier: "com.1password.1password")))
+        #expect(decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.apple.keychainaccess"],
+            excludedApps: []
+        ) == .skip(.excludedWindow(appBundleIdentifier: "com.apple.keychainaccess")))
+    }
+
+    @Test("A visible-but-not-frontmost password manager window still excludes capture")
+    func alwaysExcludedAppBehindFocusedWindowStillBlocks() {
+        #expect(decide(
+            visibleWindowOwnerBundleIdentifiers: ["com.apple.TextEdit", "com.bitwarden.desktop"],
+            excludedApps: []
+        ) == .skip(.excludedWindow(appBundleIdentifier: "com.bitwarden.desktop")))
+    }
 }

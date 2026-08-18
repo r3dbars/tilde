@@ -392,7 +392,7 @@ private actor PersistenceOperations {
               configurationState.snapshot() == configuration else { return }
         let allowed = events.filter {
             $0.consentIdentifier == configuration.consentIdentifier
-                && !configuration.excludedApps.contains($0.appBundleIdentifier)
+                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
         }
         guard !allowed.isEmpty else { return }
 
@@ -487,7 +487,7 @@ private actor PersistenceOperations {
               !replayBacklogOverflowed else { return }
         let events = replay.events.filter {
             $0.historyIdentifier == historyIdentifier
-                && !configuration.excludedApps.contains($0.appBundleIdentifier)
+                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
         }
         let stored = replay.checkpoint?.matches(
             historyIdentifier: historyIdentifier,
