@@ -10,8 +10,16 @@
 #   2. structural Swift delta      refactors remove more production code than they add
 #   3. bash -n script/*.sh         all remaining shell tooling parses
 #   4. byte-compile script/*.py    all remaining python tooling parses
-#   5. harness self-tests          request shape, privacy, and metric math hold
+#   5. harness self-tests          request shape, privacy, and metric math hold,
+#                                   including the p99 latency budget tripwire
+#                                   against synthetic pass/fail fixture logs
 #   6. swift test                  the complete Swift suite passes
+#
+# After the blocking lanes, one REPORT-ONLY lane runs: if this machine has a
+# live diagnostics log (~/Library/Logs/Tilde/diagnostics.log), it is checked
+# against script/latency_budgets.json and the verdict is printed. This never
+# fails the build — live-machine observations stay report-only, per this
+# script's own rule: pending proof stays pending.
 #
 # Environment:
 #   PROOF_DIFF_BASE=<ref>   If set, run `git diff --check <ref>...HEAD` (catches
@@ -49,6 +57,27 @@ SUMMARY=()
 
 mark() { # status label detail
   SUMMARY+=("$1|$2|$3")
+}
+
+run_report() { # label cmd...
+  # Same shape as run_blocking, but the result never moves BLOCKING_FAILURES.
+  # Live-machine observations are report-only: pending proof stays pending.
+  local label="$1"
+  shift
+  echo
+  echo "== [report-only] $label =="
+  local start end rc
+  start="$(date +%s)"
+  "$@"
+  rc=$?
+  end="$(date +%s)"
+  if [ "$rc" -eq 0 ]; then
+    echo "[REPORT] $label ($((end - start))s)"
+    mark REPORT "$label" "$((end - start))s"
+  else
+    echo "[REPORT] $label — verdict: over budget or unavailable (exit $rc, $((end - start))s)"
+    mark REPORT "$label" "$((end - start))s"
+  fi
 }
 
 run_blocking() { # label cmd...
@@ -110,6 +139,15 @@ check_structural_delta() {
   fi
 }
 
+check_live_latency_budget() {
+  local diagnostics_log="${HOME}/Library/Logs/Tilde/diagnostics.log"
+  if [ ! -f "$diagnostics_log" ]; then
+    echo "no live diagnostics log at $diagnostics_log — nothing to report yet"
+    return 0
+  fi
+  python3 script/latency_report.py --budget --log "$diagnostics_log"
+}
+
 run_swift() {
   if ! command -v swift >/dev/null 2>&1; then
     echo
@@ -158,6 +196,9 @@ run_blocking "development signing selector self-test" bash script/signing_identi
 run_blocking "dev packaging lane self-test" bash script/package_dev.sh --selftest
 run_blocking "release-proof cleanup parser self-test" bash script/restart_app.sh --selftest
 run_blocking "capture power probe measurement self-test" bash script/capture_power_probe.sh --selftest
+run_blocking "latency budget tripwire self-test" python3 script/latency_report.py --selftest
 run_swift
+
+run_report "live diagnostics p99 latency budget" check_live_latency_budget
 
 summarize_and_exit
