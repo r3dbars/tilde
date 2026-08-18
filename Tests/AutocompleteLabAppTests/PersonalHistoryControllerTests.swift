@@ -383,6 +383,45 @@ struct PersonalHistoryControllerTests {
         #expect(await settledStatus(fixture.controller).snapshot.opportunities == 0)
     }
 
+    @Test("A password-manager bundle id is excluded from live ingestion even when the caller's own exclusion list is empty")
+    func alwaysExcludedAppDoesNotPersistWithEmptyConfiguredExclusions() async {
+        // `excludedApps` defaults to `[]` here — this is the exact
+        // configuration in which the always-excluded (password manager /
+        // Keychain) set used to be silently skipped by `ingestSerially`,
+        // because it checked `configuration.excludedApps.contains(...)`
+        // directly instead of going through `DefaultExcludedApps`.
+        let fixture = Fixture()
+        fixture.controller.isEnabled = true
+        let event = fixture.event(app: "com.1password.1password")
+
+        #expect(await fixture.controller.ingest([event]))
+        #expect(await fixture.store.events.isEmpty)
+        #expect(await settledStatus(fixture.controller).snapshot.opportunities == 0)
+    }
+
+    @Test("A password-manager bundle id is excluded from startup replay even when the caller's own exclusion list is empty")
+    func alwaysExcludedAppIsFilteredFromReplayWithEmptyConfiguredExclusions() async {
+        // Same bug, replay path: `finishReplay` used to filter only against
+        // `configuration.excludedApps`, so a password-manager event already
+        // sitting in the store would still be replayed into next-word
+        // scoring when the owner had never configured any exclusions.
+        let fixture = Fixture(
+            enabled: true,
+            preloaded: [
+                ("password-manager", " private vault contents repeat ", "com.1password.1password"),
+                ("allowed", " personal writing helps personal writing helps ", "com.example.Editor"),
+            ]
+        )
+
+        let status = await settledStatus(fixture.controller)
+        #expect(status.phase == .ready)
+        var expected = PersonalNextWordShadow()
+        expected.consume(await fixture.store.events.filter {
+            $0.appBundleIdentifier == "com.example.Editor"
+        }, scoring: false)
+        #expect(status.snapshot == expected.snapshot)
+    }
+
     @Test("Deletion disables capture and rejects queued events from the old history")
     func deletionRotatesHistory() async throws {
         let fixture = Fixture()
@@ -883,7 +922,8 @@ struct PersonalHistoryControllerTests {
 
         func event(
             id: String = "event",
-            text: String = "hello"
+            text: String = "hello",
+            app: String = "com.example.Editor"
         ) -> PersonalHistoryEvent {
             PersonalHistoryEvent(
                 id: id,
@@ -895,7 +935,7 @@ struct PersonalHistoryControllerTests {
                     forKey: PersonalHistorySettingsContract.consentIdentifierKey
                 )!,
                 sessionIdentifier: "session",
-                appBundleIdentifier: "com.example.Editor",
+                appBundleIdentifier: app,
                 source: .typed,
                 text: text
             )!

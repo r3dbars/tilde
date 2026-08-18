@@ -303,6 +303,31 @@ struct ScreenCaptureServiceTests {
         #expect(afterExclusion?.mode == .composing)
         #expect(afterExclusion?.conversationTurns.isEmpty == true)
     }
+
+    // MARK: - Duty-cycle instrumentation (Phase 1b)
+    //
+    // `performCapture` itself cannot be unit-tested (see the type doc
+    // comment: SCShareableContent/SCContentFilter need a live, permissioned
+    // display). This proves the one piece of the duration math that lives
+    // outside ScreenCaptureKit — script/capture_power_probe.sh and
+    // script/screen_capture_probe.swift are the real, live callers that
+    // exercise the full instrumented path per docs/plans/screen-memory.md.
+
+    @Test("duration milliseconds rounds to the nearest whole millisecond")
+    func durationRoundsToNearestMillisecond() {
+        let start = Date(timeIntervalSince1970: 0)
+        #expect(ScreenCaptureService.milliseconds(from: start, to: start.addingTimeInterval(0.1874)) == 187)
+        #expect(ScreenCaptureService.milliseconds(from: start, to: start.addingTimeInterval(0.1876)) == 188)
+    }
+
+    @Test("duration milliseconds floors at zero for a clock that does not advance")
+    func durationFloorsAtZero() {
+        let instant = Date(timeIntervalSince1970: 1_000)
+        #expect(ScreenCaptureService.milliseconds(from: instant, to: instant) == 0)
+        // A clock that appears to run backward (e.g. an injected test clock
+        // reset between calls) must never report a negative duration.
+        #expect(ScreenCaptureService.milliseconds(from: instant, to: instant.addingTimeInterval(-1)) == 0)
+    }
 }
 
 /// Thread-safe box for capturing diagnostics calls made from actor-isolated code.
