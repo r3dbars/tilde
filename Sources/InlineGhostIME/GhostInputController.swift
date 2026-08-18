@@ -343,6 +343,14 @@ final class GhostInputController: IMKInputController {
         state.visibleText.isEmpty ? [] : [state.visibleText]
     }
 
+    /// The IMKCandidates panel delivers row selection here, not through the
+    /// key handler; without this override a click on the row is a no-op.
+    override func candidateSelected(_ candidateString: NSAttributedString!) {
+        guard let client = client() else { return }
+        let observation = synchronizeFallback(with: client)
+        _ = acceptSuggestion(client, observation: observation)
+    }
+
     private func acceptSuggestion(
         _ client: IMKTextInput,
         observation: InsertionObservation
