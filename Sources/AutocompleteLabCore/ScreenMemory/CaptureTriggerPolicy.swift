@@ -35,8 +35,12 @@ public enum CaptureTriggerPolicy {
     /// counts as a trigger.
     public static let typingPauseThresholdSeconds: TimeInterval = 2.0
     /// Hard ceiling regardless of how many triggers fire: never more than one
-    /// capture per this many seconds.
-    public static let cadenceCapSeconds: TimeInterval = 5.0
+    /// capture per this many seconds. Owner directive 2026-08-18: fresher
+    /// conversation context is worth the extra duty cycles — was 5.0; the
+    /// power probe (script/capture_power_probe.sh) still bounds per-capture
+    /// cost, so the ceiling change scales total cost by at most 2.5x while
+    /// typing, and captures still only fire on real triggers.
+    public static let cadenceCapSeconds: TimeInterval = 2.0
     /// A completion session is "active" if the IME's last observed activity
     /// (a completion request reaching the socket) was within this long ago.
     /// Chosen to comfortably span the 2s typing-pause threshold itself: a

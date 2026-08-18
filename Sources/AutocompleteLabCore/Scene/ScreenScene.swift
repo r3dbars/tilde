@@ -120,9 +120,13 @@ public enum ScreenScene {
     // MARK: - Caps (plan: "Everything capped")
 
     /// At most this many conversation turns survive into the scene.
-    public static let maxTurns = 3
+    /// Paragraph-style chats (Claude/ChatGPT-like) carry turns several
+    /// sentences long, so the caps allow one more turn and a bigger shared
+    /// budget than the bubble-era 3/600 — still under
+    /// `RawContinuationPrompt.maxSceneContextCharacters` (1,000).
+    public static let maxTurns = 4
     /// Combined character budget across every surviving turn's text.
-    public static let maxTurnsCharacterBudget = 600
+    public static let maxTurnsCharacterBudget = 800
     /// Character cap on the single reference snippet.
     public static let maxReferenceCharacters = 400
 
@@ -245,9 +249,15 @@ public enum ScreenScene {
 
         var remainingBudget = maxTurnsCharacterBudget
         var truncated: [(block: OCRBlock, text: String)] = []
-        for block in mostRecent.reversed() {
+        for (index, block) in mostRecent.reversed().enumerated() {
             guard remainingBudget > 0 else { break }
-            let text = String(block.text.prefix(remainingBudget))
+            // The newest turn keeps its TAIL when over budget — its freshest
+            // sentences sit at the end, and they are what the reply is
+            // answering. Older turns keep their head with whatever budget is
+            // left (they are context, not the thing being answered).
+            let text = index == 0
+                ? String(block.text.suffix(remainingBudget))
+                : String(block.text.prefix(remainingBudget))
             guard !text.isEmpty else { break }
             truncated.append((block, text))
             remainingBudget -= text.count
@@ -279,12 +289,20 @@ public enum ScreenScene {
 
     private static func mergeWrappedLines(_ sortedBlocks: [OCRBlock]) -> [OCRBlock] {
         var merged: [OCRBlock] = []
+        // The height of the LAST LINE folded into each merged entry — the
+        // merged block's own height must never be the gap reference:
+        // comparing against a growing multi-line block inflates the allowed
+        // gap with every merge, so after two wrapped lines join, ordinary
+        // paragraph spacing passes the check and an entire paragraph-style
+        // conversation (Claude/ChatGPT-like, no bubbles) collapses into one
+        // mega-turn (live bug 2026-08-18: 20 visible messages -> 1 turn).
+        var lastLineHeights: [Double] = []
         for block in sortedBlocks {
             if let last = merged.last,
                last.windowOwnerBundleID == block.windowOwnerBundleID,
                speaker(for: last) == speaker(for: block) {
                 let gap = block.boundingBox.y - (last.boundingBox.y + last.boundingBox.height)
-                let referenceHeight = max(last.boundingBox.height, block.boundingBox.height)
+                let referenceHeight = max(lastLineHeights.last ?? 0, block.boundingBox.height)
                 if referenceHeight > 0, gap <= referenceHeight * wrappedLineMaxGapRatio {
                     let bottom = max(
                         last.boundingBox.y + last.boundingBox.height,
@@ -302,10 +320,12 @@ public enum ScreenScene {
                         windowTitle: last.windowTitle,
                         windowFrame: last.windowFrame
                     )
+                    lastLineHeights[lastLineHeights.count - 1] = block.boundingBox.height
                     continue
                 }
             }
             merged.append(block)
+            lastLineHeights.append(block.boundingBox.height)
         }
         return merged
     }
