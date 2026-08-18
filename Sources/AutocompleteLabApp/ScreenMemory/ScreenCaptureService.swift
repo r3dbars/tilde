@@ -143,6 +143,7 @@ actor ScreenCaptureService {
                 blocks: keptBlocks
             )
         }
+        let classificationStart = self.now()
         let scene = ScreenScene.freshScene(
             from: filteredSnapshot,
             now: now,
@@ -159,11 +160,18 @@ actor ScreenCaptureService {
         // event is only fired here, after a real classification ran (a
         // `nil` scene -- no snapshot yet, or too stale -- logs nothing,
         // matching every other "no signal" path in this file).
+        // "P99 at every section" (2026-08-18): `milliseconds` times only the
+        // `ScreenScene.freshScene` call itself, using the same injectable
+        // `now()` clock as the rest of this actor — the block-filtering work
+        // above is O(blocks) and cheap; classification (turn/reference
+        // bucketing) is the part worth a percentile.
         if let scene {
+            let classificationMilliseconds = Self.milliseconds(from: classificationStart, to: self.now())
             diagnostics("scene-classified", [
                 "mode": scene.mode.rawValue,
                 "turns": String(scene.conversationTurns.count),
                 "refs": String(scene.referenceSnippets.count),
+                "milliseconds": String(classificationMilliseconds),
             ])
         }
         return scene
@@ -318,7 +326,16 @@ actor ScreenCaptureService {
                 contentFilter: filter,
                 configuration: configuration
             )
+            // "P99 at every section" (2026-08-18): the duty cycle above
+            // covers screenshot+OCR together, which is what the power probe
+            // budget cares about, but tells capture and OCR apart is exactly
+            // what a percentile table needs to point at which half of the
+            // duty cycle regressed. `ocrStart` marks the moment the
+            // screenshot finished, so `ocrMilliseconds` times `recognizeText`
+            // alone using the same injectable clock as `dutyCycleMilliseconds`.
+            let ocrStart = now()
             let recognized = try await recognizeText(image)
+            let ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             // Vision's boxes are normalized against the captured WINDOW
             // image here, not the display — map each one through the
@@ -342,7 +359,12 @@ actor ScreenCaptureService {
             lastCaptureAt = moment
             diagnostics(
                 "screen-capture-completed",
-                ["blocks": String(blocks.count), "duration_ms": String(dutyCycleMilliseconds), "kind": "window"]
+                [
+                    "blocks": String(blocks.count),
+                    "duration_ms": String(dutyCycleMilliseconds),
+                    "ocrMilliseconds": String(ocrMilliseconds),
+                    "kind": "window",
+                ]
             )
             return .captured(blockCount: blocks.count)
         } catch {
@@ -387,7 +409,14 @@ actor ScreenCaptureService {
                 contentFilter: filter,
                 configuration: configuration
             )
+            // "P99 at every section" (2026-08-18): `ocrStart` marks the
+            // moment the screenshot finished, so `ocrMilliseconds` isolates
+            // `recognizeText` from the screenshot half of the duty cycle —
+            // same purpose and same injectable clock as `performWindowCapture`'s
+            // split.
+            let ocrStart = now()
             let recognized = try await recognizeText(image)
+            let ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
             // Stop the clock the instant OCR returns — everything after this
             // (window attribution, block mapping) is pure/deterministic and
             // not part of the "capture+OCR" duty cycle the plan's power
@@ -437,7 +466,12 @@ actor ScreenCaptureService {
             lastCaptureAt = moment
             diagnostics(
                 "screen-capture-completed",
-                ["blocks": String(blocks.count), "duration_ms": String(dutyCycleMilliseconds), "kind": "display"]
+                [
+                    "blocks": String(blocks.count),
+                    "duration_ms": String(dutyCycleMilliseconds),
+                    "ocrMilliseconds": String(ocrMilliseconds),
+                    "kind": "display",
+                ]
             )
             return .captured(blockCount: blocks.count)
         } catch {

@@ -39,6 +39,11 @@ public enum DiagnosticsMetadataRedactor {
         // (`ScreenCaptureService.performWindowCapture`/`performFullDisplayCapture`)
         // — which capture path ran, never any captured text.
         "window", "display",
+        // "P99 at every section": `GhostBrainServerHost.awaitPersonalPrediction`'s
+        // outcome vocabulary, logged as the `outcome` field on
+        // `personal-lookup-timing` — which arm of the 250ms personal-brain
+        // race actually decided the request, never the prediction itself.
+        "resolved", "timeout",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
@@ -48,11 +53,19 @@ public enum DiagnosticsMetadataRedactor {
     public static func logSafeField(forKey key: String, value: String) -> String {
         let safe: Bool
         switch key {
-        case "totalMilliseconds", "cleanedChars", "chars", "turns", "refs", "duration_ms", "blocks":
+        case "totalMilliseconds", "cleanedChars", "chars", "turns", "refs", "duration_ms", "blocks",
+             // "P99 at every section" timing fields (2026-08-18): scene
+             // classification (`milliseconds` on `scene-classified`), the
+             // capture/OCR split (`ocrMilliseconds` on
+             // `screen-capture-completed`), the personal-brain race
+             // (`waitedMilliseconds` on `personal-lookup-timing`), and the
+             // socket request total (`requestMilliseconds` on
+             // `ghost-request-timing`) — all whole milliseconds, no text.
+             "milliseconds", "ocrMilliseconds", "waitedMilliseconds", "requestMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
-        case "reason", "status", "mode", "source", "kind":
+        case "reason", "status", "mode", "source", "kind", "outcome":
             safe = enumValues.contains(value)
         case "app":
             safe = value == "unknown"
