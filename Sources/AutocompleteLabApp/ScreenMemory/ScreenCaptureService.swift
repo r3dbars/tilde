@@ -315,19 +315,6 @@ actor ScreenCaptureService {
     private func performWindowCapture(window: SCWindow, display: SCDisplay, moment: Date) async -> CaptureOutcome {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
-        // `window.frame` is already in points (see `normalize`'s doc comment
-        // below), so this targets a 1x-resolution output — the point of this
-        // change. For "independent window capture" specifically, Apple's
-        // docs on `scalesToFit` say the system only scales the output to the
-        // configured width/height when this is set; leaving it at its
-        // `false` default meant ScreenCaptureKit ignored our point-sized
-        // width/height here and captured the window at its native (Retina
-        // 2x) pixel size anyway, so Vision OCR'd 4x the pixels for nothing.
-        // `performFullDisplayCapture`'s plain-display filter is not
-        // "independent window capture", so it does not need this flag —
-        // its width/height (already point-sized via `display.width/height`)
-        // are honored directly.
-        configuration.scalesToFit = true
         configuration.width = max(1, Int(window.frame.width.rounded()))
         configuration.height = max(1, Int(window.frame.height.rounded()))
         configuration.showsCursor = false
@@ -403,12 +390,6 @@ actor ScreenCaptureService {
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
-        // `SCDisplay.width`/`.height` are already point dimensions (Apple's
-        // docs: "the width/height of the display, in points"), so this is
-        // already a 1x-resolution output with no further change needed.
-        // Unlike `performWindowCapture`'s "independent window capture"
-        // filter, `scalesToFit` only affects that path per Apple's docs, so
-        // it is not needed here for plain width/height to be honored.
         configuration.width = display.width
         configuration.height = display.height
         configuration.showsCursor = false
