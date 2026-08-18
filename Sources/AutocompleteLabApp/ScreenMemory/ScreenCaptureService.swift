@@ -294,13 +294,22 @@ actor ScreenCaptureService {
             // not part of the "capture+OCR" duty cycle the plan's power
             // budget assertions (script/capture_power_probe.sh) measure.
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
-            // `SCShareableContent.windows` documents no ordering guarantee.
-            // `windowLayer` (mirrors CGWindowLevel) is the closest available
-            // front-to-back proxy: lower layers sit in front for normal
-            // windows. Verified empirically via script/screen_capture_probe;
-            // treat as a caveat, not a hard guarantee, on unusual window
-            // levels (panels, always-on-top utilities).
-            let frontToBackWindows = content.windows.sorted { $0.windowLayer < $1.windowLayer }
+            // `SCShareableContent.windows` documents no ordering guarantee,
+            // and `windowLayer` alone cannot recover z-order: every normal
+            // app window is layer 0, so sorting by layer is a no-op there
+            // and the list order decides attribution. That misattributes
+            // whole regions when several windows occupy the same frame (a
+            // user who stacks half-screen windows — live bug 2026-08-18:
+            // the visible chat's blocks attributed to a same-position
+            // window BEHIND it, so the own-window filter discarded the
+            // whole conversation). `CGWindowListCopyWindowInfo` with
+            // `.optionOnScreenOnly` IS documented front-to-back; rank by
+            // it, keeping `windowLayer` only as the fallback for windows
+            // missing from that list.
+            let zRanks = Self.onScreenZOrderRanks()
+            let frontToBackWindows = content.windows.sorted {
+                Self.frontToBackPrecedes($0, $1, zRanks: zRanks)
+            }
             let windows = frontToBackWindows.map { window in
                 WindowAttribution.WindowInfo(
                     bundleIdentifier: window.owningApplication?.bundleIdentifier,
@@ -381,7 +390,8 @@ actor ScreenCaptureService {
     /// land inside a known display (e.g. a stale/off-screen window frame).
     private static func activeDisplay(in content: SCShareableContent) -> SCDisplay? {
         guard content.displays.count > 1 else { return content.displays.first }
-        let frontToBack = content.windows.sorted { $0.windowLayer < $1.windowLayer }
+        let zRanks = onScreenZOrderRanks()
+        let frontToBack = content.windows.sorted { frontToBackPrecedes($0, $1, zRanks: zRanks) }
         for window in frontToBack {
             let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
             if let match = content.displays.first(where: { $0.frame.contains(center) }) {
@@ -389,6 +399,41 @@ actor ScreenCaptureService {
             }
         }
         return content.displays.first
+    }
+
+    /// True front-to-back ranks for on-screen windows, from
+    /// `CGWindowListCopyWindowInfo` — the one window API whose ordering IS
+    /// documented ("returned in order from front to back"). Keyed by
+    /// `CGWindowID` for lookup against `SCWindow.windowID`.
+    private static func onScreenZOrderRanks() -> [CGWindowID: Int] {
+        guard let info = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else { return [:] }
+        var ranks: [CGWindowID: Int] = [:]
+        for (rank, entry) in info.enumerated() {
+            if let number = entry[kCGWindowNumber as String] as? NSNumber {
+                ranks[CGWindowID(truncating: number)] = rank
+            }
+        }
+        return ranks
+    }
+
+    /// Documented z-order rank first. A window missing from the on-screen
+    /// list sorts behind every ranked one — "not on screen" must never win
+    /// an attribution over a visible window — with the old layer proxy only
+    /// breaking ties between two unranked windows.
+    private static func frontToBackPrecedes(
+        _ a: SCWindow,
+        _ b: SCWindow,
+        zRanks: [CGWindowID: Int]
+    ) -> Bool {
+        switch (zRanks[a.windowID], zRanks[b.windowID]) {
+        case let (rankA?, rankB?): return rankA < rankB
+        case (.some, nil): return true
+        case (nil, .some): return false
+        case (nil, nil): return a.windowLayer < b.windowLayer
+        }
     }
 
     /// `SCWindow.frame` is in global desktop points; `display.frame` is that
