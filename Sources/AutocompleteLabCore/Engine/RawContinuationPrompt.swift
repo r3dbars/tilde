@@ -43,63 +43,13 @@ public enum ContinuationRegister: String, Sendable {
         scene?.mode == .replying ? .chat : from(bundleIdentifier: hostBundleIdentifier)
     }
 
-    /// Suggested generation budget: chat wants shorter bursts; prose/email get
-    /// room to finish the clause (cut-off fragments were the top quality wart).
-    public var generatedTokenBudget: Int {
-        return self == .chat ? 14 : 20
-    }
-
-    /// A replying scene reads as rapid-fire when the visible turns' median
-    /// length is at or under this many words ("up?", "lol", "u there").
-    public static let terseReplyMedianWordThreshold = 3.0
-    /// The clamped budget for rapid-fire rooms: one short burst, not a
-    /// sentence. Live dogfood (build 2705) showed chat's 14 tokens producing
-    /// "here, I am here."-length ghosts in rooms speaking two-word turns.
-    public static let terseReplyTokenBudget = 5
-
-    /// Scene-aware budget: same as `generatedTokenBudget` except when the
-    /// classified scene says the user is replying to a conversation whose
-    /// turns are terse — then the ghost should match the room's rhythm, so
-    /// the budget clamps down to `terseReplyTokenBudget`. A `nil`, composing,
-    /// or referencing scene (and a replying scene with no measurable turns)
-    /// changes nothing.
-    public func generatedTokenBudget(scene: ScreenScene.Scene?) -> Int {
-        guard let scene, scene.mode == .replying,
-              let median = Self.medianTurnWordCount(scene.conversationTurns),
-              median <= Self.terseReplyMedianWordThreshold else {
-            return generatedTokenBudget
-        }
-        return min(generatedTokenBudget, Self.terseReplyTokenBudget)
-    }
-
-    /// Trusts `turns` as already representing real messages, one per turn.
-    /// Code review (P2, verify-then-fix): this was checked against a
-    /// concern that `ScreenScene`/`ScreenTextRecognizer` might hand this
-    /// function one turn per wrapped Vision OCR *line*, which would make an
-    /// ordinary multi-line chat bubble look like several short "terse"
-    /// turns and wrongly clamp generation. Verified NOT the case: Vision's
-    /// `VNRecognizeTextRequest` does recognize text line by line (see
-    /// `ScreenTextRecognizer`), but `ScreenScene.classify` re-groups
-    /// adjacent same-speaker OCR lines whose vertical gap is small relative
-    /// to their own height back into one `ConversationTurn` before this
-    /// function ever runs (see `mergeWrappedLines` in `ScreenScene.swift`),
-    /// while genuinely separate same-speaker messages (ordinary bubble
-    /// spacing) stay distinct so a real rapid-fire room still clamps. See
-    /// `ScreenSceneTests.wrappedBubbleLinesMergeIntoOneTurn` /
-    /// `.separateSameSpeakerMessagesStayDistinct` for the upstream proof,
-    /// and `terseClampSurvivesAWrappedMultiLineBubble` below for an
-    /// end-to-end version through this function.
-    private static func medianTurnWordCount(_ turns: [ScreenScene.ConversationTurn]) -> Double? {
-        let counts = turns
-            .map { $0.text.split(whereSeparator: \.isWhitespace).count }
-            .filter { $0 > 0 }
-            .sorted()
-        guard !counts.isEmpty else { return nil }
-        let middle = counts.count / 2
-        return counts.count.isMultiple(of: 2)
-            ? Double(counts[middle - 1] + counts[middle]) / 2
-            : Double(counts[middle])
-    }
+    /// Suggested generation budget: room to finish the clause (cut-off
+    /// fragments were the top quality wart). One budget for every register —
+    /// the chat-specific 14-token budget and the terse-room clamp to 5 were
+    /// removed by owner decision 2026-08-18: stacked with other shortening
+    /// they read as one-word ghosts, and the register scaffolds already set
+    /// the voice.
+    public var generatedTokenBudget: Int { 20 }
 }
 
 public struct RawContinuationPrompt: Equatable, Sendable {
