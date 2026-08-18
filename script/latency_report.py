@@ -13,9 +13,15 @@ Usage:
 
 Stages covered today (field in parentheses):
   llama-completion-timing   end-to-end completion incl. cleaner (totalMilliseconds)
-  screen-capture-completed  capture + OCR duty cycle, by kind (duration_ms)
+  screen-capture-completed  capture + OCR duty cycle, by kind (duration_ms);
+                            OCR alone, same event (ocrMilliseconds)
+  scene-classified          ScreenScene.freshScene classification (milliseconds)
+  personal-lookup-timing    the 250ms personal-brain race (waitedMilliseconds)
+  ghost-request-timing      socket request total, parse to response write
+                            (requestMilliseconds)
 Stages logged but not yet timed (gaps show as absent rows):
-  scene classification, personal-brain lookup, IME socket round-trip.
+  IME socket round-trip (InlineGhostIME's slow-key os_log path is out of
+  scope for this diagnostics log — see AGENTS.md).
 """
 
 import argparse
@@ -26,7 +32,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_LOG = Path.home() / "Library/Logs/Tilde/diagnostics.log"
-TIMING_FIELDS = ("totalMilliseconds", "duration_ms", "milliseconds")
+TIMING_FIELDS = (
+    "totalMilliseconds",
+    "duration_ms",
+    "milliseconds",
+    "ocrMilliseconds",
+    "waitedMilliseconds",
+    "requestMilliseconds",
+)
 LINE = re.compile(r"^(\S+)\s+(\S+)\s*(.*)$")
 PAIR = re.compile(r"(\w+)=(\S+)")
 
@@ -54,18 +67,24 @@ def parse(log_path, since):
                 if when < since:
                     continue
             fields = dict(PAIR.findall(rest))
-            value = None
-            for field in TIMING_FIELDS:
-                if field in fields:
-                    try:
-                        value = float(fields[field])
-                    except ValueError:
-                        value = None
-                    break
-            if value is None:
+            present = [field for field in TIMING_FIELDS if field in fields]
+            if not present:
                 continue
-            key = event if "kind" not in fields else f"{event}[{fields['kind']}]"
-            series.setdefault(key, []).append(value)
+            base_key = event if "kind" not in fields else f"{event}[{fields['kind']}]"
+            # Most events carry exactly one timing field, so its row keeps
+            # the plain event name. `screen-capture-completed` carries two
+            # (`duration_ms` for the whole duty cycle, `ocrMilliseconds` for
+            # OCR alone) — suffix the field name on multi-field lines so
+            # both become their own p50/p95/p99 row instead of one silently
+            # shadowing the other.
+            multiple_fields = len(present) > 1
+            for field in present:
+                try:
+                    value = float(fields[field])
+                except ValueError:
+                    continue
+                key = f"{base_key}:{field}" if multiple_fields else base_key
+                series.setdefault(key, []).append(value)
     return series
 
 
