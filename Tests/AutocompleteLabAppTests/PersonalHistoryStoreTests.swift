@@ -254,6 +254,56 @@ struct PersonalHistoryStoreTests {
         #expect(try Data(contentsOf: fixture.file) == original)
     }
 
+    @Test("A torn trailing write self-heals by dropping only the incomplete record")
+    func tornTrailingWriteSelfHeals() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.store.append([fixture.event(id: "one", text: "first")])
+        try await fixture.store.append([fixture.event(id: "two", text: "second")])
+        let complete = try Data(contentsOf: fixture.file)
+
+        // Simulate a process killed mid-append: a third record's bytes
+        // landed on disk but its trailing newline never did.
+        var torn = complete
+        torn.append(Data("dGhpcyBpcyBub3QgYSBjb21wbGV0ZSByZWNvcmQ".utf8))
+        chmod(fixture.file.deletingLastPathComponent().path, 0o700)
+        try torn.write(to: fixture.file)
+        chmod(fixture.file.path, 0o600)
+
+        // Reads recover the two complete records instead of failing closed.
+        let replayed = try await fixture.store.loadEvents()
+        #expect(replayed.map(\.id) == ["one", "two"])
+        _ = try await fixture.store.summary()
+
+        // The next append repairs the tear in place and proceeds normally —
+        // no manual delete-and-lose-everything required.
+        try await fixture.store.append([fixture.event(id: "three", text: "third")])
+        let repaired = try await fixture.store.loadEvents()
+        #expect(repaired.map(\.id) == ["one", "two", "three"])
+        #expect(fixture.diagnosticsText().contains("personal-history-store-repaired"))
+    }
+
+    @Test("A write torn on the very first record recovers to an empty store")
+    func tornFirstWriteRecoversToEmpty() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        chmod(fixture.file.deletingLastPathComponent().path, 0o700)
+        var torn = Data("TILDE-PERSONAL-HISTORY\t2\n".utf8)
+        torn.append(Data("dGhpcyBpcyBub3QgYSBjb21wbGV0ZSByZWNvcmQ".utf8))
+        try torn.write(to: fixture.file)
+        chmod(fixture.file.path, 0o600)
+
+        #expect(try await fixture.store.loadEvents().isEmpty)
+
+        try await fixture.store.append([fixture.event(id: "one", text: "first")])
+        #expect(try await fixture.store.loadEvents().map(\.id) == ["one"])
+        #expect(fixture.diagnosticsText().contains("personal-history-store-repaired"))
+    }
+
     @Test("Delete remains available when the corpus is corrupt")
     func corruptStoreCanBeDeleted() async throws {
         let fixture = try Fixture()
@@ -460,6 +510,8 @@ struct PersonalHistoryStoreTests {
         let root: URL
         let file: URL
         let keys: MutableKeys
+        let diagnosticsLog: URL
+        let diagnostics: DiagnosticsLog
         let store: EncryptedPersonalHistoryStore
 
         init(keyData: Data = Data(repeating: 0xA5, count: 32)) throws {
@@ -467,7 +519,14 @@ struct PersonalHistoryStoreTests {
                 .appendingPathComponent("tilde-history-tests-\(UUID().uuidString)")
             file = root.appendingPathComponent("Personal History/history.v1.enc")
             keys = MutableKeys(keyData: keyData)
-            store = EncryptedPersonalHistoryStore(location: file, keyProvider: keys)
+            diagnosticsLog = root.appendingPathComponent("diagnostics.log")
+            diagnostics = DiagnosticsLog(logURL: diagnosticsLog)
+            store = EncryptedPersonalHistoryStore(location: file, keyProvider: keys, diagnostics: diagnostics)
+        }
+
+        func diagnosticsText() -> String {
+            diagnostics.flush()
+            return (try? String(contentsOf: diagnosticsLog, encoding: .utf8)) ?? ""
         }
 
         func event(
