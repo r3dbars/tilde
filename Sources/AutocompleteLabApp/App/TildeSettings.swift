@@ -16,6 +16,7 @@ struct TildeSettings {
         case personalNextWordExperimentIdentifier = "PersonalNextWordExperimentIdentifier"
         case personalSuggestionsServingEnabled = "PersonalSuggestionsServingEnabled"
         case screenMemoryEnabled = "ScreenMemoryEnabled"
+        case consensusShorteningEnabled = "ConsensusShorteningEnabled"
     }
 
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
@@ -34,6 +35,13 @@ struct TildeSettings {
     var personalHistoryEnabled: Bool {
         get { keyboard.bool(forKey: KeyboardKey.personalHistory.rawValue) }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.personalHistory.rawValue) }
+    }
+
+    /// Off by default: token-level confidence over-trims greedy prose and the
+    /// n_probs request costs latency — see LlamaCompletionEngine.evidence.
+    var consensusShorteningEnabled: Bool {
+        get { keyboard.bool(forKey: KeyboardKey.consensusShorteningEnabled.rawValue) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.consensusShorteningEnabled.rawValue) }
     }
 
     var personalHistoryExcludedApps: Set<String> {
