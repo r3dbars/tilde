@@ -87,7 +87,10 @@ struct ReplayEvalCommand {
 
     init(
         settings: TildeSettings = TildeSettings(),
-        store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
+        // `.disabled`: matches `engineFactory` below — this command never
+        // mutates the store (read-only replay), but keep the same "no
+        // synthetic diagnostics" contract in case that ever changes.
+        store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(diagnostics: .disabled),
         limit: Int = PersonalReplayEval.defaultLimit,
         ownedServer: @escaping @Sendable ()
             -> Result<ReplayEvalOwnedServer, ReplayEvalOwnershipFailure> = ReplayEvalCommand

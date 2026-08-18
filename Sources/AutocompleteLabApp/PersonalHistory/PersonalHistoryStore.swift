@@ -173,16 +173,19 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
 
     let location: URL
     private let keyProvider: any PersonalHistoryKeyProviding
+    private let diagnostics: DiagnosticsLog
     private let queue = DispatchQueue(label: "bar.r3d.tilde.personal-history-store", qos: .utility)
 
     init(
         location: URL = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Tilde/Personal History/history.v1.enc"),
-        keyProvider: any PersonalHistoryKeyProviding = KeychainPersonalHistoryKeyProvider()
+        keyProvider: any PersonalHistoryKeyProviding = KeychainPersonalHistoryKeyProvider(),
+        diagnostics: DiagnosticsLog = .shared
     ) {
         self.location = location
         self.keyProvider = keyProvider
+        self.diagnostics = diagnostics
     }
 
     func append(
@@ -211,13 +214,22 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         }
         defer { try? handle.close() }
         let size = try handle.seekToEnd()
-        let legacyFormat = try validateHeaderAndTail(handle: handle, size: size)
+        let effectiveSize: UInt64
+        let legacyFormat: Bool
+        switch try validateHeaderAndTail(handle: handle, size: size) {
+        case let .clean(legacy):
+            effectiveSize = size
+            legacyFormat = legacy
+        case let .torn(validPrefixLength):
+            effectiveSize = validPrefixLength
+            legacyFormat = false
+        }
         let bodyStart = UInt64(Self.header.count)
-        guard size > bodyStart else { return nil }
+        guard effectiveSize > bodyStart else { return nil }
         guard !legacyFormat else { return nil }
         let keyData = try keyProvider.loadExistingKey()
         guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
-        let plaintext = try decryptLastRecord(handle: handle, size: size, keyData: keyData)
+        let plaintext = try decryptLastRecord(handle: handle, size: effectiveSize, keyData: keyData)
         guard let record = try? JSONDecoder().decode(
             StoredCheckpointRecord.self, from: plaintext
         ) else {
@@ -248,6 +260,9 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             defer { try? handle.close() }
             let size = try handle.seekToEnd()
             _ = try self.validateHeaderAndTail(handle: handle, size: size)
+            // The reported size stays the raw on-disk byte count even when
+            // the tail is torn (see `TailStatus.torn`) — this is a storage
+            // usage number, not a claim about how many records replay.
             return PersonalHistorySummary(
                 location: self.location,
                 approximateBytes: Int64(size)
@@ -270,10 +285,26 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             throw CocoaError(.fileWriteNoPermission)
         }
         defer { try? handle.close() }
-        let size = try handle.seekToEnd()
-        let legacyFormat = size > 0
-            ? try validateHeaderAndTail(handle: handle, size: size)
-            : false
+        var size = try handle.seekToEnd()
+        var legacyFormat = false
+        if size > 0 {
+            switch try validateHeaderAndTail(handle: handle, size: size) {
+            case let .clean(legacy):
+                legacyFormat = legacy
+            case let .torn(validPrefixLength):
+                // A prior write never finished (process killed or crashed
+                // mid-append) — the header and every record up through
+                // `validPrefixLength` are intact and authenticate fine;
+                // only the incomplete trailing partial line needs to go.
+                // Recover by dropping just that tail instead of treating
+                // the whole corpus as unreadable, and say so once so the
+                // event is legible instead of silently masquerading as an
+                // ordinary append.
+                try handle.truncate(atOffset: validPrefixLength)
+                size = validPrefixLength
+                diagnostics.record("personal-history-store-repaired")
+            }
+        }
         let keyData: Data
         if let newStoreKey {
             keyData = newStoreKey
@@ -372,8 +403,12 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             throw PersonalHistoryStorageError.corruptStore
         }
         defer { try? handle.close() }
-        let size = try handle.seekToEnd()
-        _ = try validateHeaderAndTail(handle: handle, size: size)
+        let rawSize = try handle.seekToEnd()
+        let size: UInt64
+        switch try validateHeaderAndTail(handle: handle, size: rawSize) {
+        case .clean: size = rawSize
+        case let .torn(validPrefixLength): size = validPrefixLength
+        }
         let bodyStart = UInt64(Self.header.count)
         guard size > bodyStart else {
             return PersonalHistoryReplay(events: [], checkpoint: nil)
@@ -395,7 +430,12 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             startsMidLine = try handle.read(upToCount: 1) != Data([0x0A])
         }
         try handle.seek(toOffset: start)
-        var body = try handle.readToEnd() ?? Data()
+        // Bounded to `size`, not simply "the rest of the file": when the
+        // tail is torn (see `TailStatus.torn`), `size` already stops short
+        // of the raw end-of-file, and reading past it would hand the
+        // incomplete trailing partial line to `decode` as if it were a
+        // record.
+        var body = try handle.read(upToCount: Int(size - start)) ?? Data()
         if startsMidLine {
             guard let newline = body.firstIndex(of: 0x0A) else {
                 return PersonalHistoryReplay(events: [], checkpoint: nil)
@@ -481,8 +521,19 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         }
     }
 
-    /// Returns true when the same-length v1 header should be upgraded before append.
-    private func validateHeaderAndTail(handle: FileHandle, size: UInt64) throws -> Bool {
+    /// `.clean(legacyFormat:)` when the file is a well-formed sequence of
+    /// newline-terminated records (`legacyFormat` true when the same-length
+    /// v1 header should be upgraded before append). `.torn` when the header
+    /// is fine and every record up to `validPrefixLength` is too, but the
+    /// final line has no trailing newline — the signature of a write that
+    /// never finished (the process was killed or crashed mid-append) rather
+    /// than genuine corruption. Anything else still fails closed.
+    private enum TailStatus {
+        case clean(legacyFormat: Bool)
+        case torn(validPrefixLength: UInt64)
+    }
+
+    private func validateHeaderAndTail(handle: FileHandle, size: UInt64) throws -> TailStatus {
         guard size >= UInt64(Self.header.count) else {
             throw PersonalHistoryStorageError.corruptStore
         }
@@ -493,9 +544,40 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         }
         try handle.seek(toOffset: size - 1)
         guard try handle.read(upToCount: 1) == Data([0x0A]) else {
-            throw PersonalHistoryStorageError.corruptStore
+            guard let validPrefixLength = try lastCompleteRecordBoundary(handle: handle, size: size) else {
+                throw PersonalHistoryStorageError.corruptStore
+            }
+            return .torn(validPrefixLength: validPrefixLength)
         }
-        return header == Self.legacyHeader
+        return .clean(legacyFormat: header == Self.legacyHeader)
+    }
+
+    /// Scans backward from `size` for the newline that ends the last
+    /// complete record, bounded to twice the maximum single-record size —
+    /// enough to always find it when exactly one trailing record was torn
+    /// (the only case a normal interrupted write can produce, since every
+    /// completed record is capped at `maximumEncryptedRecordBytes`).
+    /// Returns `nil` — leaving the caller to fail closed — when no boundary
+    /// turns up in that window, since that means more than a single trailing
+    /// record is implicated and this is no longer safely attributable to an
+    /// ordinary torn write.
+    private func lastCompleteRecordBoundary(handle: FileHandle, size: UInt64) throws -> UInt64? {
+        let bodyStart = UInt64(Self.header.count)
+        guard size > bodyStart else { return nil }
+        let scanCap = UInt64(Self.maximumEncryptedRecordBytes) * 2
+        let scanStart = size - bodyStart > scanCap ? size - scanCap : bodyStart
+        try handle.seek(toOffset: scanStart)
+        let window = try handle.read(upToCount: Int(size - scanStart)) ?? Data()
+        guard let lastNewlineOffset = window.lastIndex(of: 0x0A) else {
+            // No newline anywhere in the scanned window. If the window
+            // reached all the way back to the first byte of the body, the
+            // very first record ever written was the one interrupted —
+            // recovering to an empty (header-only) body is still safe.
+            // Otherwise this is more than one record's worth of unbroken
+            // bytes, which a torn write cannot produce; don't guess.
+            return scanStart == bodyStart ? bodyStart : nil
+        }
+        return scanStart + UInt64(lastNewlineOffset) + 1
     }
 
     private func perform<T: Sendable>(
