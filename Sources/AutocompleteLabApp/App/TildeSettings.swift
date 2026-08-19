@@ -17,6 +17,7 @@ struct TildeSettings {
         case personalSuggestionsServingEnabled = "PersonalSuggestionsServingEnabled"
         case screenMemoryEnabled = "ScreenMemoryEnabled"
         case consensusShorteningEnabled = "ConsensusShorteningEnabled"
+        case incrementalOCREnabled = "IncrementalOCREnabled"
     }
 
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
@@ -118,6 +119,21 @@ struct TildeSettings {
     var screenMemoryEnabled: Bool {
         get { flag(.screenMemoryEnabled) }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.screenMemoryEnabled.rawValue) }
+    }
+
+    /// Experiment arm for "OCR only the changed screen region" (2026-08-19):
+    /// ON by default, same `flag()`/`screenMemoryEnabled`-style default-true
+    /// semantics — a fresh install with no persisted key reads the default,
+    /// an existing install's explicit choice persists. Setting this `false`
+    /// restores today's always-full-OCR behavior exactly: `ScreenCaptureService`
+    /// skips the luminance-grid sampling and `CaptureChangeDetector` entirely
+    /// when this reads false, rather than merely ignoring their output, so
+    /// disabling the experiment costs nothing extra either. `ocrScope` on
+    /// `screen-capture-completed` is this experiment's measurement
+    /// instrument regardless of which arm is live.
+    var incrementalOCREnabled: Bool {
+        get { flag(.incrementalOCREnabled) }
+        nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.incrementalOCREnabled.rawValue) }
     }
 
     var pausedUntil: Date? {
