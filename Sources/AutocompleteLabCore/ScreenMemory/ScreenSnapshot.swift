@@ -27,6 +27,16 @@ public struct NormalizedDisplayRect: Equatable, Sendable {
     public func contains(x px: Double, y py: Double) -> Bool {
         px >= minX && px <= maxX && py >= minY && py <= maxY
     }
+
+    /// Boundary-inclusive intersection: two rects that only touch along an
+    /// edge (sharing a point or a line, zero-area overlap) still count as
+    /// intersecting. `CaptureChangeDetector.mergeBlocks` relies on this —
+    /// erring toward "intersects" for an edge-touching block matches the
+    /// region's own one-tile padding, which exists precisely to avoid
+    /// clipping a block that sits right on the boundary.
+    public func intersects(_ other: NormalizedDisplayRect) -> Bool {
+        minX <= other.maxX && maxX >= other.minX && minY <= other.maxY && maxY >= other.minY
+    }
 }
 
 /// One on-device OCR pass over the full display, kept memory-only in Phase 1.
