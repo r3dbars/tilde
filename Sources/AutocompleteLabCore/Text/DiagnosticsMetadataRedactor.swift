@@ -39,6 +39,13 @@ public enum DiagnosticsMetadataRedactor {
         // (`ScreenCaptureService.performWindowCapture`/`performFullDisplayCapture`)
         // — which capture path ran, never any captured text.
         "window", "display",
+        // `screen-capture-completed`'s `ocrScope` field (incremental OCR,
+        // `ScreenCaptureService.performWindowCapture`/`performFullDisplayCapture`,
+        // backed by `CaptureChangeDetector`) — how much of the frame the OCR
+        // pass actually covered this capture: the whole frame, a bounded
+        // region, or none at all because nothing changed. Never any
+        // captured text or the region's coordinates.
+        "full", "region", "skipped",
         // "P99 at every section": `GhostBrainServerHost.awaitPersonalPrediction`'s
         // outcome vocabulary, logged as the `outcome` field on
         // `personal-lookup-timing` — which arm of the 250ms personal-brain
@@ -65,7 +72,7 @@ public enum DiagnosticsMetadataRedactor {
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
-        case "reason", "status", "mode", "source", "kind", "outcome":
+        case "reason", "status", "mode", "source", "kind", "outcome", "ocrScope":
             safe = enumValues.contains(value)
         case "app":
             safe = value == "unknown"

@@ -42,6 +42,25 @@ actor ScreenCaptureService {
     private var captureCounter = 0
     private static let fullDisplayCaptureInterval = 3
 
+    /// What a full or region OCR pass leaves behind for the NEXT capture on
+    /// the same path to diff against: the luminance grid it was computed
+    /// from, the geometry it was captured under, and the resulting snapshot
+    /// (its blocks are what `.unchanged` reuses and what `.region` merges
+    /// into). Window and display captures keep entirely separate baselines
+    /// — they alternate every `fullDisplayCaptureInterval` captures, and a
+    /// display frame must never be diffed against a window frame or vice
+    /// versa. There is nothing else to "reset" on a kind switch: each path
+    /// only ever reads and writes its own baseline, and `CaptureChangeDetector`'s
+    /// `GeometryKey` equality check already forces `.full` on a window
+    /// identity or pixel-dimension change within a path.
+    private struct CaptureBaseline {
+        let geometry: CaptureChangeDetector.GeometryKey
+        let grid: CaptureChangeDetector.LuminanceGrid
+        let snapshot: ScreenSnapshot
+    }
+    private var windowBaseline: CaptureBaseline?
+    private var displayBaseline: CaptureBaseline?
+
     /// Injectable for tests: the real system checks (TCC, lock screen,
     /// secure input, ScreenCaptureKit itself) are not something a unit test
     /// should have to actually perform on a display. `enabled` and
@@ -66,6 +85,14 @@ actor ScreenCaptureService {
     private let recognizeText: (CGImage) async throws -> [ScreenTextRecognizer.RecognizedBlock]
     private let now: @Sendable () -> Date
     private let diagnostics: @Sendable (String, [String: String]) -> Void
+    /// "OCR only the changed screen region" experiment arm
+    /// (`TildeSettings.incrementalOCREnabled`, default true). Read fresh on
+    /// every capture, same live-provider pattern as `enabled`/`excludedApps`
+    /// — a menu-level kill switch takes effect on the very next capture with
+    /// nothing to keep in sync. `false` restores today's always-full-OCR
+    /// behavior exactly: the luminance-grid sampling and
+    /// `CaptureChangeDetector` call are skipped entirely, not just ignored.
+    private let incrementalOCREnabled: @Sendable () -> Bool
 
     init(
         enabled: @escaping @Sendable () -> Bool,
@@ -82,7 +109,8 @@ actor ScreenCaptureService {
         now: @escaping @Sendable () -> Date = Date.init,
         diagnostics: @escaping @Sendable (String, [String: String]) -> Void = { event, metadata in
             DiagnosticsLog.shared.record(event, metadata: metadata)
-        }
+        },
+        incrementalOCREnabled: @escaping @Sendable () -> Bool = { TildeSettings().incrementalOCREnabled }
     ) {
         self.enabled = enabled
         self.excludedApps = excludedApps
@@ -93,6 +121,7 @@ actor ScreenCaptureService {
         self.recognizeText = recognizeText
         self.now = now
         self.diagnostics = diagnostics
+        self.incrementalOCREnabled = incrementalOCREnabled
     }
 
     /// The focused-window trigger. Fires regardless of completion-session
@@ -326,17 +355,6 @@ actor ScreenCaptureService {
                 contentFilter: filter,
                 configuration: configuration
             )
-            // "P99 at every section" (2026-08-18): the duty cycle above
-            // covers screenshot+OCR together, which is what the power probe
-            // budget cares about, but tells capture and OCR apart is exactly
-            // what a percentile table needs to point at which half of the
-            // duty cycle regressed. `ocrStart` marks the moment the
-            // screenshot finished, so `ocrMilliseconds` times `recognizeText`
-            // alone using the same injectable clock as `dutyCycleMilliseconds`.
-            let ocrStart = now()
-            let recognized = try await recognizeText(image)
-            let ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
-            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             // Vision's boxes are normalized against the captured WINDOW
             // image here, not the display — map each one through the
             // window's own display-normalized frame before it becomes a
@@ -345,18 +363,133 @@ actor ScreenCaptureService {
             // window-relative widths as display-relative ones.
             let windowFrame = Self.normalize(window.frame, in: display.frame)
             let ownerBundleIdentifier = window.owningApplication?.bundleIdentifier
-            let blocks = recognized.map { block -> ScreenSnapshot.TextBlock in
-                ScreenSnapshot.TextBlock(
-                    text: block.text,
-                    boundingBox: WindowAttribution.mapWindowRelativeBox(block.boundingBox, windowFrame: windowFrame),
-                    windowOwnerBundleIdentifier: ownerBundleIdentifier,
-                    windowTitle: window.title,
-                    windowFrame: windowFrame
+
+            // Incremental OCR (docs: "OCR only the changed screen region"),
+            // gated behind `TildeSettings.incrementalOCREnabled` (default
+            // true — the experiment's "on" arm): when the flag reads false,
+            // sampling and diffing are skipped outright, not merely ignored,
+            // so the "off" arm costs nothing beyond today's behavior and
+            // `windowBaseline` clears rather than going stale, so a later
+            // re-enable starts from a fresh baseline instead of diffing
+            // against a possibly very old frame.
+            let incrementalEnabled = incrementalOCREnabled()
+            let priorBaseline = incrementalEnabled ? windowBaseline : nil
+            let currentGrid = incrementalEnabled ? LuminanceGridSampler.sample(image) : nil
+            let geometry = CaptureChangeDetector.GeometryKey(
+                kind: .window,
+                identity: window.windowID.description,
+                pixelWidth: image.width,
+                pixelHeight: image.height
+            )
+            let decision: CaptureChangeDetector.Decision
+            if let currentGrid {
+                decision = CaptureChangeDetector.decision(
+                    previousGrid: priorBaseline?.grid,
+                    previousGeometry: priorBaseline?.geometry,
+                    currentGrid: currentGrid,
+                    currentGeometry: geometry
                 )
+            } else {
+                decision = .full
             }
+
+            // "P99 at every section" (2026-08-18): the duty cycle above
+            // covers screenshot+OCR together, which is what the power probe
+            // budget cares about, but tells capture and OCR apart is exactly
+            // what a percentile table needs to point at which half of the
+            // duty cycle regressed. Every branch below times only its own
+            // `recognizeText` call (or, for `.unchanged`, spends none) using
+            // the same injectable clock as `dutyCycleMilliseconds`.
+            func fullWindowOCR() async throws -> ([ScreenSnapshot.TextBlock], Int) {
+                let ocrStart = now()
+                let recognized = try await recognizeText(image)
+                let ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
+                let mapped = recognized.map { block -> ScreenSnapshot.TextBlock in
+                    ScreenSnapshot.TextBlock(
+                        text: block.text,
+                        boundingBox: WindowAttribution.mapWindowRelativeBox(block.boundingBox, windowFrame: windowFrame),
+                        windowOwnerBundleIdentifier: ownerBundleIdentifier,
+                        windowTitle: window.title,
+                        windowFrame: windowFrame
+                    )
+                }
+                return (mapped, ocrMilliseconds)
+            }
+
+            let blocks: [ScreenSnapshot.TextBlock]
+            let ocrMilliseconds: Int
+            let ocrScope: String
+            switch decision {
+            case .unchanged:
+                if let priorBaseline {
+                    // The screen IS current -- only the OCR pass was
+                    // skipped -- so the reused blocks keep their original
+                    // text and `capturedAt` moves forward to `moment`,
+                    // matching `freshScene`'s staleness math exactly as if
+                    // a real OCR had just confirmed the same content.
+                    blocks = priorBaseline.snapshot.blocks
+                    ocrMilliseconds = 0
+                    ocrScope = "skipped"
+                } else {
+                    // `CaptureChangeDetector` only returns `.unchanged` when
+                    // it was given a previous baseline, so this is a safety
+                    // net for a future invariant break, not a reachable
+                    // path today: fail open to a full OCR rather than
+                    // inventing blocks out of nothing.
+                    (blocks, ocrMilliseconds) = try await fullWindowOCR()
+                    ocrScope = "full"
+                }
+
+            case let .region(rect):
+                if let priorBaseline, let croppedImage = Self.cropped(image, to: rect) {
+                    let ocrStart = now()
+                    let recognized = try await recognizeText(croppedImage)
+                    ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
+                    // Two affine hops through the same tested transform:
+                    // Vision's box is normalized to the CROP, so it maps
+                    // first into the crop's own place within the window
+                    // image (`rect` standing in for "the window the crop
+                    // was taken from"), then that window-relative box maps
+                    // into display space exactly like the full-window path
+                    // above.
+                    let newBlocks = recognized.map { block -> ScreenSnapshot.TextBlock in
+                        let windowRelative = WindowAttribution.mapWindowRelativeBox(block.boundingBox, windowFrame: rect)
+                        return ScreenSnapshot.TextBlock(
+                            text: block.text,
+                            boundingBox: WindowAttribution.mapWindowRelativeBox(windowRelative, windowFrame: windowFrame),
+                            windowOwnerBundleIdentifier: ownerBundleIdentifier,
+                            windowTitle: window.title,
+                            windowFrame: windowFrame
+                        )
+                    }
+                    // The merge intersects against PREVIOUS blocks, whose
+                    // boxes are display-normalized — so the region must make
+                    // the same window→display hop the new blocks just did.
+                    // Passing the window-space `rect` here would mis-place
+                    // the region for any non-fullscreen window: stale blocks
+                    // inside the changed area would survive the merge and
+                    // duplicate the freshly-read text.
+                    blocks = CaptureChangeDetector.mergeBlocks(
+                        previousBlocks: priorBaseline.snapshot.blocks,
+                        newBlocks: newBlocks,
+                        region: WindowAttribution.mapWindowRelativeBox(rect, windowFrame: windowFrame)
+                    )
+                    ocrScope = "region"
+                } else {
+                    (blocks, ocrMilliseconds) = try await fullWindowOCR()
+                    ocrScope = "full"
+                }
+
+            case .full:
+                (blocks, ocrMilliseconds) = try await fullWindowOCR()
+                ocrScope = "full"
+            }
+
+            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
             latestSnapshot = snapshot
             lastCaptureAt = moment
+            windowBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
                 "screen-capture-completed",
                 [
@@ -364,6 +497,7 @@ actor ScreenCaptureService {
                     "duration_ms": String(dutyCycleMilliseconds),
                     "ocrMilliseconds": String(ocrMilliseconds),
                     "kind": "window",
+                    "ocrScope": ocrScope,
                 ]
             )
             return .captured(blockCount: blocks.count)
@@ -409,19 +543,6 @@ actor ScreenCaptureService {
                 contentFilter: filter,
                 configuration: configuration
             )
-            // "P99 at every section" (2026-08-18): `ocrStart` marks the
-            // moment the screenshot finished, so `ocrMilliseconds` isolates
-            // `recognizeText` from the screenshot half of the duty cycle —
-            // same purpose and same injectable clock as `performWindowCapture`'s
-            // split.
-            let ocrStart = now()
-            let recognized = try await recognizeText(image)
-            let ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
-            // Stop the clock the instant OCR returns — everything after this
-            // (window attribution, block mapping) is pure/deterministic and
-            // not part of the "capture+OCR" duty cycle the plan's power
-            // budget assertions (script/capture_power_probe.sh) measure.
-            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             // `SCShareableContent.windows` documents no ordering guarantee,
             // and `windowLayer` alone cannot recover z-order: every normal
             // app window is layer 0, so sorting by layer is a no-op there
@@ -436,7 +557,9 @@ actor ScreenCaptureService {
             // missing from that list. `zRanks` is a parameter here (computed
             // once in `performCapture`, the same ranks used to pick the
             // frontmost window for the window-only path) rather than
-            // recomputed.
+            // recomputed. Building this list is pure/cheap geometry, needed
+            // regardless of OCR scope, so it happens unconditionally before
+            // the incremental-OCR decision below.
             let frontToBackWindows = content.windows.sorted {
                 Self.frontToBackPrecedes($0, $1, zRanks: zRanks)
             }
@@ -447,16 +570,120 @@ actor ScreenCaptureService {
                     frame: Self.normalize(window.frame, in: display.frame)
                 )
             }
-            let blocks = recognized.map { block -> ScreenSnapshot.TextBlock in
-                let owner = WindowAttribution.attribute(boundingBox: block.boundingBox, frontToBackWindows: windows)
-                return ScreenSnapshot.TextBlock(
-                    text: block.text,
-                    boundingBox: block.boundingBox,
-                    windowOwnerBundleIdentifier: owner?.bundleIdentifier,
-                    windowTitle: owner?.title,
-                    windowFrame: owner?.frame
+
+            // Incremental OCR (docs: "OCR only the changed screen region"):
+            // same mechanism and same `incrementalOCREnabled` gate as
+            // `performWindowCapture`, diffed against this path's own
+            // `displayBaseline` — never the window path's, since a display
+            // frame and a window frame are never comparable.
+            let incrementalEnabled = incrementalOCREnabled()
+            let priorBaseline = incrementalEnabled ? displayBaseline : nil
+            let currentGrid = incrementalEnabled ? LuminanceGridSampler.sample(image) : nil
+            let geometry = CaptureChangeDetector.GeometryKey(
+                kind: .display,
+                identity: display.displayID.description,
+                pixelWidth: image.width,
+                pixelHeight: image.height
+            )
+            let decision: CaptureChangeDetector.Decision = currentGrid.map {
+                CaptureChangeDetector.decision(
+                    previousGrid: priorBaseline?.grid,
+                    previousGeometry: priorBaseline?.geometry,
+                    currentGrid: $0,
+                    currentGeometry: geometry
                 )
+            } ?? .full
+
+            // "P99 at every section" (2026-08-18): `ocrStart` marks the
+            // moment the screenshot finished, so `ocrMilliseconds` isolates
+            // `recognizeText` from the screenshot half of the duty cycle —
+            // same purpose and same injectable clock as `performWindowCapture`'s
+            // split. Every branch below attributes each new block to a
+            // window the same way the original full-display path always
+            // did — `boundingBox` here is already display-relative, unlike
+            // the window path, so no window-frame remap is needed for the
+            // full-frame case.
+            func fullDisplayOCR() async throws -> ([ScreenSnapshot.TextBlock], Int) {
+                let ocrStart = now()
+                let recognized = try await recognizeText(image)
+                let ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
+                let mapped = recognized.map { block -> ScreenSnapshot.TextBlock in
+                    let owner = WindowAttribution.attribute(boundingBox: block.boundingBox, frontToBackWindows: windows)
+                    return ScreenSnapshot.TextBlock(
+                        text: block.text,
+                        boundingBox: block.boundingBox,
+                        windowOwnerBundleIdentifier: owner?.bundleIdentifier,
+                        windowTitle: owner?.title,
+                        windowFrame: owner?.frame
+                    )
+                }
+                return (mapped, ocrMilliseconds)
             }
+
+            let blocks: [ScreenSnapshot.TextBlock]
+            let ocrMilliseconds: Int
+            let ocrScope: String
+            switch decision {
+            case .unchanged:
+                if let priorBaseline {
+                    // The screen IS current -- only the OCR pass was
+                    // skipped -- so the reused blocks keep their original
+                    // text and `capturedAt` moves forward to `moment`, same
+                    // staleness semantics as a real re-OCR would have
+                    // produced.
+                    blocks = priorBaseline.snapshot.blocks
+                    ocrMilliseconds = 0
+                    ocrScope = "skipped"
+                } else {
+                    // Safety net for a future invariant break in
+                    // `CaptureChangeDetector` (see `performWindowCapture`'s
+                    // identical comment) — not reachable today.
+                    (blocks, ocrMilliseconds) = try await fullDisplayOCR()
+                    ocrScope = "full"
+                }
+
+            case let .region(rect):
+                if let priorBaseline, let croppedImage = Self.cropped(image, to: rect) {
+                    let ocrStart = now()
+                    let recognized = try await recognizeText(croppedImage)
+                    ocrMilliseconds = Self.milliseconds(from: ocrStart, to: now())
+                    // Vision's box is normalized to the CROP; `rect` is
+                    // already display-relative (this path's boxes never go
+                    // through a window-frame remap), so one hop through the
+                    // same tested affine transform lands it in display
+                    // space directly.
+                    let newBlocks = recognized.map { block -> ScreenSnapshot.TextBlock in
+                        let displayRelative = WindowAttribution.mapWindowRelativeBox(block.boundingBox, windowFrame: rect)
+                        let owner = WindowAttribution.attribute(boundingBox: displayRelative, frontToBackWindows: windows)
+                        return ScreenSnapshot.TextBlock(
+                            text: block.text,
+                            boundingBox: displayRelative,
+                            windowOwnerBundleIdentifier: owner?.bundleIdentifier,
+                            windowTitle: owner?.title,
+                            windowFrame: owner?.frame
+                        )
+                    }
+                    blocks = CaptureChangeDetector.mergeBlocks(
+                        previousBlocks: priorBaseline.snapshot.blocks,
+                        newBlocks: newBlocks,
+                        region: rect
+                    )
+                    ocrScope = "region"
+                } else {
+                    (blocks, ocrMilliseconds) = try await fullDisplayOCR()
+                    ocrScope = "full"
+                }
+
+            case .full:
+                (blocks, ocrMilliseconds) = try await fullDisplayOCR()
+                ocrScope = "full"
+            }
+
+            // Stop the clock the instant the switch above finishes — window
+            // attribution and block mapping are pure/deterministic and not
+            // part of the "capture+OCR" duty cycle the plan's power budget
+            // assertions (script/capture_power_probe.sh) measure.
+            let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             let snapshot = ScreenSnapshot(
                 capturedAt: moment,
                 displayID: display.displayID,
@@ -464,6 +691,7 @@ actor ScreenCaptureService {
             )
             latestSnapshot = snapshot
             lastCaptureAt = moment
+            displayBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
                 "screen-capture-completed",
                 [
@@ -471,6 +699,7 @@ actor ScreenCaptureService {
                     "duration_ms": String(dutyCycleMilliseconds),
                     "ocrMilliseconds": String(ocrMilliseconds),
                     "kind": "display",
+                    "ocrScope": ocrScope,
                 ]
             )
             return .captured(blockCount: blocks.count)
@@ -603,5 +832,29 @@ actor ScreenCaptureService {
             width: frame.width / displayFrame.width,
             height: frame.height / displayFrame.height
         )
+    }
+
+    /// Crops `image` to the pixel rect equivalent to `normalizedRegion`
+    /// (top-left origin, 0...1, same convention `LuminanceGridSampler` and
+    /// `CaptureChangeDetector` already share) so only that part of the frame
+    /// gets OCR'd. `CaptureChangeDetector.decision` already clamps and pads
+    /// its region into 0...1, but this clamps again against the image's
+    /// actual pixel bounds — belt-and-suspenders against float rounding
+    /// ever handing `CGImage.cropping(to:)` an out-of-bounds rect, which
+    /// returns `nil` and would otherwise silently drop the region's text.
+    /// Returns `nil` if the resulting rect is degenerate (zero width or
+    /// height) or the crop itself fails.
+    private static func cropped(_ image: CGImage, to normalizedRegion: NormalizedDisplayRect) -> CGImage? {
+        let width = Double(image.width)
+        let height = Double(image.height)
+        guard width > 0, height > 0 else { return nil }
+
+        let minX = max(0, min(normalizedRegion.minX * width, width))
+        let minY = max(0, min(normalizedRegion.minY * height, height))
+        let maxX = max(0, min(normalizedRegion.maxX * width, width))
+        let maxY = max(0, min(normalizedRegion.maxY * height, height))
+        let pixelRect = CGRect(x: minX, y: minY, width: max(0, maxX - minX), height: max(0, maxY - minY)).integral
+        guard pixelRect.width >= 1, pixelRect.height >= 1 else { return nil }
+        return image.cropping(to: pixelRect)
     }
 }

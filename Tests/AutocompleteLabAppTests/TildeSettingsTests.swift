@@ -27,6 +27,28 @@ struct TildeSettingsTests {
         // no persisted key must read ON, same as every other product
         // default in this file (`suggestionsEnabled` above).
         #expect(settings.screenMemoryEnabled)
+        // 2026-08-19 experiment: "OCR only the changed screen region" is the
+        // default-on arm, same default-true semantics as `screenMemoryEnabled`
+        // above — a fresh install with no persisted key reads ON.
+        #expect(settings.incrementalOCREnabled)
+    }
+
+    @Test("Incremental OCR's toggle lands in the keyboard domain, on by default, explicitly settable either way")
+    func incrementalOCRToggle() {
+        let (settings, keyboard) = makeSettings()
+        #expect(settings.incrementalOCREnabled)
+        settings.incrementalOCREnabled = false
+        #expect(!settings.incrementalOCREnabled)
+        #expect(keyboard.object(forKey: "IncrementalOCREnabled") as? Bool == false)
+        settings.incrementalOCREnabled = true
+        #expect(settings.incrementalOCREnabled)
+    }
+
+    @Test("An existing install that explicitly turned incremental OCR off keeps that choice")
+    func incrementalOCRExplicitOffPersists() {
+        let (settings, keyboard) = makeSettings()
+        keyboard.set(false, forKey: "IncrementalOCREnabled")
+        #expect(!settings.incrementalOCREnabled)
     }
 
     @Test("Screen Memory's toggle lands in the keyboard domain, on by default, explicitly settable either way")
