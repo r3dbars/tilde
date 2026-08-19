@@ -462,10 +462,17 @@ actor ScreenCaptureService {
                             windowFrame: windowFrame
                         )
                     }
+                    // The merge intersects against PREVIOUS blocks, whose
+                    // boxes are display-normalized — so the region must make
+                    // the same window→display hop the new blocks just did.
+                    // Passing the window-space `rect` here would mis-place
+                    // the region for any non-fullscreen window: stale blocks
+                    // inside the changed area would survive the merge and
+                    // duplicate the freshly-read text.
                     blocks = CaptureChangeDetector.mergeBlocks(
                         previousBlocks: priorBaseline.snapshot.blocks,
                         newBlocks: newBlocks,
-                        region: rect
+                        region: WindowAttribution.mapWindowRelativeBox(rect, windowFrame: windowFrame)
                     )
                     ocrScope = "region"
                 } else {
