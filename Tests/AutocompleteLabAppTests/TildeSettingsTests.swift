@@ -69,6 +69,23 @@ struct TildeSettingsTests {
         #expect(keyboard.object(forKey: "SetupVersion") == nil)
     }
 
+    @Test("Raw OCR evaluation defaults off and stays in the app domain")
+    func localOCREvaluationPreference() {
+        let keyboardName = "tilde.tests.keyboard.\(UUID().uuidString)"
+        let appName = "tilde.tests.app.\(UUID().uuidString)"
+        let keyboard = UserDefaults(suiteName: keyboardName)!
+        let app = UserDefaults(suiteName: appName)!
+        keyboard.removePersistentDomain(forName: keyboardName)
+        app.removePersistentDomain(forName: appName)
+        let settings = TildeSettings(keyboard: keyboard, app: app)
+
+        #expect(!settings.localOCREvaluationEnabled)
+        settings.localOCREvaluationEnabled = true
+        #expect(settings.localOCREvaluationEnabled)
+        #expect(app.object(forKey: "LocalOCREvaluationEnabled") as? Bool == true)
+        #expect(keyboard.object(forKey: "LocalOCREvaluationEnabled") == nil)
+    }
+
     @Test("Incremental OCR's toggle lands in the keyboard domain, on by default, explicitly settable either way")
     func incrementalOCRToggle() {
         let (settings, keyboard) = makeSettings()
