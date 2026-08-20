@@ -48,7 +48,7 @@ struct LocalOCREvaluationSample: Codable, Sendable {
         incrementalBlocks: [ScreenSnapshot.TextBlock],
         fullReferenceBlocks: [ScreenSnapshot.TextBlock]
     ) {
-        schemaVersion = 1
+        schemaVersion = 2
         self.capturedAt = capturedAt
         self.captureKind = captureKind
         self.incrementalScope = incrementalScope
@@ -82,6 +82,7 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     let location: URL
     private let queue = DispatchQueue(label: "bar.r3d.tilde.local-ocr-evaluation")
     private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
     private let mayPersist: @Sendable () -> Bool
     private let excludedApps: @Sendable () -> Set<String>
     private let generationLock = NSLock()
@@ -109,6 +110,8 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
+        decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
     }
 
     func record(_ sample: LocalOCREvaluationSample) {
@@ -143,13 +146,27 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             generationLock.lock()
             generationStorage &+= 1
             generationLock.unlock()
+            // Persist the disabled state before unlinking the corpus. Other
+            // Tilde processes check this marker immediately before writing,
+            // so a queued capture cannot recreate data after deletion.
+            guard createCollectionDisabledMarker() else { return false }
             return SecureLocalStorage.removeOwnerOnlyFile(at: location)
+        }
+    }
+
+    @discardableResult
+    func beginCollection() -> Bool {
+        queue.sync {
+            generationLock.lock()
+            generationStorage &+= 1
+            generationLock.unlock()
+            return SecureLocalStorage.removeOwnerOnlyFile(at: collectionDisabledMarker)
         }
     }
 
     private func persist(_ sample: LocalOCREvaluationSample) {
         do {
-            guard mayPersist(sample) else { return }
+            guard mayPersist(sample), !isCollectionDisabled() else { return }
             let encoded = try encoder.encode(sample)
             guard encoded.count <= Self.maximumRecordBytes,
                   let handle = SecureLocalStorage.openFileForReadingAndAppending(at: location) else {
@@ -164,7 +181,13 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             let newline: UInt8 = 0x0A
             var records = [UInt8](existing)
                 .split(separator: newline, omittingEmptySubsequences: true)
-                .map { Data($0) }
+                .compactMap { bytes -> Data? in
+                    let data = Data(bytes)
+                    guard let retained = try? decoder.decode(LocalOCREvaluationSample.self, from: data),
+                          retained.schemaVersion == 2,
+                          mayPersist(retained) else { return nil }
+                    return data
+                }
             records.append(encoded)
 
             func encodedSize(_ values: [Data]) -> Int {
@@ -183,7 +206,7 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             // Re-check immediately before the only raw disk mutation. This
             // closes the async queue gap when consent, Screen Memory, TCC,
             // lock state, or Secure Event Input changes after record().
-            guard mayPersist(sample) else { return }
+            guard mayPersist(sample), !isCollectionDisabled() else { return }
             try handle.truncate(atOffset: 0)
             // FileHandle truncation does not promise to reset the current
             // offset. Seek after truncating or repeated rewrites can create
@@ -205,6 +228,37 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
                 owner,
                 configuredExcludedApps: exclusions
             )
+        }
+    }
+
+    private var collectionDisabledMarker: URL {
+        location.deletingLastPathComponent().appendingPathComponent("collection-disabled")
+    }
+
+    private func isCollectionDisabled() -> Bool {
+        switch SecureLocalStorage.openExistingOwnerOnlyFileForReadOnlyStatus(
+            at: collectionDisabledMarker
+        ) {
+        case let .opened(handle):
+            try? handle.close()
+            return true
+        case .missing:
+            return false
+        case .rejected:
+            return true
+        }
+    }
+
+    private func createCollectionDisabledMarker() -> Bool {
+        guard let handle = SecureLocalStorage.openFileForAppending(at: collectionDisabledMarker) else {
+            return false
+        }
+        defer { try? handle.close() }
+        do {
+            try handle.synchronize()
+            return true
+        } catch {
+            return false
         }
     }
 
