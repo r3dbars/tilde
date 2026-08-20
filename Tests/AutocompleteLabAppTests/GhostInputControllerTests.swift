@@ -4,15 +4,19 @@ import Testing
 
 @Suite("Ghost input controller")
 struct GhostInputControllerTests {
-    @Test("Tilde accepts all while backtick and modified chords remain printable")
+    @Test("The backtick/tilde key accepts all while modified chords remain printable")
     func tildeFullAcceptShortcut() {
         #expect(GhostInputController.shouldAcceptWholeSuggestion(
             keyCode: 50,
             modifiers: [.shift]
         ))
-        #expect(!GhostInputController.shouldAcceptWholeSuggestion(
+        #expect(GhostInputController.shouldAcceptWholeSuggestion(
             keyCode: 50,
             modifiers: []
+        ))
+        #expect(GhostInputController.shouldAcceptWholeSuggestion(
+            keyCode: 50,
+            modifiers: [.capsLock]
         ))
         #expect(!GhostInputController.shouldAcceptWholeSuggestion(
             keyCode: 50,
