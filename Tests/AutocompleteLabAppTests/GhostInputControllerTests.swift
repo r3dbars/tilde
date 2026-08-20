@@ -60,4 +60,33 @@ struct GhostInputControllerTests {
             candidates: ["instant", "instead"]
         ) == "ant")
     }
+
+    @Test("Trailing context reads are bounded and require a caret")
+    func trailingContextRangeIsSafe() {
+        #expect(GhostInputController.trailingContextRange(
+            selection: NSRange(location: 20, length: 0),
+            markedRange: NSRange(location: NSNotFound, length: 0),
+            documentLength: 150
+        ) == NSRange(location: 20, length: 80))
+        #expect(GhostInputController.trailingContextRange(
+            selection: NSRange(location: 20, length: 0),
+            markedRange: NSRange(location: NSNotFound, length: 0),
+            documentLength: 25
+        ) == NSRange(location: 20, length: 5))
+        #expect(GhostInputController.trailingContextRange(
+            selection: NSRange(location: 20, length: 0),
+            markedRange: NSRange(location: 20, length: 8),
+            documentLength: 35
+        ) == NSRange(location: 28, length: 7))
+        #expect(GhostInputController.trailingContextRange(
+            selection: NSRange(location: 25, length: 0),
+            markedRange: NSRange(location: NSNotFound, length: 0),
+            documentLength: 25
+        ) == nil)
+        #expect(GhostInputController.trailingContextRange(
+            selection: NSRange(location: 20, length: 3),
+            markedRange: NSRange(location: NSNotFound, length: 0),
+            documentLength: 25
+        ) == nil)
+    }
 }
