@@ -311,6 +311,7 @@ final class ModelManager: @unchecked Sendable {
     private let callbackQueue: DispatchQueue
     private let stateQueue = DispatchQueue(label: "bar.r3d.tilde.model-manager-state")
     private let availableDiskSpace: DiskSpaceProvider
+    private let retryDelays: [Duration]
     private let stateHandler: StateHandler?
     private let progressHandler: ProgressHandler?
     private var stateStorage: ModelState = .checking
@@ -324,7 +325,11 @@ final class ModelManager: @unchecked Sendable {
         callbackQueue: DispatchQueue = .main,
         onStateChange: StateHandler? = nil,
         onProgress: ProgressHandler? = nil,
-        availableDiskSpace: @escaping DiskSpaceProvider = ModelManager.defaultDiskSpace
+        availableDiskSpace: @escaping DiskSpaceProvider = ModelManager.defaultDiskSpace,
+        retryDelays: [Duration] = [
+            .milliseconds(500), .seconds(1), .seconds(2), .seconds(4),
+            .seconds(8), .seconds(16), .seconds(30), .seconds(30)
+        ]
     ) {
         self.descriptor = descriptor
         let root = rootDirectory ?? Self.defaultRootDirectory
@@ -337,6 +342,7 @@ final class ModelManager: @unchecked Sendable {
         self.stateHandler = onStateChange
         self.progressHandler = onProgress
         self.availableDiskSpace = availableDiskSpace
+        self.retryDelays = retryDelays
     }
 
     /// The exact root override used by isolated release proof.  The override
@@ -460,23 +466,7 @@ final class ModelManager: @unchecked Sendable {
                     partialBytes = 0
                 }
             }
-            let requiredBytes = descriptor.expectedBytes - partialBytes
-            if let available = availableDiskSpace(modelDirectory), available < requiredBytes {
-                throw ManagerError.insufficientDiskSpace
-            }
-
-            try Task.checkCancellation()
-            let request = makeRequest(startingAt: partialBytes)
-            let response = try await transport.response(for: request)
-            try Task.checkCancellation()
-            let mode = try validate(response: response, startingAt: partialBytes)
-            if mode == .restart {
-                partialBytes = 0
-                try truncatePartial()
-            }
-
-            publish(.downloading(receivedBytes: partialBytes, totalBytes: descriptor.expectedBytes), generation: generation)
-            try await append(response.body, to: partialURL, startingAt: partialBytes, generation: generation)
+            try await downloadWithRetries(generation: generation)
             publish(.verifying, generation: generation)
             try Task.checkCancellation()
 
@@ -511,6 +501,49 @@ final class ModelManager: @unchecked Sendable {
     }
 
     private enum ResponseMode { case append, restart }
+
+    private func downloadWithRetries(generation: UInt64) async throws {
+        var retryIndex = 0
+        while true {
+            do {
+                try await downloadRemaining(generation: generation)
+                return
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard map(error) == .offline, retryIndex < retryDelays.count else { throw error }
+                let received = (try? partialByteCount()) ?? 0
+                publish(
+                    .downloading(receivedBytes: received, totalBytes: descriptor.expectedBytes),
+                    generation: generation
+                )
+                let delay = retryDelays[retryIndex]
+                retryIndex += 1
+                try await Task.sleep(for: delay)
+            }
+        }
+    }
+
+    private func downloadRemaining(generation: UInt64) async throws {
+        var partialBytes = try partialByteCount()
+        let requiredBytes = descriptor.expectedBytes - partialBytes
+        if let available = availableDiskSpace(modelDirectory), available < requiredBytes {
+            throw ManagerError.insufficientDiskSpace
+        }
+
+        try Task.checkCancellation()
+        let request = makeRequest(startingAt: partialBytes)
+        let response = try await transport.response(for: request)
+        try Task.checkCancellation()
+        let mode = try validate(response: response, startingAt: partialBytes)
+        if mode == .restart {
+            partialBytes = 0
+            try truncatePartial()
+        }
+
+        publish(.downloading(receivedBytes: partialBytes, totalBytes: descriptor.expectedBytes), generation: generation)
+        try await append(response.body, to: partialURL, startingAt: partialBytes, generation: generation)
+    }
 
     private func makeRequest(startingAt offset: Int64) -> URLRequest {
         var request = URLRequest(url: descriptor.downloadURL)
