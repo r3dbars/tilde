@@ -1,6 +1,5 @@
 #!/usr/bin/env swift
 
-import AppKit
 import Foundation
 
 let outputPath = CommandLine.arguments.dropFirst().first ?? "dist/Tilde.app/Contents/Resources/AppIcon.icns"
@@ -13,7 +12,7 @@ let iconsetURL = URL(fileURLWithPath: NSTemporaryDirectory())
 let temporaryOutputURL = URL(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent("Tilde-\(UUID().uuidString).icns")
 
-guard let sourceImage = NSImage(contentsOf: sourceURL) else {
+guard fileManager.fileExists(atPath: sourceURL.path) else {
     throw NSError(
         domain: "TildeIcon",
         code: 1,
@@ -38,36 +37,24 @@ let iconFiles: [(name: String, points: CGFloat, scale: CGFloat)] = [
     ("icon_512x512@2x.png", 512, 2)
 ]
 
-func scaledIcon(pixels: CGFloat) -> NSImage {
-    let size = NSSize(width: pixels, height: pixels)
-    let image = NSImage(size: size)
-    image.lockFocus()
-    NSGraphicsContext.current?.imageInterpolation = .high
-    sourceImage.draw(
-        in: NSRect(origin: .zero, size: size),
-        from: NSRect(origin: .zero, size: sourceImage.size),
-        operation: .copy,
-        fraction: 1
-    )
-    image.unlockFocus()
-    return image
-}
-
 func writePNG(named name: String, pixels: CGFloat) throws {
-    let image = scaledIcon(pixels: pixels)
-    guard
-        let tiffData = image.tiffRepresentation,
-        let bitmap = NSBitmapImageRep(data: tiffData),
-        let pngData = bitmap.representation(using: .png, properties: [:])
-    else {
+    let destination = iconsetURL.appendingPathComponent(name)
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+    process.arguments = [
+        "-z", String(Int(pixels)), String(Int(pixels)),
+        sourceURL.path, "--out", destination.path
+    ]
+    process.standardOutput = FileHandle.nullDevice
+    try process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
         throw NSError(
             domain: "TildeIcon",
             code: 2,
             userInfo: [NSLocalizedDescriptionKey: "Could not render \(name)"]
         )
     }
-
-    try pngData.write(to: iconsetURL.appendingPathComponent(name))
 }
 
 for file in iconFiles {
