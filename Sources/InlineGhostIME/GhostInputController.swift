@@ -35,6 +35,14 @@ final class GhostInputController: IMKInputController {
         )
     }
 
+    static func shouldAcceptWholeSuggestion(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags
+    ) -> Bool {
+        keyCode == 50
+            && modifiers.intersection(.deviceIndependentFlagsMask) == [.shift]
+    }
+
     private struct FallbackOwner: Equatable {
         let bundle: String
         let caret: Int
@@ -131,6 +139,15 @@ final class GhostInputController: IMKInputController {
                 return false
             }
             let accepted = acceptSuggestion(client, observation: insertionObservation)
+            if !accepted { breakHistorySegment() }
+            return accepted
+
+        case 50: // Shift-backtick (`~`) accepts the whole visible suggestion.
+            guard Self.shouldAcceptWholeSuggestion(
+                keyCode: event.keyCode,
+                modifiers: modifiers
+            ) else { break }
+            let accepted = acceptAllSuggestion(client, observation: insertionObservation)
             if !accepted { breakHistorySegment() }
             return accepted
 
@@ -344,6 +361,33 @@ final class GhostInputController: IMKInputController {
             boundedContext: match?.context ?? "",
             utf16Limit: Self.contextLimit
         ))
+        guard case let .insert(accepted)? = effects.first(where: {
+            if case .insert = $0 { return true }
+            return false
+        }) else {
+            apply(effects, to: client)
+            return false
+        }
+        apply(effects, to: client)
+        appendFallback(accepted, for: client)
+        capturePersonalHistory(
+            accepted,
+            source: .acceptedSuggestion,
+            client: client,
+            secureInput: IsSecureEventInputEnabled(),
+            observation: observation
+        )
+        GhostStats.recordAccepted(accepted)
+        return true
+    }
+
+    private func acceptAllSuggestion(
+        _ client: IMKTextInput,
+        observation: InsertionObservation
+    ) -> Bool {
+        let match = matchingVisibleState(for: client)
+        cancelPendingWork()
+        let effects = state.reduce(.acceptAll(current: match?.ticket))
         guard case let .insert(accepted)? = effects.first(where: {
             if case .insert = $0 { return true }
             return false
