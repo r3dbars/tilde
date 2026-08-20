@@ -9,18 +9,32 @@ suggestions. Type normally, then use:
 - `Esc` to dismiss
 
 Suggestions are IMKit marked text inside the app where you are writing. Tilde
-does not use an overlay, Accessibility, Screen Recording, OCR, or synthetic
-paste events.
+does not use an overlay, Accessibility, or synthetic paste events. Screen
+Memory uses macOS Screen Recording and on-device OCR when enabled by its
+privacy controls; screen text stays on this Mac and is never sent for cloud
+inference.
 
 ## How it works
 
-Tilde ships as one self-contained, signed package:
+Tilde ships as a small signed package:
 
 1. `InlineGhostIME` handles keystrokes and marked-text display.
 2. The Tilde menu-bar app receives bounded context over an owner-only local
    Unix socket.
-3. The app runs its bundled `llama-server` helper and bundled GGUF model as a
-   child process. Users do not install or run a model server.
+3. The app runs its signed `llama-server` helper as a child process. Users do
+   not install or run a model server.
+4. On first run, `ModelManager` downloads one pinned Gemma 4 E2B GGUF to
+   Tilde's external app-support storage, verifies its exact size and SHA-256,
+   and starts the helper only with that verified path. The GGUF is never part
+   of `Tilde.app`.
+
+The only model asset is `gemma-4-E2B.Q4_K_M.gguf` at exactly 3,427,861,984
+bytes (SHA-256
+`389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`). The
+download uses this immutable revision URL and no model picker or Hugging Face
+login:
+
+`https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
 
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
@@ -29,7 +43,10 @@ log and quietly compares two bounded personal next-word recipes. The comparison
 is shadow-only: neither recipe changes visible suggestions. Its bounded lifetime
 and daily aggregate checkpoint is encrypted in the same app-owned history log as the
 batch it scores; it contains no words, candidate text, or per-case rows.
-Tilde has no cloud inference, analytics, sync, upload, screenshots, or accept sounds.
+Tilde has no cloud inference, analytics, sync, upload, or accept sounds. The
+separate first-run asset phase may make an HTTPS request only to the immutable
+model URL above; it sends no typed text, screen text, prompt, history, or model
+output. After the model is verified, autocomplete is local-only.
 
 Personal History is off by default. Its menu shows the local storage location
 and approximate size, lets the user exclude the current app, reports aggregate
@@ -67,16 +84,15 @@ non-empty Team IDs. If multiple identities exist, pass the same exact SHA-1 to
 both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles,
 which cannot exercise the authenticated app-to-IME runtime.
 `script/proof.sh fast` is the pre-merge gate.
-`script/package_app.sh` is the single manual release driver; it requires exact
-SHA-256 pins for the helper and
-model, then blocks on bundle, runtime, signing, notarization, Gatekeeper, and
-open-socket observation checks. Run `./script/package_app.sh --help` for its
-required release inputs. Its isolated runtime lane observes only the exact
-packaged app and helper on a dedicated port. It may append privacy-safe
-diagnostics, but it does not quit or change the daily driver or input method;
-IME/editor/authenticated-socket proof stays manual.
-The pins must come from human review: matching bytes and valid file shapes do
-not prove where a helper or model came from.
+`script/package_app.sh` is the single manual release driver. It requires the
+helper hash and an explicitly named `--proof-model` preseed. That model is
+checked against the Gemma 4 E2B revision, byte count, and SHA-256 above, copied
+only into isolated external proof storage, and never into the signed app. The
+driver then blocks on bundle shape, helper/IME signatures, runtime health,
+steady-state open-socket observation, notarization, Gatekeeper checks, and a
+512 MiB hard cap on the signed app artifact. Run
+`./script/package_app.sh --help` for the full command. The pins must come from
+human review: matching bytes and valid file shapes do not prove provenance.
 
 For private, aggregate-only model comparisons, see the
 [evaluation guide](docs/evaluation.md).

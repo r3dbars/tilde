@@ -85,7 +85,7 @@ not resolve on `main` until #347 merges). Governance (Phase 0, this PR) merges
 before any capture code (Phase 1+) begins; update this entry with real numbers
 once Phase 4's context-arm runs land.
 
-## 2026-08-15 — Gemma 4 E2B base ships as the bundled model
+## 2026-08-15 — Gemma 4 E2B base becomes the production model
 
 Head-to-head against the shipped Gemma 2 2B base (both Q4_K_M, same helper,
 same deterministic quiz cutting and scoring as `script/golden_eval.py`, greedy
@@ -127,7 +127,9 @@ Lessons:
   first-word accuracy.
 - **Effective-parameter models break the size/latency trade.** Gemma 4 E2B is
   a 4.6B-parameter model with 2B-class activation: 12B-class family knowledge
-  at 78ms p50. Cost: the Q4_K_M grows 1.7GB → 3.2GB. Text-only conversion is
+  at 78ms p50. The currently pinned Q4_K_M is exactly 3,427,861,984 bytes;
+  it is downloaded to verified Application Support storage instead of being
+  embedded in `Tilde.app`. Text-only conversion is
   provable: the converted GGUF carries 601 language-model tensors and zero
   vision/audio tensors (audited with gguf-py), 8.7GB text-only vs 10.2GB
   multimodal safetensors.

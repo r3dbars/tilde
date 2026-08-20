@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate {
     private let model: TildeSettingsViewModel
+    private var refreshTimer: Timer?
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         model = TildeSettingsViewModel(appDelegate: appDelegate, personalHistory: personalHistory)
@@ -27,6 +28,7 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
 
     func show() {
         model.refresh()
+        startRefreshing()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -35,6 +37,20 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
     func refresh() {
         model.refresh()
     }
+
+    func windowWillClose(_ notification: Notification) {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func startRefreshing() {
+        guard refreshTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.model.refresh() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+    }
 }
 
 private struct TildeSettingsView: View {
@@ -42,6 +58,7 @@ private struct TildeSettingsView: View {
     @State private var confirmDisableScreenMemory = false
     @State private var confirmEnableLearning = false
     @State private var confirmDeleteLearning = false
+    @State private var confirmDeleteModel = false
     @State private var confirmEnableOCREvaluation = false
     @State private var confirmDeleteOCREvaluation = false
 
@@ -111,7 +128,7 @@ private struct TildeSettingsView: View {
             }
 
             Section("Privacy") {
-                Text("Your writing and personal learning data stay on this Mac.")
+                Text("Your screen, writing, and personal learning data stay on this Mac. Tilde connects only to download the fixed Gemma 4 E2B model.")
 
                 Toggle("Personal Learning", isOn: Binding(
                     get: { model.personalHistoryEnabled },
@@ -135,9 +152,30 @@ private struct TildeSettingsView: View {
                 }
                 .disabled(model.isDeletingLearningData || model.learningDataSize == "No learning data")
 
-                LabeledContent("Model", value: model.modelDescription)
-                Button("Delete Model…") {}
-                    .disabled(true)
+                VStack(alignment: .leading, spacing: 6) {
+                    LabeledContent("Model", value: model.modelDescription)
+                    if let progress = model.modelProgress {
+                        if let fraction = progress.fraction {
+                            ProgressView(value: fraction)
+                                .progressViewStyle(.linear)
+                        } else {
+                            ProgressView()
+                                .progressViewStyle(.linear)
+                        }
+                        Text(progress.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(model.modelStatusText)
+                            .font(.caption)
+                            .foregroundStyle(model.modelState.isFailure ? .red : .secondary)
+                    }
+                }
+
+                Button("Delete Model…", role: .destructive) {
+                    confirmDeleteModel = true
+                }
+                .disabled(!model.canDeleteModel || model.isDeletingModel)
             }
 
             if model.localOCREvaluationAvailable {
@@ -226,7 +264,16 @@ private struct TildeSettingsView: View {
             Button("Delete", role: .destructive) { model.deleteLearningData() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes encrypted writing history, its Keychain key, and learning signals. The app and bundled model are preserved.")
+            Text("This removes encrypted writing history, its Keychain key, and learning signals. The app and downloaded model are preserved.")
+        }
+        .confirmationDialog(
+            "Delete the local model?",
+            isPresented: $confirmDeleteModel
+        ) {
+            Button("Delete Model", role: .destructive) { model.deleteModel() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This stops Tilde, removes the downloaded Gemma 4 E2B model (about 3.43 GB), and starts setup again. Your writing and learning data stay on this Mac.")
         }
         .confirmationDialog(
             "Record raw OCR samples?",
@@ -248,5 +295,12 @@ private struct TildeSettingsView: View {
         } message: {
             Text("This permanently removes the local raw OCR evaluation corpus and disables further recording.")
         }
+    }
+}
+
+private extension ModelState {
+    var isFailure: Bool {
+        if case .failed = self { return true }
+        return false
     }
 }

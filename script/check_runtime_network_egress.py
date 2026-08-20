@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Fail-closed runtime socket observation for a disposable Tilde completion.
+"""Fail-closed steady-state runtime socket observation for a disposable Tilde completion.
 
 This observes open sockets with lsof. It is deliberately not described as a
 packet capture: a clean result means no non-loopback socket was visible during
-the observation window, not that packet-level absence was proven.
+the observation window, not that packet-level absence was proven. The model
+download is a separate first-run phase; this lane runs only after a pinned
+proof-only model has been preseeded into isolated external storage. It never
+downloads assets or sends user-derived request data.
 """
 
 from __future__ import annotations
@@ -82,6 +85,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-samples", type=int, default=2)
     parser.add_argument("--port", type=int, default=17872)
     parser.add_argument("--app-binary", type=Path, default=DEFAULT_APP_BINARY)
+    parser.add_argument(
+        "--model-path",
+        type=Path,
+        help="require llama-server to use this preseeded external proof model",
+    )
     parser.add_argument("--proof-out", type=Path, default=DEFAULT_PROOF)
     parser.add_argument(
         "--synthetic-helper-proof",
@@ -134,6 +142,28 @@ def option_values(row: ProcessRow, option: str) -> list[str]:
     return values
 
 
+def path_option_value(row: ProcessRow, option: str) -> str | None:
+    """Read a path-valued option without splitting spaces in the path.
+
+    `ps args` flattens argv on macOS.  The ordinary option parser intentionally
+    handles the fixed, whitespace-free host/port flags, but a proof model path
+    may live under a checkout whose directory name contains spaces.
+    """
+    executable = row.executable
+    if not executable or not row.command.startswith(executable):
+        return None
+    tail = row.command[len(executable) :]
+    marker = f" {option} "
+    marker_index = tail.find(marker)
+    if marker_index < 0:
+        return None
+    value = tail[marker_index + len(marker) :]
+    for terminator in (" --host", " --port", " -c", " --swa-full", " --cache-reuse"):
+        value = value.split(terminator, 1)[0]
+    value = value.strip()
+    return value or None
+
+
 def listener_endpoints(output: str) -> dict[int, set[str]]:
     listeners: dict[int, set[str]] = {}
     current_pid: int | None = None
@@ -152,7 +182,30 @@ def owns_exact_loopback_listener(returncode: int, output: str, pid: int, port: i
     }
 
 
-def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, ProcessRow]:
+def owns_exact_model_stdin(returncode: int, output: str, pid: int, model: Path) -> bool:
+    current_pid: int | None = None
+    current_fd: str | None = None
+    names: list[str] = []
+    for field in output.splitlines():
+        if field.startswith("p") and field[1:].isdigit():
+            current_pid = int(field[1:])
+        elif field.startswith("f"):
+            current_fd = field[1:]
+        elif field.startswith("n") and current_pid == pid and current_fd == "0":
+            names.append(field[1:])
+    if returncode != 0 or len(names) != 1:
+        return False
+    snapshot_name = names[0].removesuffix(" (deleted)")
+    snapshot = Path(snapshot_name)
+    return (
+        snapshot.parent.resolve() == model.resolve().parent
+        and snapshot.name.startswith(".model-runtime-")
+    )
+
+
+def require_owned_model(
+    app_binary: Path, port: int, model_path: Path | None = None
+) -> tuple[ProcessRow, ProcessRow]:
     rows = process_table()
     app_matches = [row for row in rows.values() if same_file(row.executable, app_binary)]
     if len(app_matches) != 1:
@@ -180,6 +233,29 @@ def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, Proces
         raise RuntimeError(f"llama-server child is not configured for port {port}")
     if option_values(server, "--host") != ["127.0.0.1"]:
         raise RuntimeError("llama-server child is not configured for loopback only")
+    if model_path is not None:
+        expected_model = model_path.resolve()
+        if not expected_model.is_file():
+            raise RuntimeError(f"proof model is missing from isolated external storage: {expected_model}")
+        model_value = path_option_value(server, "-m")
+        if model_value != "/dev/fd/0":
+            raise RuntimeError(
+                "llama-server child is not consuming its inherited verified model descriptor"
+            )
+        if expected_model.is_relative_to(app_binary.resolve().parent.parent):
+            raise RuntimeError("proof model must not be stored inside the signed app bundle")
+        model_descriptor = subprocess.run(
+            ["lsof", "-nP", "-a", "-p", str(server.pid), "-d", "0", "-Fpfn"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if not owns_exact_model_stdin(
+            model_descriptor.returncode, model_descriptor.stdout, server.pid, expected_model
+        ):
+            raise RuntimeError(
+                "llama-server stdin is not the exact isolated external proof model"
+            )
     listener = subprocess.run(
         [
             "lsof", "-nP", "-a", "-p", str(server.pid),
@@ -197,7 +273,7 @@ def require_owned_model(app_binary: Path, port: int) -> tuple[ProcessRow, Proces
 
 
 def require_processes(args: argparse.Namespace) -> tuple[ProcessRow, ProcessRow, list[ProcessRow]]:
-    app, server = require_owned_model(args.app_binary, args.port)
+    app, server = require_owned_model(args.app_binary, args.port, args.model_path)
     if args.synthetic_helper_proof:
         if app.arguments != ["--release-proof"]:
             raise RuntimeError("synthetic helper proof requires the app's exact --release-proof mode")
@@ -322,6 +398,17 @@ def selftest() -> None:
     assert server.executable == "/tmp/App With Spaces/llama-server"
     assert option_values(server, "--host") == ["127.0.0.1"]
     assert option_values(server, "--port") == ["17872"]
+    spaced_model = ProcessRow(
+        4243,
+        4000,
+        "/tmp/App With Spaces/llama-server -m /tmp/proof store/model.gguf "
+        "--host 127.0.0.1 --port 17872",
+    )
+    assert path_option_value(spaced_model, "-m") == "/tmp/proof store/model.gguf"
+    model_fd = "p4243\nf0\nn/tmp/proof store/.model-runtime-123 (deleted)\n"
+    assert owns_exact_model_stdin(0, model_fd, 4243, Path("/tmp/proof store/model.gguf"))
+    assert not owns_exact_model_stdin(0, model_fd, 4243, Path("/tmp/other.gguf"))
+    assert not owns_exact_model_stdin(1, model_fd, 4243, Path("/tmp/proof store/model.gguf"))
     assert option_values(
         ProcessRow(1, 0, "/tmp/llama-server --port 17872 --port 9999"),
         "--port",
@@ -443,11 +530,15 @@ def main() -> int:
 
     proves = [
         "the exact packaged Tilde process and its exact helper child were observed",
+        "llama-server inherited an unlinked verified snapshot descriptor from isolated external storage"
+        if args.model_path is not None
+        else "the helper used the model path supplied by the app",
         "the helper returned a nonempty completion for the fixed synthetic prompt",
         "no non-loopback open socket was visible for the observed processes during the window",
     ]
     does_not_prove = [
         "packet-level absence of network traffic",
+        "the separate first-run HTTPS model-download phase",
         "a Tilde-to-input-method Unix-socket request round trip",
         "inline rendering or acceptance in a real editor",
     ]
@@ -464,6 +555,7 @@ def main() -> int:
         "observation_kind": "open-socket metadata via lsof; not packet capture",
         "app_pid": app.pid,
         "llama_server_pid": server.pid,
+        "model_path": str(args.model_path.resolve()) if args.model_path is not None else None,
         "inline_ghost_ime_pids": [row.pid for row in imes],
         "input_method_observation": input_method_observation,
         "samples": samples,
@@ -474,11 +566,14 @@ def main() -> int:
         "failures": failures,
         "stimulation": (
             "direct POST to the exact packaged llama-server child over loopback "
-            "using a fixed synthetic prompt"
+            "using a fixed synthetic prompt after the separate model-download phase"
         ),
         "proves": proves,
         "does_not_prove": does_not_prove,
-        "privacy": "Only process/socket metadata and synthetic completion length are saved.",
+        "privacy": (
+            "Only process/socket metadata, the isolated proof-model path, and "
+            "synthetic completion length are saved; no user-derived request data is used."
+        ),
     }
     args.proof_out.parent.mkdir(parents=True, exist_ok=True)
     args.proof_out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")

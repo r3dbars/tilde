@@ -51,6 +51,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     struct Assets: Sendable {
         let binary: String
         let model: String
+        let modelInput: FileHandle?
+
+        init(binary: String, model: String, modelInput: FileHandle? = nil) {
+            self.binary = binary
+            self.model = model
+            self.modelInput = modelInput
+        }
     }
 
     private let lifecycle = DispatchQueue(label: "bar.r3d.tilde.llama-lifecycle")
@@ -64,14 +71,24 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var launchedAt = Date.distantPast
     private var restartPolicy = LlamaRestartPolicy()
 
-    init(port: Int, assetResolver: @escaping @Sendable () -> Assets? = resolveAssets) {
+    init(
+        port: Int,
+        modelFileProvider: @escaping @Sendable () -> VerifiedModelFile? = developmentModelFile,
+        assetResolver: (@Sendable () -> Assets?)? = nil
+    ) {
         precondition((1...65_535).contains(port))
         self.port = port
-        self.assetResolver = assetResolver
+        self.assetResolver = assetResolver ?? {
+            Self.resolveAssets(modelFileProvider: modelFileProvider)
+        }
     }
 
     func start() {
-        lifecycle.async { [weak self] in self?.prepareLaunch() }
+        lifecycle.async { [weak self] in
+            guard let self else { return }
+            stopped = false
+            prepareLaunch()
+        }
     }
 
     func stop() {
@@ -110,27 +127,36 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         }
     }
 
-    /// Release builds use only their exact embedded, sealed pair. Debug builds
-    /// may use explicit development overrides when neither embedded asset exists.
-    private static func resolveAssets() -> Assets? {
+    /// The executable remains nested inside the signed app. The model is
+    /// supplied only after ModelManager has verified the external bytes.
+    private static func resolveAssets(modelFileProvider: @Sendable () -> VerifiedModelFile?) -> Assets? {
         let binary = Bundle.main.bundlePath + "/Contents/Helpers/llama-server"
-        let model = Bundle.main.bundlePath + "/Contents/Resources/bundled-model.gguf"
 #if DEBUG
-        let hasPackagedAsset = FileManager.default.fileExists(atPath: binary)
-            || FileManager.default.fileExists(atPath: model)
-        if !hasPackagedAsset {
+        if !FileManager.default.fileExists(atPath: binary) {
             let environment = ProcessInfo.processInfo.environment
             guard let devBinary = environment["TILDE_DEV_LLAMA_SERVER"],
-                  let devModel = environment["TILDE_DEV_MODEL_PATH"],
                   FileManager.default.isExecutableFile(atPath: devBinary),
-                  usableModel(devModel) else { return nil }
-            return Assets(binary: devBinary, model: devModel)
+                  let model = modelFileProvider() else { return nil }
+            return Assets(binary: devBinary, model: "/dev/fd/0", modelInput: model.handle)
         }
 #endif
         guard validCurrentBundleSeal(),
               FileManager.default.isExecutableFile(atPath: binary),
-              usableModel(model) else { return nil }
-        return Assets(binary: binary, model: model)
+              let model = modelFileProvider() else { return nil }
+        return Assets(binary: binary, model: "/dev/fd/0", modelInput: model.handle)
+    }
+
+    private static func developmentModelFile() -> VerifiedModelFile? {
+#if DEBUG
+        guard let path = ProcessInfo.processInfo.environment["TILDE_DEV_MODEL_PATH"],
+              usableModel(path),
+              let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        return VerifiedModelFile(url: URL(fileURLWithPath: path), handle: handle)
+#else
+        return nil
+#endif
     }
 
     private static func validCurrentBundleSeal() -> Bool {
@@ -195,6 +221,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         ]
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice
+        if let modelInput = assets.modelInput { child.standardInput = modelInput }
         child.terminationHandler = { [weak self, weak child] _ in
             guard let self, let child else { return }
             lifecycle.async { self.handleExit(child) }
