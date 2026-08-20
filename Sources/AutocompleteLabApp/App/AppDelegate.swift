@@ -308,6 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or the exit races the log queue and the line never lands.
         DiagnosticsLog.shared.record("shutdown", metadata: [:])
         DiagnosticsLog.shared.flush()
+        LocalOCREvaluationStore.shared.flush()
         if launchMode == .production { ghostBrainServerHost.stop() }
         llamaServerHost.stop()
         if let frontmostAppObserver {

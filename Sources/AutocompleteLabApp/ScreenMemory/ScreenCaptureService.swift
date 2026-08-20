@@ -100,7 +100,8 @@ actor ScreenCaptureService {
     /// decisions run one additional full OCR pass over the same in-memory
     /// image and persist both outputs to the bounded owner-only corpus.
     private let localOCREvaluationEnabled: @Sendable () -> Bool
-    private let recordOCREvaluation: @Sendable (LocalOCREvaluationSample) -> Void
+    private let localOCREvaluationGeneration: @Sendable () -> UInt64
+    private let recordOCREvaluation: @Sendable (LocalOCREvaluationSample, UInt64) -> Void
 
     init(
         enabled: @escaping @Sendable () -> Bool,
@@ -123,8 +124,11 @@ actor ScreenCaptureService {
             LocalOCREvaluationStore.isAvailableInCurrentBuild
                 && TildeSettings().localOCREvaluationEnabled
         },
-        recordOCREvaluation: @escaping @Sendable (LocalOCREvaluationSample) -> Void = {
-            LocalOCREvaluationStore.shared.record($0)
+        localOCREvaluationGeneration: @escaping @Sendable () -> UInt64 = {
+            LocalOCREvaluationStore.shared.generationToken()
+        },
+        recordOCREvaluation: @escaping @Sendable (LocalOCREvaluationSample, UInt64) -> Void = {
+            LocalOCREvaluationStore.shared.record($0, generation: $1)
         }
     ) {
         self.enabled = enabled
@@ -138,6 +142,7 @@ actor ScreenCaptureService {
         self.diagnostics = diagnostics
         self.incrementalOCREnabled = incrementalOCREnabled
         self.localOCREvaluationEnabled = localOCREvaluationEnabled
+        self.localOCREvaluationGeneration = localOCREvaluationGeneration
         self.recordOCREvaluation = recordOCREvaluation
     }
 
@@ -611,25 +616,6 @@ actor ScreenCaptureService {
             }
 
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
-            if localOCREvaluationEnabled(), ocrScope != "full" {
-                do {
-                    let (referenceBlocks, referenceMilliseconds) = try await fullWindowOCR()
-                    recordOCREvaluation(LocalOCREvaluationSample(
-                        capturedAt: moment,
-                        captureKind: "window",
-                        incrementalScope: ocrScope,
-                        incrementalMilliseconds: ocrMilliseconds,
-                        fullReferenceMilliseconds: referenceMilliseconds,
-                        incrementalBlocks: blocks,
-                        fullReferenceBlocks: referenceBlocks
-                    ))
-                } catch {
-                    diagnostics(
-                        "ocr-evaluation-reference-failed",
-                        ["kind": "window", "scope": ocrScope]
-                    )
-                }
-            }
             let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
             latestSnapshot = snapshot
             lastCaptureAt = moment
@@ -643,6 +629,14 @@ actor ScreenCaptureService {
                     "kind": "window",
                     "ocrScope": ocrScope,
                 ]
+            )
+            await recordLocalOCREvaluationIfEnabled(
+                capturedAt: moment,
+                captureKind: "window",
+                incrementalScope: ocrScope,
+                incrementalMilliseconds: ocrMilliseconds,
+                incrementalBlocks: blocks,
+                referenceOCR: fullWindowOCR
             )
             return .captured(blockCount: blocks.count)
         } catch {
@@ -829,25 +823,6 @@ actor ScreenCaptureService {
             // part of the "capture+OCR" duty cycle the plan's power budget
             // assertions (script/capture_power_probe.sh) measure.
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
-            if localOCREvaluationEnabled(), ocrScope != "full" {
-                do {
-                    let (referenceBlocks, referenceMilliseconds) = try await fullDisplayOCR()
-                    recordOCREvaluation(LocalOCREvaluationSample(
-                        capturedAt: moment,
-                        captureKind: "display",
-                        incrementalScope: ocrScope,
-                        incrementalMilliseconds: ocrMilliseconds,
-                        fullReferenceMilliseconds: referenceMilliseconds,
-                        incrementalBlocks: blocks,
-                        fullReferenceBlocks: referenceBlocks
-                    ))
-                } catch {
-                    diagnostics(
-                        "ocr-evaluation-reference-failed",
-                        ["kind": "display", "scope": ocrScope]
-                    )
-                }
-            }
             let snapshot = ScreenSnapshot(
                 capturedAt: moment,
                 displayID: display.displayID,
@@ -865,6 +840,14 @@ actor ScreenCaptureService {
                     "kind": "display",
                     "ocrScope": ocrScope,
                 ]
+            )
+            await recordLocalOCREvaluationIfEnabled(
+                capturedAt: moment,
+                captureKind: "display",
+                incrementalScope: ocrScope,
+                incrementalMilliseconds: ocrMilliseconds,
+                incrementalBlocks: blocks,
+                referenceOCR: fullDisplayOCR
             )
             return .captured(blockCount: blocks.count)
         } catch {
@@ -888,6 +871,59 @@ actor ScreenCaptureService {
     /// math that CAN be proven without a live display.
     static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
+    }
+
+    func recordLocalOCREvaluationIfEnabled(
+        capturedAt: Date,
+        captureKind: String,
+        incrementalScope: String,
+        incrementalMilliseconds: Int,
+        incrementalBlocks: [ScreenSnapshot.TextBlock],
+        referenceOCR: () async throws -> ([ScreenSnapshot.TextBlock], Int)
+    ) async {
+        let generation = localOCREvaluationGeneration()
+        guard incrementalScope != "full", localOCREvaluationEnabled() else { return }
+        do {
+            let (referenceBlocks, referenceMilliseconds) = try await referenceOCR()
+            // Consent and safety settings can change while Vision is working.
+            // Re-check them at the persistence boundary, then strip any app
+            // the user excluded during the in-flight pass.
+            guard enabled(),
+                  permissionGranted(),
+                  localOCREvaluationEnabled(),
+                  !screenLocked(),
+                  !secureInputActive() else { return }
+            let exclusions = excludedApps()
+            let allowed: (ScreenSnapshot.TextBlock) -> Bool = { block in
+                guard let owner = block.windowOwnerBundleIdentifier else { return false }
+                return !exclusions.contains(owner)
+            }
+            recordOCREvaluation(
+                LocalOCREvaluationSample(
+                    capturedAt: capturedAt,
+                    captureKind: captureKind,
+                    incrementalScope: incrementalScope,
+                    incrementalMilliseconds: incrementalMilliseconds,
+                    fullReferenceMilliseconds: referenceMilliseconds,
+                    incrementalBlocks: incrementalBlocks.filter(allowed),
+                    fullReferenceBlocks: referenceBlocks.filter(allowed)
+                ),
+                generation
+            )
+            diagnostics(
+                "ocr-evaluation-reference-completed",
+                [
+                    "kind": captureKind,
+                    "scope": incrementalScope,
+                    "referenceMilliseconds": String(referenceMilliseconds),
+                ]
+            )
+        } catch {
+            diagnostics(
+                "ocr-evaluation-reference-failed",
+                ["kind": captureKind, "scope": incrementalScope]
+            )
+        }
     }
 
     private func record(_ decision: CaptureTriggerPolicy.Decision) {

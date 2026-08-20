@@ -156,11 +156,11 @@ private struct TildeSettingsView: View {
 
                     LabeledContent("Evaluation data", value: model.localOCREvaluationData)
                     Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
-                        .disabled(model.localOCREvaluationData == "No samples")
+                        .disabled(!model.hasLocalOCREvaluationSamples)
                     Button("Delete Evaluation Data…", role: .destructive) {
                         confirmDeleteOCREvaluation = true
                     }
-                    .disabled(model.isDeletingOCREvaluationData || model.localOCREvaluationData == "No samples")
+                    .disabled(model.isDeletingOCREvaluationData || !model.hasLocalOCREvaluationSamples)
                 }
             }
 
@@ -182,6 +182,12 @@ private struct TildeSettingsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .frame(minWidth: 500, minHeight: 680)
+        .task {
+            while !Task.isCancelled {
+                await model.refreshLocalOCREvaluationSummary()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
         .confirmationDialog(
             "Turn off Screen Memory?",
             isPresented: $confirmDisableScreenMemory

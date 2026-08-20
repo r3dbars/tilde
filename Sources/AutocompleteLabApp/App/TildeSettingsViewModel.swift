@@ -21,6 +21,7 @@ final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var personalSuggestionsEnabled = false
     @Published private(set) var localOCREvaluationAvailable = false
     @Published private(set) var localOCREvaluationEnabled = false
+    @Published private(set) var hasLocalOCREvaluationSamples = false
     @Published private(set) var localOCREvaluationData = "No samples"
     @Published private(set) var excludedApplications: [ExcludedApplication] = []
     @Published private(set) var learningDataSize = "No learning data"
@@ -57,15 +58,7 @@ final class TildeSettingsViewModel: ObservableObject {
         localOCREvaluationAvailable = LocalOCREvaluationStore.isAvailableInCurrentBuild
         localOCREvaluationEnabled = localOCREvaluationAvailable
             && settings.localOCREvaluationEnabled
-        let evaluationSummary = LocalOCREvaluationStore.shared.summary()
-        if evaluationSummary.sampleCount == 0 {
-            localOCREvaluationData = "No samples"
-        } else {
-            let formatter = ByteCountFormatter()
-            formatter.allowedUnits = [.useKB, .useMB]
-            formatter.countStyle = .file
-            localOCREvaluationData = "\(evaluationSummary.sampleCount) samples · \(formatter.string(fromByteCount: evaluationSummary.approximateBytes))"
-        }
+        applyLocalOCREvaluationSummary(LocalOCREvaluationStore.shared.summary())
         excludedApplications = personalHistory.excludedApps
             .map(Self.describeApplication)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -84,6 +77,26 @@ final class TildeSettingsViewModel: ObservableObject {
             } else {
                 self.learningDataSize = "No learning data"
             }
+        }
+    }
+
+    func refreshLocalOCREvaluationSummary() async {
+        let summary = await Task.detached(priority: .utility) {
+            LocalOCREvaluationStore.shared.summary()
+        }.value
+        guard !Task.isCancelled else { return }
+        applyLocalOCREvaluationSummary(summary)
+    }
+
+    private func applyLocalOCREvaluationSummary(_ evaluationSummary: LocalOCREvaluationSummary) {
+        hasLocalOCREvaluationSamples = evaluationSummary.sampleCount > 0
+        if evaluationSummary.sampleCount == 0 {
+            localOCREvaluationData = "No samples"
+        } else {
+            let formatter = ByteCountFormatter()
+            formatter.allowedUnits = [.useKB, .useMB]
+            formatter.countStyle = .file
+            localOCREvaluationData = "\(evaluationSummary.sampleCount) samples · \(formatter.string(fromByteCount: evaluationSummary.approximateBytes))"
         }
     }
 
@@ -170,6 +183,7 @@ final class TildeSettingsViewModel: ObservableObject {
         localOCREvaluationEnabled = false
         LocalOCREvaluationStore.shared.flush()
         if LocalOCREvaluationStore.shared.deleteAll() {
+            hasLocalOCREvaluationSamples = false
             localOCREvaluationData = "No samples"
             message = "OCR evaluation samples were deleted and recording was turned off."
         } else {

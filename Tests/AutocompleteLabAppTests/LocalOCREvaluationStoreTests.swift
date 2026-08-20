@@ -5,6 +5,13 @@ import Testing
 
 @Suite("Local OCR evaluation store")
 struct LocalOCREvaluationStoreTests {
+    @Test("Raw corpus is available only to explicitly labeled development builds")
+    func availabilityRequiresDevVersion() {
+        #expect(LocalOCREvaluationStore.isAvailable(bundleVersion: "0.1.0-dev"))
+        #expect(!LocalOCREvaluationStore.isAvailable(bundleVersion: "0.1.0"))
+        #expect(!LocalOCREvaluationStore.isAvailable(bundleVersion: nil))
+    }
+
     private func temporaryLocation() -> URL {
         URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("tilde-ocr-evaluation-tests", isDirectory: true)
@@ -47,7 +54,7 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location)
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
 
         for index in 0..<(LocalOCREvaluationStore.maximumSamples + 5) {
             store.record(sample(index: index))
@@ -75,7 +82,7 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location)
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
         let oversized = String(repeating: "x", count: LocalOCREvaluationStore.maximumRecordBytes + 1)
 
         store.record(sample(index: 0, text: oversized))
@@ -90,12 +97,54 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location)
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
         store.record(sample(index: 1))
         store.flush()
         #expect(store.summary().sampleCount == 1)
 
         #expect(store.deleteAll())
         #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))
+    }
+
+    @Test("Delete invalidates an in-flight capture so it cannot recreate the corpus")
+    func deleteInvalidatesPriorGeneration() {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let inFlightGeneration = store.generationToken()
+
+        #expect(store.deleteAll())
+        store.record(sample(index: 1), generation: inFlightGeneration)
+        store.flush()
+
+        #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+    }
+
+    @Test("Byte retention cap removes oldest records before the sample-count cap")
+    func recordsRespectByteCap() throws {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let payload = String(repeating: "x", count: 900_000)
+
+        for index in 0..<12 {
+            store.record(sample(index: index, text: "\(index)-\(payload)"))
+        }
+        store.flush()
+
+        let summary = store.summary()
+        #expect(summary.approximateBytes <= Int64(LocalOCREvaluationStore.maximumBytes))
+        #expect(summary.sampleCount < 12)
+        let lines = [UInt8](try Data(contentsOf: location))
+            .split(separator: UInt8(0x0A), omittingEmptySubsequences: true)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let first = try decoder.decode(LocalOCREvaluationSample.self, from: Data(lines[0]))
+        let last = try decoder.decode(LocalOCREvaluationSample.self, from: Data(lines.last!))
+        #expect(first.capturedAt > Date(timeIntervalSince1970: 0))
+        #expect(last.capturedAt == Date(timeIntervalSince1970: 11))
     }
 }
