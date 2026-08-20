@@ -1,4 +1,5 @@
 import AutocompleteLabCore
+import Carbon.HIToolbox.Events
 import Foundation
 
 /// Explicit development-only corpus for comparing incremental OCR with a
@@ -71,26 +72,55 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
 
     static var isAvailableInCurrentBuild: Bool {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return version?.hasSuffix("-dev") == true
+        return isAvailable(bundleVersion: version)
+    }
+
+    static func isAvailable(bundleVersion: String?) -> Bool {
+        bundleVersion?.hasSuffix("-dev") == true
     }
 
     let location: URL
     private let queue = DispatchQueue(label: "bar.r3d.tilde.local-ocr-evaluation")
     private let encoder: JSONEncoder
+    private let mayPersist: @Sendable () -> Bool
+    private var generation: UInt64 = 0
 
     init(
         location: URL = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tilde/OCR Evaluation/samples.jsonl")
+            .appendingPathComponent("Tilde/OCR Evaluation/samples.jsonl"),
+        mayPersist: @escaping @Sendable () -> Bool = {
+            LocalOCREvaluationStore.isAvailableInCurrentBuild
+                && TildeSettings().localOCREvaluationEnabled
+                && TildeSettings().screenMemoryEnabled
+                && ScreenRecordingPermission.isGranted()
+                && !ScreenLockObserver.isLocked()
+                && !IsSecureEventInputEnabled()
+        }
     ) {
         self.location = location
+        self.mayPersist = mayPersist
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
     }
 
     func record(_ sample: LocalOCREvaluationSample) {
-        queue.async { [self] in persist(sample) }
+        record(sample, generation: generationToken())
+    }
+
+    /// A capture holds this token while its full-reference OCR is running.
+    /// Deletion advances the generation, so a late result from before the
+    /// delete can never recreate the raw corpus afterward.
+    func generationToken() -> UInt64 {
+        queue.sync { generation }
+    }
+
+    func record(_ sample: LocalOCREvaluationSample, generation token: UInt64) {
+        queue.async { [self] in
+            guard token == generation else { return }
+            persist(sample)
+        }
     }
 
     func flush() { queue.sync {} }
@@ -101,11 +131,15 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
 
     @discardableResult
     func deleteAll() -> Bool {
-        queue.sync { SecureLocalStorage.removeOwnerOnlyFile(at: location) }
+        queue.sync {
+            generation &+= 1
+            return SecureLocalStorage.removeOwnerOnlyFile(at: location)
+        }
     }
 
     private func persist(_ sample: LocalOCREvaluationSample) {
         do {
+            guard mayPersist() else { return }
             let encoded = try encoder.encode(sample)
             guard encoded.count <= Self.maximumRecordBytes,
                   let handle = SecureLocalStorage.openFileForReadingAndAppending(at: location) else {
@@ -113,6 +147,9 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             }
             defer { try? handle.close() }
 
+            let existingSize = try handle.seekToEnd()
+            guard existingSize <= UInt64(Self.maximumBytes) else { return }
+            try handle.seek(toOffset: 0)
             let existing = try handle.readToEnd() ?? Data()
             let newline: UInt8 = 0x0A
             var records = [UInt8](existing)
@@ -133,6 +170,10 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
                 output.append(record)
                 output.append(0x0A)
             }
+            // Re-check immediately before the only raw disk mutation. This
+            // closes the async queue gap when consent, Screen Memory, TCC,
+            // lock state, or Secure Event Input changes after record().
+            guard mayPersist() else { return }
             try handle.truncate(atOffset: 0)
             // FileHandle truncation does not promise to reset the current
             // offset. Seek after truncating or repeated rewrites can create
@@ -151,8 +192,15 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             return LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0)
         }
         defer { try? handle.close() }
-        guard let data = try? handle.readToEnd() else {
+        guard let size = try? handle.seekToEnd() else {
             return LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0)
+        }
+        guard size <= UInt64(Self.maximumBytes) else {
+            return LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: Int64(size))
+        }
+        try? handle.seek(toOffset: 0)
+        guard let data = try? handle.readToEnd() else {
+            return LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: Int64(size))
         }
         return LocalOCREvaluationSummary(
             sampleCount: [UInt8](data).split(
