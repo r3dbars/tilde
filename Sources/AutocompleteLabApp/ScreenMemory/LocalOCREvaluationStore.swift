@@ -201,7 +201,10 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
         let exclusions = excludedApps()
         return (sample.incrementalBlocks + sample.fullReferenceBlocks).allSatisfy { block in
             guard let owner = block.ownerBundleIdentifier else { return false }
-            return !exclusions.contains(owner)
+            return !DefaultExcludedApps.isExcluded(
+                owner,
+                configuredExcludedApps: exclusions
+            )
         }
     }
 

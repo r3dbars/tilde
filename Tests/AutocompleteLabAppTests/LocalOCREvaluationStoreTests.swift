@@ -19,17 +19,21 @@ struct LocalOCREvaluationStoreTests {
             .appendingPathComponent("samples.jsonl")
     }
 
-    private func sample(index: Int, text: String? = nil) -> LocalOCREvaluationSample {
+    private func sample(
+        index: Int,
+        text: String? = nil,
+        owner: String = "com.example.Editor"
+    ) -> LocalOCREvaluationSample {
         let candidate = ScreenSnapshot.TextBlock(
             text: text ?? "incremental-\(index)",
             boundingBox: NormalizedDisplayRect(x: 0.1, y: 0.2, width: 0.3, height: 0.04),
-            windowOwnerBundleIdentifier: "com.example.Editor",
+            windowOwnerBundleIdentifier: owner,
             windowTitle: "Draft"
         )
         let reference = ScreenSnapshot.TextBlock(
             text: "reference-\(index)",
             boundingBox: NormalizedDisplayRect(x: 0.1, y: 0.2, width: 0.3, height: 0.04),
-            windowOwnerBundleIdentifier: "com.example.Editor",
+            windowOwnerBundleIdentifier: owner,
             windowTitle: "Draft"
         )
         return LocalOCREvaluationSample(
@@ -104,6 +108,24 @@ struct LocalOCREvaluationStoreTests {
         )
 
         store.record(sample(index: 1))
+        store.flush()
+
+        #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+    }
+
+    @Test("Persistence boundary always rejects password-manager blocks")
+    func rejectsAlwaysExcludedOwner() {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalOCREvaluationStore(
+            location: location,
+            mayPersist: { true },
+            excludedApps: { [] }
+        )
+
+        store.record(sample(index: 1, owner: "com.1password.1password"))
         store.flush()
 
         #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))

@@ -162,6 +162,18 @@ private struct TildeSettingsView: View {
                     }
                     .disabled(model.isDeletingOCREvaluationData || !model.hasLocalOCREvaluationSamples)
                 }
+            } else if model.hasLocalOCREvaluationSamples {
+                Section("OCR Evaluation Data") {
+                    Text("Raw OCR evaluation data from a development build remains on this Mac. Recording is unavailable in this build.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
+                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
+                    Button("Delete Evaluation Data…", role: .destructive) {
+                        confirmDeleteOCREvaluation = true
+                    }
+                    .disabled(model.isDeletingOCREvaluationData)
+                }
             }
 
             Section("Support") {
