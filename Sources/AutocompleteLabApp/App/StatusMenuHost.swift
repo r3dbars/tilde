@@ -10,6 +10,7 @@ final class StatusMenuHost: NSObject {
 
     private var statusItem: NSStatusItem?
     private var statusLineItem: NSMenuItem?
+    private var todayItem: NSMenuItem?
     private var engineItem: NSMenuItem?
     private var screenMemoryItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
@@ -17,6 +18,7 @@ final class StatusMenuHost: NSObject {
     private var setupOrSettingsItem: NSMenuItem?
 
     private var settingsWindow: TildeSettingsWindowController?
+    private var yourTildeWindow: YourTildeWindowController?
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
@@ -31,12 +33,14 @@ final class StatusMenuHost: NSObject {
 
         let menu = NSMenu()
         statusLineItem = addInfoRow(to: menu, "Model is Loading")
+        todayItem = addInfoRow(to: menu, "Today: 0 words saved")
         engineItem = addInfoRow(to: menu, "Engine: Gemma (starting…)")
         screenMemoryItem = addInfoRow(to: menu, "Screen Memory: checking…")
         menu.addItem(.separator())
 
         suggestionsItem = addAction(to: menu, "Tilde On", #selector(toggleSuggestions(_:)))
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
+        addAction(to: menu, "Your Tilde…", #selector(openYourTilde(_:)))
         setupOrSettingsItem = addAction(
             to: menu,
             "Settings…",
@@ -56,6 +60,7 @@ final class StatusMenuHost: NSObject {
         guard let appDelegate else { return }
         let state = appDelegate.applicationState()
         statusLineItem?.title = state.statusText
+        todayItem?.title = "Today: \(TildeStats.todayWordsAccepted().formatted()) words saved"
         engineItem?.title = appDelegate.engineStatusLine()
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
         setupOrSettingsItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Settings…"
@@ -71,6 +76,7 @@ final class StatusMenuHost: NSObject {
         refreshScreenMemoryLine()
         refreshIcon(for: state.iconAppearance)
         settingsWindow?.refresh()
+        yourTildeWindow?.refresh()
     }
 
     @objc private func toggleSuggestions(_ sender: Any?) {
@@ -101,6 +107,16 @@ final class StatusMenuHost: NSObject {
             )
         }
         settingsWindow?.show()
+    }
+
+    @objc private func openYourTilde(_ sender: Any?) {
+        if yourTildeWindow == nil {
+            yourTildeWindow = YourTildeWindowController(
+                personalHistory: personalHistory,
+                openSettings: { [weak self] in self?.openSetupOrSettings(nil) }
+            )
+        }
+        yourTildeWindow?.show()
     }
 
     @objc private func quit(_ sender: Any?) {
