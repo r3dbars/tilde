@@ -3,19 +3,28 @@ import SwiftUI
 
 @MainActor
 final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate {
-    private let model: TildeSettingsViewModel
-    private var refreshTimer: Timer?
+    private let settingsModel: TildeSettingsViewModel
+    private let progressModel: YourTildeViewModel
+    private var settingsRefreshTimer: Timer?
+    private var progressRefreshTimer: Timer?
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
-        model = TildeSettingsViewModel(appDelegate: appDelegate, personalHistory: personalHistory)
-        let rootView = TildeSettingsView(model: model)
+        settingsModel = TildeSettingsViewModel(
+            appDelegate: appDelegate,
+            personalHistory: personalHistory
+        )
+        progressModel = YourTildeViewModel(personalHistory: personalHistory)
+        let rootView = TildeSettingsView(
+            model: settingsModel,
+            progressModel: progressModel
+        )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 500, height: 820),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Tilde Settings"
+        window.title = "Tilde"
         window.contentViewController = NSHostingController(rootView: rootView)
         window.isReleasedWhenClosed = false
         window.center()
@@ -27,7 +36,8 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
     required init?(coder: NSCoder) { nil }
 
     func show() {
-        model.refresh()
+        settingsModel.refresh()
+        progressModel.refresh()
         startRefreshing()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -35,26 +45,36 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
     }
 
     func refresh() {
-        model.refresh()
+        guard window?.isVisible == true else { return }
+        settingsModel.refresh()
+        progressModel.refresh()
     }
 
     func windowWillClose(_ notification: Notification) {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
+        settingsRefreshTimer?.invalidate()
+        settingsRefreshTimer = nil
+        progressRefreshTimer?.invalidate()
+        progressRefreshTimer = nil
     }
 
     private func startRefreshing() {
-        guard refreshTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.model.refresh() }
+        guard settingsRefreshTimer == nil, progressRefreshTimer == nil else { return }
+        let settingsTimer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.settingsModel.refresh() }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        refreshTimer = timer
+        let progressTimer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.progressModel.refresh() }
+        }
+        RunLoop.main.add(settingsTimer, forMode: .common)
+        RunLoop.main.add(progressTimer, forMode: .common)
+        settingsRefreshTimer = settingsTimer
+        progressRefreshTimer = progressTimer
     }
 }
 
 private struct TildeSettingsView: View {
     @ObservedObject var model: TildeSettingsViewModel
+    @ObservedObject var progressModel: YourTildeViewModel
     @State private var confirmDisableScreenMemory = false
     @State private var confirmEnableLearning = false
     @State private var confirmDeleteLearning = false
@@ -64,6 +84,10 @@ private struct TildeSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Your Tilde") {
+                YourTildeSummaryView(model: progressModel)
+            }
+
             Section("General") {
                 Toggle("Tilde On", isOn: Binding(
                     get: { model.suggestionsEnabled },
