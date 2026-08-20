@@ -40,8 +40,8 @@ final class GhostInputController: IMKInputController {
         keyCode: UInt16,
         modifiers: NSEvent.ModifierFlags
     ) -> Bool {
-        keyCode == 50
-            && modifiers.intersection(.deviceIndependentFlagsMask) == [.shift]
+        let shortcutModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .function]
+        return keyCode == 50 && modifiers.intersection(shortcutModifiers).isEmpty
     }
 
     static func trailingContextRange(
@@ -182,7 +182,7 @@ final class GhostInputController: IMKInputController {
             if !accepted { breakHistorySegment() }
             return accepted
 
-        case 50: // Shift-backtick (`~`) accepts the whole visible suggestion.
+        case 50: // The physical backtick/tilde key accepts the whole visible suggestion.
             guard Self.shouldAcceptWholeSuggestion(
                 keyCode: event.keyCode,
                 modifiers: modifiers
