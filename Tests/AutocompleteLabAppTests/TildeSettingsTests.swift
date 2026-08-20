@@ -49,6 +49,26 @@ struct TildeSettingsTests {
         #expect(app.object(forKey: "LaunchAtLoginEnabled") as? Bool == false)
     }
 
+    @Test("Setup progress stays in the app defaults domain")
+    func setupProgress() {
+        let keyboardName = "tilde.tests.keyboard.\(UUID().uuidString)"
+        let appName = "tilde.tests.app.\(UUID().uuidString)"
+        let keyboard = UserDefaults(suiteName: keyboardName)!
+        let app = UserDefaults(suiteName: appName)!
+        keyboard.removePersistentDomain(forName: keyboardName)
+        app.removePersistentDomain(forName: appName)
+        let settings = TildeSettings(keyboard: keyboard, app: app)
+
+        #expect(settings.setupVersion == 0)
+        #expect(!settings.screenRecordingRequested)
+        settings.setupVersion = TildeSettings.currentSetupVersion
+        settings.screenRecordingRequested = true
+
+        #expect(app.integer(forKey: "SetupVersion") == 1)
+        #expect(app.bool(forKey: "ScreenRecordingRequested"))
+        #expect(keyboard.object(forKey: "SetupVersion") == nil)
+    }
+
     @Test("Incremental OCR's toggle lands in the keyboard domain, on by default, explicitly settable either way")
     func incrementalOCRToggle() {
         let (settings, keyboard) = makeSettings()

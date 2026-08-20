@@ -143,8 +143,7 @@ private struct TildeSettingsView: View {
                 Button("Export Diagnostics…") { model.exportDiagnostics() }
                 Button("Check for Updates…") {}
                     .disabled(true)
-                Button("Run Setup Again…") {}
-                    .disabled(true)
+                Button("Run Setup Again…") { model.runSetupAgain() }
             }
 
             if let message = model.message {
