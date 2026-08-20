@@ -23,6 +23,7 @@ struct TildeApplicationStateTests {
     @Test("Missing permission and runtime failures are honest")
     func attentionStates() {
         #expect(resolve(screenRecordingGranted: false) == .needsPermission)
+        #expect(resolve(keyboardAvailable: false) == .needsKeyboard)
         #expect(resolve(runtime: .starting) == .preparingModel)
         #expect(resolve(runtime: .failed(.assetsMissing)) == .recoverableError)
         #expect(resolve(socketAvailable: false) == .recoverableError)
@@ -33,11 +34,13 @@ struct TildeApplicationStateTests {
         #expect(TildeApplicationState.ready.iconAppearance == .normal)
         #expect(TildeApplicationState.disabled.iconAppearance == .dimmed)
         #expect(TildeApplicationState.needsPermission.iconAppearance == .warning)
+        #expect(TildeApplicationState.needsKeyboard.statusText == "Finish Setup")
     }
 
     private func resolve(
         suggestionsEnabled: Bool = true,
         pausedUntil: Date? = nil,
+        keyboardAvailable: Bool = true,
         screenMemoryEnabled: Bool = true,
         screenRecordingGranted: Bool = true,
         runtime: LlamaRuntimeSnapshot = .ready,
@@ -47,6 +50,7 @@ struct TildeApplicationStateTests {
         TildeApplicationState.resolve(
             suggestionsEnabled: suggestionsEnabled,
             pausedUntil: pausedUntil,
+            keyboardAvailable: keyboardAvailable,
             screenMemoryEnabled: screenMemoryEnabled,
             screenRecordingGranted: screenRecordingGranted,
             runtime: runtime,
@@ -55,4 +59,3 @@ struct TildeApplicationStateTests {
         )
     }
 }
-

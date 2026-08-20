@@ -69,6 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalHistory: personalHistoryController
     )
     private let ghostKeyboardInstallerHost = GhostKeyboardInstallerHost()
+    private var keyboardInstallResult: GhostKeyboardInstallerHost.KeyboardInstallResult?
+    private var setupWindow: TildeSetupWindowController?
+    private var setupLaunchTimer: Timer?
 
     // Screen Memory: capture engine, memory-only (nothing persisted yet —
     // Phase 3 of docs/plans/screen-memory.md), on by default per the
@@ -268,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         llamaServerHost.start()
         if launchMode.allowsDailyDriverMutation {
             registerAsLoginItemIfNeeded()
-            ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
+            keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
             // Any production launch means the brain is wanted again: lift the
             // keyboard watchdog's stay-quiet flag from a deliberate quit.
             UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
@@ -278,68 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             launchMode == .production ? "launch" : "release-proof-launch",
             metadata: [:]
         )
-        if launchMode == .production {
-            // Runs last: everything the daily driver actually needs (socket,
-            // login item, keyboard install) is already underway, so a modal
-            // the user might sit on for a while never delays those. See the
-            // method doc for why this shows on every launch rather than only
-            // the very first one.
-            presentScreenPermissionPromptIfNeeded()
-        }
-    }
-
-    /// The discoverability fix for the bug that motivated requiring this
-    /// permission: Screen Memory used to be reachable only behind a dev flag
-    /// that a menu-bar (`LSUIElement`) app cannot pick up from a Terminal
-    /// shell's environment, so the owner had no UI to find at all and 44
-    /// consecutive captures logged as silently skipped. Now Screen Memory is
-    /// shipped, on by default, and required (2026-08-16 owner directive:
-    /// Tilde withholds suggestions entirely without this permission — see
-    /// `AppDelegate.suggestionsGate` and `GhostBrainServerHost`), so the
-    /// equivalent failure mode is a user who never sees a system permission
-    /// dialog because nothing ever asked, and experiences a silently
-    /// suggestion-less app with no idea why — this makes the ask itself
-    /// impossible to miss.
-    ///
-    /// Shown on every production launch while the toggle is on and the
-    /// permission is still missing, not merely once: the point of this
-    /// screen is maximum discoverability, and a one-time flag risks the same
-    /// invisibility bug in a new shape (dismissed once during a confused
-    /// first run, then never surfaced with equal prominence again). A user
-    /// who wants it to stop asking has a one-click, equally discoverable
-    /// off-ramp: turn the "Screen Memory (local only)" menu toggle off,
-    /// which also stops this prompt (see the `screenMemoryEnabled` guard
-    /// below) — that is a deliberate, plainly-labeled choice to run without
-    /// suggestions, not a way to keep suggestions while dodging the ask.
-    private func presentScreenPermissionPromptIfNeeded() {
-        guard TildeSettings().screenMemoryEnabled else { return }
-        guard !ScreenRecordingPermission.isGranted() else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "Tilde needs Screen Recording access to suggest"
-        alert.informativeText = """
-        Tilde predicts from what's on your screen, using on-device OCR — not just what you type — so it can understand what you're replying to or referencing. That's the whole idea behind Tilde, so without this permission Tilde will not suggest anything at all.
-
-        Screen text never leaves this Mac. It is redacted for secrets before it is used, and you can turn Screen Memory off, exclude specific apps, or delete everything at any time from the Tilde menu.
-
-        You can grant access now, or open System Settings directly. Either way, this is not something Tilde did wrong — macOS just needs you to say yes once.
-        """
-        alert.addButton(withTitle: "Grant Screen Recording Access")
-        alert.addButton(withTitle: "Open System Settings…")
-        alert.addButton(withTitle: "Not Now")
-
-        let choice: String
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            ScreenRecordingPermission.request()
-            choice = "requested"
-        case .alertSecondButtonReturn:
-            NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
-            choice = "settings-opened"
-        default:
-            choice = "dismissed"
-        }
-        DiagnosticsLog.shared.record("screen-permission-prompt", metadata: ["status": choice])
+        if launchMode == .production { finishLaunchSetup() }
     }
 
     /// One of the three required Screen Recording permission checkpoints
@@ -353,11 +295,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// opens). This only refreshes the already-built menu's status text; it
     /// never polls in a loop and never re-requests the system prompt on its
     /// own, so a user who denied access is not re-nagged just for switching
-    /// apps — only `presentScreenPermissionPromptIfNeeded` (launch) and the
-    /// user's own menu click do that.
+    /// apps. The setup window owns every user-facing permission action.
     func applicationDidBecomeActive(_ notification: Notification) {
         guard launchMode == .production else { return }
         statusMenuHost.refresh()
+        setupWindow?.refresh()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -372,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.notificationCenter.removeObserver(frontmostAppObserver)
         }
         windowIdentityPollTimer?.invalidate()
+        setupLaunchTimer?.invalidate()
     }
 
     /// The window-change trigger: macOS already tells every app when a
@@ -389,7 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastFrontWindowIdentity = Self.currentFrontWindowIdentity()
         windowIdentityPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.pollFrontWindowIdentityForScreenMemory()
+            Task { @MainActor in self?.pollFrontWindowIdentityForScreenMemory() }
         }
     }
 
@@ -447,12 +390,128 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return TildeApplicationState.resolve(
             suggestionsEnabled: settings.suggestionsEnabled,
             pausedUntil: settings.pausedUntil,
+            keyboardAvailable: ghostKeyboardInstallerHost.inputSourceStatus() != .missing,
             screenMemoryEnabled: settings.screenMemoryEnabled,
             screenRecordingGranted: ScreenRecordingPermission.isGranted(),
             runtime: llamaServerHost.snapshot,
             socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath),
             now: now
         )
+    }
+
+    func setupState() -> TildeSetupState {
+        return TildeSetupState.resolve(
+            keyboardInstallResult: keyboardInstallResult,
+            inputSourceStatus: ghostKeyboardInstallerHost.inputSourceStatus(),
+            screenRecordingGranted: ScreenRecordingPermission.isGranted(),
+            runtime: llamaServerHost.snapshot,
+            socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath)
+        )
+    }
+
+    func setupRequired() -> Bool {
+        let settings = TildeSettings()
+        return settings.setupVersion < TildeSettings.currentSetupVersion
+            || ghostKeyboardInstallerHost.inputSourceStatus() == .missing
+            || !ScreenRecordingPermission.isGranted()
+    }
+
+    func showSetup() {
+        if setupWindow == nil { setupWindow = TildeSetupWindowController(appDelegate: self) }
+        setupWindow?.show()
+    }
+
+    func completeSetup() {
+        let settings = TildeSettings()
+        settings.setupVersion = TildeSettings.currentSetupVersion
+        statusMenuHost.refresh()
+        setupWindow?.close()
+    }
+
+    func openKeyboardSettings() { ghostKeyboardInstallerHost.openKeyboardSettings() }
+
+    @discardableResult
+    func selectInputSourceIfAvailable() -> Bool {
+        ghostKeyboardInstallerHost.selectInputSourceIfAvailable()
+    }
+
+    func inputSourceIsSelected() -> Bool {
+        ghostKeyboardInstallerHost.inputSourceStatus() == .selected
+    }
+
+    func requestScreenRecordingAccess() {
+        let settings = TildeSettings()
+        settings.screenRecordingRequested = true
+        ScreenRecordingPermission.request()
+    }
+
+    func openScreenRecordingSettings() {
+        NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
+    }
+
+    func retrySetup() {
+        keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
+        setupWindow?.refresh()
+    }
+
+    @discardableResult
+    func relaunchAfterScreenRecordingGrant() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [
+            "-c",
+            "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open -n -F -- \"$1\"",
+            "tilde-relaunch",
+            Bundle.main.bundlePath,
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do {
+            try process.run()
+            NSApp.terminate(nil)
+            return true
+        } catch {
+            DiagnosticsLog.shared.record("setup-relaunch-failed", metadata: [:])
+            return false
+        }
+    }
+
+    private func finishLaunchSetup() {
+        let settings = TildeSettings()
+        guard settings.setupVersion < TildeSettings.currentSetupVersion else {
+            setupLaunchTimer?.invalidate()
+            setupLaunchTimer = nil
+            return
+        }
+        let hasKeyboard = ghostKeyboardInstallerHost.inputSourceStatus() != .missing
+        let hasPermission = ScreenRecordingPermission.isGranted()
+        guard hasKeyboard, hasPermission, !settings.screenRecordingRequested else {
+            setupLaunchTimer?.invalidate()
+            setupLaunchTimer = nil
+            showSetup()
+            return
+        }
+
+        switch setupState() {
+        case .ready:
+            settings.setupVersion = TildeSettings.currentSetupVersion
+            setupLaunchTimer?.invalidate()
+            setupLaunchTimer = nil
+            statusMenuHost.refresh()
+        case .installingKeyboard, .preparing:
+            guard setupLaunchTimer == nil else { return }
+            setupLaunchTimer = Timer.scheduledTimer(
+                withTimeInterval: 0.5,
+                repeats: true
+            ) { [weak self] _ in
+                Task { @MainActor in self?.finishLaunchSetup() }
+            }
+        case .needsKeyboard, .needsScreenRecording, .recoverableError:
+            setupLaunchTimer?.invalidate()
+            setupLaunchTimer = nil
+            showSetup()
+        }
     }
 
     /// The keyboard is only as smart as this app is alive: register as a login
