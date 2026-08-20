@@ -261,8 +261,14 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
         do {
             try handle.seek(toOffset: 0)
             let current = readCollectionState(from: handle)
-                ?? CollectionState(epoch: 0, enabled: false)
-            let next = CollectionState(epoch: current.epoch &+ 1, enabled: enabled)
+            var freshEpoch = UInt64.random(in: 1...UInt64.max)
+            while freshEpoch == current?.epoch {
+                freshEpoch = UInt64.random(in: 1...UInt64.max)
+            }
+            // A corrupt/torn state never resets a counter. Explicit recovery
+            // replaces it with a fresh nonce, so no pre-corruption capture
+            // token can intentionally become valid again.
+            let next = CollectionState(epoch: freshEpoch, enabled: enabled)
             let encoded = Data("\(next.epoch) \(next.enabled ? 1 : 0)\n".utf8)
             try handle.truncate(atOffset: 0)
             try handle.seek(toOffset: 0)

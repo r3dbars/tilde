@@ -280,6 +280,30 @@ struct LocalOCREvaluationStoreTests {
         #expect(otherProcessStore.summary().sampleCount == 1)
     }
 
+    @Test("Recovering a corrupt collection state never recycles a stale token")
+    func corruptStateRecoveryUsesFreshEpoch() throws {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stateLocation = root.appendingPathComponent("collection-state")
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
+
+        #expect(store.beginCollection())
+        let staleGeneration = store.generationToken()
+        try Data("torn".utf8).write(to: stateLocation)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stateLocation.path)
+
+        #expect(store.beginCollection())
+        #expect(store.generationToken() != staleGeneration)
+        store.record(sample(index: 1), generation: staleGeneration)
+        store.flush()
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+
+        store.record(sample(index: 2))
+        store.flush()
+        #expect(store.summary().sampleCount == 1)
+    }
+
     @Test("A rewrite drops records from the older pre-filter corpus schema")
     func rewriteDropsLegacyCorpusRecords() throws {
         let location = temporaryLocation()
