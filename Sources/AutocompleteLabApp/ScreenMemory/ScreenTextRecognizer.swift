@@ -3,7 +3,7 @@ import CoreGraphics
 import Vision
 
 /// Runs on-device Vision OCR over a single captured frame. Accurate mode
-/// only — Screen Memory triggers are cadence-capped to 1/5s already, so
+/// only — Screen Memory triggers are cadence-capped to 1/2s already, so
 /// there is no throughput pressure pushing toward the faster, less precise
 /// `.fast` recognition level.
 enum ScreenTextRecognizer {

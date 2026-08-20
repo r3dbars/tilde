@@ -71,6 +71,7 @@ final class GhostInputController: IMKInputController {
     private var scheduleRevision = 0
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
+    private var screenMemoryTypingTask: Task<Void, Never>?
     private var calmRevealByBundle = [String: Bool]()
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
@@ -91,6 +92,9 @@ final class GhostInputController: IMKInputController {
         }
         let secureInput = IsSecureEventInputEnabled()
         if secureInput {
+            screenMemoryTypingTask?.cancel()
+            screenMemoryTypingTask = nil
+            notifyScreenMemory(.textFieldBlurred)
             PersonalHistoryCapture.shared.sensitiveInputBegan()
             breakHistorySegment()
             dismiss(client)
@@ -129,7 +133,14 @@ final class GhostInputController: IMKInputController {
             }
             return false
         }
+        let previousOwner = fallbackOwner
         let insertionObservation = synchronizeFallback(with: client)
+        if previousOwner != insertionObservation.owner {
+            notifyScreenMemory(.textFieldFocused)
+        }
+        if typedGrapheme != nil {
+            scheduleScreenMemoryTypingPause()
+        }
 
         switch event.keyCode {
         case 48: // Plain Tab accepts one word. Shift-Tab remains the host app's key.
@@ -203,13 +214,40 @@ final class GhostInputController: IMKInputController {
         breakHistorySegment()
     }
 
+    override func activateServer(_ sender: Any!) {
+        super.activateServer(sender)
+        guard !IsSecureEventInputEnabled() else { return }
+        notifyScreenMemory(.textFieldFocused)
+    }
+
     override func deactivateServer(_ sender: Any!) {
+        screenMemoryTypingTask?.cancel()
+        screenMemoryTypingTask = nil
+        notifyScreenMemory(.textFieldBlurred)
         GhostStats.flush(force: true)
         PersonalHistoryCapture.shared.flush()
         if let client = sender as? IMKTextInput { dismiss(client) }
         breakHistorySegment()
         resetFallback()
         super.deactivateServer(sender)
+    }
+
+    private func scheduleScreenMemoryTypingPause() {
+        screenMemoryTypingTask?.cancel()
+        let delay = UInt64(CaptureTriggerPolicy.typingPauseThresholdSeconds * 1_000_000_000)
+        screenMemoryTypingTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            self?.notifyScreenMemory(.typingPaused)
+        }
+    }
+
+    private func notifyScreenMemory(_ kind: ScreenMemoryInputEvent.Kind) {
+        let event = ScreenMemoryInputEvent(
+            kind: kind,
+            sessionIdentifier: suggestionSessionIdentifier
+        )
+        Task { _ = await GhostBrainClient.notifyScreenMemory(event) }
     }
 
     // MARK: - Input and effects

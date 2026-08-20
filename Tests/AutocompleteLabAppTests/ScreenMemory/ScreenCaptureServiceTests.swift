@@ -60,6 +60,25 @@ struct ScreenCaptureServiceTests {
         #expect(events.values.contains { $0.0 == "screen-capture-skipped" && $0.1["reason"] == "no-permission" })
     }
 
+    @Test("No text field means no ScreenCaptureKit enumeration")
+    func textFieldRequiredBeforeCapture() async {
+        let service = ScreenCaptureService(
+            enabled: { true },
+            excludedApps: { [] },
+            permissionGranted: { true },
+            screenLocked: { false },
+            secureInputActive: { false },
+            shareableContent: {
+                Issue.record("shareableContent should not run without an active text field")
+                throw CocoaError(.fileReadUnknown)
+            },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+        #expect(await service.noteWindowChanged() == .skipped(.noActiveTextField))
+    }
+
     @Test("noteCompletionActivity does not disturb the enabled/permission gates")
     func completionActivityDoesNotBypassGates() async {
         let service = ScreenCaptureService(
@@ -75,6 +94,32 @@ struct ScreenCaptureServiceTests {
         await service.noteCompletionActivity()
         let outcome = await service.noteWindowChanged()
         #expect(outcome == .permissionNotGranted)
+    }
+
+    @Test("Only the focused IMKit session can schedule typing refreshes")
+    func textFieldSessionOwnership() async {
+        let service = ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+        let focused = UUID().uuidString
+        let stale = UUID().uuidString
+
+        #expect(await service.noteTextFieldFocused(sessionIdentifier: focused) == .skipped(.disabled))
+        #expect(await service.noteTypingPaused(sessionIdentifier: stale) == nil)
+        #expect(await service.noteTypingPaused(sessionIdentifier: focused) == .skipped(.disabled))
+
+        await service.noteTextFieldBlurred(sessionIdentifier: stale)
+        #expect(await service.noteTypingPaused(sessionIdentifier: focused) == .skipped(.disabled))
+
+        await service.noteTextFieldBlurred(sessionIdentifier: focused)
+        #expect(await service.noteTypingPaused(sessionIdentifier: focused) == nil)
     }
 
     @Test("enabled is read fresh on every trigger, not cached at init")

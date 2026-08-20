@@ -15,6 +15,24 @@ struct GhostBrainWireTests {
         #expect(decoded.v == 1)
     }
 
+    @Test("Screen Memory field events carry lifecycle only, never text")
+    func screenMemoryLifecycleRequest() throws {
+        let event = ScreenMemoryInputEvent(
+            kind: .typingPaused,
+            sessionIdentifier: UUID().uuidString
+        )
+        let request = GhostBrainRequest(screenMemoryEvent: event)
+        let decoded = try JSONDecoder().decode(
+            GhostBrainRequest.self,
+            from: JSONEncoder().encode(request)
+        )
+        #expect(decoded == request)
+        #expect(decoded.context.isEmpty)
+        #expect(decoded.app == nil)
+        #expect(decoded.personalHistoryEvents == nil)
+        #expect(decoded.screenMemoryEvent == event)
+    }
+
     @Test("Silence and failure are distinct from a suggestion")
     func outcomesAreDistinct() throws {
         let outcomes: [GhostBrainResponse] = [

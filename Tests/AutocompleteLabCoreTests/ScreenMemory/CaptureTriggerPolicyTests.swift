@@ -11,6 +11,7 @@ struct CaptureTriggerPolicyTests {
         enabled: Bool = true,
         screenLocked: Bool = false,
         secureInputActive: Bool = false,
+        textFieldActive: Bool = true,
         completionSessionActive: Bool = true,
         visibleWindowOwnerBundleIdentifiers: [String] = ["com.apple.TextEdit"],
         excludedApps: Set<String> = [],
@@ -22,6 +23,7 @@ struct CaptureTriggerPolicyTests {
             enabled: enabled,
             screenLocked: screenLocked,
             secureInputActive: secureInputActive,
+            textFieldActive: textFieldActive,
             completionSessionActive: completionSessionActive,
             visibleWindowOwnerBundleIdentifiers: visibleWindowOwnerBundleIdentifiers,
             excludedApps: excludedApps,
@@ -50,9 +52,23 @@ struct CaptureTriggerPolicyTests {
         #expect(decide(secureInputActive: true) == .skip(.secureInput))
     }
 
+    @Test("No active text field blocks every capture trigger")
+    func textFieldRequired() {
+        #expect(decide(textFieldActive: false) == .skip(.noActiveTextField))
+        #expect(decide(
+            trigger: .typingPause(elapsedSeconds: 30),
+            textFieldActive: false
+        ) == .skip(.noActiveTextField))
+    }
+
     @Test("Window-change fires without requiring an active completion session")
     func windowChangeIgnoresSessionState() {
         #expect(decide(trigger: .windowChanged, completionSessionActive: false) == .capture)
+    }
+
+    @Test("Text-field focus fires without requiring an existing completion session")
+    func textFieldFocusStartsSession() {
+        #expect(decide(trigger: .textFieldFocused, completionSessionActive: false) == .capture)
     }
 
     @Test("Typing pause with no active completion session is not a trigger")
@@ -63,10 +79,10 @@ struct CaptureTriggerPolicyTests {
         ) == .skip(.noActiveCompletionSession))
     }
 
-    @Test("Typing pause below the 2s threshold does not fire")
+    @Test("Typing pause below the 250ms threshold does not fire")
     func typingPauseBelowThreshold() {
         #expect(decide(
-            trigger: .typingPause(elapsedSeconds: 1.999),
+            trigger: .typingPause(elapsedSeconds: 0.249),
             completionSessionActive: true
         ) == .skip(.belowTypingPauseThreshold))
     }
@@ -74,7 +90,7 @@ struct CaptureTriggerPolicyTests {
     @Test("Typing pause exactly at and above the threshold fires")
     func typingPauseAtOrAboveThreshold() {
         #expect(decide(
-            trigger: .typingPause(elapsedSeconds: 2.0),
+            trigger: .typingPause(elapsedSeconds: 0.25),
             completionSessionActive: true
         ) == .capture)
         #expect(decide(
