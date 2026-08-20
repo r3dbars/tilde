@@ -132,6 +132,92 @@ struct LocalOCREvaluationStoreTests {
         #expect(!FileManager.default.fileExists(atPath: location.path))
     }
 
+    @Test("Disabled persistence gate creates no raw corpus")
+    func rejectsWhenPersistenceGateIsClosed() {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalOCREvaluationStore(
+            location: location,
+            mayPersist: { false },
+            excludedApps: { [] }
+        )
+
+        store.record(sample(index: 1))
+        store.flush()
+
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+    }
+
+    @Test("Persistence gate is checked again immediately before raw mutation")
+    func rechecksPersistenceGateBeforeWrite() {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gate = FirstCallOnlyGate()
+        let store = LocalOCREvaluationStore(
+            location: location,
+            mayPersist: { gate.consume() },
+            excludedApps: { [] }
+        )
+
+        store.record(sample(index: 1))
+        store.flush()
+
+        #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))
+    }
+
+    @Test("Oversized existing corpus is reported, not extended, and remains deletable")
+    func oversizedExistingCorpusFailsClosed() throws {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: location.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: location.deletingLastPathComponent().path
+        )
+        let oversized = Data(repeating: 0x78, count: LocalOCREvaluationStore.maximumBytes + 1)
+        try oversized.write(to: location)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: location.path)
+
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
+        let before = store.summary()
+        store.record(sample(index: 1))
+        store.flush()
+
+        #expect(before.sampleCount == 0)
+        #expect(before.approximateBytes == Int64(oversized.count))
+        #expect(store.summary() == before)
+        #expect(store.deleteAll())
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+    }
+
+    @Test("Deletion refuses a symlink masquerading as the raw corpus")
+    func deletionRejectsSymlink() throws {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("target.txt")
+        try FileManager.default.createDirectory(
+            at: location.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: location.deletingLastPathComponent().path
+        )
+        try Data("keep".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: location, withDestinationURL: target)
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
+
+        #expect(!store.deleteAll())
+        #expect(try Data(contentsOf: target) == Data("keep".utf8))
+    }
+
     @Test("Delete removes the corpus and future summaries are empty")
     func deletesCorpus() {
         let location = temporaryLocation()
@@ -186,5 +272,17 @@ struct LocalOCREvaluationStoreTests {
         let last = try decoder.decode(LocalOCREvaluationSample.self, from: Data(lines.last!))
         #expect(first.capturedAt > Date(timeIntervalSince1970: 0))
         #expect(last.capturedAt == Date(timeIntervalSince1970: 11))
+    }
+}
+
+private final class FirstCallOnlyGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var callCount = 0
+
+    func consume() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        callCount += 1
+        return callCount == 1
     }
 }
