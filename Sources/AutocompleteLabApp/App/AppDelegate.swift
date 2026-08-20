@@ -101,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sceneProvider: Self.sceneProvider(for: screenCaptureService),
         // A bare activity pulse only — see GhostBrainServerHost's doc comment.
         onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService),
+        onScreenMemoryEvent: Self.screenMemoryEventHandler(for: screenCaptureService),
         suggestionsGate: Self.suggestionsGate,
         personalSuggestionsGate: Self.personalSuggestionsGate,
         personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController)
@@ -162,6 +163,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for service: ScreenCaptureService
     ) -> @Sendable () -> Void {
         { Task { await service.noteCompletionActivity() } }
+    }
+
+    private nonisolated static func screenMemoryEventHandler(
+        for service: ScreenCaptureService
+    ) -> @Sendable (ScreenMemoryInputEvent) -> Void {
+        { event in
+            Task {
+                switch event.kind {
+                case .textFieldFocused:
+                    _ = await service.noteTextFieldFocused(sessionIdentifier: event.sessionIdentifier)
+                case .typingPaused:
+                    _ = await service.noteTypingPaused(sessionIdentifier: event.sessionIdentifier)
+                case .textFieldBlurred:
+                    await service.noteTextFieldBlurred(sessionIdentifier: event.sessionIdentifier)
+                }
+            }
+        }
     }
 
     /// Screen Memory plan Phase 2 PR 2b: the SAME settings gate

@@ -14,8 +14,8 @@ import ScreenCaptureKit
 /// pure) with freshly observed state, so the covenant's non-negotiables —
 /// the user's own master toggle (on by default, always visible and
 /// switchable), Secure Event Input, screen lock, per-app exclusion against
-/// every visible window, the 1/5s cadence cap — are enforced by tested
-/// logic, not re-derived here.
+/// every visible window, an active text field, and the 1/2s cadence cap —
+/// are enforced by tested logic, not re-derived here.
 actor ScreenCaptureService {
     enum CaptureOutcome: Equatable, Sendable {
         case captured(blockCount: Int)
@@ -28,6 +28,9 @@ actor ScreenCaptureService {
     private var lastActivityAt: Date?
     private(set) var latestSnapshot: ScreenSnapshot?
     private var pendingTypingPauseTask: Task<Void, Never>?
+    private var pendingTextFieldCaptureTask: Task<Void, Never>?
+    private var activeTextFieldSessionIdentifier: String?
+    private var textFieldRequiresFullRefresh = false
 
     /// Counts every capture that reaches `performCapture` (cadence/exclusion
     /// already cleared it). Referencing needs OTHER windows' text, which a
@@ -124,12 +127,54 @@ actor ScreenCaptureService {
         self.incrementalOCREnabled = incrementalOCREnabled
     }
 
-    /// The focused-window trigger. Fires regardless of completion-session
-    /// state — a plain app switch is worth capturing context for even if
-    /// the user was not mid-suggestion.
+    /// The focused-window trigger. It may refresh context while an IMKit
+    /// text session is active, but an ordinary app switch with no active
+    /// text field is rejected by the shared capture policy.
     @discardableResult
     func noteWindowChanged() async -> CaptureOutcome {
         await attemptCapture(trigger: .windowChanged)
+    }
+
+    /// A real IMKit input session became active. The first refresh uses the
+    /// full display and bypasses the incremental baseline so Vision's
+    /// `.accurate` recognizer rebuilds a complete scene. The safety gates
+    /// and two-second heavy-capture ceiling still apply.
+    @discardableResult
+    func noteTextFieldFocused(sessionIdentifier: String) async -> CaptureOutcome {
+        activeTextFieldSessionIdentifier = sessionIdentifier
+        lastActivityAt = now()
+        textFieldRequiresFullRefresh = true
+        pendingTextFieldCaptureTask?.cancel()
+        pendingTextFieldCaptureTask = nil
+        let outcome = await attemptTextFieldCapture(trigger: .textFieldFocused)
+        scheduleRetryAfterCadenceIfNeeded(outcome, trigger: .textFieldFocused)
+        return outcome
+    }
+
+    /// The IME has observed 250ms without another printable keystroke. Only
+    /// the active session may refresh; a late pulse from an old field is
+    /// ignored. Incremental OCR then recognizes only the changed region.
+    @discardableResult
+    func noteTypingPaused(sessionIdentifier: String) async -> CaptureOutcome? {
+        guard activeTextFieldSessionIdentifier == sessionIdentifier else { return nil }
+        lastActivityAt = now()
+        pendingTextFieldCaptureTask?.cancel()
+        pendingTextFieldCaptureTask = nil
+        let trigger = CaptureTriggerPolicy.Trigger.typingPause(
+            elapsedSeconds: CaptureTriggerPolicy.typingPauseThresholdSeconds
+        )
+        let outcome = await attemptTextFieldCapture(trigger: trigger)
+        scheduleRetryAfterCadenceIfNeeded(outcome, trigger: trigger)
+        return outcome
+    }
+
+    /// Stops delayed refreshes for the field that actually lost focus. A
+    /// stale blur from an older IMKit controller cannot cancel a newer one.
+    func noteTextFieldBlurred(sessionIdentifier: String) {
+        guard activeTextFieldSessionIdentifier == sessionIdentifier else { return }
+        activeTextFieldSessionIdentifier = nil
+        pendingTextFieldCaptureTask?.cancel()
+        pendingTextFieldCaptureTask = nil
     }
 
     /// A completion request reached the socket: the IME is actively
@@ -222,14 +267,48 @@ actor ScreenCaptureService {
             let nanoseconds = UInt64(CaptureTriggerPolicy.typingPauseThresholdSeconds * 1_000_000_000)
             try? await Task.sleep(nanoseconds: nanoseconds)
             guard !Task.isCancelled else { return }
-            await self?.attemptCapture(
+            _ = await self?.attemptCapture(
                 trigger: .typingPause(elapsedSeconds: CaptureTriggerPolicy.typingPauseThresholdSeconds)
             )
         }
     }
 
     @discardableResult
-    private func attemptCapture(trigger: CaptureTriggerPolicy.Trigger) async -> CaptureOutcome {
+    private func attemptTextFieldCapture(
+        trigger: CaptureTriggerPolicy.Trigger
+    ) async -> CaptureOutcome {
+        let outcome = await attemptCapture(
+            trigger: trigger,
+            forceFullDisplay: textFieldRequiresFullRefresh,
+            forceFullOCR: textFieldRequiresFullRefresh
+        )
+        if case .captured = outcome {
+            textFieldRequiresFullRefresh = false
+        }
+        return outcome
+    }
+
+    private func scheduleRetryAfterCadenceIfNeeded(
+        _ outcome: CaptureOutcome,
+        trigger: CaptureTriggerPolicy.Trigger
+    ) {
+        guard activeTextFieldSessionIdentifier != nil,
+              case let .skipped(.cadence(secondsRemaining)) = outcome else { return }
+        pendingTextFieldCaptureTask?.cancel()
+        pendingTextFieldCaptureTask = Task { [weak self] in
+            let nanoseconds = UInt64(max(0, secondsRemaining) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled, let self else { return }
+            let retry = await self.attemptTextFieldCapture(trigger: trigger)
+            await self.scheduleRetryAfterCadenceIfNeeded(retry, trigger: trigger)
+        }
+    }
+
+    private func attemptCapture(
+        trigger: CaptureTriggerPolicy.Trigger,
+        forceFullDisplay: Bool = false,
+        forceFullOCR: Bool = false
+    ) async -> CaptureOutcome {
         let moment = now()
         let isEnabled = enabled()
 
@@ -240,6 +319,10 @@ actor ScreenCaptureService {
         guard permissionGranted() else {
             diagnostics("screen-capture-skipped", ["reason": "no-permission"])
             return .permissionNotGranted
+        }
+        guard activeTextFieldSessionIdentifier != nil else {
+            record(.skip(.noActiveTextField))
+            return .skipped(.noActiveTextField)
         }
 
         let sessionActive = CaptureTriggerPolicy.isCompletionSessionActive(
@@ -292,6 +375,7 @@ actor ScreenCaptureService {
             enabled: stillEnabled,
             screenLocked: screenLocked(),
             secureInputActive: secureInputActive(),
+            textFieldActive: activeTextFieldSessionIdentifier != nil,
             completionSessionActive: sessionActive,
             visibleWindowOwnerBundleIdentifiers: visibleOwners,
             excludedApps: excludedApps(),
@@ -304,7 +388,12 @@ actor ScreenCaptureService {
         )
         guard case let .skip(reason) = decision else {
             // decision is exhaustively .capture or .skip — reaching here means .capture.
-            return await performCapture(content: content, moment: moment)
+            return await performCapture(
+                content: content,
+                moment: moment,
+                forceFullDisplay: forceFullDisplay,
+                forceFullOCR: forceFullOCR
+            )
         }
         lastCaptureAt = priorCaptureAt
         record(.skip(reason))
@@ -317,20 +406,37 @@ actor ScreenCaptureService {
     /// `frontmostWindow` still has to actually find a layer-0 window or this
     /// falls back to full-display anyway — a window-only capture is never
     /// attempted blind.
-    private func performCapture(content: SCShareableContent, moment: Date) async -> CaptureOutcome {
+    private func performCapture(
+        content: SCShareableContent,
+        moment: Date,
+        forceFullDisplay: Bool,
+        forceFullOCR: Bool
+    ) async -> CaptureOutcome {
         guard let display = Self.activeDisplay(in: content) else {
             diagnostics("screen-capture-skipped", ["reason": "no-display"])
             return .captureFailed
         }
 
         captureCounter += 1
-        let forceFullDisplay = captureCounter % Self.fullDisplayCaptureInterval == 0
+        let forceFullDisplay = forceFullDisplay
+            || captureCounter % Self.fullDisplayCaptureInterval == 0
         let zRanks = Self.onScreenZOrderRanks()
 
         if !forceFullDisplay, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
-            return await performWindowCapture(window: window, display: display, moment: moment)
+            return await performWindowCapture(
+                window: window,
+                display: display,
+                moment: moment,
+                forceFullOCR: forceFullOCR
+            )
         }
-        return await performFullDisplayCapture(content: content, display: display, zRanks: zRanks, moment: moment)
+        return await performFullDisplayCapture(
+            content: content,
+            display: display,
+            zRanks: zRanks,
+            moment: moment,
+            forceFullOCR: forceFullOCR
+        )
     }
 
     /// Captures ONLY the frontmost app's frontmost layer-0 window
@@ -341,7 +447,12 @@ actor ScreenCaptureService {
     /// which still needs `WindowAttribution` because it can see several
     /// windows at once). Roughly halves OCR latency too: Vision has one
     /// window's worth of pixels to walk instead of the whole display.
-    private func performWindowCapture(window: SCWindow, display: SCDisplay, moment: Date) async -> CaptureOutcome {
+    private func performWindowCapture(
+        window: SCWindow,
+        display: SCDisplay,
+        moment: Date,
+        forceFullOCR: Bool
+    ) async -> CaptureOutcome {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
         configuration.width = max(1, Int(window.frame.width.rounded()))
@@ -373,7 +484,7 @@ actor ScreenCaptureService {
             // re-enable starts from a fresh baseline instead of diffing
             // against a possibly very old frame.
             let incrementalEnabled = incrementalOCREnabled()
-            let priorBaseline = incrementalEnabled ? windowBaseline : nil
+            let priorBaseline = incrementalEnabled && !forceFullOCR ? windowBaseline : nil
             let currentGrid = incrementalEnabled ? LuminanceGridSampler.sample(image) : nil
             let geometry = CaptureChangeDetector.GeometryKey(
                 kind: .window,
@@ -520,7 +631,8 @@ actor ScreenCaptureService {
         content: SCShareableContent,
         display: SCDisplay,
         zRanks: [CGWindowID: Int],
-        moment: Date
+        moment: Date,
+        forceFullOCR: Bool
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
@@ -577,7 +689,7 @@ actor ScreenCaptureService {
             // `displayBaseline` — never the window path's, since a display
             // frame and a window frame are never comparable.
             let incrementalEnabled = incrementalOCREnabled()
-            let priorBaseline = incrementalEnabled ? displayBaseline : nil
+            let priorBaseline = incrementalEnabled && !forceFullOCR ? displayBaseline : nil
             let currentGrid = incrementalEnabled ? LuminanceGridSampler.sample(image) : nil
             let geometry = CaptureChangeDetector.GeometryKey(
                 kind: .display,
@@ -736,6 +848,7 @@ actor ScreenCaptureService {
         case .disabled: return "disabled"
         case .screenLocked: return "screen-locked"
         case .secureInput: return "secure-input"
+        case .noActiveTextField: return "no-active-text-field"
         case .noActiveCompletionSession: return "no-active-session"
         case .belowTypingPauseThreshold: return "below-threshold"
         case .excludedWindow: return "excluded-app"
