@@ -10,9 +10,33 @@ struct ExcludedApplication: Identifiable, Equatable {
     var id: String { bundleIdentifier }
 }
 
+enum TildeModelPresentation {
+    static let name = "Gemma 4 E2B"
+    static let approximateSize = "about 3.43 GB"
+    static let description = "\(name) · \(approximateSize)"
+}
+
+struct TildeModelDownloadProgress: Equatable {
+    let receivedBytes: Int64
+    let totalBytes: Int64
+
+    var fraction: Double? {
+        guard totalBytes > 0 else { return nil }
+        return min(1, max(0, Double(receivedBytes) / Double(totalBytes)))
+    }
+
+    var detail: String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return "\(formatter.string(fromByteCount: max(0, receivedBytes))) of \(formatter.string(fromByteCount: max(0, totalBytes)))"
+    }
+}
+
 @MainActor
 final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var statusText = "Model is Loading"
+    @Published private(set) var modelState: ModelState = .checking
     @Published private(set) var suggestionsEnabled = true
     @Published private(set) var launchAtLoginEnabled = true
     @Published private(set) var screenMemoryEnabled = true
@@ -23,6 +47,7 @@ final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var learningDataSize = "No learning data"
     @Published private(set) var message: String?
     @Published private(set) var isDeletingLearningData = false
+    @Published private(set) var isDeletingModel = false
 
     private weak var appDelegate: AppDelegate?
     private let personalHistory: PersonalHistoryController
@@ -41,9 +66,37 @@ final class TildeSettingsViewModel: ObservableObject {
         return build.map { "\(version) (\($0))" } ?? version
     }
 
-    var modelDescription: String { "Gemma · bundled with Tilde" }
+    var modelDescription: String {
+        appDelegate?.modelDescription() ?? TildeModelPresentation.description
+    }
+
+    var modelProgress: TildeModelDownloadProgress? {
+        guard case let .downloading(receivedBytes, totalBytes) = modelState else { return nil }
+        return TildeModelDownloadProgress(receivedBytes: receivedBytes, totalBytes: totalBytes)
+    }
+
+    var modelStatusText: String {
+        switch modelState {
+        case .checking: "Checking…"
+        case .missing: "Not downloaded"
+        case .downloading: "Downloading…"
+        case .verifying: "Checking download…"
+        case .ready: "Ready"
+        case let .failed(failure): modelFailureDescription(failure)
+        }
+    }
+
+    var canDeleteModel: Bool {
+        switch modelState {
+        case .checking, .missing:
+            return false
+        case .downloading, .verifying, .ready, .failed:
+            return true
+        }
+    }
 
     func refresh() {
+        modelState = appDelegate?.modelState() ?? .missing
         suggestionsEnabled = settings.suggestionsEnabled
         launchAtLoginEnabled = settings.launchAtLoginEnabled
         screenMemoryEnabled = settings.screenMemoryEnabled
@@ -173,6 +226,20 @@ final class TildeSettingsViewModel: ObservableObject {
         }
     }
 
+    func deleteModel() {
+        guard !isDeletingModel else { return }
+        guard let appDelegate else {
+            message = "The model could not be deleted. Quit and reopen Tilde, then try again."
+            return
+        }
+        isDeletingModel = true
+        message = nil
+        appDelegate.deleteModel()
+        isDeletingModel = false
+        refresh()
+        message = "Model deletion started. Setup will reopen when it is complete."
+    }
+
     func exportDiagnostics() {
         DiagnosticsLog.shared.flush()
         let source = FileManager.default.homeDirectoryForCurrentUser
@@ -208,5 +275,16 @@ final class TildeSettingsViewModel: ObservableObject {
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? url.deletingPathExtension().lastPathComponent
         return ExcludedApplication(bundleIdentifier: bundleIdentifier, name: name)
+    }
+
+    private func modelFailureDescription(_ failure: ModelFailure) -> String {
+        switch failure {
+        case .offline: "Download paused — connection unavailable"
+        case .insufficientDiskSpace: "Not enough disk space"
+        case .serverRejectedRequest: "Model host rejected the download"
+        case .checksumMismatch: "Integrity check failed"
+        case .invalidModel: "Invalid model download"
+        case .installationFailed: "Model installation failed"
+        }
     }
 }

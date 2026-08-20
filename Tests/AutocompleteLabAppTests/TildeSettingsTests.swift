@@ -64,7 +64,7 @@ struct TildeSettingsTests {
         settings.setupVersion = TildeSettings.currentSetupVersion
         settings.screenRecordingRequested = true
 
-        #expect(app.integer(forKey: "SetupVersion") == 1)
+        #expect(app.integer(forKey: "SetupVersion") == TildeSettings.currentSetupVersion)
         #expect(app.bool(forKey: "ScreenRecordingRequested"))
         #expect(keyboard.object(forKey: "SetupVersion") == nil)
     }
@@ -160,5 +160,21 @@ struct TildeSettingsTests {
             forKey: "GhostPausedUntil"
         )
         #expect(settings.pausedUntil == nil)
+    }
+
+    @Test("Settings describes the external Gemma 4 E2B model and formats progress")
+    func modelPresentation() {
+        #expect(TildeModelPresentation.name == "Gemma 4 E2B")
+        #expect(TildeModelPresentation.approximateSize == "about 3.43 GB")
+        #expect(TildeModelPresentation.description.contains("Gemma 4 E2B"))
+
+        let progress = TildeModelDownloadProgress(
+            receivedBytes: 640_000_000,
+            totalBytes: 3_430_000_000
+        )
+        #expect(progress.fraction != nil)
+        #expect(progress.fraction! > 0.18)
+        #expect(progress.fraction! < 0.19)
+        #expect(progress.detail.contains("of"))
     }
 }

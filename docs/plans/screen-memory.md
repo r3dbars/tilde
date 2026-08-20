@@ -17,8 +17,10 @@ Tilde may capture and retain what cloud products never could. The reversal of
 the prior OCR ban is deliberate and goes on the record in Phase 0.
 
 Non-negotiables that survive from the old covenant:
-- On-device only. No cloud, no network egress, ever. Release egress proofs
-  stay blocking and unchanged.
+- Screen text, writing, prompts, history, and suggestions stay on-device and
+  are never sent over the network. The only network phase is the separate,
+  fixed first-run application/model asset download. Post-download release
+  egress proof remains blocking and rejects every non-loopback connection.
 - Secrets never persist. Redaction runs BEFORE storage, fail-closed: if the
   redactor errors, the capture is dropped, never stored raw.
 - User sovereignty: master toggle (ON by default for new installs as of

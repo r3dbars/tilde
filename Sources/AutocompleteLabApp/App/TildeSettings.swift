@@ -12,7 +12,7 @@ struct TildeSettings {
         case screenRecordingRequested = "ScreenRecordingRequested"
     }
 
-    static let currentSetupVersion = 1
+    static let currentSetupVersion = 2
 
     enum KeyboardKey: String {
         case suggestions = "GhostSuggestionsEnabled"

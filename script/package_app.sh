@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Single release driver: test, build, embed, sign, exercise, notarize, staple,
-# package, and checksum a self-contained Tilde release.
+# Single release driver: test, build, stage, sign, exercise, notarize, staple,
+# package, and checksum a Tilde release. The GGUF is never embedded in the app;
+# --proof-model is a proof-only preseed used by the isolated runtime lane.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -8,27 +9,37 @@ cd "$ROOT_DIR"
 
 LLAMA_SERVER=""
 LLAMA_SHA256=""
-MODEL=""
-MODEL_SHA256=""
+PROOF_MODEL=""
+PROOF_MODEL_SHA256="389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
 SIGN_IDENTITY=""
 NOTARY_PROFILE=""
 VERSION="0.1.0"
 BUILD_NUMBER=""
 VERIFY_INPUTS_ONLY=0
 
+MODEL_REVISION="3762686d74ff8db6c98f8d3c389f56fbdf994d5a"
+MODEL_FILENAME="gemma-4-E2B.Q4_K_M.gguf"
+MODEL_BYTES=3427861984
+MODEL_SHA256="389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
+MODEL_URL="https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/${MODEL_REVISION}/${MODEL_FILENAME}"
+
 usage() {
   cat <<'EOF'
 Usage: script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
-  --model PATH --model-sha256 SHA256 --build-number NUMBER \
+  --proof-model PATH [--proof-model-sha256 SHA256] --build-number NUMBER \
   --notary-profile PROFILE [options]
        script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
-  --model PATH --model-sha256 SHA256 --verify-inputs-only
+  --proof-model PATH [--proof-model-sha256 SHA256] --verify-inputs-only
 
 Release inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
   --llama-sha256 SHA256     Human-reviewed SHA-256 pin for the helper bytes.
-  --model PATH              GGUF model embedded in the app.
-  --model-sha256 SHA256     Human-reviewed SHA-256 pin for the model bytes.
+  --proof-model PATH        Preseeded Gemma 4 E2B GGUF for release proof only;
+                            it is copied to isolated external model storage and
+                            never copied into Tilde.app.
+  --proof-model-sha256 SHA256
+                            Optional assertion of the pinned proof-model hash;
+                            it must equal the fixed pin shown below.
 
 Full release only:
   --notary-profile PROFILE  Stored notarytool keychain profile.
@@ -41,10 +52,14 @@ Options:
                             signing, notarizing, or uploading anything.
 
 This is intentionally fail-closed. It creates release artifacts only after the
-full test suite, isolated packaged-helper health/completion/socket observation,
-Apple notarization, stapling, and Gatekeeper assessment all pass. The proof may
-append privacy-safe diagnostics but leaves the daily driver and input method
-untouched.
+full test suite, isolated helper health/completion/socket observation against
+the preseeded external model, Apple notarization, stapling, and Gatekeeper
+assessment all pass. The proof may append privacy-safe diagnostics but leaves
+the daily driver and input method untouched.
+The production app downloads this exact immutable model URL during its separate
+first-run asset phase; no user-derived request data is sent during that phase:
+https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf
+The model pin is SHA-256 389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2 and exactly 3427861984 bytes.
 Shape checks and matching hashes do not establish input provenance; the release
 operator remains responsible for reviewing where the helper and model came from.
 EOF
@@ -52,13 +67,13 @@ EOF
 
 while (($#)); do
   case "$1" in
-    --llama-server|--llama-sha256|--model|--model-sha256|--notary-profile|--sign-identity|--version|--build-number)
+    --llama-server|--llama-sha256|--proof-model|--proof-model-sha256|--notary-profile|--sign-identity|--version|--build-number)
       [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
       case "$1" in
         --llama-server) LLAMA_SERVER="$2" ;;
         --llama-sha256) LLAMA_SHA256="$2" ;;
-        --model) MODEL="$2" ;;
-        --model-sha256) MODEL_SHA256="$2" ;;
+        --proof-model) PROOF_MODEL="$2" ;;
+        --proof-model-sha256) PROOF_MODEL_SHA256="$2" ;;
         --notary-profile) NOTARY_PROFILE="$2" ;;
         --sign-identity) SIGN_IDENTITY="$2" ;;
         --version) VERSION="$2" ;;
@@ -68,6 +83,10 @@ while (($#)); do
       ;;
     --verify-inputs-only)
       VERIFY_INPUTS_ONLY=1
+      ;;
+    --model|--model-sha256)
+      echo "$1 is obsolete: releases use the explicit proof-only --proof-model input" >&2
+      exit 2
       ;;
     -h|--help)
       usage
@@ -106,16 +125,26 @@ verify_sha256() {
 
 [[ -f "$LLAMA_SERVER" ]] || { echo "missing --llama-server file: $LLAMA_SERVER" >&2; exit 2; }
 [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server is not executable: $LLAMA_SERVER" >&2; exit 2; }
-[[ -s "$MODEL" ]] || { echo "missing --model file: $MODEL" >&2; exit 2; }
-./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$MODEL"
+[[ -n "$PROOF_MODEL" ]] || { echo "--proof-model is required; release proof must be preseeded explicitly" >&2; exit 2; }
+[[ -s "$PROOF_MODEL" ]] || { echo "missing --proof-model file: $PROOF_MODEL" >&2; exit 2; }
+[[ "$(basename "$PROOF_MODEL")" == "$MODEL_FILENAME" ]] \
+  || { echo "--proof-model must be named $MODEL_FILENAME" >&2; exit 2; }
+PROOF_MODEL_SHA256="$(normalize_sha256 --proof-model-sha256 "$PROOF_MODEL_SHA256")"
+[[ "$PROOF_MODEL_SHA256" == "$MODEL_SHA256" ]] \
+  || { echo "--proof-model-sha256 must match the pinned Gemma 4 E2B SHA-256 $MODEL_SHA256" >&2; exit 2; }
+PROOF_MODEL_BYTES="$(/usr/bin/stat -f '%z' "$PROOF_MODEL" 2>/dev/null || true)"
+[[ "$PROOF_MODEL_BYTES" == "$MODEL_BYTES" ]] \
+  || { echo "proof model size mismatch: expected $MODEL_BYTES bytes, got ${PROOF_MODEL_BYTES:-unknown}" >&2; exit 1; }
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_MODEL"
 LLAMA_SHA256="$(normalize_sha256 --llama-sha256 "$LLAMA_SHA256")"
-MODEL_SHA256="$(normalize_sha256 --model-sha256 "$MODEL_SHA256")"
 
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
-verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
+verify_sha256 "proof-only Gemma 4 E2B model" "$PROOF_MODEL" "$MODEL_SHA256"
 
 if [[ "$VERIFY_INPUTS_ONLY" == "1" ]]; then
-  echo "Release shapes passed and caller-provided SHA-256 pins match."
+  echo "Release helper shape and proof-only Gemma 4 E2B model pin passed."
+  echo "Model revision: $MODEL_REVISION"
+  echo "Model URL: $MODEL_URL"
   echo "Input provenance remains a human review boundary."
   echo "No build, signing, notarization, or upload performed."
   exit 0
@@ -142,6 +171,8 @@ xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --output-format js
 APP="$ROOT_DIR/dist/Tilde.app"
 IME="$ROOT_DIR/dist/InlineGhostIME.app"
 PROOF_DIR="$ROOT_DIR/dist/release-proof"
+PROOF_MODEL_DIRECTORY="$PROOF_DIR/model-store/gemma-4-e2b-q4km"
+PROOF_MODEL_PATH="$PROOF_MODEL_DIRECTORY/model.gguf"
 NOTARY_ZIP="$ROOT_DIR/dist/Tilde-notarize.zip"
 STAGING_DMG="$ROOT_DIR/dist/Tilde-notarize.dmg"
 FINAL_ZIP="$ROOT_DIR/dist/Tilde.zip"
@@ -158,6 +189,8 @@ cleanup() {
     ./script/restart_app.sh --release-proof --cleanup >/dev/null 2>&1 \
       || echo "warning: exact release-proof candidate cleanup failed" >&2
   fi
+  unset TILDE_MODEL_DIRECTORY
+  [[ -z "${PROOF_MODEL_DIRECTORY:-}" ]] || rm -rf "$(dirname "$PROOF_MODEL_DIRECTORY")"
   [[ -z "$DMG_SOURCE" ]] || rm -rf "$DMG_SOURCE"
 }
 trap cleanup EXIT
@@ -197,18 +230,19 @@ echo "==> building packaged input method"
   --build-number "$BUILD_NUMBER" \
   --sign-identity "$SIGN_IDENTITY"
 
-echo "==> embedding app-owned runtime, input method, and model"
-./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$MODEL"
+echo "==> staging app-owned runtime and input method (model remains external)"
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_MODEL"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
-verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Library" "$APP/Contents/Resources"
 cp "$LLAMA_SERVER" "$APP/Contents/Helpers/llama-server"
 chmod +x "$APP/Contents/Helpers/llama-server"
 rm -rf "$APP/Contents/Library/InlineGhostIME.app"
 cp -R "$IME" "$APP/Contents/Library/InlineGhostIME.app"
-cp "$MODEL" "$APP/Contents/Resources/bundled-model.gguf"
 verify_sha256 "bundled llama-server" "$APP/Contents/Helpers/llama-server" "$LLAMA_SHA256"
-verify_sha256 "bundled model" "$APP/Contents/Resources/bundled-model.gguf" "$MODEL_SHA256"
+if find "$APP" -type f -iname '*.gguf' -print -quit | grep -q .; then
+  echo "release app unexpectedly contains a GGUF model" >&2
+  exit 1
+fi
 
 echo "==> signing nested code and app with hardened runtime"
 codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
@@ -220,15 +254,22 @@ record "$PROOF_DIR/codesign-verify.txt" codesign --verify --deep --strict --verb
 ./script/check_app_bundle.sh --release "$APP"
 
 echo "==> exercising the exact packaged helper without touching the input method"
+mkdir -p "$PROOF_MODEL_DIRECTORY"
+cp "$PROOF_MODEL" "$PROOF_MODEL_PATH"
+chmod 600 "$PROOF_MODEL_PATH"
+verify_sha256 "isolated proof model" "$PROOF_MODEL_PATH" "$MODEL_SHA256"
+export TILDE_MODEL_DIRECTORY="$PROOF_DIR/model-store"
 RELEASE_PROOF_ACTIVE=1
 ./script/restart_app.sh --release-proof
 python3 script/check_runtime_network_egress.py \
   --app-binary "$APP/Contents/MacOS/Tilde" \
   --port 17873 \
+  --model-path "$PROOF_MODEL_PATH" \
   --synthetic-helper-proof \
   --proof-out "$PROOF_DIR/runtime-socket-observation.json"
 ./script/restart_app.sh --release-proof --cleanup
 RELEASE_PROOF_ACTIVE=0
+unset TILDE_MODEL_DIRECTORY
 
 echo "==> notarizing and stapling the app"
 rm -f "$NOTARY_ZIP"
@@ -238,6 +279,7 @@ record "$PROOF_DIR/notarytool-app-submit.txt" \
 require_notary_accepted "$PROOF_DIR/notarytool-app-submit.txt"
 record "$PROOF_DIR/stapler-app.txt" xcrun stapler staple "$APP"
 record "$PROOF_DIR/stapler-app-validate.txt" xcrun stapler validate "$APP"
+./script/check_app_bundle.sh --release "$APP"
 record "$PROOF_DIR/spctl-app.txt" spctl --assess --type execute --verbose=4 "$APP"
 
 echo "==> creating, notarizing, and stapling the DMG"

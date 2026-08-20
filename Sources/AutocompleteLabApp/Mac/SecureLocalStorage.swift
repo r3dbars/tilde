@@ -40,6 +40,20 @@ enum SecureLocalStorage {
         openOwnerOnlyFile(at: file, flags: O_RDONLY, lock: LOCK_SH)
     }
 
+    /// Opens an existing owner-only regular file without following symlinks.
+    /// Unlike the append helpers this never creates the leaf.
+    static func openExistingFileForReadingAndWriting(at file: URL) -> FileHandle? {
+        openOwnerOnlyFile(at: file, flags: O_RDWR, lock: LOCK_EX)
+    }
+
+    /// Creates or validates an owner-only directory without following any
+    /// symlink in its path.
+    static func ensureOwnerOnlyDirectory(at directory: URL) -> Bool {
+        guard let descriptor = secureDirectoryDescriptor(at: directory) else { return false }
+        close(descriptor)
+        return true
+    }
+
     /// Opens an existing private file for status without creating or tightening anything.
     static func openExistingOwnerOnlyFileForReadOnlyStatus(at file: URL) -> ReadOnlyStatusFile {
         let directory = file.deletingLastPathComponent()
@@ -119,6 +133,91 @@ enum SecureLocalStorage {
               info.st_nlink > 0,
               clearNonblocking(descriptor) else { return false }
         return unlinkat(directoryDescriptor, file.lastPathComponent, 0) == 0
+    }
+
+    /// Atomically renames one validated owner-only regular file over another
+    /// leaf in the same validated directory. `renameat` replaces a destination
+    /// symlink itself rather than following its target.
+    static func replaceOwnerOnlyFile(at destination: URL, with source: URL) -> Bool {
+        let directory = destination.deletingLastPathComponent()
+        guard source.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL,
+              !source.lastPathComponent.isEmpty,
+              !destination.lastPathComponent.isEmpty,
+              let directoryDescriptor = secureDirectoryDescriptor(at: directory) else { return false }
+        defer { close(directoryDescriptor) }
+        guard flock(directoryDescriptor, LOCK_EX) == 0 else { return false }
+
+        let sourceDescriptor = openat(
+            directoryDescriptor,
+            source.lastPathComponent,
+            O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard sourceDescriptor >= 0 else { return false }
+        defer { close(sourceDescriptor) }
+        var info = stat()
+        guard fstat(sourceDescriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o7777 == 0o600,
+              info.st_nlink > 0 else { return false }
+        return renameat(
+            directoryDescriptor,
+            source.lastPathComponent,
+            directoryDescriptor,
+            destination.lastPathComponent
+        ) == 0
+    }
+
+    /// Makes an APFS copy-on-write snapshot of an owner-only regular file,
+    /// opens it, and immediately unlinks its name. The returned descriptor is
+    /// therefore unaffected by later path replacement or in-place writes to
+    /// the installed source inode.
+    static func openUnlinkedCloneForReading(at source: URL) -> FileHandle? {
+        let directory = source.deletingLastPathComponent()
+        guard !source.lastPathComponent.isEmpty,
+              let directoryDescriptor = secureDirectoryDescriptor(at: directory) else { return nil }
+        defer { close(directoryDescriptor) }
+        guard flock(directoryDescriptor, LOCK_EX) == 0 else { return nil }
+
+        let sourceDescriptor = openat(
+            directoryDescriptor,
+            source.lastPathComponent,
+            O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard sourceDescriptor >= 0 else { return nil }
+        defer { close(sourceDescriptor) }
+        var info = stat()
+        guard fstat(sourceDescriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o7777 == 0o600,
+              info.st_nlink > 0 else { return nil }
+
+        let snapshotName = ".model-runtime-\(UUID().uuidString)"
+        guard fclonefileat(sourceDescriptor, directoryDescriptor, snapshotName, 0) == 0 else {
+            return nil
+        }
+        let snapshotDescriptor = openat(
+            directoryDescriptor,
+            snapshotName,
+            O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard snapshotDescriptor >= 0 else {
+            _ = unlinkat(directoryDescriptor, snapshotName, 0)
+            return nil
+        }
+        guard fchmod(snapshotDescriptor, 0o400) == 0,
+              fstat(snapshotDescriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o7777 == 0o400,
+              unlinkat(directoryDescriptor, snapshotName, 0) == 0,
+              clearNonblocking(snapshotDescriptor) else {
+            close(snapshotDescriptor)
+            _ = unlinkat(directoryDescriptor, snapshotName, 0)
+            return nil
+        }
+        return FileHandle(fileDescriptor: snapshotDescriptor, closeOnDealloc: true)
     }
 
     private static func openOwnerOnlyFile(
