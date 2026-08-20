@@ -91,6 +91,9 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RESOURCES"
 cp "$BIN_PATH/Tilde" "$MACOS/Tilde"
 cp "$GENERATED_ICON" "$RESOURCES/AppIcon.icns"
+if [[ "$CONFIGURATION" == "release" ]]; then
+  strip -S -x "$MACOS/Tilde"
+fi
 chmod +x "$MACOS/Tilde"
 
 cat >"$CONTENTS/Info.plist" <<PLIST
