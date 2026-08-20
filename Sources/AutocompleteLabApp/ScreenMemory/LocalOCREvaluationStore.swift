@@ -85,8 +85,11 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     private let decoder: JSONDecoder
     private let mayPersist: @Sendable () -> Bool
     private let excludedApps: @Sendable () -> Set<String>
-    private let generationLock = NSLock()
-    private var generationStorage: UInt64 = 0
+
+    private struct CollectionState {
+        let epoch: UInt64
+        let enabled: Bool
+    }
 
     init(
         location: URL = FileManager.default
@@ -122,15 +125,13 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     /// Deletion advances the generation, so a late result from before the
     /// delete can never recreate the raw corpus afterward.
     func generationToken() -> UInt64 {
-        generationLock.lock()
-        defer { generationLock.unlock() }
-        return generationStorage
+        currentCollectionState()?.epoch ?? .max
     }
 
     func record(_ sample: LocalOCREvaluationSample, generation token: UInt64) {
         queue.async { [self] in
-            guard token == generationToken() else { return }
-            persist(sample)
+            guard collectionAllows(token: token) else { return }
+            persist(sample, generation: token)
         }
     }
 
@@ -143,13 +144,10 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     @discardableResult
     func deleteAll() -> Bool {
         queue.sync {
-            generationLock.lock()
-            generationStorage &+= 1
-            generationLock.unlock()
-            // Persist the disabled state before unlinking the corpus. Other
-            // Tilde processes check this marker immediately before writing,
-            // so a queued capture cannot recreate data after deletion.
-            guard createCollectionDisabledMarker() else { return false }
+            // Advance the shared epoch before unlinking the corpus. Every
+            // process rechecks this state immediately before mutation, so a
+            // queued capture can never recreate data after deletion.
+            guard advanceCollectionState(enabled: false) else { return false }
             return SecureLocalStorage.removeOwnerOnlyFile(at: location)
         }
     }
@@ -157,16 +155,13 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     @discardableResult
     func beginCollection() -> Bool {
         queue.sync {
-            generationLock.lock()
-            generationStorage &+= 1
-            generationLock.unlock()
-            return SecureLocalStorage.removeOwnerOnlyFile(at: collectionDisabledMarker)
+            advanceCollectionState(enabled: true)
         }
     }
 
-    private func persist(_ sample: LocalOCREvaluationSample) {
+    private func persist(_ sample: LocalOCREvaluationSample, generation token: UInt64) {
         do {
-            guard mayPersist(sample), !isCollectionDisabled() else { return }
+            guard mayPersist(sample), collectionAllows(token: token) else { return }
             let encoded = try encoder.encode(sample)
             guard encoded.count <= Self.maximumRecordBytes,
                   let handle = SecureLocalStorage.openFileForReadingAndAppending(at: location) else {
@@ -206,7 +201,7 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             // Re-check immediately before the only raw disk mutation. This
             // closes the async queue gap when consent, Screen Memory, TCC,
             // lock state, or Secure Event Input changes after record().
-            guard mayPersist(sample), !isCollectionDisabled() else { return }
+            guard mayPersist(sample), collectionAllows(token: token) else { return }
             try handle.truncate(atOffset: 0)
             // FileHandle truncation does not promise to reset the current
             // offset. Seek after truncating or repeated rewrites can create
@@ -231,34 +226,69 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
         }
     }
 
-    private var collectionDisabledMarker: URL {
-        location.deletingLastPathComponent().appendingPathComponent("collection-disabled")
+    private var collectionStateLocation: URL {
+        location.deletingLastPathComponent().appendingPathComponent("collection-state")
     }
 
-    private func isCollectionDisabled() -> Bool {
+    private func collectionAllows(token: UInt64) -> Bool {
+        guard let state = currentCollectionState() else { return false }
+        return state.enabled && state.epoch == token
+    }
+
+    private func currentCollectionState() -> CollectionState? {
         switch SecureLocalStorage.openExistingOwnerOnlyFileForReadOnlyStatus(
-            at: collectionDisabledMarker
+            at: collectionStateLocation
         ) {
         case let .opened(handle):
-            try? handle.close()
-            return true
+            defer { try? handle.close() }
+            return readCollectionState(from: handle)
         case .missing:
-            return false
+            // Compatibility for the first run after upgrading. The global
+            // consent/safety gate still decides whether writing is allowed.
+            return CollectionState(epoch: 0, enabled: true)
         case .rejected:
-            return true
+            return nil
         }
     }
 
-    private func createCollectionDisabledMarker() -> Bool {
-        guard let handle = SecureLocalStorage.openFileForAppending(at: collectionDisabledMarker) else {
+    private func advanceCollectionState(enabled: Bool) -> Bool {
+        guard let handle = SecureLocalStorage.openFileForReadingAndAppending(
+            at: collectionStateLocation
+        ) else {
             return false
         }
         defer { try? handle.close() }
         do {
+            try handle.seek(toOffset: 0)
+            let current = readCollectionState(from: handle)
+                ?? CollectionState(epoch: 0, enabled: false)
+            let next = CollectionState(epoch: current.epoch &+ 1, enabled: enabled)
+            let encoded = Data("\(next.epoch) \(next.enabled ? 1 : 0)\n".utf8)
+            try handle.truncate(atOffset: 0)
+            try handle.seek(toOffset: 0)
+            try handle.write(contentsOf: encoded)
             try handle.synchronize()
             return true
         } catch {
             return false
+        }
+    }
+
+    private func readCollectionState(from handle: FileHandle) -> CollectionState? {
+        do {
+            let size = try handle.seekToEnd()
+            guard size > 0, size <= 64 else { return nil }
+            try handle.seek(toOffset: 0)
+            guard let data = try handle.readToEnd(),
+                  let value = String(data: data, encoding: .utf8) else { return nil }
+            let fields = value.split(whereSeparator: \Character.isWhitespace)
+            guard fields.count == 2,
+                  let epoch = UInt64(fields[0]),
+                  let enabledInt = Int(fields[1]),
+                  enabledInt == 0 || enabledInt == 1 else { return nil }
+            return CollectionState(epoch: epoch, enabled: enabledInt == 1)
+        } catch {
+            return nil
         }
     }
 
