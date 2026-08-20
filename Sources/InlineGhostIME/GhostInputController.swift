@@ -9,6 +9,7 @@ import OSLog
 final class GhostInputController: IMKInputController {
     private static let unset = NSRange(location: NSNotFound, length: NSNotFound)
     private static let contextLimit = 3_000
+    private static let trailingContextLimit = 80
     private static let slowKeyThreshold: TimeInterval = 0.050
     private static let slowKeyLogger = Logger(
         subsystem: "bar.r3d.inputmethod.InlineGhost",
@@ -41,6 +42,34 @@ final class GhostInputController: IMKInputController {
     ) -> Bool {
         keyCode == 50
             && modifiers.intersection(.deviceIndependentFlagsMask) == [.shift]
+    }
+
+    static func trailingContextRange(
+        selection: NSRange,
+        markedRange: NSRange,
+        documentLength: Int
+    ) -> NSRange? {
+        guard selection.location != NSNotFound,
+              selection.length == 0,
+              documentLength > selection.location else {
+            return nil
+        }
+
+        // While a ghost is visible, some clients include Tilde's own marked
+        // text in their document length. Skip that range so the acceptance
+        // safety check examines only the writer's real trailing content.
+        let start: Int
+        if markedRange.location == selection.location,
+           markedRange.length <= documentLength - selection.location {
+            start = NSMaxRange(markedRange)
+        } else {
+            start = selection.location
+        }
+        guard documentLength > start else { return nil }
+        return NSRange(
+            location: start,
+            length: min(trailingContextLimit, documentLength - start)
+        )
     }
 
     private struct FallbackOwner: Equatable {
@@ -392,6 +421,10 @@ final class GhostInputController: IMKInputController {
         _ client: IMKTextInput,
         observation: InsertionObservation
     ) -> Bool {
+        guard canAcceptSuggestion(in: client) else {
+            dismiss(client)
+            return false
+        }
         let match = matchingVisibleState(for: client)
         cancelPendingWork()
         let effects = state.reduce(.acceptNextWord(
@@ -423,6 +456,10 @@ final class GhostInputController: IMKInputController {
         _ client: IMKTextInput,
         observation: InsertionObservation
     ) -> Bool {
+        guard canAcceptSuggestion(in: client) else {
+            dismiss(client)
+            return false
+        }
         let match = matchingVisibleState(for: client)
         cancelPendingWork()
         let effects = state.reduce(.acceptAll(current: match?.ticket))
@@ -513,6 +550,24 @@ final class GhostInputController: IMKInputController {
         return fallbackOwner(for: client) == fallbackOwner ? typedFallback : ""
     }
 
+    private func trailingTextAfterCaret(_ client: IMKTextInput) -> String {
+        guard !IsSecureEventInputEnabled() else { return "" }
+        guard let range = Self.trailingContextRange(
+            selection: client.selectedRange(),
+            markedRange: client.markedRange(),
+            documentLength: client.length()
+        ) else {
+            return ""
+        }
+        return client.attributedSubstring(from: range)?.string ?? ""
+    }
+
+    private func canAcceptSuggestion(in client: IMKTextInput) -> Bool {
+        SuggestionActivationPolicy.isAtGrowingEdge(
+            trailingTextAfterCaret: trailingTextAfterCaret(client)
+        )
+    }
+
     // MARK: - Suggestion paths
 
     private func scheduleSuggestion(for client: IMKTextInput, afterUserTyped grapheme: String) {
@@ -566,7 +621,11 @@ final class GhostInputController: IMKInputController {
             return
         }
         let context = contextBeforeCaret(client)
-        guard SuggestionActivationPolicy.allowsSuggestions(afterUserTyped: typedFallback) else {
+        let trailingText = trailingTextAfterCaret(client)
+        guard SuggestionActivationPolicy.allowsSuggestions(
+            afterUserTyped: typedFallback,
+            trailingTextAfterCaret: trailingText
+        ) else {
             dismiss(client)
             return
         }
@@ -639,6 +698,12 @@ final class GhostInputController: IMKInputController {
         guard !stopForSecureInput(liveClient) else { return }
         let currentContext = contextBeforeCaret(liveClient)
         guard ticket(for: liveClient, context: currentContext) == requestTicket else { return }
+        guard SuggestionActivationPolicy.isAtGrowingEdge(
+            trailingTextAfterCaret: trailingTextAfterCaret(liveClient)
+        ) else {
+            dismiss(liveClient)
+            return
+        }
         apply(state.reduce(.present(text, requestTicket)), to: liveClient)
     }
 
