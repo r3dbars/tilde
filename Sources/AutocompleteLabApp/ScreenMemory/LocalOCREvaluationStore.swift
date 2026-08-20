@@ -83,7 +83,9 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "bar.r3d.tilde.local-ocr-evaluation")
     private let encoder: JSONEncoder
     private let mayPersist: @Sendable () -> Bool
-    private var generation: UInt64 = 0
+    private let excludedApps: @Sendable () -> Set<String>
+    private let generationLock = NSLock()
+    private var generationStorage: UInt64 = 0
 
     init(
         location: URL = FileManager.default
@@ -96,10 +98,14 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
                 && ScreenRecordingPermission.isGranted()
                 && !ScreenLockObserver.isLocked()
                 && !IsSecureEventInputEnabled()
+        },
+        excludedApps: @escaping @Sendable () -> Set<String> = {
+            TildeSettings().personalHistoryExcludedApps
         }
     ) {
         self.location = location
         self.mayPersist = mayPersist
+        self.excludedApps = excludedApps
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys]
@@ -113,12 +119,14 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     /// Deletion advances the generation, so a late result from before the
     /// delete can never recreate the raw corpus afterward.
     func generationToken() -> UInt64 {
-        queue.sync { generation }
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        return generationStorage
     }
 
     func record(_ sample: LocalOCREvaluationSample, generation token: UInt64) {
         queue.async { [self] in
-            guard token == generation else { return }
+            guard token == generationToken() else { return }
             persist(sample)
         }
     }
@@ -132,14 +140,16 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     @discardableResult
     func deleteAll() -> Bool {
         queue.sync {
-            generation &+= 1
+            generationLock.lock()
+            generationStorage &+= 1
+            generationLock.unlock()
             return SecureLocalStorage.removeOwnerOnlyFile(at: location)
         }
     }
 
     private func persist(_ sample: LocalOCREvaluationSample) {
         do {
-            guard mayPersist() else { return }
+            guard mayPersist(sample) else { return }
             let encoded = try encoder.encode(sample)
             guard encoded.count <= Self.maximumRecordBytes,
                   let handle = SecureLocalStorage.openFileForReadingAndAppending(at: location) else {
@@ -173,7 +183,7 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             // Re-check immediately before the only raw disk mutation. This
             // closes the async queue gap when consent, Screen Memory, TCC,
             // lock state, or Secure Event Input changes after record().
-            guard mayPersist() else { return }
+            guard mayPersist(sample) else { return }
             try handle.truncate(atOffset: 0)
             // FileHandle truncation does not promise to reset the current
             // offset. Seek after truncating or repeated rewrites can create
@@ -183,6 +193,15 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
             try handle.synchronize()
         } catch {
             // Evaluation must never affect capture or typing.
+        }
+    }
+
+    private func mayPersist(_ sample: LocalOCREvaluationSample) -> Bool {
+        guard mayPersist() else { return false }
+        let exclusions = excludedApps()
+        return (sample.incrementalBlocks + sample.fullReferenceBlocks).allSatisfy { block in
+            guard let owner = block.ownerBundleIdentifier else { return false }
+            return !exclusions.contains(owner)
         }
     }
 

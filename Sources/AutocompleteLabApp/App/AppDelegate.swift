@@ -73,8 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var setupWindow: TildeSetupWindowController?
     private var setupLaunchTimer: Timer?
 
-    // Screen Memory: capture engine, memory-only (nothing persisted yet —
-    // Phase 3 of docs/plans/screen-memory.md), on by default per the
+    // Screen Memory: normal capture state remains memory-only. Development
+    // builds may persist an explicitly enabled, bounded raw OCR evaluation
+    // corpus through LocalOCREvaluationStore. On by default per the
     // 2026-08-16 owner directive making Screen Memory a first-class,
     // required-permission feature rather than an opt-in. `enabled` reads
     // TildeSettings live on every trigger, so flipping the menu toggle off

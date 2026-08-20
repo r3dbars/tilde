@@ -102,6 +102,7 @@ actor ScreenCaptureService {
     private let localOCREvaluationEnabled: @Sendable () -> Bool
     private let localOCREvaluationGeneration: @Sendable () -> UInt64
     private let recordOCREvaluation: @Sendable (LocalOCREvaluationSample, UInt64) -> Void
+    private var localOCREvaluationInFlight = false
 
     init(
         enabled: @escaping @Sendable () -> Bool,
@@ -882,7 +883,11 @@ actor ScreenCaptureService {
         referenceOCR: () async throws -> ([ScreenSnapshot.TextBlock], Int)
     ) async {
         let generation = localOCREvaluationGeneration()
-        guard incrementalScope != "full", localOCREvaluationEnabled() else { return }
+        guard incrementalScope != "full",
+              localOCREvaluationEnabled(),
+              !localOCREvaluationInFlight else { return }
+        localOCREvaluationInFlight = true
+        defer { localOCREvaluationInFlight = false }
         do {
             let (referenceBlocks, referenceMilliseconds) = try await referenceOCR()
             // Consent and safety settings can change while Vision is working.

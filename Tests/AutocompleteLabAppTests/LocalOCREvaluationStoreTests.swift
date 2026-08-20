@@ -54,7 +54,7 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
 
         for index in 0..<(LocalOCREvaluationStore.maximumSamples + 5) {
             store.record(sample(index: index))
@@ -82,10 +82,28 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
         let oversized = String(repeating: "x", count: LocalOCREvaluationStore.maximumRecordBytes + 1)
 
         store.record(sample(index: 0, text: oversized))
+        store.flush()
+
+        #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+    }
+
+    @Test("Persistence boundary rejects blocks from a currently excluded app")
+    func rejectsCurrentlyExcludedOwner() {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalOCREvaluationStore(
+            location: location,
+            mayPersist: { true },
+            excludedApps: { ["com.example.Editor"] }
+        )
+
+        store.record(sample(index: 1))
         store.flush()
 
         #expect(store.summary() == LocalOCREvaluationSummary(sampleCount: 0, approximateBytes: 0))
@@ -97,7 +115,7 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
         store.record(sample(index: 1))
         store.flush()
         #expect(store.summary().sampleCount == 1)
@@ -111,7 +129,7 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
         let inFlightGeneration = store.generationToken()
 
         #expect(store.deleteAll())
@@ -127,7 +145,7 @@ struct LocalOCREvaluationStoreTests {
         let location = temporaryLocation()
         let root = location.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = LocalOCREvaluationStore(location: location, mayPersist: { true })
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
         let payload = String(repeating: "x", count: 900_000)
 
         for index in 0..<12 {
