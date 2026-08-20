@@ -96,6 +96,11 @@ actor ScreenCaptureService {
     /// behavior exactly: the luminance-grid sampling and
     /// `CaptureChangeDetector` call are skipped entirely, not just ignored.
     private let incrementalOCREnabled: @Sendable () -> Bool
+    /// Explicit dev-build-only paired evaluator. When enabled, region/skip
+    /// decisions run one additional full OCR pass over the same in-memory
+    /// image and persist both outputs to the bounded owner-only corpus.
+    private let localOCREvaluationEnabled: @Sendable () -> Bool
+    private let recordOCREvaluation: @Sendable (LocalOCREvaluationSample) -> Void
 
     init(
         enabled: @escaping @Sendable () -> Bool,
@@ -113,7 +118,14 @@ actor ScreenCaptureService {
         diagnostics: @escaping @Sendable (String, [String: String]) -> Void = { event, metadata in
             DiagnosticsLog.shared.record(event, metadata: metadata)
         },
-        incrementalOCREnabled: @escaping @Sendable () -> Bool = { TildeSettings().incrementalOCREnabled }
+        incrementalOCREnabled: @escaping @Sendable () -> Bool = { TildeSettings().incrementalOCREnabled },
+        localOCREvaluationEnabled: @escaping @Sendable () -> Bool = {
+            LocalOCREvaluationStore.isAvailableInCurrentBuild
+                && TildeSettings().localOCREvaluationEnabled
+        },
+        recordOCREvaluation: @escaping @Sendable (LocalOCREvaluationSample) -> Void = {
+            LocalOCREvaluationStore.shared.record($0)
+        }
     ) {
         self.enabled = enabled
         self.excludedApps = excludedApps
@@ -125,6 +137,8 @@ actor ScreenCaptureService {
         self.now = now
         self.diagnostics = diagnostics
         self.incrementalOCREnabled = incrementalOCREnabled
+        self.localOCREvaluationEnabled = localOCREvaluationEnabled
+        self.recordOCREvaluation = recordOCREvaluation
     }
 
     /// The focused-window trigger. It may refresh context while an IMKit
@@ -597,6 +611,25 @@ actor ScreenCaptureService {
             }
 
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
+            if localOCREvaluationEnabled(), ocrScope != "full" {
+                do {
+                    let (referenceBlocks, referenceMilliseconds) = try await fullWindowOCR()
+                    recordOCREvaluation(LocalOCREvaluationSample(
+                        capturedAt: moment,
+                        captureKind: "window",
+                        incrementalScope: ocrScope,
+                        incrementalMilliseconds: ocrMilliseconds,
+                        fullReferenceMilliseconds: referenceMilliseconds,
+                        incrementalBlocks: blocks,
+                        fullReferenceBlocks: referenceBlocks
+                    ))
+                } catch {
+                    diagnostics(
+                        "ocr-evaluation-reference-failed",
+                        ["kind": "window", "scope": ocrScope]
+                    )
+                }
+            }
             let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
             latestSnapshot = snapshot
             lastCaptureAt = moment
@@ -796,6 +829,25 @@ actor ScreenCaptureService {
             // part of the "capture+OCR" duty cycle the plan's power budget
             // assertions (script/capture_power_probe.sh) measure.
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
+            if localOCREvaluationEnabled(), ocrScope != "full" {
+                do {
+                    let (referenceBlocks, referenceMilliseconds) = try await fullDisplayOCR()
+                    recordOCREvaluation(LocalOCREvaluationSample(
+                        capturedAt: moment,
+                        captureKind: "display",
+                        incrementalScope: ocrScope,
+                        incrementalMilliseconds: ocrMilliseconds,
+                        fullReferenceMilliseconds: referenceMilliseconds,
+                        incrementalBlocks: blocks,
+                        fullReferenceBlocks: referenceBlocks
+                    ))
+                } catch {
+                    diagnostics(
+                        "ocr-evaluation-reference-failed",
+                        ["kind": "display", "scope": ocrScope]
+                    )
+                }
+            }
             let snapshot = ScreenSnapshot(
                 capturedAt: moment,
                 displayID: display.displayID,
