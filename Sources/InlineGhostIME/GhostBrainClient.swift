@@ -26,6 +26,10 @@ enum GhostBrainClient {
         return await send(GhostBrainRequest(personalHistoryEvents: events))
     }
 
+    static func notifyScreenMemory(_ event: ScreenMemoryInputEvent) async -> GhostBrainResponse {
+        await send(GhostBrainRequest(screenMemoryEvent: event))
+    }
+
     static func personalHistoryPayloadFits(_ events: [PersonalHistoryEvent]) -> Bool {
         PersonalHistoryEvent.validBatch(events)
             && encoded(GhostBrainRequest(personalHistoryEvents: events)) != nil

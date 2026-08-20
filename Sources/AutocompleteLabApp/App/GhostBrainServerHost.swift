@@ -19,6 +19,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// active" signal; this file otherwise knows nothing about Screen
     /// Memory and never sees a `ScreenSnapshot`.
     private let onCompletionActivity: (@Sendable () -> Void)?
+    /// Content-free field lifecycle pulses from the IME. The app turns
+    /// these into Screen Memory capture triggers; no document text is
+    /// carried by this callback.
+    private let onScreenMemoryEvent: (@Sendable (ScreenMemoryInputEvent) -> Void)?
     /// Screen Memory plan Phase 2 PR 2b: resolves the current request's
     /// scene, already settings-gated by whoever constructs this host (see
     /// `AppDelegate`). `nil` — no provider, or the provider itself returning
@@ -63,6 +67,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         personalHistory: any PersonalHistoryIngesting,
         sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)? = nil,
         onCompletionActivity: (@Sendable () -> Void)? = nil,
+        onScreenMemoryEvent: (@Sendable (ScreenMemoryInputEvent) -> Void)? = nil,
         suggestionsGate: (@Sendable () -> Bool)? = nil,
         personalSuggestionsGate: (@Sendable () -> Bool)? = nil,
         personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil
@@ -72,6 +77,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
         self.onCompletionActivity = onCompletionActivity
+        self.onScreenMemoryEvent = onScreenMemoryEvent
         self.suggestionsGate = suggestionsGate
         self.personalSuggestionsGate = personalSuggestionsGate
         self.personalNextWordProvider = personalNextWordProvider
@@ -192,6 +198,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
             if case let .personalHistory(events) = request {
                 let accepted = await self.personalHistory.ingest(events)
                 _ = Self.write(accepted ? .recorded : .error, to: connection)
+                return
+            }
+            if case let .screenMemory(event) = request {
+                self.onScreenMemoryEvent?(event)
+                _ = Self.write(.recorded, to: connection)
                 return
             }
             guard case let .completion(completionRequest) = request else { return }
@@ -447,6 +458,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private enum ValidatedRequest {
         case completion(GhostBrainRequest)
         case personalHistory([PersonalHistoryEvent])
+        case screenMemory(ScreenMemoryInputEvent)
     }
 
     private static func readRequest(_ fd: Int32) -> Result<ValidatedRequest, Error> {
@@ -468,12 +480,22 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             if let events = request.personalHistoryEvents {
                 guard request.context.isEmpty, request.app == nil,
+                      request.screenMemoryEvent == nil,
                       PersonalHistoryEvent.validBatch(events) else {
                     return .failure(WireError.invalid)
                 }
                 return .success(.personalHistory(events))
             }
+            if let event = request.screenMemoryEvent {
+                guard request.context.isEmpty, request.app == nil,
+                      request.personalHistoryEvents == nil,
+                      UUID(uuidString: event.sessionIdentifier) != nil else {
+                    return .failure(WireError.invalid)
+                }
+                return .success(.screenMemory(event))
+            }
             guard !request.context.isEmpty,
+                  request.screenMemoryEvent == nil,
                   request.context.count <= 3_000,
                   request.context.last?.isWhitespace == true,
                   (request.app?.count ?? 0) <= 512 else {

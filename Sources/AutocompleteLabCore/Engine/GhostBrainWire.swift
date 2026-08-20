@@ -11,12 +11,14 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
     public let context: String
     public let app: String?
     public let personalHistoryEvents: [PersonalHistoryEvent]?
+    public let screenMemoryEvent: ScreenMemoryInputEvent?
 
     public init(context: String, app: String?) {
         self.v = Self.version
         self.context = context
         self.app = app
         self.personalHistoryEvents = nil
+        self.screenMemoryEvent = nil
     }
 
     public init(personalHistoryEvents: [PersonalHistoryEvent]) {
@@ -24,6 +26,35 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.context = ""
         self.app = nil
         self.personalHistoryEvents = personalHistoryEvents
+        self.screenMemoryEvent = nil
+    }
+
+    public init(screenMemoryEvent: ScreenMemoryInputEvent) {
+        self.v = Self.version
+        self.context = ""
+        self.app = nil
+        self.personalHistoryEvents = nil
+        self.screenMemoryEvent = screenMemoryEvent
+    }
+}
+
+/// A content-free lifecycle pulse from the input method to Screen Memory.
+/// The session identifier prevents a late blur from an old IMKit controller
+/// from cancelling capture for the newly focused field. No typed or screen
+/// text crosses this message boundary.
+public struct ScreenMemoryInputEvent: Codable, Equatable, Sendable {
+    public enum Kind: String, Codable, Sendable {
+        case textFieldFocused
+        case typingPaused
+        case textFieldBlurred
+    }
+
+    public let kind: Kind
+    public let sessionIdentifier: String
+
+    public init(kind: Kind, sessionIdentifier: String) {
+        self.kind = kind
+        self.sessionIdentifier = sessionIdentifier
     }
 }
 

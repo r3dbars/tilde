@@ -2,17 +2,19 @@ import Foundation
 
 /// Decides whether a Screen Memory capture may fire. Pure and deterministic —
 /// no ScreenCaptureKit, no Vision, no I/O — so the covenant's non-negotiables
-/// (off by default, secure-input and lock-screen exclusion, per-app exclusion
-/// against EVERY visible window, cadence cap) are testable without ever
-/// touching a real display. The app supplies the observed state; this type
+/// (secure-input and lock-screen exclusion, active-field requirement,
+/// per-app exclusion against EVERY visible window, cadence cap) are testable
+/// without ever touching a real display. The app supplies the observed state; this type
 /// only says yes or no and why.
 public enum CaptureTriggerPolicy {
-    /// What asked for a capture. `windowChanged` fires independent of any
-    /// completion session; `typingPause` only counts once the user has been
+    /// What asked for a capture. Every trigger requires an active text
+    /// field. `windowChanged` is independent of a completion session;
+    /// `typingPause` only counts once the user has been
     /// still for the threshold AND a completion session is active — a stray
     /// pause with no writing underway is not a trigger.
     public enum Trigger: Equatable, Sendable {
         case windowChanged
+        case textFieldFocused
         case typingPause(elapsedSeconds: TimeInterval)
     }
 
@@ -25,6 +27,7 @@ public enum CaptureTriggerPolicy {
         case disabled
         case screenLocked
         case secureInput
+        case noActiveTextField
         case noActiveCompletionSession
         case belowTypingPauseThreshold
         case excludedWindow(appBundleIdentifier: String)
@@ -33,7 +36,7 @@ public enum CaptureTriggerPolicy {
 
     /// Typing must be still this long, with a session active, before a pause
     /// counts as a trigger.
-    public static let typingPauseThresholdSeconds: TimeInterval = 2.0
+    public static let typingPauseThresholdSeconds: TimeInterval = 0.25
     /// Hard ceiling regardless of how many triggers fire: never more than one
     /// capture per this many seconds. Owner directive 2026-08-18: fresher
     /// conversation context is worth the extra duty cycles — was 5.0; the
@@ -43,8 +46,8 @@ public enum CaptureTriggerPolicy {
     public static let cadenceCapSeconds: TimeInterval = 2.0
     /// A completion session is "active" if the IME's last observed activity
     /// (a completion request reaching the socket) was within this long ago.
-    /// Chosen to comfortably span the 2s typing-pause threshold itself: a
-    /// pause trigger fires at 2s, so activity from just before that pause
+    /// Chosen to comfortably span the typing-pause threshold itself: a
+    /// pause trigger fires at 250ms, so activity from just before that pause
     /// must still read as an active session.
     public static let sessionActivityWindowSeconds: TimeInterval = 10.0
 
@@ -64,6 +67,7 @@ public enum CaptureTriggerPolicy {
         enabled: Bool,
         screenLocked: Bool,
         secureInputActive: Bool,
+        textFieldActive: Bool,
         completionSessionActive: Bool,
         visibleWindowOwnerBundleIdentifiers: [String],
         excludedApps: Set<String>,
@@ -73,6 +77,7 @@ public enum CaptureTriggerPolicy {
         guard enabled else { return .skip(.disabled) }
         guard !screenLocked else { return .skip(.screenLocked) }
         guard !secureInputActive else { return .skip(.secureInput) }
+        guard textFieldActive else { return .skip(.noActiveTextField) }
 
         if case let .typingPause(elapsedSeconds) = trigger {
             guard completionSessionActive else { return .skip(.noActiveCompletionSession) }
