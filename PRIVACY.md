@@ -10,9 +10,10 @@ cursor to ask its local model for a continuation. It inserts text only when you
 accept a visible suggestion.
 
 The input method sends that bounded context to the Tilde app through an
-owner-only Unix socket on this Mac. The app passes it to its bundled model and
-returns the suggestion. Context and output are used in memory for that request
-and are not saved as part of ordinary completion requests.
+owner-only Unix socket on this Mac. The app passes it to the verified local
+Gemma 4 E2B model in Tilde's external app-support storage and returns the
+suggestion. Context and output are used in memory for that request and are not
+saved as part of ordinary completion requests.
 
 Tilde does not use Accessibility, screenshots as stored images, the
 clipboard, or synthetic key events for autocomplete. It does use Screen
@@ -50,7 +51,8 @@ rebuilds learned contexts but is not scored. On fresh eligible word boundaries,
 both recipes freeze a prediction from the same prior authored words, compare it
 with the same next authored word, and learn only afterward. This paired shadow
 experiment does not change visible suggestions, perform retrieval, or train the
-bundled model. Accepted Tilde suggestions are excluded from learning and scoring.
+fixed Gemma 4 E2B model. Accepted Tilde suggestions are excluded from learning
+and scoring.
 
 Capture stops when Personal History is disabled, when macOS Secure Event Input
 is active, when the host app cannot be identified safely, or when the current
@@ -244,7 +246,7 @@ Memory's persistence phase ships, a separate conversation-context table
 populated from stored screen events is planned to inform future
 suggestions; the covenant requires that table to stay wholly separate from
 the table that models how *you* write — only text you actually typed will
-ever train that one — and any future fine-tuning of the bundled model will
+ever train that one — and any future fine-tuning of the fixed Gemma 4 E2B model will
 remain an explicit, separate user action.
 
 **Controls and deletion.** Screen Memory ships ON by default for new
@@ -264,20 +266,37 @@ today.
 
 ## Network behavior
 
-Autocomplete does not need internet access. Distributed builds contain the
-model and a self-contained `llama-server` helper inside the signed app. Tilde
-does not download a model at runtime and does not send autocomplete requests to
-a cloud service.
+Autocomplete does not use the internet after setup. The signed app contains
+the `llama-server` helper but deliberately does not contain the 3.2 GB model.
+During first-run setup, Tilde's separate asset phase downloads exactly one
+fixed model file, `gemma-4-E2B.Q4_K_M.gguf`, from this immutable Hugging Face
+revision URL:
 
-The release gate starts an isolated proof-mode app on a dedicated local port and
-observes that app and its exact helper child's open sockets while sending a
-fixed synthetic prompt directly to the helper. It may append privacy-safe
-diagnostics, but it does not quit or change the daily driver. The proof reads
-process-table metadata to identify the exact proof app and helper and avoid
-other processes; it does not validate or observe sockets of the input method,
-or install, launch, or terminate it. Any unexpected remote connection is a
-release blocker. This is open-socket observation, not packet capture,
-authenticated-socket proof, or a real-editor round trip.
+`https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
+
+The download is resumable and is accepted only when the final file is exactly
+3,427,861,984 bytes with SHA-256
+`389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`; an
+interrupted or mismatched file is not used by the runtime. The request contains
+no typed text, screen text, prompt, history, suggestion, or other user-derived
+content. The model host can still see ordinary transport metadata such as the
+client IP address, request time, and fixed asset URL.
+
+After verification, model startup and all autocomplete, Screen Memory, and
+Personal History work are local. Tilde does not send autocomplete requests to a
+cloud service, and it has no remote inference fallback.
+
+The release gate takes a preseeded copy of the pinned model as an explicitly
+named proof-only input and places it in isolated external storage; it never
+puts that file in `Tilde.app`. It then starts the exact packaged app and helper
+on a dedicated local port and observes their open sockets while sending a fixed
+synthetic prompt directly to the helper. This is the post-download steady-state
+lane: any unexpected non-loopback connection is a release blocker. The proof
+reads process-table metadata to identify the exact proof app and helper and
+avoid other processes; it does not validate or observe sockets of the input
+method, or install, launch, or terminate it. This is open-socket observation,
+not packet capture, download-phase proof, authenticated-socket proof, or a
+real-editor round trip.
 
 ## Control and removal
 

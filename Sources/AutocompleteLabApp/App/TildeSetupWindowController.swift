@@ -39,6 +39,7 @@ final class TildeSetupWindowController: NSWindowController, NSWindowDelegate {
 @MainActor
 private final class TildeSetupViewModel: ObservableObject {
     @Published private(set) var state: TildeSetupState = .installingKeyboard
+    @Published private(set) var modelState: ModelState = .checking
     @Published private(set) var finishingSetup = false
     @Published private(set) var showInputSourceFallback = false
 
@@ -54,6 +55,53 @@ private final class TildeSetupViewModel: ObservableObject {
     }
 
     var screenRecordingWasRequested: Bool { TildeSettings().screenRecordingRequested }
+
+    var modelDescription: String {
+        appDelegate?.modelDescription() ?? "Gemma 4 E2B · about 3.43 GB"
+    }
+
+    var isBusy: Bool {
+        switch state {
+        case .installingKeyboard, .downloadingModel, .verifyingModel, .startingRuntime:
+            return true
+        case .needsKeyboard, .needsScreenRecording, .needsInputSourceSelection, .ready,
+             .recoverableError:
+            return false
+        }
+    }
+
+    var modelProgress: TildeModelProgress? {
+        switch modelState {
+        case .checking, .missing:
+            return TildeModelProgress(
+                title: "Preparing Gemma 4 E2B",
+                detail: "About 3.43 GB · starts automatically",
+                fraction: nil
+            )
+        case let .downloading(receivedBytes, totalBytes):
+            let formatter = ByteCountFormatter()
+            formatter.allowedUnits = [.useMB, .useGB]
+            formatter.countStyle = .file
+            let received = formatter.string(fromByteCount: max(0, receivedBytes))
+            let total = formatter.string(fromByteCount: max(0, totalBytes))
+            let fraction = totalBytes > 0
+                ? min(1, max(0, Double(receivedBytes) / Double(totalBytes)))
+                : nil
+            return TildeModelProgress(
+                title: "Downloading local model",
+                detail: "\(received) of \(total)",
+                fraction: fraction
+            )
+        case .verifying:
+            return TildeModelProgress(
+                title: "Checking Gemma 4 E2B",
+                detail: "Verifying the downloaded model once",
+                fraction: nil
+            )
+        case .ready, .failed:
+            return nil
+        }
+    }
 
     func start() {
         refresh()
@@ -71,21 +119,23 @@ private final class TildeSetupViewModel: ObservableObject {
     func refresh() {
         guard !finishingSetup else { return }
         let permissionGranted = ScreenRecordingPermission.isGranted()
-        state = appDelegate?.setupState() ?? .recoverableError
-        let canSelectInputSource = state == .needsScreenRecording
-            || state == .preparing
-            || state == .ready
+        modelState = appDelegate?.modelState() ?? .missing
+        state = appDelegate?.setupState() ?? .recoverableError(.runtime)
+        let canSelectInputSource = state == .needsInputSourceSelection
         if canSelectInputSource, !attemptedInputSourceSelection {
             attemptedInputSourceSelection = true
             showInputSourceFallback = appDelegate?.selectInputSourceIfAvailable() != true
-            state = appDelegate?.setupState() ?? .recoverableError
+            state = appDelegate?.setupState() ?? .recoverableError(.runtime)
+        }
+        if state != .needsInputSourceSelection {
+            showInputSourceFallback = false
         }
         if showInputSourceFallback, appDelegate?.inputSourceIsSelected() == true {
             showInputSourceFallback = false
         }
         if !previousPermissionGranted, permissionGranted, screenRecordingWasRequested {
             finishingSetup = true
-            state = .preparing
+            state = .startingRuntime
             stop()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
                 guard let self else { return }
@@ -111,14 +161,25 @@ private final class TildeSetupViewModel: ObservableObject {
                 appDelegate.requestScreenRecordingAccess()
                 refresh()
             }
+        case .needsInputSourceSelection:
+            attemptedInputSourceSelection = true
+            showInputSourceFallback = !appDelegate.selectInputSourceIfAvailable()
+            refresh()
         case .ready:
             appDelegate.completeSetup()
         case .recoverableError:
             appDelegate.retrySetup()
-        case .installingKeyboard, .preparing:
+            refresh()
+        case .installingKeyboard, .downloadingModel, .verifyingModel, .startingRuntime:
             break
         }
     }
+}
+
+private struct TildeModelProgress {
+    let title: String
+    let detail: String
+    let fraction: Double?
 }
 
 private struct TildeSetupView: View {
@@ -164,14 +225,42 @@ private struct TildeSetupView: View {
             Button(primaryTitle) { model.performPrimaryAction() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(model.state == .installingKeyboard || model.state == .preparing)
+                .disabled(model.isBusy)
                 .keyboardShortcut(.defaultAction)
 
-            Label("Everything stays on this Mac.", systemImage: "lock.fill")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
+            if let progress = model.modelProgress {
+                VStack(spacing: 5) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                            .foregroundStyle(.secondary)
+                        Text(progress.title)
+                            .font(.caption.weight(.medium))
+                        Spacer()
+                    }
+                    if let fraction = progress.fraction {
+                        ProgressView(value: fraction)
+                            .progressViewStyle(.linear)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                    }
+                    Text(progress.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: 390)
+                .padding(.top, 12)
+            }
+
+            Label(
+                "Your screen and writing stay on this Mac. Tilde connects only to download the fixed Gemma 4 E2B model (about 3.43 GB).",
+                systemImage: "lock.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
         .frame(width: 500, height: 430)
@@ -183,7 +272,10 @@ private struct TildeSetupView: View {
         case .installingKeyboard: "Installing Tilde…"
         case .needsKeyboard: "Add the Tilde keyboard"
         case .needsScreenRecording: "Allow screen access"
-        case .preparing: "Getting Tilde ready…"
+        case .downloadingModel: "Downloading the local model…"
+        case .verifyingModel: "Checking the local model…"
+        case .startingRuntime: "Starting Tilde…"
+        case .needsInputSourceSelection: "Select Tilde as your keyboard"
         case .ready: "Tilde is ready"
         case .recoverableError: "Tilde needs a quick retry"
         }
@@ -195,10 +287,17 @@ private struct TildeSetupView: View {
         case .installingKeyboard: "This only takes a moment."
         case .needsKeyboard: "macOS needs you to approve it once."
         case .needsScreenRecording:
-            "macOS calls this Screen Recording. Tilde uses visible text to understand what you’re replying to. Nothing leaves this Mac."
-        case .preparing: "The local model is starting."
+            "macOS calls this Screen Recording. Tilde uses visible text to understand what you’re replying to. Your screen and writing never leave this Mac."
+        case .downloadingModel:
+            "Tilde is downloading its local Gemma 4 E2B writing engine. It runs entirely on this Mac after setup."
+        case .verifyingModel: "Tilde is checking the download before it can run."
+        case .startingRuntime: "The verified local model is starting."
+        case .needsInputSourceSelection:
+            model.showInputSourceFallback
+                ? "Choose Tilde from the keyboard menu, then return here."
+                : "Tilde needs to be selected once before setup is complete."
         case .ready: "Start typing anywhere. Press Tab to accept a suggestion."
-        case .recoverableError: "Tilde couldn’t finish setup. Try once more; if it still fails, reinstall the app."
+        case let .recoverableError(target): recoveryExplanation(for: target)
         }
     }
 
@@ -208,9 +307,40 @@ private struct TildeSetupView: View {
         case .needsKeyboard: "Open Keyboard Settings"
         case .needsScreenRecording:
             model.screenRecordingWasRequested ? "Open Privacy Settings" : "Allow Screen Access"
-        case .preparing: model.finishingSetup ? "Reopening…" : "Starting…"
+        case .downloadingModel: "Downloading…"
+        case .verifyingModel: "Checking…"
+        case .startingRuntime: model.finishingSetup ? "Reopening…" : "Starting…"
+        case .needsInputSourceSelection: "Select Tilde"
         case .ready: "Start Typing"
         case .recoverableError: "Try Again"
+        }
+    }
+
+    private func recoveryExplanation(for target: TildeSetupRepairTarget) -> String {
+        switch target {
+        case .keyboard:
+            return "Tilde couldn’t install its keyboard. Try again; if it still fails, open Keyboard Settings and add Tilde."
+        case .runtime:
+            return "Tilde couldn’t start its local engine. Try again; your downloaded model will be checked before it runs."
+        case let .model(failure):
+            return modelFailureExplanation(failure)
+        }
+    }
+
+    private func modelFailureExplanation(_ failure: ModelFailure) -> String {
+        switch failure {
+        case .offline:
+            return "Tilde couldn’t reach the model host. Check your connection and try again."
+        case .insufficientDiskSpace:
+            return "Tilde needs about 3.43 GB of free space for Gemma 4 E2B. Free space, then try again."
+        case .serverRejectedRequest:
+            return "The model host rejected the download. Try again in a moment."
+        case .checksumMismatch:
+            return "The downloaded model failed its integrity check. Tilde will download it again."
+        case .invalidModel:
+            return "The downloaded model was not valid. Tilde will download it again."
+        case .installationFailed:
+            return "Tilde could not install the model. Check available disk space and try again."
         }
     }
 }

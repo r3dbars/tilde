@@ -50,6 +50,28 @@ struct RuntimeBoundaryTests {
         #expect(runtime.baseURL == URL(string: "http://127.0.0.1:19001"))
     }
 
+    @Test("A child can consume the exact inherited model descriptor")
+    func inheritedModelDescriptor() throws {
+        let model = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tilde-model-fd-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: model) }
+        let bytes = Data("verified model inode".utf8)
+        try bytes.write(to: model)
+        let input = try FileHandle(forReadingFrom: model)
+        defer { try? input.close() }
+        let output = Pipe()
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sh")
+        child.arguments = ["-c", "cat /dev/fd/0"]
+        child.standardInput = input
+        child.standardOutput = output
+        try child.run()
+        child.waitUntilExit()
+
+        #expect(child.terminationStatus == 0)
+        #expect(output.fileHandleForReading.readDataToEndOfFile() == bytes)
+    }
+
     @Test("Localhost requests never follow redirects")
     func redirectsAreRejected() async throws {
         let local = try #require(URL(string: "http://127.0.0.1:17872/completion"))

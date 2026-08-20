@@ -10,7 +10,7 @@ insertion.
 1. Install a signed and notarized `InlineGhostIME.app`.
 2. Add Tilde in System Settings → Keyboard → Input Sources.
 3. Switch to Tilde from the input menu.
-4. Run the Tilde app and confirm its bundled model is ready.
+4. Run the Tilde app and confirm its verified external model is ready.
 5. Start with a disposable TextEdit document before testing another editor.
 
 Never test with private writing. Do not capture or attach typed text or

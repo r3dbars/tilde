@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dev packaging lane: test, build, embed pinned inputs, and sign a daily-driver
+# Dev packaging lane: test, build, embed the pinned helper, and sign a daily-driver
 # bundle with an Apple Development identity. DMG creation, notarization,
 # stapling, Gatekeeper assessment, and dist/release-proof reports belong only
 # to the fail-closed release driver, script/package_app.sh.
@@ -11,30 +11,27 @@ source "$ROOT_DIR/script/signing_identity.sh"
 
 LLAMA_SERVER=""
 LLAMA_SHA256=""
-MODEL=""
-MODEL_SHA256=""
 SIGN_IDENTITY=""
 VERSION="0.1.0"
 SELFTEST=0
 
 usage() {
   cat <<'EOF'
-Usage: script/package_dev.sh --llama-server PATH --llama-sha256 SHA256 \
-  --model PATH --model-sha256 SHA256 [options]
+Usage: script/package_dev.sh --llama-server PATH --llama-sha256 SHA256 [options]
        script/package_dev.sh --selftest
 
 Local iteration lane. Runs the same fast proof gate and bundle assembly as the
-release driver, with the same pinned helper/model inputs, then signs with an
+release driver, with the same pinned helper input, then signs with an
 Apple Development identity and stops: no DMG, no notarization, no stapling, no
 Gatekeeper assessment, and no dist/release-proof report. Install the result
 with script/restart_app.sh. The fail-closed release path stays
 script/package_app.sh; this lane never produces a release artifact.
 
-Dev inputs (same pins as the release driver):
+Dev inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
   --llama-sha256 SHA256     Human-reviewed SHA-256 pin for the helper bytes.
-  --model PATH              GGUF model embedded in the app.
-  --model-sha256 SHA256     Human-reviewed SHA-256 pin for the model bytes.
+The Gemma 4 E2B model is never embedded. The installed dev app uses the same
+verified Application Support download flow as production.
 
 Options:
   --version VERSION         Base version (default: 0.1.0). The bundle always
@@ -59,17 +56,19 @@ EOF
 
 while (($#)); do
   case "$1" in
-    --llama-server|--llama-sha256|--model|--model-sha256|--sign-identity|--version)
+    --llama-server|--llama-sha256|--sign-identity|--version)
       [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
       case "$1" in
         --llama-server) LLAMA_SERVER="$2" ;;
         --llama-sha256) LLAMA_SHA256="$2" ;;
-        --model) MODEL="$2" ;;
-        --model-sha256) MODEL_SHA256="$2" ;;
         --sign-identity) SIGN_IDENTITY="$2" ;;
         --version) VERSION="$2" ;;
       esac
       shift
+      ;;
+    --model|--model-sha256|--proof-model|--proof-model-sha256)
+      echo "package_dev.sh does not accept model inputs; the model is downloaded outside the app" >&2
+      exit 2
       ;;
     --notary-profile|--build-number|--verify-inputs-only)
       echo "package_dev.sh refuses release-only flag $1; releases go through script/package_app.sh" >&2
@@ -167,12 +166,9 @@ fi
 
 [[ -f "$LLAMA_SERVER" ]] || { echo "missing --llama-server file: $LLAMA_SERVER" >&2; exit 2; }
 [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server is not executable: $LLAMA_SERVER" >&2; exit 2; }
-[[ -s "$MODEL" ]] || { echo "missing --model file: $MODEL" >&2; exit 2; }
-./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$MODEL"
+./script/check_app_bundle.sh --release-helper "$LLAMA_SERVER"
 LLAMA_SHA256="$(normalize_sha256 --llama-sha256 "$LLAMA_SHA256")"
-MODEL_SHA256="$(normalize_sha256 --model-sha256 "$MODEL_SHA256")"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
-verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
   echo "$(dev_identity_error '-' '')" >&2
@@ -206,18 +202,19 @@ echo "==> building input method"
   --build-number "$BUILD_NUMBER" \
   --sign-identity "$SIGN_IDENTITY"
 
-echo "==> embedding app-owned runtime, input method, and model"
-./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$MODEL"
+echo "==> embedding app-owned runtime and input method (model remains external)"
+./script/check_app_bundle.sh --release-helper "$LLAMA_SERVER"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
-verify_sha256 "model input" "$MODEL" "$MODEL_SHA256"
 mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Library" "$APP/Contents/Resources"
 cp "$LLAMA_SERVER" "$APP/Contents/Helpers/llama-server"
 chmod +x "$APP/Contents/Helpers/llama-server"
 rm -rf "$APP/Contents/Library/InlineGhostIME.app"
 cp -R "$IME" "$APP/Contents/Library/InlineGhostIME.app"
-cp "$MODEL" "$APP/Contents/Resources/bundled-model.gguf"
 verify_sha256 "bundled llama-server" "$APP/Contents/Helpers/llama-server" "$LLAMA_SHA256"
-verify_sha256 "bundled model" "$APP/Contents/Resources/bundled-model.gguf" "$MODEL_SHA256"
+if find "$APP" -type f -iname '*.gguf' -print -quit | grep -q .; then
+  echo "dev app unexpectedly contains a GGUF model" >&2
+  exit 1
+fi
 
 echo "==> signing nested code and app with the Apple Development identity"
 codesign --force --options runtime --sign "$SIGN_IDENTITY" \
@@ -227,8 +224,7 @@ codesign --force --options runtime --sign "$SIGN_IDENTITY" \
 codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 ./script/check_app_bundle.sh "$APP"
-./script/check_app_bundle.sh --release-inputs \
-  "$APP/Contents/Helpers/llama-server" "$APP/Contents/Resources/bundled-model.gguf"
+./script/check_app_bundle.sh --release-helper "$APP/Contents/Helpers/llama-server"
 
 echo "==> verifying the bundle is unmistakably a dev build"
 plist_value() {
