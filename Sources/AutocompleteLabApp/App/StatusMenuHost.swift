@@ -1,7 +1,7 @@
 import AppKit
 
-/// Tilde stays quiet in the menu bar. Detailed privacy and application
-/// controls live in the dedicated settings window.
+/// Tilde stays quiet in the menu bar. Personal progress and controls live in
+/// one unified window opened from a single menu action.
 @MainActor
 final class StatusMenuHost: NSObject {
     private weak var appDelegate: AppDelegate?
@@ -15,10 +15,9 @@ final class StatusMenuHost: NSObject {
     private var screenMemoryItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
-    private var setupOrSettingsItem: NSMenuItem?
+    private var setupOrTildeItem: NSMenuItem?
 
-    private var settingsWindow: TildeSettingsWindowController?
-    private var yourTildeWindow: YourTildeWindowController?
+    private var tildeWindow: TildeSettingsWindowController?
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
@@ -40,11 +39,10 @@ final class StatusMenuHost: NSObject {
 
         suggestionsItem = addAction(to: menu, "Tilde On", #selector(toggleSuggestions(_:)))
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
-        addAction(to: menu, "Your Tilde…", #selector(openYourTilde(_:)))
-        setupOrSettingsItem = addAction(
+        setupOrTildeItem = addAction(
             to: menu,
-            "Settings…",
-            #selector(openSetupOrSettings(_:)),
+            "Open Tilde…",
+            #selector(openTilde(_:)),
             key: ","
         )
         menu.addItem(.separator())
@@ -63,7 +61,7 @@ final class StatusMenuHost: NSObject {
         todayItem?.title = "Today: \(TildeStats.todayWordsAccepted().formatted()) words saved"
         engineItem?.title = appDelegate.engineStatusLine()
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
-        setupOrSettingsItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Settings…"
+        setupOrTildeItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Open Tilde…"
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(ceil(until.timeIntervalSinceNow / 60)))
@@ -75,8 +73,7 @@ final class StatusMenuHost: NSObject {
 
         refreshScreenMemoryLine()
         refreshIcon(for: state.iconAppearance)
-        settingsWindow?.refresh()
-        yourTildeWindow?.refresh()
+        tildeWindow?.refresh()
     }
 
     @objc private func toggleSuggestions(_ sender: Any?) {
@@ -94,29 +91,19 @@ final class StatusMenuHost: NSObject {
         refresh()
     }
 
-    @objc private func openSetupOrSettings(_ sender: Any?) {
+    @objc private func openTilde(_ sender: Any?) {
         guard let appDelegate else { return }
         if appDelegate.setupRequired() {
             appDelegate.showSetup()
             return
         }
-        if settingsWindow == nil {
-            settingsWindow = TildeSettingsWindowController(
+        if tildeWindow == nil {
+            tildeWindow = TildeSettingsWindowController(
                 appDelegate: appDelegate,
                 personalHistory: personalHistory
             )
         }
-        settingsWindow?.show()
-    }
-
-    @objc private func openYourTilde(_ sender: Any?) {
-        if yourTildeWindow == nil {
-            yourTildeWindow = YourTildeWindowController(
-                personalHistory: personalHistory,
-                openSettings: { [weak self] in self?.openSetupOrSettings(nil) }
-            )
-        }
-        yourTildeWindow?.show()
+        tildeWindow?.show()
     }
 
     @objc private func quit(_ sender: Any?) {

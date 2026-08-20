@@ -1,60 +1,4 @@
-import AppKit
 import SwiftUI
-
-@MainActor
-final class YourTildeWindowController: NSWindowController, NSWindowDelegate {
-    private let model: YourTildeViewModel
-    private var refreshTimer: Timer?
-
-    init(
-        personalHistory: PersonalHistoryController,
-        openSettings: @escaping @MainActor () -> Void
-    ) {
-        model = YourTildeViewModel(personalHistory: personalHistory, openSettings: openSettings)
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 420),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Your Tilde"
-        window.contentViewController = NSHostingController(rootView: YourTildeView(model: model))
-        window.isReleasedWhenClosed = false
-        window.center()
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func show() {
-        model.refresh()
-        startRefreshing()
-        showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func refresh() {
-        guard window?.isVisible == true else { return }
-        model.refresh()
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
-    }
-
-    private func startRefreshing() {
-        guard refreshTimer == nil else { return }
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.model.refresh() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        refreshTimer = timer
-    }
-}
 
 @MainActor
 final class YourTildeViewModel: ObservableObject {
@@ -70,15 +14,10 @@ final class YourTildeViewModel: ObservableObject {
     )
 
     private let personalHistory: PersonalHistoryController
-    private let openSettingsAction: @MainActor () -> Void
     private var refreshGeneration: UInt64 = 0
 
-    init(
-        personalHistory: PersonalHistoryController,
-        openSettings: @escaping @MainActor () -> Void
-    ) {
+    init(personalHistory: PersonalHistoryController) {
         self.personalHistory = personalHistory
-        openSettingsAction = openSettings
     }
 
     func refresh() {
@@ -90,26 +29,14 @@ final class YourTildeViewModel: ObservableObject {
             self.snapshot = next
         }
     }
-
-    func openSettings() {
-        openSettingsAction()
-    }
 }
 
-private struct YourTildeView: View {
+struct YourTildeSummaryView: View {
     @ObservedObject var model: YourTildeViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 10) {
-                Image(systemName: "personalhotspot")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
-                Text("Your Tilde")
-                    .font(.title2.weight(.semibold))
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text(stageTitle)
                     .font(.headline)
                 Text(stageDetail)
@@ -160,19 +87,11 @@ private struct YourTildeView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer(minLength: 0)
-
-            HStack {
-                Label("All learning stays on this Mac.", systemImage: "lock.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Manage Learning") { model.openSettings() }
-                    .buttonStyle(.link)
-            }
+            Label("All learning stays on this Mac.", systemImage: "lock.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .padding(24)
-        .frame(width: 440, height: 420)
+        .padding(.vertical, 4)
     }
 
     private func metric(value: String, label: String, detail: String? = nil) -> some View {
@@ -209,7 +128,7 @@ private struct YourTildeView: View {
     private var stageDetail: String {
         switch model.snapshot.personalizationStage {
         case .off:
-            "Turn on Personal Learning in Settings to help Tilde adapt to your writing."
+            "Turn on Personal Learning below to help Tilde adapt to your writing."
         case .loading:
             "Tilde is loading aggregate learning progress from this Mac."
         case .unavailable:
