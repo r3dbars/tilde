@@ -507,6 +507,57 @@ struct ScreenCaptureServiceTests {
         #expect(records.values.isEmpty)
     }
 
+    @Test("Paired evaluation is single-flight while reference OCR is running")
+    func pairedEvaluationSuppressesConcurrentReferencePasses() async {
+        let gate = AsyncTestGate()
+        let records = EvaluationRecordBox()
+        let service = ScreenCaptureService(
+            enabled: { true },
+            excludedApps: { [] },
+            permissionGranted: { true },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: Date.init,
+            diagnostics: { _, _ in },
+            localOCREvaluationEnabled: { true },
+            localOCREvaluationGeneration: { 12 },
+            recordOCREvaluation: { records.append($0, generation: $1) }
+        )
+        let block = evaluationBlock("candidate")
+
+        let first = Task {
+            await service.recordLocalOCREvaluationIfEnabled(
+                capturedAt: Date(),
+                captureKind: "display",
+                incrementalScope: "region",
+                incrementalMilliseconds: 10,
+                incrementalBlocks: [block],
+                referenceOCR: {
+                    await gate.block()
+                    return ([block], 200)
+                }
+            )
+        }
+        await gate.waitUntilBlocked()
+
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(),
+            captureKind: "display",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: [block],
+            referenceOCR: {
+                Issue.record("a concurrent evaluation must not start reference OCR")
+                return ([block], 200)
+            }
+        )
+        await gate.release()
+        await first.value
+
+        #expect(records.values.count == 1)
+    }
+
     @Test("Reference OCR failure is metadata-only and never changes capture state")
     func pairedEvaluationReferenceFailure() async {
         let (sink, events) = recordingDiagnostics()
@@ -606,5 +657,24 @@ final class EvaluationRecordBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return storage
+    }
+}
+
+actor AsyncTestGate {
+    private var blocked = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func block() async {
+        blocked = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func waitUntilBlocked() async {
+        while !blocked { await Task.yield() }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
     }
 }
