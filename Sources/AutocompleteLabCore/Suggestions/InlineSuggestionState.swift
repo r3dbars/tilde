@@ -154,8 +154,13 @@ public struct InlineSuggestionState: Equatable, Sendable {
                 visibleTicket = nil
                 return effects
             }
-            let accepted = Self.nextWordPrefix(in: visibleText)
-            let remainder = String(visibleText.dropFirst(accepted.count))
+            let rawAccepted = Self.nextWordPrefix(in: visibleText)
+            let rawRemainder = visibleText.dropFirst(rawAccepted.count)
+            let remainder = String(rawRemainder.drop(while: \Character.isWhitespace))
+            let accepted = rawAccepted.contains(where: { !$0.isWhitespace })
+                && rawAccepted.last?.isWhitespace != true
+                ? rawAccepted + " "
+                : rawAccepted
             let recordAccepted = !presentationAccepted
             presentationAccepted = true
             visibleText = remainder
@@ -181,8 +186,9 @@ public struct InlineSuggestionState: Equatable, Sendable {
         }
     }
 
-    /// Includes whitespace before the first visible word, but leaves the next
-    /// separator in the ghost so repeated Tab presses advance one word at a time.
+    /// Includes whitespace before the first visible word. Acceptance moves the
+    /// following separator into the inserted text so the user can type again
+    /// immediately while repeated Tab presses still advance one word at a time.
     private static func nextWordPrefix(in text: String) -> String {
         guard let wordStart = text.firstIndex(where: { !$0.isWhitespace }) else {
             return text

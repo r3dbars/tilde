@@ -100,7 +100,7 @@ struct InlineSuggestionStateTests {
             current: matchedForTab,
             boundedContext: "hel",
             utf16Limit: 3_000
-        )) == [.hide, .insert("lo"), .accepted])
+        )) == [.hide, .insert("lo "), .accepted])
     }
 
     @Test("Divergence hides, inserts, then schedules a new request")
@@ -145,7 +145,7 @@ struct InlineSuggestionStateTests {
             current: matchedForTab,
             boundedContext: rolledContext,
             utf16Limit: 3_000
-        )) == [.hide, .insert("c"), .accepted])
+        )) == [.hide, .insert("c "), .accepted])
     }
 
     @Test("Non-BMP fallback shares the ticket's UTF-16 context window")
@@ -176,7 +176,7 @@ struct InlineSuggestionStateTests {
             current: matchedForTab,
             boundedContext: fallback,
             utf16Limit: 3_000
-        )) == [.hide, .insert("c"), .accepted])
+        )) == [.hide, .insert("c "), .accepted])
     }
 
     @Test("Tab advances through a suggestion one word at a time")
@@ -190,30 +190,30 @@ struct InlineSuggestionStateTests {
             current: current,
             boundedContext: "hello",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" world"), .show(" and beyond"), .accepted])
+        )) == [.hide, .insert(" world "), .show("and beyond"), .accepted])
 
         let afterWorld = current.advancing(
-            with: " world",
+            with: " world ",
             boundedContext: "hello",
             utf16Limit: 3_000
         )
         #expect(state.visibleTicket == afterWorld)
         #expect(state.reduce(.acceptNextWord(
             current: afterWorld,
-            boundedContext: "hello world",
+            boundedContext: "hello world ",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" and"), .show(" beyond")])
+        )) == [.hide, .insert("and "), .show("beyond")])
 
         let afterAnd = afterWorld.advancing(
-            with: " and",
-            boundedContext: "hello world",
+            with: "and ",
+            boundedContext: "hello world ",
             utf16Limit: 3_000
         )
         #expect(state.reduce(.acceptNextWord(
             current: afterAnd,
-            boundedContext: "hello world and",
+            boundedContext: "hello world and ",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" beyond")])
+        )) == [.hide, .insert("beyond ")])
         #expect(!state.isVisible)
     }
 
@@ -236,7 +236,7 @@ struct InlineSuggestionStateTests {
             current: current,
             boundedContext: "hello",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" world"), .accepted])
+        )) == [.hide, .insert(" world "), .accepted])
     }
 
     @Test("Shown counts only fresh presentations; accepted counts only the first accept")
@@ -261,15 +261,15 @@ struct InlineSuggestionStateTests {
             current: advanced,
             boundedContext: "hello ",
             utf16Limit: 3_000
-        )) == [.hide, .insert("world"), .show(" and beyond"), .accepted])
+        )) == [.hide, .insert("world "), .show("and beyond"), .accepted])
 
-        let afterWorld = advanced.advancing(with: "world", boundedContext: "hello ", utf16Limit: 3_000)
+        let afterWorld = advanced.advancing(with: "world ", boundedContext: "hello ", utf16Limit: 3_000)
         // ...and a later Tab-walk accept of the same presentation is not.
         #expect(state.reduce(.acceptNextWord(
             current: afterWorld,
-            boundedContext: "hello world",
+            boundedContext: "hello world ",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" and"), .show(" beyond")])
+        )) == [.hide, .insert("and "), .show("beyond")])
 
         // A brand-new presentation is a fresh shown, and its first accept
         // records again.
@@ -280,7 +280,37 @@ struct InlineSuggestionStateTests {
             current: next,
             boundedContext: "hello world and beyond",
             utf16Limit: 3_000
-        )) == [.hide, .insert(" next"), .accepted])
+        )) == [.hide, .insert(" next "), .accepted])
+    }
+
+    @Test("Typing immediately after a word accept uses the inserted space")
+    func fastTypingAfterWordAcceptance() {
+        let current = ticket(context: "hello", location: 5, request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+        _ = state.reduce(.present(" world again", current))
+
+        #expect(state.reduce(.acceptNextWord(
+            current: current,
+            boundedContext: "hello",
+            utf16Limit: 3_000
+        )) == [.hide, .insert(" world "), .show("again"), .accepted])
+
+        let afterAccept = current.advancing(
+            with: " world ",
+            boundedContext: "hello",
+            utf16Limit: 3_000
+        )
+        let afterTyping = afterAccept.advancing(
+            with: "a",
+            boundedContext: "hello world ",
+            utf16Limit: 3_000
+        )
+        #expect(state.reduce(.type(
+            "a",
+            current: afterAccept,
+            advanced: afterTyping
+        )) == [.hide, .insert("a"), .show("gain")])
     }
 
     private func ticket(
