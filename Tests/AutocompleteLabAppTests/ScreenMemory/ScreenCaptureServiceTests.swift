@@ -410,6 +410,7 @@ struct ScreenCaptureServiceTests {
         let candidate = [
             evaluationBlock("allowed"),
             evaluationBlock("excluded", owner: "com.example.Secret"),
+            evaluationBlock("password", owner: "com.1password.1password"),
         ]
 
         await service.recordLocalOCREvaluationIfEnabled(
@@ -536,7 +537,7 @@ struct ScreenCaptureServiceTests {
         #expect(records.values.isEmpty)
         #expect(events.values.count == 1)
         #expect(events.values.first?.0 == "ocr-evaluation-reference-failed")
-        #expect(events.values.first?.1 == ["kind": "display", "scope": "skipped"])
+        #expect(events.values.first?.1 == ["kind": "display", "ocrScope": "skipped"])
     }
 }
 

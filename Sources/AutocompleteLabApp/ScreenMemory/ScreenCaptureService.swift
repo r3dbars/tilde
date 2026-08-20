@@ -901,7 +901,10 @@ actor ScreenCaptureService {
             let exclusions = excludedApps()
             let allowed: (ScreenSnapshot.TextBlock) -> Bool = { block in
                 guard let owner = block.windowOwnerBundleIdentifier else { return false }
-                return !exclusions.contains(owner)
+                return !DefaultExcludedApps.isExcluded(
+                    owner,
+                    configuredExcludedApps: exclusions
+                )
             }
             recordOCREvaluation(
                 LocalOCREvaluationSample(
@@ -919,14 +922,14 @@ actor ScreenCaptureService {
                 "ocr-evaluation-reference-completed",
                 [
                     "kind": captureKind,
-                    "scope": incrementalScope,
-                    "referenceMilliseconds": String(referenceMilliseconds),
+                    "ocrScope": incrementalScope,
+                    "ocrMilliseconds": String(referenceMilliseconds),
                 ]
             )
         } catch {
             diagnostics(
                 "ocr-evaluation-reference-failed",
-                ["kind": captureKind, "scope": incrementalScope]
+                ["kind": captureKind, "ocrScope": incrementalScope]
             )
         }
     }

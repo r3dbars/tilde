@@ -32,6 +32,7 @@ final class TildeSettingsViewModel: ObservableObject {
     private weak var appDelegate: AppDelegate?
     private let personalHistory: PersonalHistoryController
     private let settings = TildeSettings()
+    private var localOCREvaluationSummaryGeneration: UInt64 = 0
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
@@ -83,10 +84,13 @@ final class TildeSettingsViewModel: ObservableObject {
     }
 
     func refreshLocalOCREvaluationSummary() async {
+        localOCREvaluationSummaryGeneration &+= 1
+        let generation = localOCREvaluationSummaryGeneration
         let summary = await Task.detached(priority: .utility) {
             LocalOCREvaluationStore.shared.summary()
         }.value
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              generation == localOCREvaluationSummaryGeneration else { return }
         applyLocalOCREvaluationSummary(summary)
     }
 
@@ -185,6 +189,7 @@ final class TildeSettingsViewModel: ObservableObject {
     func deleteLocalOCREvaluationData() {
         guard !isDeletingOCREvaluationData else { return }
         isDeletingOCREvaluationData = true
+        localOCREvaluationSummaryGeneration &+= 1
         settings.localOCREvaluationEnabled = false
         localOCREvaluationEnabled = false
         LocalOCREvaluationStore.shared.flush()
