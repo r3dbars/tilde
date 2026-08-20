@@ -43,15 +43,21 @@ final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var screenRecordingGranted = false
     @Published private(set) var personalHistoryEnabled = false
     @Published private(set) var personalSuggestionsEnabled = false
+    @Published private(set) var localOCREvaluationAvailable = false
+    @Published private(set) var localOCREvaluationEnabled = false
+    @Published private(set) var hasLocalOCREvaluationSamples = false
+    @Published private(set) var localOCREvaluationData = "No samples"
     @Published private(set) var excludedApplications: [ExcludedApplication] = []
     @Published private(set) var learningDataSize = "No learning data"
     @Published private(set) var message: String?
     @Published private(set) var isDeletingLearningData = false
     @Published private(set) var isDeletingModel = false
+    @Published private(set) var isDeletingOCREvaluationData = false
 
     private weak var appDelegate: AppDelegate?
     private let personalHistory: PersonalHistoryController
     private let settings = TildeSettings()
+    private var localOCREvaluationSummaryGeneration: UInt64 = 0
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
@@ -103,6 +109,12 @@ final class TildeSettingsViewModel: ObservableObject {
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
         personalHistoryEnabled = personalHistory.isEnabled
         personalSuggestionsEnabled = settings.personalSuggestionsServingEnabled
+        localOCREvaluationAvailable = LocalOCREvaluationStore.isAvailableInCurrentBuild
+        localOCREvaluationEnabled = localOCREvaluationAvailable
+            && settings.localOCREvaluationEnabled
+        Task { [weak self] in
+            await self?.refreshLocalOCREvaluationSummary()
+        }
         excludedApplications = personalHistory.excludedApps
             .map(Self.describeApplication)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -121,6 +133,33 @@ final class TildeSettingsViewModel: ObservableObject {
             } else {
                 self.learningDataSize = "No learning data"
             }
+        }
+    }
+
+    func refreshLocalOCREvaluationSummary() async {
+        localOCREvaluationSummaryGeneration &+= 1
+        let generation = localOCREvaluationSummaryGeneration
+        let summary = await Task.detached(priority: .utility) {
+            LocalOCREvaluationStore.shared.summary()
+        }.value
+        guard !Task.isCancelled,
+              generation == localOCREvaluationSummaryGeneration else { return }
+        applyLocalOCREvaluationSummary(summary)
+    }
+
+    private func applyLocalOCREvaluationSummary(_ evaluationSummary: LocalOCREvaluationSummary) {
+        // A non-empty oversized/corrupt corpus still contains raw text and
+        // must keep Reveal/Delete available even when no valid sample count
+        // can be reported.
+        hasLocalOCREvaluationSamples = evaluationSummary.sampleCount > 0
+            || evaluationSummary.approximateBytes > 0
+        if evaluationSummary.sampleCount == 0 {
+            localOCREvaluationData = "No samples"
+        } else {
+            let formatter = ByteCountFormatter()
+            formatter.allowedUnits = [.useKB, .useMB]
+            formatter.countStyle = .file
+            localOCREvaluationData = "\(evaluationSummary.sampleCount) samples · \(formatter.string(fromByteCount: evaluationSummary.approximateBytes))"
         }
     }
 
@@ -180,6 +219,45 @@ final class TildeSettingsViewModel: ObservableObject {
     func setPersonalSuggestionsEnabled(_ enabled: Bool) {
         settings.personalSuggestionsServingEnabled = enabled
         personalSuggestionsEnabled = enabled
+    }
+
+    func setLocalOCREvaluationEnabled(_ enabled: Bool) {
+        guard localOCREvaluationAvailable else { return }
+        if enabled, !LocalOCREvaluationStore.shared.beginCollection() {
+            message = "Local OCR evaluation could not start safely."
+            return
+        }
+        settings.localOCREvaluationEnabled = enabled
+        localOCREvaluationEnabled = enabled
+        message = enabled
+            ? "Local OCR evaluation is recording paired raw samples."
+            : "Local OCR evaluation is off. Existing samples remain until deleted."
+    }
+
+    func revealLocalOCREvaluationData() {
+        let location = LocalOCREvaluationStore.shared.location
+        guard FileManager.default.fileExists(atPath: location.path) else {
+            message = "No OCR evaluation samples are available yet."
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([location])
+    }
+
+    func deleteLocalOCREvaluationData() {
+        guard !isDeletingOCREvaluationData else { return }
+        isDeletingOCREvaluationData = true
+        localOCREvaluationSummaryGeneration &+= 1
+        settings.localOCREvaluationEnabled = false
+        localOCREvaluationEnabled = false
+        LocalOCREvaluationStore.shared.flush()
+        if LocalOCREvaluationStore.shared.deleteAll() {
+            hasLocalOCREvaluationSamples = false
+            localOCREvaluationData = "No samples"
+            message = "OCR evaluation samples were deleted and recording was turned off."
+        } else {
+            message = "OCR evaluation samples could not be deleted."
+        }
+        isDeletingOCREvaluationData = false
     }
 
     func chooseApplicationToExclude() {

@@ -96,6 +96,13 @@ actor ScreenCaptureService {
     /// behavior exactly: the luminance-grid sampling and
     /// `CaptureChangeDetector` call are skipped entirely, not just ignored.
     private let incrementalOCREnabled: @Sendable () -> Bool
+    /// Explicit dev-build-only paired evaluator. When enabled, region/skip
+    /// decisions run one additional full OCR pass over the same in-memory
+    /// image and persist both outputs to the bounded owner-only corpus.
+    private let localOCREvaluationEnabled: @Sendable () -> Bool
+    private let localOCREvaluationGeneration: @Sendable () -> UInt64
+    private let recordOCREvaluation: @Sendable (LocalOCREvaluationSample, UInt64) -> Void
+    private var localOCREvaluationInFlight = false
 
     init(
         enabled: @escaping @Sendable () -> Bool,
@@ -113,7 +120,17 @@ actor ScreenCaptureService {
         diagnostics: @escaping @Sendable (String, [String: String]) -> Void = { event, metadata in
             DiagnosticsLog.shared.record(event, metadata: metadata)
         },
-        incrementalOCREnabled: @escaping @Sendable () -> Bool = { TildeSettings().incrementalOCREnabled }
+        incrementalOCREnabled: @escaping @Sendable () -> Bool = { TildeSettings().incrementalOCREnabled },
+        localOCREvaluationEnabled: @escaping @Sendable () -> Bool = {
+            LocalOCREvaluationStore.isAvailableInCurrentBuild
+                && TildeSettings().localOCREvaluationEnabled
+        },
+        localOCREvaluationGeneration: @escaping @Sendable () -> UInt64 = {
+            LocalOCREvaluationStore.shared.generationToken()
+        },
+        recordOCREvaluation: @escaping @Sendable (LocalOCREvaluationSample, UInt64) -> Void = {
+            LocalOCREvaluationStore.shared.record($0, generation: $1)
+        }
     ) {
         self.enabled = enabled
         self.excludedApps = excludedApps
@@ -125,6 +142,9 @@ actor ScreenCaptureService {
         self.now = now
         self.diagnostics = diagnostics
         self.incrementalOCREnabled = incrementalOCREnabled
+        self.localOCREvaluationEnabled = localOCREvaluationEnabled
+        self.localOCREvaluationGeneration = localOCREvaluationGeneration
+        self.recordOCREvaluation = recordOCREvaluation
     }
 
     /// The focused-window trigger. It may refresh context while an IMKit
@@ -611,6 +631,14 @@ actor ScreenCaptureService {
                     "ocrScope": ocrScope,
                 ]
             )
+            await recordLocalOCREvaluationIfEnabled(
+                capturedAt: moment,
+                captureKind: "window",
+                incrementalScope: ocrScope,
+                incrementalMilliseconds: ocrMilliseconds,
+                incrementalBlocks: blocks,
+                referenceOCR: fullWindowOCR
+            )
             return .captured(blockCount: blocks.count)
         } catch {
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
@@ -814,6 +842,14 @@ actor ScreenCaptureService {
                     "ocrScope": ocrScope,
                 ]
             )
+            await recordLocalOCREvaluationIfEnabled(
+                capturedAt: moment,
+                captureKind: "display",
+                incrementalScope: ocrScope,
+                incrementalMilliseconds: ocrMilliseconds,
+                incrementalBlocks: blocks,
+                referenceOCR: fullDisplayOCR
+            )
             return .captured(blockCount: blocks.count)
         } catch {
             // Failed attempts still spent wall-clock time in
@@ -836,6 +872,66 @@ actor ScreenCaptureService {
     /// math that CAN be proven without a live display.
     static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
+    }
+
+    func recordLocalOCREvaluationIfEnabled(
+        capturedAt: Date,
+        captureKind: String,
+        incrementalScope: String,
+        incrementalMilliseconds: Int,
+        incrementalBlocks: [ScreenSnapshot.TextBlock],
+        referenceOCR: () async throws -> ([ScreenSnapshot.TextBlock], Int)
+    ) async {
+        guard incrementalScope != "full",
+              localOCREvaluationEnabled(),
+              !localOCREvaluationInFlight else { return }
+        let generation = localOCREvaluationGeneration()
+        localOCREvaluationInFlight = true
+        defer { localOCREvaluationInFlight = false }
+        do {
+            let (referenceBlocks, referenceMilliseconds) = try await referenceOCR()
+            // Consent and safety settings can change while Vision is working.
+            // Re-check them at the persistence boundary, then strip any app
+            // the user excluded during the in-flight pass.
+            guard enabled(),
+                  permissionGranted(),
+                  localOCREvaluationEnabled(),
+                  !screenLocked(),
+                  !secureInputActive() else { return }
+            let exclusions = excludedApps()
+            let allowed: (ScreenSnapshot.TextBlock) -> Bool = { block in
+                guard let owner = block.windowOwnerBundleIdentifier else { return false }
+                return !DefaultExcludedApps.isExcluded(
+                    owner,
+                    configuredExcludedApps: exclusions
+                )
+            }
+            recordOCREvaluation(
+                LocalOCREvaluationSample(
+                    capturedAt: capturedAt,
+                    captureKind: captureKind,
+                    incrementalScope: incrementalScope,
+                    incrementalMilliseconds: incrementalMilliseconds,
+                    fullReferenceMilliseconds: referenceMilliseconds,
+                    incrementalBlocks: incrementalBlocks.filter(allowed),
+                    fullReferenceBlocks: referenceBlocks.filter(allowed)
+                ),
+                generation
+            )
+            diagnostics(
+                "ocr-evaluation-reference-completed",
+                [
+                    "kind": captureKind,
+                    "ocrScope": incrementalScope,
+                    "ocrMilliseconds": String(referenceMilliseconds),
+                ]
+            )
+        } catch {
+            diagnostics(
+                "ocr-evaluation-reference-failed",
+                ["kind": captureKind, "ocrScope": incrementalScope]
+            )
+        }
     }
 
     private func record(_ decision: CaptureTriggerPolicy.Decision) {
