@@ -58,7 +58,9 @@ final class TildeSettingsViewModel: ObservableObject {
         localOCREvaluationAvailable = LocalOCREvaluationStore.isAvailableInCurrentBuild
         localOCREvaluationEnabled = localOCREvaluationAvailable
             && settings.localOCREvaluationEnabled
-        applyLocalOCREvaluationSummary(LocalOCREvaluationStore.shared.summary())
+        Task { [weak self] in
+            await self?.refreshLocalOCREvaluationSummary()
+        }
         excludedApplications = personalHistory.excludedApps
             .map(Self.describeApplication)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -89,7 +91,11 @@ final class TildeSettingsViewModel: ObservableObject {
     }
 
     private func applyLocalOCREvaluationSummary(_ evaluationSummary: LocalOCREvaluationSummary) {
+        // A non-empty oversized/corrupt corpus still contains raw text and
+        // must keep Reveal/Delete available even when no valid sample count
+        // can be reported.
         hasLocalOCREvaluationSamples = evaluationSummary.sampleCount > 0
+            || evaluationSummary.approximateBytes > 0
         if evaluationSummary.sampleCount == 0 {
             localOCREvaluationData = "No samples"
         } else {

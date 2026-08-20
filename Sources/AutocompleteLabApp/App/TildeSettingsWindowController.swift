@@ -183,6 +183,7 @@ private struct TildeSettingsView: View {
         .scrollContentBackground(.hidden)
         .frame(minWidth: 500, minHeight: 680)
         .task {
+            guard model.localOCREvaluationAvailable else { return }
             while !Task.isCancelled {
                 await model.refreshLocalOCREvaluationSummary()
                 try? await Task.sleep(for: .seconds(2))
