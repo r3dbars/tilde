@@ -248,6 +248,67 @@ struct LocalOCREvaluationStoreTests {
         #expect(!FileManager.default.fileExists(atPath: location.path))
     }
 
+    @Test("Delete marker prevents another store instance from recreating the corpus")
+    func deleteCoordinatesAcrossStoreInstances() {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let deletingStore = LocalOCREvaluationStore(
+            location: location,
+            mayPersist: { true },
+            excludedApps: { [] }
+        )
+        let otherProcessStore = LocalOCREvaluationStore(
+            location: location,
+            mayPersist: { true },
+            excludedApps: { [] }
+        )
+
+        #expect(deletingStore.deleteAll())
+        otherProcessStore.record(sample(index: 1))
+        otherProcessStore.flush()
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+
+        #expect(otherProcessStore.beginCollection())
+        otherProcessStore.record(sample(index: 2))
+        otherProcessStore.flush()
+        #expect(otherProcessStore.summary().sampleCount == 1)
+    }
+
+    @Test("A rewrite drops records from the older pre-filter corpus schema")
+    func rewriteDropsLegacyCorpusRecords() throws {
+        let location = temporaryLocation()
+        let root = location.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalOCREvaluationStore(location: location, mayPersist: { true }, excludedApps: { [] })
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var legacy = try encoder.encode(sample(index: 1, owner: "com.1password.1password"))
+        let currentSchema = Data("\"schemaVersion\":2".utf8)
+        let oldSchema = Data("\"schemaVersion\":1".utf8)
+        let range = try #require(legacy.range(of: currentSchema))
+        legacy.replaceSubrange(range, with: oldSchema)
+        legacy.append(0x0A)
+        try FileManager.default.createDirectory(
+            at: location.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: location.deletingLastPathComponent().path
+        )
+        try legacy.write(to: location)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: location.path)
+
+        store.record(sample(index: 2))
+        store.flush()
+
+        #expect(store.summary().sampleCount == 1)
+        let contents = try Data(contentsOf: location)
+        #expect(contents.range(of: Data("reference-1".utf8)) == nil)
+        #expect(contents.range(of: Data("reference-2".utf8)) != nil)
+    }
+
     @Test("Byte retention cap removes oldest records before the sample-count cap")
     func recordsRespectByteCap() throws {
         let location = temporaryLocation()

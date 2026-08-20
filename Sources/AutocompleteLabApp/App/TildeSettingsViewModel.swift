@@ -170,6 +170,10 @@ final class TildeSettingsViewModel: ObservableObject {
 
     func setLocalOCREvaluationEnabled(_ enabled: Bool) {
         guard localOCREvaluationAvailable else { return }
+        if enabled, !LocalOCREvaluationStore.shared.beginCollection() {
+            message = "Local OCR evaluation could not start safely."
+            return
+        }
         settings.localOCREvaluationEnabled = enabled
         localOCREvaluationEnabled = enabled
         message = enabled
