@@ -111,6 +111,10 @@ final class TildeSettingsViewModel: ObservableObject {
         NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
     }
 
+    func runSetupAgain() {
+        appDelegate?.showSetup()
+    }
+
     func setPersonalHistoryEnabled(_ enabled: Bool) {
         personalHistory.isEnabled = enabled
         personalHistoryEnabled = enabled
@@ -206,4 +210,3 @@ final class TildeSettingsViewModel: ObservableObject {
         return ExcludedApplication(bundleIdentifier: bundleIdentifier, name: name)
     }
 }
-

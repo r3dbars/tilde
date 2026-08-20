@@ -19,7 +19,7 @@ public enum DiagnosticsMetadataRedactor {
         "no-active-session", "below-threshold", "excluded-app", "cadence",
         "enumeration-failed", "no-display",
         // The 2026-08-16 first-launch Screen Recording permission prompt's
-        // outcome vocabulary (`AppDelegate.presentScreenPermissionPromptIfNeeded`).
+        // outcome vocabulary from the setup permission flow.
         "requested", "settings-opened", "dismissed",
         // `ScreenScene.Mode`'s raw values, logged by the `scene-classified`
         // diagnostic (`ScreenCaptureService.freshScene`) so a classification

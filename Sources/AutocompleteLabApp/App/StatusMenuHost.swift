@@ -14,6 +14,7 @@ final class StatusMenuHost: NSObject {
     private var screenMemoryItem: NSMenuItem?
     private var suggestionsItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
+    private var setupOrSettingsItem: NSMenuItem?
 
     private var settingsWindow: TildeSettingsWindowController?
 
@@ -36,7 +37,12 @@ final class StatusMenuHost: NSObject {
 
         suggestionsItem = addAction(to: menu, "Tilde On", #selector(toggleSuggestions(_:)))
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
-        addAction(to: menu, "Settings…", #selector(openSettings(_:)), key: ",")
+        setupOrSettingsItem = addAction(
+            to: menu,
+            "Settings…",
+            #selector(openSetupOrSettings(_:)),
+            key: ","
+        )
         menu.addItem(.separator())
         addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
@@ -52,6 +58,7 @@ final class StatusMenuHost: NSObject {
         statusLineItem?.title = state.statusText
         engineItem?.title = appDelegate.engineStatusLine()
         suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
+        setupOrSettingsItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Settings…"
 
         if let until = settings.pausedUntil {
             let minutes = max(1, Int(ceil(until.timeIntervalSinceNow / 60)))
@@ -81,8 +88,13 @@ final class StatusMenuHost: NSObject {
         refresh()
     }
 
-    @objc private func openSettings(_ sender: Any?) {
-        if settingsWindow == nil, let appDelegate {
+    @objc private func openSetupOrSettings(_ sender: Any?) {
+        guard let appDelegate else { return }
+        if appDelegate.setupRequired() {
+            appDelegate.showSetup()
+            return
+        }
+        if settingsWindow == nil {
             settingsWindow = TildeSettingsWindowController(
                 appDelegate: appDelegate,
                 personalHistory: personalHistory
