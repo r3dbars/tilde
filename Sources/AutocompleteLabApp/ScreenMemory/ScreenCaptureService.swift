@@ -882,10 +882,10 @@ actor ScreenCaptureService {
         incrementalBlocks: [ScreenSnapshot.TextBlock],
         referenceOCR: () async throws -> ([ScreenSnapshot.TextBlock], Int)
     ) async {
-        let generation = localOCREvaluationGeneration()
         guard incrementalScope != "full",
               localOCREvaluationEnabled(),
               !localOCREvaluationInFlight else { return }
+        let generation = localOCREvaluationGeneration()
         localOCREvaluationInFlight = true
         defer { localOCREvaluationInFlight = false }
         do {

@@ -263,6 +263,7 @@ struct LocalOCREvaluationStoreTests {
             mayPersist: { true },
             excludedApps: { [] }
         )
+        let staleGeneration = otherProcessStore.generationToken()
 
         #expect(deletingStore.deleteAll())
         otherProcessStore.record(sample(index: 1))
@@ -270,6 +271,10 @@ struct LocalOCREvaluationStoreTests {
         #expect(!FileManager.default.fileExists(atPath: location.path))
 
         #expect(otherProcessStore.beginCollection())
+        otherProcessStore.record(sample(index: 2), generation: staleGeneration)
+        otherProcessStore.flush()
+        #expect(!FileManager.default.fileExists(atPath: location.path))
+
         otherProcessStore.record(sample(index: 2))
         otherProcessStore.flush()
         #expect(otherProcessStore.summary().sampleCount == 1)
