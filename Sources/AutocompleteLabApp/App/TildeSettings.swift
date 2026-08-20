@@ -6,6 +6,10 @@ import Foundation
 /// The keyboard is a separate process, so its settings must be written to the
 /// InlineGhost settings shared with the keyboard process.
 struct TildeSettings {
+    enum AppKey: String {
+        case launchAtLogin = "LaunchAtLoginEnabled"
+    }
+
     enum KeyboardKey: String {
         case suggestions = "GhostSuggestionsEnabled"
         case pausedUntil = "GhostPausedUntil"
@@ -23,9 +27,19 @@ struct TildeSettings {
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
 
     private let keyboard: UserDefaults
+    private let app: UserDefaults
 
-    init(keyboard: UserDefaults? = UserDefaults(suiteName: TildeSettings.keyboardSuiteName)) {
+    init(
+        keyboard: UserDefaults? = UserDefaults(suiteName: TildeSettings.keyboardSuiteName),
+        app: UserDefaults = .standard
+    ) {
         self.keyboard = keyboard ?? .standard
+        self.app = app
+    }
+
+    var launchAtLoginEnabled: Bool {
+        get { app.object(forKey: AppKey.launchAtLogin.rawValue) as? Bool ?? true }
+        nonmutating set { app.set(newValue, forKey: AppKey.launchAtLogin.rawValue) }
     }
 
     var suggestionsEnabled: Bool {
