@@ -60,6 +60,7 @@ swift build -c release --product InlineGhostIME
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/InlineGhostIME "$APP/Contents/MacOS/InlineGhostIME"
+strip -S -x "$APP/Contents/MacOS/InlineGhostIME"
 cp Sources/InlineGhostIME/Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"

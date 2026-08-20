@@ -211,6 +211,7 @@ chmod +x "$APP/Contents/Helpers/llama-server"
 rm -rf "$APP/Contents/Library/InlineGhostIME.app"
 cp -R "$IME" "$APP/Contents/Library/InlineGhostIME.app"
 verify_sha256 "bundled llama-server" "$APP/Contents/Helpers/llama-server" "$LLAMA_SHA256"
+strip -S -x "$APP/Contents/Helpers/llama-server"
 if find "$APP" -type f -iname '*.gguf' -print -quit | grep -q .; then
   echo "dev app unexpectedly contains a GGUF model" >&2
   exit 1

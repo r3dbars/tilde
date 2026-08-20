@@ -90,7 +90,7 @@ checked against the Gemma 4 E2B revision, byte count, and SHA-256 above, copied
 only into isolated external proof storage, and never into the signed app. The
 driver then blocks on bundle shape, helper/IME signatures, runtime health,
 steady-state open-socket observation, notarization, Gatekeeper checks, and a
-512 MiB hard cap on the signed app artifact. Run
+32 MiB hard cap on the signed app artifact. Run
 `./script/package_app.sh --help` for the full command. The pins must come from
 human review: matching bytes and valid file shapes do not prove provenance.
 
