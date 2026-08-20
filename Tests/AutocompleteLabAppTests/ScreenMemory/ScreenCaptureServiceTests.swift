@@ -376,6 +376,220 @@ struct ScreenCaptureServiceTests {
         // reset between calls) must never report a negative duration.
         #expect(ScreenCaptureService.milliseconds(from: instant, to: instant.addingTimeInterval(-1)) == 0)
     }
+
+    // MARK: - Local paired OCR evaluation
+
+    private func evaluationBlock(_ text: String, owner: String? = "com.example.Editor") -> ScreenSnapshot.TextBlock {
+        ScreenSnapshot.TextBlock(
+            text: text,
+            boundingBox: NormalizedDisplayRect(x: 0.1, y: 0.2, width: 0.3, height: 0.04),
+            windowOwnerBundleIdentifier: owner,
+            windowTitle: "Draft"
+        )
+    }
+
+    @Test("Paired evaluation records only incremental scopes and filters newly excluded apps")
+    func pairedEvaluationGatesAndFilters() async {
+        let captureEnabled = LockedFlag(true)
+        let enabled = LockedFlag(false)
+        let exclusions = LockedSet<String>(["com.example.Secret"])
+        let records = EvaluationRecordBox()
+        let service = ScreenCaptureService(
+            enabled: { captureEnabled.value },
+            excludedApps: { exclusions.value },
+            permissionGranted: { true },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: Date.init,
+            diagnostics: { _, _ in },
+            localOCREvaluationEnabled: { enabled.value },
+            localOCREvaluationGeneration: { 7 },
+            recordOCREvaluation: { records.append($0, generation: $1) }
+        )
+        let candidate = [
+            evaluationBlock("allowed"),
+            evaluationBlock("excluded", owner: "com.example.Secret"),
+            evaluationBlock("password", owner: "com.1password.1password"),
+        ]
+
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(timeIntervalSince1970: 1),
+            captureKind: "display",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: candidate,
+            referenceOCR: { Issue.record("disabled evaluation must not OCR"); return ([], 0) }
+        )
+        enabled.value = true
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(timeIntervalSince1970: 1),
+            captureKind: "display",
+            incrementalScope: "full",
+            incrementalMilliseconds: 200,
+            incrementalBlocks: candidate,
+            referenceOCR: { Issue.record("full scope must not run a second OCR"); return ([], 0) }
+        )
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(timeIntervalSince1970: 1),
+            captureKind: "display",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: candidate,
+            referenceOCR: { (candidate, 200) }
+        )
+
+        #expect(records.values.count == 1)
+        #expect(records.values.first?.generation == 7)
+        #expect(records.values.first?.sample.incrementalBlocks.map(\.text) == ["allowed"])
+        #expect(records.values.first?.sample.fullReferenceBlocks.map(\.text) == ["allowed"])
+    }
+
+    @Test("Paired evaluation rechecks consent and safety after reference OCR")
+    func pairedEvaluationRechecksSafety() async {
+        let captureEnabled = LockedFlag(true)
+        let permissionGranted = LockedFlag(true)
+        let enabled = LockedFlag(true)
+        let secureInput = LockedFlag(false)
+        let records = EvaluationRecordBox()
+        let service = ScreenCaptureService(
+            enabled: { captureEnabled.value },
+            excludedApps: { [] },
+            permissionGranted: { permissionGranted.value },
+            screenLocked: { false },
+            secureInputActive: { secureInput.value },
+            recognizeText: { _ in [] },
+            now: Date.init,
+            diagnostics: { _, _ in },
+            localOCREvaluationEnabled: { enabled.value },
+            localOCREvaluationGeneration: { 9 },
+            recordOCREvaluation: { records.append($0, generation: $1) }
+        )
+        let block = evaluationBlock("sensitive")
+
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(),
+            captureKind: "window",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: [block],
+            referenceOCR: {
+                secureInput.value = true
+                return ([block], 200)
+            }
+        )
+        #expect(records.values.isEmpty)
+
+        secureInput.value = false
+        captureEnabled.value = false
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(),
+            captureKind: "window",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: [block],
+            referenceOCR: {
+                return ([block], 200)
+            }
+        )
+        #expect(records.values.isEmpty)
+
+        captureEnabled.value = true
+        permissionGranted.value = false
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(),
+            captureKind: "window",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: [block],
+            referenceOCR: { ([block], 200) }
+        )
+        #expect(records.values.isEmpty)
+    }
+
+    @Test("Paired evaluation is single-flight while reference OCR is running")
+    func pairedEvaluationSuppressesConcurrentReferencePasses() async {
+        let gate = AsyncTestGate()
+        let records = EvaluationRecordBox()
+        let service = ScreenCaptureService(
+            enabled: { true },
+            excludedApps: { [] },
+            permissionGranted: { true },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: Date.init,
+            diagnostics: { _, _ in },
+            localOCREvaluationEnabled: { true },
+            localOCREvaluationGeneration: { 12 },
+            recordOCREvaluation: { records.append($0, generation: $1) }
+        )
+        let block = evaluationBlock("candidate")
+
+        let first = Task {
+            await service.recordLocalOCREvaluationIfEnabled(
+                capturedAt: Date(),
+                captureKind: "display",
+                incrementalScope: "region",
+                incrementalMilliseconds: 10,
+                incrementalBlocks: [block],
+                referenceOCR: {
+                    await gate.block()
+                    return ([block], 200)
+                }
+            )
+        }
+        await gate.waitUntilBlocked()
+
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(),
+            captureKind: "display",
+            incrementalScope: "region",
+            incrementalMilliseconds: 10,
+            incrementalBlocks: [block],
+            referenceOCR: {
+                Issue.record("a concurrent evaluation must not start reference OCR")
+                return ([block], 200)
+            }
+        )
+        await gate.release()
+        await first.value
+
+        #expect(records.values.count == 1)
+    }
+
+    @Test("Reference OCR failure is metadata-only and never changes capture state")
+    func pairedEvaluationReferenceFailure() async {
+        let (sink, events) = recordingDiagnostics()
+        let records = EvaluationRecordBox()
+        let service = ScreenCaptureService(
+            enabled: { true },
+            excludedApps: { [] },
+            permissionGranted: { true },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: Date.init,
+            diagnostics: sink,
+            localOCREvaluationEnabled: { true },
+            localOCREvaluationGeneration: { 11 },
+            recordOCREvaluation: { records.append($0, generation: $1) }
+        )
+
+        await service.recordLocalOCREvaluationIfEnabled(
+            capturedAt: Date(),
+            captureKind: "display",
+            incrementalScope: "skipped",
+            incrementalMilliseconds: 0,
+            incrementalBlocks: [evaluationBlock("candidate")],
+            referenceOCR: { throw CocoaError(.fileReadUnknown) }
+        )
+
+        #expect(records.values.isEmpty)
+        #expect(events.values.count == 1)
+        #expect(events.values.first?.0 == "ocr-evaluation-reference-failed")
+        #expect(events.values.first?.1 == ["kind": "display", "ocrScope": "skipped"])
+    }
 }
 
 /// Thread-safe box for capturing diagnostics calls made from actor-isolated code.
@@ -421,5 +635,46 @@ final class LockedSet<Element: Hashable>: @unchecked Sendable {
     var value: Set<Element> {
         get { lock.lock(); defer { lock.unlock() }; return storage }
         set { lock.lock(); storage = newValue; lock.unlock() }
+    }
+}
+
+final class EvaluationRecordBox: @unchecked Sendable {
+    struct Value: Sendable {
+        let sample: LocalOCREvaluationSample
+        let generation: UInt64
+    }
+
+    private let lock = NSLock()
+    private var storage: [Value] = []
+
+    func append(_ sample: LocalOCREvaluationSample, generation: UInt64) {
+        lock.lock()
+        storage.append(Value(sample: sample, generation: generation))
+        lock.unlock()
+    }
+
+    var values: [Value] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
+actor AsyncTestGate {
+    private var blocked = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func block() async {
+        blocked = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func waitUntilBlocked() async {
+        while !blocked { await Task.yield() }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
     }
 }

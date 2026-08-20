@@ -9,7 +9,7 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
         model = TildeSettingsViewModel(appDelegate: appDelegate, personalHistory: personalHistory)
         let rootView = TildeSettingsView(model: model)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 680),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 820),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -42,6 +42,8 @@ private struct TildeSettingsView: View {
     @State private var confirmDisableScreenMemory = false
     @State private var confirmEnableLearning = false
     @State private var confirmDeleteLearning = false
+    @State private var confirmEnableOCREvaluation = false
+    @State private var confirmDeleteOCREvaluation = false
 
     var body: some View {
         Form {
@@ -138,6 +140,42 @@ private struct TildeSettingsView: View {
                     .disabled(true)
             }
 
+            if model.localOCREvaluationAvailable {
+                Section("OCR Evaluation — Development") {
+                    Toggle("Record Raw Paired OCR Samples", isOn: Binding(
+                        get: { model.localOCREvaluationEnabled },
+                        set: { enabled in
+                            if enabled { confirmEnableOCREvaluation = true }
+                            else { model.setLocalOCREvaluationEnabled(false) }
+                        }
+                    ))
+
+                    Text("Runs full OCR beside incremental OCR on the same frame and stores both raw outputs locally. This may capture sensitive text and slow Tilde while enabled.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
+                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
+                        .disabled(!model.hasLocalOCREvaluationSamples)
+                    Button("Delete Evaluation Data…", role: .destructive) {
+                        confirmDeleteOCREvaluation = true
+                    }
+                    .disabled(model.isDeletingOCREvaluationData || !model.hasLocalOCREvaluationSamples)
+                }
+            } else if model.hasLocalOCREvaluationSamples {
+                Section("OCR Evaluation Data") {
+                    Text("Raw OCR evaluation data from a development build remains on this Mac. Recording is unavailable in this build.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
+                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
+                    Button("Delete Evaluation Data…", role: .destructive) {
+                        confirmDeleteOCREvaluation = true
+                    }
+                    .disabled(model.isDeletingOCREvaluationData)
+                }
+            }
+
             Section("Support") {
                 LabeledContent("Version", value: model.versionText)
                 Button("Export Diagnostics…") { model.exportDiagnostics() }
@@ -156,6 +194,13 @@ private struct TildeSettingsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .frame(minWidth: 500, minHeight: 680)
+        .task {
+            guard model.localOCREvaluationAvailable else { return }
+            while !Task.isCancelled {
+                await model.refreshLocalOCREvaluationSummary()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
         .confirmationDialog(
             "Turn off Screen Memory?",
             isPresented: $confirmDisableScreenMemory
@@ -182,6 +227,26 @@ private struct TildeSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes encrypted writing history, its Keychain key, and learning signals. The app and bundled model are preserved.")
+        }
+        .confirmationDialog(
+            "Record raw OCR samples?",
+            isPresented: $confirmEnableOCREvaluation
+        ) {
+            Button("Start Recording") { model.setLocalOCREvaluationEnabled(true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Visible text from your screen will be stored unredacted on this Mac in an owner-only file. Collection is limited to this development build and the newest 100 samples or 10 MB.")
+        }
+        .confirmationDialog(
+            "Delete all OCR evaluation samples?",
+            isPresented: $confirmDeleteOCREvaluation
+        ) {
+            Button("Delete and Turn Off", role: .destructive) {
+                model.deleteLocalOCREvaluationData()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes the local raw OCR evaluation corpus and disables further recording.")
         }
     }
 }
