@@ -65,7 +65,8 @@ struct ModelManagerTests {
         fixture: Fixture,
         transport: any ModelDownloadTransport,
         onProgress: ModelManager.ProgressHandler? = nil,
-        availableDiskSpace: @escaping ModelManager.DiskSpaceProvider = { _ in Int64.max }
+        availableDiskSpace: @escaping ModelManager.DiskSpaceProvider = { _ in Int64.max },
+        retryDelays: [Duration] = []
     ) -> ModelManager {
         ModelManager(
             descriptor: fixture.descriptor,
@@ -73,7 +74,8 @@ struct ModelManagerTests {
             transport: transport,
             callbackQueue: .global(qos: .utility),
             onProgress: onProgress,
-            availableDiskSpace: availableDiskSpace
+            availableDiskSpace: availableDiskSpace,
+            retryDelays: retryDelays
         )
     }
 
@@ -197,6 +199,43 @@ struct ModelManagerTests {
         #expect(manager.state == ModelState.ready(manager.modelURL))
         #expect(try Data(contentsOf: manager.modelURL) == fixture.data)
         #expect(await transport.requests.first?.value(forHTTPHeaderField: "Range") == "bytes=\(prefixCount)-")
+    }
+
+    @Test("A dropped connection resumes automatically from the saved partial")
+    func retriesDroppedConnection() async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanup() }
+        let prefixCount = 7
+        let interrupted = AsyncThrowingStream<Data, Error> { continuation in
+            continuation.yield(Data(fixture.data.prefix(prefixCount)))
+            continuation.finish(throwing: URLError(.networkConnectionLost))
+        }
+        let suffix = Data(fixture.data.dropFirst(prefixCount))
+        let transport = StubTransport([
+            ModelDownloadResponse(
+                statusCode: 200,
+                headers: ["Content-Length": String(fixture.data.count)],
+                body: interrupted
+            ),
+            response(
+                status: 206,
+                headers: [
+                    "Content-Range": "bytes \(prefixCount)-\(fixture.data.count - 1)/\(fixture.data.count)",
+                    "Content-Length": String(suffix.count)
+                ],
+                chunks: [suffix]
+            )
+        ])
+        let manager = manager(fixture: fixture, transport: transport, retryDelays: [.zero])
+
+        _ = manager.start()
+        await manager.waitUntilSettled()
+
+        #expect(manager.state == .ready(manager.modelURL))
+        #expect(try Data(contentsOf: manager.modelURL) == fixture.data)
+        let requests = await transport.requests
+        #expect(requests.count == 2)
+        #expect(requests[1].value(forHTTPHeaderField: "Range") == "bytes=\(prefixCount)-")
     }
 
     @Test("A 200 response safely restarts a partial instead of appending")
