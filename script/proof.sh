@@ -28,7 +28,10 @@
 #   PROOF_STRUCTURAL_CHANGE=1
 #                           Require the production Swift diff to be net-negative.
 #
-# The signed/notarized release path lives in script/package_app.sh.
+# The signed/notarized release path lives in script/package_app.sh. Release
+# proof pre-seeds one pinned Gemma 4 E2B model outside the app; it never permits
+# a GGUF to be embedded in the signed bundle. The post-download runtime lane
+# remains loopback-only and does not exercise the separate HTTPS asset phase.
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -148,6 +151,17 @@ check_live_latency_budget() {
   python3 script/latency_report.py --budget --log "$diagnostics_log"
 }
 
+check_release_contract() {
+  local help
+  help="$(bash script/package_app.sh --help)"
+  grep -F -- '--proof-model PATH' <<<"$help" >/dev/null \
+    || { echo "release driver does not expose explicit --proof-model input" >&2; return 1; }
+  grep -F -- 'never copied into Tilde.app' <<<"$help" >/dev/null \
+    || { echo "release driver does not state that the proof model is external" >&2; return 1; }
+  grep -F -- 'gemma-4-E2B.Q4_K_M.gguf' <<<"$help" >/dev/null \
+    || { echo "release driver does not identify the pinned Gemma 4 E2B file" >&2; return 1; }
+}
+
 run_swift() {
   if ! command -v swift >/dev/null 2>&1; then
     echo
@@ -188,6 +202,7 @@ run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "personal brain lab LOC budget" bash -c \
   'test $(( $(wc -l < script/personal_brain_lab.py) + $(wc -l < script/personal_brain_messages.swift) )) -le 1250'
 run_blocking "runtime egress harness self-test" python3 script/check_runtime_network_egress.py --selftest
+run_blocking "external-model release contract self-test" check_release_contract
 run_blocking "golden evaluator self-test" python3 script/golden_eval.py --selftest
 run_blocking "personal brain historical discovery self-test" python3 script/personal_brain_lab.py --selftest
 run_blocking "personal brain Messages decoder self-test" xcrun swift script/personal_brain_messages.swift --selftest

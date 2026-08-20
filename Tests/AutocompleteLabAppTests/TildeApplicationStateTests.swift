@@ -24,6 +24,8 @@ struct TildeApplicationStateTests {
     func attentionStates() {
         #expect(resolve(screenRecordingGranted: false) == .needsPermission)
         #expect(resolve(keyboardAvailable: false) == .needsKeyboard)
+        #expect(resolve(model: .checking) == .preparingModel)
+        #expect(resolve(model: .failed(.offline)) == .recoverableError)
         #expect(resolve(runtime: .starting) == .preparingModel)
         #expect(resolve(runtime: .failed(.assetsMissing)) == .recoverableError)
         #expect(resolve(socketAvailable: false) == .recoverableError)
@@ -43,6 +45,7 @@ struct TildeApplicationStateTests {
         keyboardAvailable: Bool = true,
         screenMemoryEnabled: Bool = true,
         screenRecordingGranted: Bool = true,
+        model: ModelState = .ready(URL(fileURLWithPath: "/verified/model.gguf")),
         runtime: LlamaRuntimeSnapshot = .ready,
         socketAvailable: Bool = true,
         now: Date = Date(timeIntervalSince1970: 1_000)
@@ -53,6 +56,7 @@ struct TildeApplicationStateTests {
             keyboardAvailable: keyboardAvailable,
             screenMemoryEnabled: screenMemoryEnabled,
             screenRecordingGranted: screenRecordingGranted,
+            model: model,
             runtime: runtime,
             socketAvailable: socketAvailable,
             now: now

@@ -1,10 +1,10 @@
 # Tilde Threat Model
 
-Status: current for the simplified IMKit + bundled llama architecture
-(2026-08-12), extended (2026-08-16) with the Screen Memory covenant. Screen
-Memory itself is planned, not shipped; its entries below describe the model
-this document holds it to once built, per `docs/plans/screen-memory.md` on
-PR #347 (not yet merged — lands separately from this governance PR).
+Status: current for the simplified IMKit + external-model llama architecture
+(2026-08-20), extended (2026-08-16) with the Screen Memory covenant. Screen
+Memory capture, on-device OCR, and memory-only prompt context are shipped and
+required for suggestions; its separate persistence and model-redaction phases
+remain planned in `docs/plans/screen-memory.md`.
 
 ## System boundary
 
@@ -14,22 +14,25 @@ Tilde has two signed user-facing processes and one signed helper child:
   renders marked-text suggestions, commits accepted text, and—only when the
   user enables Personal History—buffers bounded history events in memory.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
-  its bundled GGUF model, returns suggestions, and exclusively owns the local
-  Personal History store and paired personal next-word shadow.
+  the verified Gemma 4 E2B GGUF from external app-support storage, returns
+  suggestions, and exclusively owns the local Personal History store and
+  paired personal next-word shadow.
 - The bundled `llama-server` helper is a localhost-only child of the Tilde app.
 
 The helper is an app-owned child process bound to localhost. Ordinary request
 text and unaccepted model output exist in memory only. If explicitly enabled,
 Personal History persists text the user produces as encrypted local events.
-Tilde has no Accessibility, Screen Recording, OCR, screenshot capture, cloud
-inference, sync, upload, or analytics path.
+Screen Memory captures full-display text only on-device, redacts it before it
+enters a prompt, and keeps it memory-only today. Tilde has no Accessibility,
+cloud inference, sync, upload, or analytics path.
 
 ## Assets to protect
 
 1. Typed context, prompts, model output, accepted text, and the durable Personal
    History corpus and encryption key.
 2. Integrity of committed text and the field receiving it.
-3. Integrity of the signed input method, helper, and model.
+3. Integrity of the signed input method and helper, plus integrity and
+   provenance of the externally downloaded model bytes.
 4. Privacy-safe settings and diagnostics stored for the local user.
 5. Screen-derived text (OCR output of on-screen content) at rest in the
    Personal History store and in memory during capture, redaction, and scene
@@ -99,15 +102,28 @@ identity are out of scope.
   explicit data path.
 - Suggestions are marked text and become committed text only after explicit
   acceptance. There is no clipboard or cross-app synthetic insertion path.
-- Distributed builds embed the helper and model inside the signed app. There is
-  no runtime model download or remote inference fallback. The release driver
-  requires exact input hashes before it copies or signs either asset.
-- Before using packaged assets, the app strictly validates its signed bundle
-  and nested code. Before every prompt, it rechecks that the localhost listener
-  belongs to its exact helper child. Local HTTP requests use an ephemeral
-  session with caches, cookies, credentials, and proxies disabled.
+- Distributed builds contain the signed helper but never embed a GGUF. During a
+  separate first-run asset phase, ModelManager downloads only the immutable
+  Gemma 4 E2B revision URL below. It sends no user-derived request data, stores
+  partial bytes outside the app bundle, verifies the exact filename, size, and
+  SHA-256, and installs atomically. A failed or mismatched download is not
+  eligible for runtime use; there is no remote inference fallback.
+
+  `https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
+
+  The fixed descriptor is 3,427,861,984 bytes with SHA-256
+  `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`.
+- Before using the external model, the app strictly validates its signed bundle,
+  nested code, and ModelManager seal. Before every prompt, it rechecks that the
+  localhost listener belongs to its exact helper child. Local HTTP requests use
+  an ephemeral session with caches, cookies, credentials, and proxies disabled.
 - The release driver verifies bundle structure, runtime ownership, signing,
-  notarization, Gatekeeper assessment, and observed open sockets.
+  notarization, Gatekeeper assessment, and observed open sockets. Release
+  proof accepts a named `--proof-model` preseed only; it copies that file into
+  isolated external storage, never into `Tilde.app`, and passes the exact model
+  path to the helper. The post-download steady-state egress lane rejects every
+  non-loopback socket; it does not claim to prove the separate HTTPS download
+  phase or packet-level traffic.
 
 ## Remaining risks
 
@@ -156,30 +172,30 @@ identity are out of scope.
   components. Signed packaging reduces tampering risk but cannot remove bugs in
   those components.
 
-## Screen Memory (planned)
+## Screen Memory persistence (planned)
 
-Not yet implemented; this section states the controls and residual risks this
-document will hold the feature to once it ships, per
-`docs/plans/screen-memory.md` on PR #347 (not yet merged as of this section —
-see the Status line above). It supersedes the prior blanket OCR/Screen
-Recording ban recorded in `AGENTS.md`.
+Capture, on-device OCR, rules redaction, and prompt folding are shipped. This
+section states the additional controls and residual risks the document holds
+the persistence phase to, per `docs/plans/screen-memory.md`. It supersedes the
+prior blanket OCR/Screen Recording ban recorded in `AGENTS.md`.
 
-Controls, once shipped:
+Persistence controls, once shipped:
 
 - Redaction runs before any persistence and fails closed: a structured-secret
   rules pass, then a local span-detection model pass, must both complete
   before redacted text is written; a redactor error drops the capture
   instead of storing it raw.
 - Capture is suspended unconditionally under the same conditions Personal
-  History already enforces — master toggle off (default) or macOS Secure
-  Event Input active — plus a locked screen and a hard capture-rate cap.
+  History already enforces — master toggle off (an existing install's explicit
+  choice persists; new installs default on) or macOS Secure Event Input active
+  — plus a locked screen and a hard capture-rate cap.
   Because capture is full-display, the shared exclusion list check cannot be
   frontmost-only: every visible window's owning app is checked, and capture
   is suspended if any of them is excluded, so an excluded app stays protected
   even when a different, non-excluded app is focused on top of it.
 - The on-device-only claim for Screen Memory is not proven by the existing
   autocomplete egress lane, which is unchanged and never exercises capture,
-  OCR, or redaction code paths for a feature that is off by default. Before
+  OCR, or redaction code paths for a feature that is not yet fully proven. Before
   ship, `script/package_app.sh`'s egress lane must add a packaged
   capture-and-redaction stimulus and observe sockets through it; that
   stimulus, not the unchanged autocomplete-only proof, is what closes this
@@ -227,18 +243,23 @@ Residual risks, stated honestly:
 ## Required proof after security-sensitive changes
 
 Run `./script/proof.sh fast` for every change. Before release, run
-`./script/package_app.sh` with reviewed helper and model hashes, and require all
-bundle, runtime, signing, notarization, Gatekeeper, and socket-observation lanes
-to pass. File-shape checks and matching hashes do not prove provenance; the
-operator must review the source of both inputs. The egress lane sends a fixed
-synthetic prompt directly to the helper;
-its isolated proof mode observes only the exact app and helper on a dedicated
-port. It may append privacy-safe diagnostics, but it does not quit or change the
-daily driver or input method. It is open-socket observation, not packet capture,
-input-method execution, Unix-socket authentication proof, or a real-editor
-round trip. Model or helper changes also require a freshly installed, notarized
-build and manual IME checks—including secure text fields—in disposable
-documents.
+`./script/package_app.sh` with the reviewed helper hash and an explicitly named
+`--proof-model` preseed matching the Gemma 4 E2B revision, exact size, and
+SHA-256 pin. Require all bundle, runtime, signing, notarization, Gatekeeper,
+and steady-state socket-observation lanes to pass. File-shape checks and
+matching hashes do not prove provenance; the operator must review the source of
+both inputs. The egress lane sends a fixed synthetic prompt directly to the
+helper after the separate first-run download phase; its isolated proof mode
+observes only the exact app and helper on a dedicated port and confirms the
+helper inherited an unlinked, verified APFS snapshot descriptor from the app.
+This binds inference to the immutable snapshot bytes that were hashed instead
+of reopening a replaceable or in-place mutable path. The proof may append
+privacy-safe diagnostics, but
+it does not quit or change the daily driver or input method. It is open-socket
+observation, not packet capture, download-phase proof, input-method execution,
+Unix-socket authentication proof, or a real-editor round trip. Model or helper
+changes also require a freshly installed, notarized build and manual IME
+checks—including secure text fields—in disposable documents.
 
 Personal History changes additionally require tests for disabled capture,
 excluded apps, secure-input policy, bounded event decoding, encrypted

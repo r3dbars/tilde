@@ -15,6 +15,7 @@ enum TildeApplicationState: Equatable {
         keyboardAvailable: Bool,
         screenMemoryEnabled: Bool,
         screenRecordingGranted: Bool,
+        model: ModelState,
         runtime: LlamaRuntimeSnapshot,
         socketAvailable: Bool,
         now: Date = Date()
@@ -23,6 +24,16 @@ enum TildeApplicationState: Equatable {
         if let pausedUntil, pausedUntil > now { return .paused(until: pausedUntil) }
         guard keyboardAvailable else { return .needsKeyboard }
         guard screenRecordingGranted else { return .needsPermission }
+
+        switch model {
+        case .checking, .missing, .downloading, .verifying:
+            return .preparingModel
+        case .failed:
+            return .recoverableError
+        case .ready:
+            break
+        }
+
         guard socketAvailable else { return .recoverableError }
 
         switch runtime {

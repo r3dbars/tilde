@@ -212,7 +212,11 @@ if [[ "$RELEASE_PROOF" == "1" ]]; then
     exit 1
   }
 
-  /usr/bin/open -n -F "$APP" --args --release-proof
+  # Release proof is deliberately headless. Launching the bundle executable
+  # directly is the only scoped way to pass TILDE_MODEL_DIRECTORY to this
+  # isolated process; LaunchServices does not inherit the caller's shell
+  # environment reliably.
+  "$BINARY" --release-proof >/dev/null 2>&1 &
   for _ in {1..60}; do
     app_pid="$(proof_candidate_pids | head -n 1)"
     if [[ -n "$app_pid" ]]; then

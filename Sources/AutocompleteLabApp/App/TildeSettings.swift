@@ -13,7 +13,7 @@ struct TildeSettings {
         case localOCREvaluation = "LocalOCREvaluationEnabled"
     }
 
-    static let currentSetupVersion = 1
+    static let currentSetupVersion = 2
 
     enum KeyboardKey: String {
         case suggestions = "GhostSuggestionsEnabled"

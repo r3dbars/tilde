@@ -62,6 +62,7 @@ enum TildeInvocation: Equatable {
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let launchMode: TildeLaunchMode
+    private let modelManager: ModelManager
     private let llamaServerHost: LlamaServerProcessHost
     private lazy var personalHistoryController = PersonalHistoryController()
     private lazy var statusMenuHost = StatusMenuHost(
@@ -72,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardInstallResult: GhostKeyboardInstallerHost.KeyboardInstallResult?
     private var setupWindow: TildeSetupWindowController?
     private var setupLaunchTimer: Timer?
+    private var modelPreparationTask: Task<Void, Never>?
 
     // Screen Memory: normal capture state remains memory-only. Development
     // builds may persist an explicitly enabled, bounded raw OCR evaluation
@@ -207,10 +209,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     init(launchMode: TildeLaunchMode = .production) {
         self.launchMode = launchMode
-        self.llamaServerHost = LlamaServerProcessHost(port: launchMode.llamaServerPort)
+        let modelManager = ModelManager()
+        self.modelManager = modelManager
+        self.llamaServerHost = LlamaServerProcessHost(
+            port: launchMode.llamaServerPort,
+            modelFileProvider: { modelManager.verifiedInstalledModelFile() }
+        )
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if launchMode == .production, TildeInstallationLocation.requiresMove() {
+            presentInstallLocationRepair()
+            return
+        }
+
         if launchMode == .production {
             // The process-held runtime lock makes this the only socket/model owner.
             guard ghostBrainServerHost.start() else {
@@ -269,7 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ScreenRecordingPermission.request()
             }
         }
-        llamaServerHost.start()
+        startModelPreparation()
         if launchMode.allowsDailyDriverMutation {
             registerAsLoginItemIfNeeded()
             keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
@@ -283,6 +295,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [:]
         )
         if launchMode == .production { finishLaunchSetup() }
+    }
+
+    private func presentInstallLocationRepair() {
+        let alert = NSAlert()
+        alert.messageText = "Move Tilde to Applications"
+        alert.informativeText = "Tilde needs to live in Applications so it can start with your Mac. Drag Tilde into Applications, then open it there."
+        alert.addButton(withTitle: "Open Applications Folder")
+        alert.runModal()
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications", isDirectory: true))
+        NSApp.terminate(nil)
     }
 
     /// One of the three required Screen Recording permission checkpoints
@@ -317,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         windowIdentityPollTimer?.invalidate()
         setupLaunchTimer?.invalidate()
+        modelPreparationTask?.cancel()
     }
 
     /// The window-change trigger: macOS already tells every app when a
@@ -381,6 +404,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// rule — the app may fail, but never silently. The personal/generic
     /// distinction surfaces the worst silent failure (identity loss).
     func engineStatusLine() -> String {
+        switch modelManager.state {
+        case .checking, .missing:
+            return "Model: Gemma 4 E2B (checking…)"
+        case let .downloading(receivedBytes, totalBytes):
+            let percent = totalBytes > 0 ? Int((Double(receivedBytes) / Double(totalBytes)) * 100) : 0
+            return "Model: Gemma 4 E2B (downloading \(min(100, max(0, percent)))%)"
+        case .verifying:
+            return "Model: Gemma 4 E2B (checking download…)"
+        case let .failed(failure):
+            return "⚠️ Model: \(Self.modelFailureMenuDescription(failure))"
+        case .ready:
+            break
+        }
         guard FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath) else {
             return "⚠️ Brain socket missing — quit and reopen"
         }
@@ -395,6 +431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyboardAvailable: ghostKeyboardInstallerHost.inputSourceStatus() != .missing,
             screenMemoryEnabled: settings.screenMemoryEnabled,
             screenRecordingGranted: ScreenRecordingPermission.isGranted(),
+            model: modelManager.state,
             runtime: llamaServerHost.snapshot,
             socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath),
             now: now
@@ -407,7 +444,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             inputSourceStatus: ghostKeyboardInstallerHost.inputSourceStatus(),
             screenRecordingGranted: ScreenRecordingPermission.isGranted(),
             runtime: llamaServerHost.snapshot,
-            socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath)
+            socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath),
+            model: modelManager.state,
+            requireInitialInputSourceSelection: TildeSettings().setupVersion < TildeSettings.currentSetupVersion
         )
     }
 
@@ -416,6 +455,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return settings.setupVersion < TildeSettings.currentSetupVersion
             || ghostKeyboardInstallerHost.inputSourceStatus() == .missing
             || !ScreenRecordingPermission.isGranted()
+            || !modelManager.state.isReady
+            || runtimeRequiresSetup
     }
 
     func showSetup() {
@@ -424,6 +465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func completeSetup() {
+        guard case .ready = setupState() else { return }
         let settings = TildeSettings()
         settings.setupVersion = TildeSettings.currentSetupVersion
         statusMenuHost.refresh()
@@ -452,8 +494,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func retrySetup() {
-        keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
+        switch setupState() {
+        case .recoverableError(.keyboard), .needsKeyboard, .installingKeyboard:
+            keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
+        case .recoverableError(.model), .downloadingModel, .verifyingModel:
+            startModelPreparation()
+        case .recoverableError(.runtime), .startingRuntime:
+            llamaServerHost.start()
+        case .needsInputSourceSelection:
+            _ = selectInputSourceIfAvailable()
+        case .needsScreenRecording, .ready:
+            break
+        }
         setupWindow?.refresh()
+    }
+
+    func modelState() -> ModelState { modelManager.state }
+
+    func modelDescription() -> String { "Gemma 4 E2B · 3.43 GB" }
+
+    func deleteModel() {
+        modelPreparationTask?.cancel()
+        llamaServerHost.stop()
+        modelPreparationTask = Task { [weak self, modelManager] in
+            await modelManager.deleteModelAndWait()
+            guard let self, !Task.isCancelled else { return }
+            TildeSettings().setupVersion = 0
+            self.statusMenuHost.refresh()
+            self.showSetup()
+            self.startModelPreparation()
+        }
     }
 
     @discardableResult
@@ -481,7 +551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishLaunchSetup() {
         let settings = TildeSettings()
-        guard settings.setupVersion < TildeSettings.currentSetupVersion else {
+        guard settings.setupVersion < TildeSettings.currentSetupVersion || !modelManager.state.isReady else {
             setupLaunchTimer?.invalidate()
             setupLaunchTimer = nil
             return
@@ -501,7 +571,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setupLaunchTimer?.invalidate()
             setupLaunchTimer = nil
             statusMenuHost.refresh()
-        case .installingKeyboard, .preparing:
+        case .installingKeyboard, .downloadingModel, .verifyingModel, .startingRuntime:
             guard setupLaunchTimer == nil else { return }
             setupLaunchTimer = Timer.scheduledTimer(
                 withTimeInterval: 0.5,
@@ -509,10 +579,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) { [weak self] _ in
                 Task { @MainActor in self?.finishLaunchSetup() }
             }
-        case .needsKeyboard, .needsScreenRecording, .recoverableError:
+        case .needsKeyboard, .needsScreenRecording, .needsInputSourceSelection, .recoverableError:
             setupLaunchTimer?.invalidate()
             setupLaunchTimer = nil
             showSetup()
+        }
+    }
+
+    private var runtimeRequiresSetup: Bool {
+        switch llamaServerHost.snapshot {
+        case .failed:
+            return true
+        case .ready:
+            return !FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath)
+        case .starting, .retrying:
+            return false
+        }
+    }
+
+    private func startModelPreparation() {
+        modelManager.prepare()
+        modelPreparationTask?.cancel()
+        modelPreparationTask = Task { [weak self, modelManager] in
+            await modelManager.waitUntilSettled()
+            guard let self, !Task.isCancelled else { return }
+            if modelManager.state.isReady { self.llamaServerHost.start() }
+            self.statusMenuHost.refresh()
+            self.setupWindow?.refresh()
+            if self.launchMode == .production { self.finishLaunchSetup() }
+        }
+    }
+
+    private static func modelFailureMenuDescription(_ failure: ModelFailure) -> String {
+        switch failure {
+        case .offline: "offline — try again"
+        case .insufficientDiskSpace: "not enough disk space"
+        case .serverRejectedRequest: "download unavailable"
+        case .checksumMismatch: "download failed verification"
+        case .invalidModel: "download is invalid"
+        case .installationFailed: "couldn't install"
         }
     }
 
