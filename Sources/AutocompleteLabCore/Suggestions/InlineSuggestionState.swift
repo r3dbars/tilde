@@ -76,6 +76,7 @@ public struct InlineSuggestionState: Equatable, Sendable {
             boundedContext: String,
             utf16Limit: Int
         )
+        case acceptAll(current: InlineSuggestionTicket?)
         case dismiss
     }
 
@@ -171,6 +172,20 @@ public struct InlineSuggestionState: Equatable, Sendable {
                 : [.hide, .insert(accepted), .show(remainder)]
             if recordAccepted { effects.append(.accepted) }
             return effects
+
+        case let .acceptAll(current):
+            pendingTicket = nil
+            guard isVisible, let current, visibleTicket == current else {
+                let effects: [Effect] = isVisible ? [.hide] : []
+                visibleText = ""
+                visibleTicket = nil
+                return effects
+            }
+            let accepted = visibleText
+            visibleText = ""
+            visibleTicket = nil
+            presentationAccepted = true
+            return [.hide, .insert(accepted), .accepted]
 
         case .dismiss:
             pendingTicket = nil

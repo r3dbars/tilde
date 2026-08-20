@@ -1,8 +1,29 @@
+import AppKit
 import Testing
 @testable import InlineGhostIME
 
 @Suite("Ghost input controller")
 struct GhostInputControllerTests {
+    @Test("Tilde accepts all while backtick and modified chords remain printable")
+    func tildeFullAcceptShortcut() {
+        #expect(GhostInputController.shouldAcceptWholeSuggestion(
+            keyCode: 50,
+            modifiers: [.shift]
+        ))
+        #expect(!GhostInputController.shouldAcceptWholeSuggestion(
+            keyCode: 50,
+            modifiers: []
+        ))
+        #expect(!GhostInputController.shouldAcceptWholeSuggestion(
+            keyCode: 50,
+            modifiers: [.shift, .command]
+        ))
+        #expect(!GhostInputController.shouldAcceptWholeSuggestion(
+            keyCode: 48,
+            modifiers: [.shift]
+        ))
+    }
+
     @Test("Slow-key timing separates queue delay from handler work")
     func slowKeyTiming() throws {
         let timing = try #require(GhostInputController.slowKeyTiming(

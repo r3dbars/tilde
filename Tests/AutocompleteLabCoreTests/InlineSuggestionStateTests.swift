@@ -239,6 +239,31 @@ struct InlineSuggestionStateTests {
         )) == [.hide, .insert(" world"), .accepted])
     }
 
+    @Test("Full accept inserts the whole current suggestion and dismisses it")
+    func fullAcceptance() {
+        let current = ticket(context: "hello", location: 5, request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+        _ = state.reduce(.present(" world and beyond", current))
+
+        #expect(state.reduce(.acceptAll(current: current)) == [
+            .hide, .insert(" world and beyond"), .accepted,
+        ])
+        #expect(!state.isVisible)
+        #expect(state.visibleTicket == nil)
+    }
+
+    @Test("Full accept rejects a stale suggestion")
+    func fullAcceptanceRequiresCurrentTicket() {
+        let current = ticket(context: "hello", location: 5, request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+        _ = state.reduce(.present(" world and beyond", current))
+
+        #expect(state.reduce(.acceptAll(current: ticket(location: 99))) == [.hide])
+        #expect(!state.isVisible)
+    }
+
     @Test("Shown counts only fresh presentations; accepted counts only the first accept")
     func presentationCountingSemantics() {
         let current = ticket(context: "hello", location: 5, request: 1)
