@@ -1,6 +1,7 @@
 import Foundation
 
 enum TildeApplicationState: Equatable {
+    case needsKeyboard
     case needsPermission
     case preparingModel
     case ready
@@ -11,6 +12,7 @@ enum TildeApplicationState: Equatable {
     static func resolve(
         suggestionsEnabled: Bool,
         pausedUntil: Date?,
+        keyboardAvailable: Bool,
         screenMemoryEnabled: Bool,
         screenRecordingGranted: Bool,
         runtime: LlamaRuntimeSnapshot,
@@ -19,6 +21,7 @@ enum TildeApplicationState: Equatable {
     ) -> Self {
         guard suggestionsEnabled, screenMemoryEnabled else { return .disabled }
         if let pausedUntil, pausedUntil > now { return .paused(until: pausedUntil) }
+        guard keyboardAvailable else { return .needsKeyboard }
         guard screenRecordingGranted else { return .needsPermission }
         guard socketAvailable else { return .recoverableError }
 
@@ -34,6 +37,7 @@ enum TildeApplicationState: Equatable {
 
     var statusText: String {
         switch self {
+        case .needsKeyboard: "Finish Setup"
         case .needsPermission: "Permission Required"
         case .preparingModel: "Model is Loading"
         case .ready: "Tilde is Ready"
@@ -46,7 +50,7 @@ enum TildeApplicationState: Equatable {
         switch self {
         case .ready: .normal
         case .paused, .disabled: .dimmed
-        case .needsPermission, .preparingModel, .recoverableError: .warning
+        case .needsKeyboard, .needsPermission, .preparingModel, .recoverableError: .warning
         }
     }
 }
@@ -56,4 +60,3 @@ enum TildeMenuIconAppearance: Equatable {
     case dimmed
     case warning
 }
-
