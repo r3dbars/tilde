@@ -31,7 +31,9 @@ concurrency:
 
 jobs:
   fast-proof:
-    runs-on: macos-26
+    # Use GitHub's stable Apple-silicon image. macos-26 is a public-preview
+    # image and has been failing during provisioning before any step starts.
+    runs-on: macos-15
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
