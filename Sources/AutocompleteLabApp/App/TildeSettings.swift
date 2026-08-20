@@ -10,6 +10,7 @@ struct TildeSettings {
         case launchAtLogin = "LaunchAtLoginEnabled"
         case setupVersion = "SetupVersion"
         case screenRecordingRequested = "ScreenRecordingRequested"
+        case localOCREvaluation = "LocalOCREvaluationEnabled"
     }
 
     static let currentSetupVersion = 2
@@ -54,6 +55,14 @@ struct TildeSettings {
     var screenRecordingRequested: Bool {
         get { app.bool(forKey: AppKey.screenRecordingRequested.rawValue) }
         nonmutating set { app.set(newValue, forKey: AppKey.screenRecordingRequested.rawValue) }
+    }
+
+    /// Development-only paired OCR corpus. Unlike product flags, this is
+    /// deliberately off when absent because enabling it persists raw visible
+    /// text and runs an additional full-frame OCR reference pass.
+    var localOCREvaluationEnabled: Bool {
+        get { app.bool(forKey: AppKey.localOCREvaluation.rawValue) }
+        nonmutating set { app.set(newValue, forKey: AppKey.localOCREvaluation.rawValue) }
     }
 
     var suggestionsEnabled: Bool {
