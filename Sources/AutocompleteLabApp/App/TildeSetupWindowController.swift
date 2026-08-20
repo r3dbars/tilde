@@ -74,8 +74,8 @@ private final class TildeSetupViewModel: ObservableObject {
         switch modelState {
         case .checking, .missing:
             return TildeModelProgress(
-                title: "Preparing Gemma 4 E2B",
-                detail: "About 3.43 GB · starts automatically",
+                title: "Preparing download",
+                detail: "3.43 GB · one time only",
                 fraction: nil
             )
         case let .downloading(receivedBytes, totalBytes):
@@ -88,14 +88,14 @@ private final class TildeSetupViewModel: ObservableObject {
                 ? min(1, max(0, Double(receivedBytes) / Double(totalBytes)))
                 : nil
             return TildeModelProgress(
-                title: "Downloading local model",
+                title: "Downloading model",
                 detail: "\(received) of \(total)",
                 fraction: fraction
             )
         case .verifying:
             return TildeModelProgress(
-                title: "Checking Gemma 4 E2B",
-                detail: "Verifying the downloaded model once",
+                title: "Checking model",
+                detail: "Almost done",
                 fraction: nil
             )
         case .ready, .failed:
@@ -202,31 +202,34 @@ private struct TildeSetupView: View {
 
             Spacer(minLength: 24)
 
-            VStack(spacing: 12) {
-                Text(headline)
-                    .font(.headline)
-                Text(explanation)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 390)
-                if model.state == .needsKeyboard {
-                    Text("Text Input → Edit → + → search “Tilde” → Add")
-                        .font(.callout.monospaced())
+            if model.modelProgress == nil {
+                VStack(spacing: 12) {
+                    Text(headline)
+                        .font(.headline)
+                    Text(explanation)
                         .foregroundStyle(.secondary)
-                } else if model.showInputSourceFallback {
-                    Text("Choose Tilde from the keyboard menu.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 390)
+                    if model.state == .needsKeyboard {
+                        Text("Text Input → Edit → + → search “Tilde” → Add")
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                    } else if model.showInputSourceFallback {
+                        Text("Choose Tilde from the keyboard menu.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
             Spacer(minLength: 22)
 
-            Button(primaryTitle) { model.performPrimaryAction() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(model.isBusy)
-                .keyboardShortcut(.defaultAction)
+            if !model.isBusy {
+                Button(primaryTitle) { model.performPrimaryAction() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
+            }
 
             if let progress = model.modelProgress {
                 VStack(spacing: 5) {
@@ -234,7 +237,7 @@ private struct TildeSetupView: View {
                         Image(systemName: "arrow.down.circle")
                             .foregroundStyle(.secondary)
                         Text(progress.title)
-                            .font(.caption.weight(.medium))
+                            .font(.headline)
                         Spacer()
                     }
                     if let fraction = progress.fraction {
@@ -253,7 +256,7 @@ private struct TildeSetupView: View {
             }
 
             Label(
-                "Your screen and writing stay on this Mac. Tilde connects only to download the fixed Gemma 4 E2B model (about 3.43 GB).",
+                "Everything stays on this Mac.",
                 systemImage: "lock.fill"
             )
             .font(.caption)
@@ -272,8 +275,8 @@ private struct TildeSetupView: View {
         case .installingKeyboard: "Installing Tilde…"
         case .needsKeyboard: "Add the Tilde keyboard"
         case .needsScreenRecording: "Allow screen access"
-        case .downloadingModel: "Downloading the local model…"
-        case .verifyingModel: "Checking the local model…"
+        case .downloadingModel: "Downloading model…"
+        case .verifyingModel: "Checking model…"
         case .startingRuntime: "Starting Tilde…"
         case .needsInputSourceSelection: "Select Tilde as your keyboard"
         case .ready: "Tilde is ready"
@@ -288,10 +291,9 @@ private struct TildeSetupView: View {
         case .needsKeyboard: "macOS needs you to approve it once."
         case .needsScreenRecording:
             "macOS calls this Screen Recording. Tilde uses visible text to understand what you’re replying to. Your screen and writing never leave this Mac."
-        case .downloadingModel:
-            "Tilde is downloading its local Gemma 4 E2B writing engine. It runs entirely on this Mac after setup."
-        case .verifyingModel: "Tilde is checking the download before it can run."
-        case .startingRuntime: "The verified local model is starting."
+        case .downloadingModel: "One-time download."
+        case .verifyingModel: "Making sure the download is ready."
+        case .startingRuntime: "Almost done."
         case .needsInputSourceSelection:
             model.showInputSourceFallback
                 ? "Choose Tilde from the keyboard menu, then return here."
