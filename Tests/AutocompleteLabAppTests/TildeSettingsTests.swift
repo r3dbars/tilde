@@ -33,6 +33,22 @@ struct TildeSettingsTests {
         #expect(settings.incrementalOCREnabled)
     }
 
+    @Test("Launch at login defaults on and preserves an explicit choice")
+    func launchAtLoginPreference() {
+        let keyboardName = "tilde.tests.keyboard.\(UUID().uuidString)"
+        let appName = "tilde.tests.app.\(UUID().uuidString)"
+        let keyboard = UserDefaults(suiteName: keyboardName)!
+        let app = UserDefaults(suiteName: appName)!
+        keyboard.removePersistentDomain(forName: keyboardName)
+        app.removePersistentDomain(forName: appName)
+        let settings = TildeSettings(keyboard: keyboard, app: app)
+
+        #expect(settings.launchAtLoginEnabled)
+        settings.launchAtLoginEnabled = false
+        #expect(!settings.launchAtLoginEnabled)
+        #expect(app.object(forKey: "LaunchAtLoginEnabled") as? Bool == false)
+    }
+
     @Test("Incremental OCR's toggle lands in the keyboard domain, on by default, explicitly settable either way")
     func incrementalOCRToggle() {
         let (settings, keyboard) = makeSettings()
