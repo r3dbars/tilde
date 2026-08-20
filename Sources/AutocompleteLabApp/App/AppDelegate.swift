@@ -357,7 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// user's own menu click do that.
     func applicationDidBecomeActive(_ notification: Notification) {
         guard launchMode == .production else { return }
-        statusMenuHost.refreshScreenMemoryStatus()
+        statusMenuHost.refresh()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -442,11 +442,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return llamaServerHost.snapshot.menuLine
     }
 
+    func applicationState(now: Date = Date()) -> TildeApplicationState {
+        let settings = TildeSettings()
+        return TildeApplicationState.resolve(
+            suggestionsEnabled: settings.suggestionsEnabled,
+            pausedUntil: settings.pausedUntil,
+            screenMemoryEnabled: settings.screenMemoryEnabled,
+            screenRecordingGranted: ScreenRecordingPermission.isGranted(),
+            runtime: llamaServerHost.snapshot,
+            socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath),
+            now: now
+        )
+    }
+
     /// The keyboard is only as smart as this app is alive: register as a login
     /// item once. The user keeps control in System Settings › Login Items.
     /// Status is logged every launch and failures are logged, never swallowed —
     /// a silently-failed registration is how mornings start brainless.
     private func registerAsLoginItemIfNeeded() {
+        guard TildeSettings().launchAtLoginEnabled else {
+            if SMAppService.mainApp.status != .notRegistered {
+                do {
+                    try SMAppService.mainApp.unregister()
+                } catch {
+                    DiagnosticsLog.shared.record(
+                        "login-item-unregister-failed",
+                        metadata: ["reason": error.localizedDescription]
+                    )
+                }
+            }
+            return
+        }
         let service = SMAppService.mainApp
         if service.status == .notRegistered {
             do {
