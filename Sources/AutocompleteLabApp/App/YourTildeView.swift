@@ -35,48 +35,42 @@ struct YourTildeSummaryView: View {
     @ObservedObject var model: YourTildeViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
                 Text(model.snapshot.wordsWrittenWithTildeToday.formatted())
                     .font(.system(size: 36, weight: .semibold))
                     .monospacedDigit()
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("words written with Tilde today")
+                    Text("words today")
                         .font(.subheadline)
-                    Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
+                    Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) total")
                         .font(.subheadline)
                         .foregroundStyle(.primary.opacity(0.72))
                         .monospacedDigit()
                 }
             }
 
-            if model.snapshot.personalSuggestionsToday > 0 {
-                Text("\(model.snapshot.personalSuggestionsToday.formatted()) suggestions were personalized today")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(stageTitle)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(stageHeadline)
                     .font(.headline)
-                Text(stageDetail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let stageProgress {
-                    HStack {
-                        Text(progressStartLabel)
-                        Spacer()
-                        Text(progressEndLabel)
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
 
+                if let stageSupportingText {
+                    Text(stageSupportingText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let stageProgress {
                     ProgressView(value: stageProgress)
                         .progressViewStyle(.linear)
                         .tint(.accentColor)
+
+                    Text(progressLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
 
@@ -86,49 +80,43 @@ struct YourTildeSummaryView: View {
                         .foregroundStyle(.green)
                     Text(milestone)
                 }
-                    .font(.subheadline.weight(.medium))
+                .font(.subheadline.weight(.medium))
             }
-
-            Text("Keep Tilde on and write normally. Every writing day makes it more personal.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var stageTitle: String {
+    private var stageHeadline: String {
         switch model.snapshot.personalizationStage {
-        case .off: "Personalization is off"
+        case .off: "Personalized suggestions are off"
         case .loading: "Loading your progress"
         case .unavailable: "Progress is unavailable"
-        case let .learningWords(current, _) where current < 500: "Getting to know you"
-        case .learningWords: "Learning your style"
-        case .buildingConfidence: "Building confidence"
-        case .validating: "Still tuning"
+        case let .learningWords(current, goal):
+            "\(max(0, goal - current).formatted()) words until Tilde starts tuning to you"
+        case let .buildingConfidence(days, goal):
+            "\(max(0, goal - days)) writing days until your progress report"
+        case .validating: "Checking your personalized predictions"
         case .tuned: "Tuned to you"
         }
     }
 
-    private var stageDetail: String {
+    private var stageSupportingText: String? {
         switch model.snapshot.personalizationStage {
         case .off:
-            "Turn on Personal Learning below to help Tilde adapt to your writing."
+            "Turn them on below to help Tilde adapt to your writing."
         case .loading:
-            "Tilde is loading aggregate learning progress from this Mac."
+            nil
         case .unavailable:
             "Tilde could not read learning progress. Your writing was not exposed."
-        case let .learningWords(current, goal):
-            "\(max(0, goal - current).formatted()) more words until Tilde starts checking whether personalization helps."
-        case let .buildingConfidence(days, goal):
-            "\(max(0, goal - days)) more writing days until Tilde can show whether it predicts you better."
+        case .learningWords, .buildingConfidence:
+            nil
         case .validating:
-            "Tilde is checking whether personalized predictions are more accurate."
+            "Keep writing normally while Tilde gathers enough evidence."
         case let .tuned(candidate, baseline):
-            "Tilde now predicts your writing better than its general starting point: \(percent(candidate)) vs \(percent(baseline))."
+            "Personalized predictions: \(percent(candidate)) vs \(percent(baseline)) without personalization."
         }
     }
 
-    private var progressStartLabel: String {
+    private var progressLabel: String {
         switch model.snapshot.personalizationStage {
         case let .learningWords(current, goal):
             "\(min(current, goal).formatted()) of \(goal.formatted()) words"
@@ -141,23 +129,9 @@ struct YourTildeSummaryView: View {
         }
     }
 
-    private var progressEndLabel: String {
-        switch model.snapshot.personalizationStage {
-        case let .learningWords(current, goal):
-            "\(max(0, goal - current).formatted()) to go"
-        case let .buildingConfidence(days, goal):
-            "\(max(0, goal - days)) to go"
-        case .tuned:
-            "Complete"
-        case .off, .loading, .unavailable, .validating:
-            ""
-        }
-    }
-
     private var stageProgress: Double? {
         switch model.snapshot.personalizationStage {
-        case .off, .unavailable: 0
-        case .loading, .validating: nil
+        case .off, .loading, .unavailable, .validating: nil
         case let .learningWords(current, goal):
             goal > 0 ? min(1, Double(current) / Double(goal)) : 0
         case let .buildingConfidence(days, goal):
@@ -173,14 +147,8 @@ struct YourTildeSummaryView: View {
 
 enum TildeProgressPresentation {
     static func milestoneText(for snapshot: TildeProgressSnapshot) -> String? {
-        if snapshot.activeWritingDays >= 14 {
-            return "14 writing days completed"
-        }
         if snapshot.wordsLearnedFrom >= 2_000 {
             return "Learned from \(snapshot.wordsLearnedFrom.formatted()) words"
-        }
-        if snapshot.wordsLearnedFrom >= 500 {
-            return "Learning from \(snapshot.wordsLearnedFrom.formatted()) words"
         }
         return nil
     }
