@@ -1,22 +1,81 @@
 import AppKit
 
-/// Tilde stays quiet in the menu bar. Detailed privacy and application
-/// controls live in the dedicated settings window.
+/// Tilde stays quiet in the menu bar. Personal progress and controls live in
+/// one unified window opened from a single menu action.
 @MainActor
 final class StatusMenuHost: NSObject {
+    struct Presentation: Equatable {
+        let status: String
+        let detail: String
+        let primaryAction: String?
+
+        static func make(
+            state: TildeApplicationState,
+            model: ModelState,
+            wordsToday: Int
+        ) -> Self {
+            if state.requiresUserAttention {
+                return Self(
+                    status: "Tilde Needs Attention",
+                    detail: "Finish setup to start suggesting",
+                    primaryAction: "Finish Setup"
+                )
+            }
+
+            if case let .downloading(receivedBytes, totalBytes) = model,
+               state == .preparingModel {
+                let fraction = totalBytes > 0
+                    ? min(1, max(0, Double(receivedBytes) / Double(totalBytes)))
+                    : 0
+                let percent = Int((fraction * 100).rounded())
+                let progress = TildeModelDownloadProgress(
+                    receivedBytes: receivedBytes,
+                    totalBytes: totalBytes
+                )
+                return Self(
+                    status: "Downloading Local Model · \(percent)%",
+                    detail: progress.detail,
+                    primaryAction: nil
+                )
+            }
+
+            switch state {
+            case .ready:
+                return Self(
+                    status: "Tilde is Ready",
+                    detail: "\(wordsToday.formatted()) words with Tilde today",
+                    primaryAction: "Pause for 1 Hour"
+                )
+            case .paused, .disabled:
+                return Self(
+                    status: "Tilde is Paused",
+                    detail: "\(wordsToday.formatted()) words with Tilde today",
+                    primaryAction: "Resume Tilde"
+                )
+            case .needsKeyboard, .needsPermission, .recoverableError:
+                assertionFailure("User-attention states are handled above")
+                return Self(status: "Tilde Needs Attention", detail: "Finish setup", primaryAction: "Finish Setup")
+            case .preparingModel:
+                return Self(
+                    status: "Tilde is Getting Ready",
+                    detail: "Preparing local model",
+                    primaryAction: nil
+                )
+            }
+        }
+    }
+
     private weak var appDelegate: AppDelegate?
     private let personalHistory: PersonalHistoryController
     private let settings = TildeSettings()
 
     private var statusItem: NSStatusItem?
     private var statusLineItem: NSMenuItem?
-    private var engineItem: NSMenuItem?
-    private var screenMemoryItem: NSMenuItem?
-    private var suggestionsItem: NSMenuItem?
+    private var todayItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
-    private var setupOrSettingsItem: NSMenuItem?
+    private var setupOrTildeItem: NSMenuItem?
 
-    private var settingsWindow: TildeSettingsWindowController?
+    private var tildeWindow: TildeSettingsWindowController?
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
@@ -30,19 +89,12 @@ final class StatusMenuHost: NSObject {
         item.button?.image = Self.menuBarMark()
 
         let menu = NSMenu()
-        statusLineItem = addInfoRow(to: menu, "Model is Loading")
-        engineItem = addInfoRow(to: menu, "Engine: Gemma (starting…)")
-        screenMemoryItem = addInfoRow(to: menu, "Screen Memory: checking…")
+        statusLineItem = addAction(to: menu, "Tilde is Getting Ready", #selector(openStatus(_:)))
+        todayItem = addAction(to: menu, "0 words with Tilde today", #selector(openYourTilde(_:)))
         menu.addItem(.separator())
 
-        suggestionsItem = addAction(to: menu, "Tilde On", #selector(toggleSuggestions(_:)))
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
-        setupOrSettingsItem = addAction(
-            to: menu,
-            "Settings…",
-            #selector(openSetupOrSettings(_:)),
-            key: ","
-        )
+        setupOrTildeItem = addAction(to: menu, "Open Tilde", #selector(openTilde(_:)))
         menu.addItem(.separator())
         addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
@@ -55,32 +107,29 @@ final class StatusMenuHost: NSObject {
     func refresh() {
         guard let appDelegate else { return }
         let state = appDelegate.applicationState()
-        statusLineItem?.title = state.statusText
-        engineItem?.title = appDelegate.engineStatusLine()
-        suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
-        setupOrSettingsItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Settings…"
+        let presentation = Presentation.make(
+            state: state,
+            model: appDelegate.modelState(),
+            wordsToday: TildeStats.todayWordsAccepted()
+        )
+        statusLineItem?.title = presentation.status
+        todayItem?.title = presentation.detail
+        pauseItem?.title = presentation.primaryAction ?? ""
+        pauseItem?.isHidden = presentation.primaryAction == nil
+        setupOrTildeItem?.title = "Open Tilde"
 
-        if let until = settings.pausedUntil {
-            let minutes = max(1, Int(ceil(until.timeIntervalSinceNow / 60)))
-            pauseItem?.title = "Resume Tilde (\(minutes)m left)"
-        } else {
-            pauseItem?.title = "Pause for 1 Hour"
-        }
-        pauseItem?.isEnabled = settings.suggestionsEnabled
-
-        refreshScreenMemoryLine()
         refreshIcon(for: state.iconAppearance)
-        settingsWindow?.refresh()
-    }
-
-    @objc private func toggleSuggestions(_ sender: Any?) {
-        settings.suggestionsEnabled.toggle()
-        if !settings.suggestionsEnabled { settings.resume() }
-        refresh()
+        tildeWindow?.refresh()
     }
 
     @objc private func togglePause(_ sender: Any?) {
-        if settings.pausedUntil != nil {
+        if appDelegate?.applicationState().requiresUserAttention == true {
+            appDelegate?.showSetup()
+        } else if settings.pausedUntil != nil {
+            settings.resume()
+        } else if appDelegate?.applicationState() == .disabled {
+            settings.suggestionsEnabled = true
+            settings.screenMemoryEnabled = true
             settings.resume()
         } else {
             settings.pause(for: 3_600)
@@ -88,35 +137,46 @@ final class StatusMenuHost: NSObject {
         refresh()
     }
 
-    @objc private func openSetupOrSettings(_ sender: Any?) {
+    @objc private func openStatus(_ sender: Any?) {
+        if appDelegate?.applicationState().requiresUserAttention == true {
+            appDelegate?.showSetup()
+        } else {
+            showYourTilde()
+        }
+    }
+
+    @objc private func openYourTilde(_ sender: Any?) {
+        showYourTilde()
+    }
+
+    @objc private func openTilde(_ sender: Any?) {
+        showYourTilde()
+    }
+
+    func showTilde() {
         guard let appDelegate else { return }
         if appDelegate.setupRequired() {
             appDelegate.showSetup()
             return
         }
-        if settingsWindow == nil {
-            settingsWindow = TildeSettingsWindowController(
+        showYourTilde()
+    }
+
+    private func showYourTilde() {
+        guard let appDelegate else { return }
+        if tildeWindow == nil {
+            tildeWindow = TildeSettingsWindowController(
                 appDelegate: appDelegate,
                 personalHistory: personalHistory
             )
         }
-        settingsWindow?.show()
+        tildeWindow?.show()
     }
 
     @objc private func quit(_ sender: Any?) {
         UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
             .set(true, forKey: "GhostBrainQuietQuit")
         NSApp.terminate(nil)
-    }
-
-    private func refreshScreenMemoryLine() {
-        guard settings.screenMemoryEnabled else {
-            screenMemoryItem?.title = "Screen Memory: Off"
-            return
-        }
-        screenMemoryItem?.title = ScreenRecordingPermission.isGranted()
-            ? "Screen Memory: Ready"
-            : "Screen Memory: Permission Required"
     }
 
     private func refreshIcon(for appearance: TildeMenuIconAppearance) {
@@ -164,14 +224,6 @@ final class StatusMenuHost: NSObject {
         image.accessibilityDescription = "Tilde"
         image.isTemplate = true
         return image
-    }
-
-    @discardableResult
-    private func addInfoRow(to menu: NSMenu, _ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        menu.addItem(item)
-        return item
     }
 
     @discardableResult

@@ -113,16 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController)
     )
 
-    /// "Personal suggestions (experimental)" (`docs/plans/road-to-paid.md`
-    /// Phase 3): both the feature toggle AND Personal History's own master
-    /// toggle must be on — the menu only ever shows the experimental toggle
-    /// while Personal History is enabled, but this gate re-checks both live
-    /// on every completion request, the same discipline `suggestionsGate`
-    /// applies to Screen Recording permission, so a toggle flipped mid-
-    /// session takes effect on the very next request with nothing cached.
+    /// Personalization has one product-level choice. When local Personal
+    /// History is enabled, safe personal suggestions may be served; when it
+    /// is disabled, neither learning nor personal serving runs.
     private nonisolated static func personalSuggestionsGate() -> Bool {
         let settings = TildeSettings()
-        return settings.personalHistoryEnabled && settings.personalSuggestionsServingEnabled
+        return settings.personalHistoryEnabled
     }
 
     /// `nonisolated` for the same reason `sceneProvider`/
@@ -325,6 +321,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupWindow?.refresh()
     }
 
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        guard launchMode == .production else { return false }
+        statusMenuHost.showTilde()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Deaths must leave a trace: an unexplained brainless morning
         // (2026-08-04) had no shutdown line to tell crash from quit. Flush,
@@ -470,6 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.setupVersion = TildeSettings.currentSetupVersion
         statusMenuHost.refresh()
         setupWindow?.close()
+        statusMenuHost.showTilde()
     }
 
     func openKeyboardSettings() { ghostKeyboardInstallerHost.openKeyboardSettings() }

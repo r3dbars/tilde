@@ -59,9 +59,16 @@ enum TildeApplicationState: Equatable {
 
     var iconAppearance: TildeMenuIconAppearance {
         switch self {
-        case .ready: .normal
+        case .ready, .preparingModel: .normal
         case .paused, .disabled: .dimmed
-        case .needsKeyboard, .needsPermission, .preparingModel, .recoverableError: .warning
+        case .needsKeyboard, .needsPermission, .recoverableError: .warning
+        }
+    }
+
+    var requiresUserAttention: Bool {
+        switch self {
+        case .needsKeyboard, .needsPermission, .recoverableError: true
+        case .ready, .paused, .disabled, .preparingModel: false
         }
     }
 }
