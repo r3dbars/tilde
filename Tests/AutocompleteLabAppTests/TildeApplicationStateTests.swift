@@ -34,6 +34,7 @@ struct TildeApplicationStateTests {
     @Test("Every state maps to one of the three icon appearances")
     func iconAppearances() {
         #expect(TildeApplicationState.ready.iconAppearance == .normal)
+        #expect(TildeApplicationState.preparingModel.iconAppearance == .normal)
         #expect(TildeApplicationState.disabled.iconAppearance == .dimmed)
         #expect(TildeApplicationState.needsPermission.iconAppearance == .warning)
         #expect(TildeApplicationState.needsKeyboard.statusText == "Finish Setup")
