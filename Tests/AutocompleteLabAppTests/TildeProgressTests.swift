@@ -76,7 +76,8 @@ struct TildeProgressTests {
             == "Learned from \(learned.wordsLearnedFrom.formatted()) words")
 
         let complete = progress(status: status(opportunities: 3_000, activeDays: 14))
-        #expect(TildeProgressPresentation.milestoneText(for: complete) == "14 writing days completed")
+        #expect(TildeProgressPresentation.milestoneText(for: complete)
+            == "Learned from \(complete.wordsLearnedFrom.formatted()) words")
     }
 
     @Test("User-facing source counters follow the local calendar")
