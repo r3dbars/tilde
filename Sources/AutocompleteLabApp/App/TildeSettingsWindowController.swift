@@ -3,19 +3,28 @@ import SwiftUI
 
 @MainActor
 final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate {
-    private let model: TildeSettingsViewModel
-    private var refreshTimer: Timer?
+    private let settingsModel: TildeSettingsViewModel
+    private let progressModel: YourTildeViewModel
+    private var settingsRefreshTimer: Timer?
+    private var progressRefreshTimer: Timer?
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
-        model = TildeSettingsViewModel(appDelegate: appDelegate, personalHistory: personalHistory)
-        let rootView = TildeSettingsView(model: model)
+        settingsModel = TildeSettingsViewModel(
+            appDelegate: appDelegate,
+            personalHistory: personalHistory
+        )
+        progressModel = YourTildeViewModel(personalHistory: personalHistory)
+        let rootView = TildeSettingsView(
+            model: settingsModel,
+            progressModel: progressModel
+        )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 820),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 660),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Tilde Settings"
+        window.title = "Tilde"
         window.contentViewController = NSHostingController(rootView: rootView)
         window.isReleasedWhenClosed = false
         window.center()
@@ -27,7 +36,8 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
     required init?(coder: NSCoder) { nil }
 
     func show() {
-        model.refresh()
+        settingsModel.refresh()
+        progressModel.refresh()
         startRefreshing()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
@@ -35,191 +45,95 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
     }
 
     func refresh() {
-        model.refresh()
+        guard window?.isVisible == true else { return }
+        settingsModel.refresh()
+        progressModel.refresh()
     }
 
     func windowWillClose(_ notification: Notification) {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
+        settingsRefreshTimer?.invalidate()
+        settingsRefreshTimer = nil
+        progressRefreshTimer?.invalidate()
+        progressRefreshTimer = nil
     }
 
     private func startRefreshing() {
-        guard refreshTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.model.refresh() }
+        guard settingsRefreshTimer == nil, progressRefreshTimer == nil else { return }
+        let settingsTimer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.settingsModel.refresh() }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        refreshTimer = timer
+        let progressTimer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.progressModel.refresh() }
+        }
+        RunLoop.main.add(settingsTimer, forMode: .common)
+        RunLoop.main.add(progressTimer, forMode: .common)
+        settingsRefreshTimer = settingsTimer
+        progressRefreshTimer = progressTimer
     }
 }
 
 private struct TildeSettingsView: View {
     @ObservedObject var model: TildeSettingsViewModel
-    @State private var confirmDisableScreenMemory = false
-    @State private var confirmEnableLearning = false
-    @State private var confirmDeleteLearning = false
-    @State private var confirmDeleteModel = false
-    @State private var confirmEnableOCREvaluation = false
-    @State private var confirmDeleteOCREvaluation = false
+    @ObservedObject var progressModel: YourTildeViewModel
+
+    @State private var confirmEnablePersonalization = false
+    @State private var showPrivacyAndData = false
+    @State private var showTroubleshooting = false
 
     var body: some View {
         Form {
-            Section("General") {
-                Toggle("Tilde On", isOn: Binding(
-                    get: { model.suggestionsEnabled },
-                    set: { model.setSuggestionsEnabled($0) }
-                ))
+            Section("Your Tilde") {
+                YourTildeSummaryView(model: progressModel)
+            }
 
-                Toggle("Launch Tilde at Login", isOn: Binding(
+            Section("Settings") {
+                VStack(alignment: .leading, spacing: 5) {
+                    Toggle("Tilde", isOn: Binding(
+                        get: { model.suggestionsEnabled },
+                        set: { model.setSuggestionsEnabled($0) }
+                    ))
+
+                    if model.screenAccessNeedsAttention {
+                        HStack {
+                            Text("Screen Access is required")
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Button("Fix Access…") { model.enableScreenAccess() }
+                        }
+                        .font(.caption)
+                    } else {
+                        Text(model.simpleStatusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Toggle("Start Tilde when I log in", isOn: Binding(
                     get: { model.launchAtLoginEnabled },
                     set: { model.setLaunchAtLoginEnabled($0) }
                 ))
 
-                Toggle("Screen Memory", isOn: Binding(
-                    get: { model.screenMemoryEnabled },
-                    set: { enabled in
-                        if enabled { model.setScreenMemoryEnabled(true) }
-                        else { confirmDisableScreenMemory = true }
-                    }
-                ))
+                VStack(alignment: .leading, spacing: 5) {
+                    Toggle("Personalized suggestions", isOn: Binding(
+                        get: { model.personalizationEnabled },
+                        set: { enabled in
+                            if enabled { confirmEnablePersonalization = true }
+                            else { model.setPersonalizationEnabled(false) }
+                        }
+                    ))
 
-                if model.screenMemoryEnabled, !model.screenRecordingGranted {
-                    HStack {
-                        Text("Screen Recording permission is required for suggestions.")
-                            .foregroundStyle(.red)
-                        Spacer()
-                        Button("Open System Settings") { model.openScreenRecordingSettings() }
-                    }
+                    Text("Learns from your writing on this Mac to improve suggestions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                LabeledContent("Status", value: model.statusText)
             }
 
             Section {
-                if model.excludedApplications.isEmpty {
-                    Text("No excluded applications")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(model.excludedApplications) { application in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(application.name)
-                                Text(application.bundleIdentifier)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                model.removeExcludedApplication(application)
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.plain)
-                            .help("Remove application")
-                        }
-                    }
-                }
-
-                Button("Add Application…") { model.chooseApplicationToExclude() }
-            } header: {
-                Text("Apps")
+                SettingsDestinationRow("Privacy & Data") { showPrivacyAndData = true }
+                SettingsDestinationRow("Help & Troubleshooting") { showTroubleshooting = true }
             } footer: {
-                Text("Tilde never observes or suggests inside excluded applications. Screen capture also pauses while an excluded app is visible.")
-            }
-
-            Section("Privacy") {
-                Text("Your screen, writing, and personal learning data stay on this Mac. Tilde connects only to download the fixed Gemma 4 E2B model.")
-
-                Toggle("Personal Learning", isOn: Binding(
-                    get: { model.personalHistoryEnabled },
-                    set: { enabled in
-                        if enabled { confirmEnableLearning = true }
-                        else { model.setPersonalHistoryEnabled(false) }
-                    }
-                ))
-
-                if model.personalHistoryEnabled {
-                    Toggle("Use Personal Suggestions", isOn: Binding(
-                        get: { model.personalSuggestionsEnabled },
-                        set: { model.setPersonalSuggestionsEnabled($0) }
-                    ))
-                }
-
-                LabeledContent("Learning data", value: model.learningDataSize)
-
-                Button("Delete Learning Data…", role: .destructive) {
-                    confirmDeleteLearning = true
-                }
-                .disabled(model.isDeletingLearningData || model.learningDataSize == "No learning data")
-
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledContent("Model", value: model.modelDescription)
-                    if let progress = model.modelProgress {
-                        if let fraction = progress.fraction {
-                            ProgressView(value: fraction)
-                                .progressViewStyle(.linear)
-                        } else {
-                            ProgressView()
-                                .progressViewStyle(.linear)
-                        }
-                        Text(progress.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(model.modelStatusText)
-                            .font(.caption)
-                            .foregroundStyle(model.modelState.isFailure ? .red : .secondary)
-                    }
-                }
-
-                Button("Delete Model…", role: .destructive) {
-                    confirmDeleteModel = true
-                }
-                .disabled(!model.canDeleteModel || model.isDeletingModel)
-            }
-
-            if model.localOCREvaluationAvailable {
-                Section("OCR Evaluation — Development") {
-                    Toggle("Record Raw Paired OCR Samples", isOn: Binding(
-                        get: { model.localOCREvaluationEnabled },
-                        set: { enabled in
-                            if enabled { confirmEnableOCREvaluation = true }
-                            else { model.setLocalOCREvaluationEnabled(false) }
-                        }
-                    ))
-
-                    Text("Runs full OCR beside incremental OCR on the same frame and stores both raw outputs locally. This may capture sensitive text and slow Tilde while enabled.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
-                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
-                        .disabled(!model.hasLocalOCREvaluationSamples)
-                    Button("Delete Evaluation Data…", role: .destructive) {
-                        confirmDeleteOCREvaluation = true
-                    }
-                    .disabled(model.isDeletingOCREvaluationData || !model.hasLocalOCREvaluationSamples)
-                }
-            } else if model.hasLocalOCREvaluationSamples {
-                Section("OCR Evaluation Data") {
-                    Text("Raw OCR evaluation data from a development build remains on this Mac. Recording is unavailable in this build.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
-                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
-                    Button("Delete Evaluation Data…", role: .destructive) {
-                        confirmDeleteOCREvaluation = true
-                    }
-                    .disabled(model.isDeletingOCREvaluationData)
-                }
-            }
-
-            Section("Support") {
-                LabeledContent("Version", value: model.versionText)
-                Button("Export Diagnostics…") { model.exportDiagnostics() }
-                Button("Check for Updates…") {}
-                    .disabled(true)
-                Button("Run Setup Again…") { model.runSetupAgain() }
+                Text("Tilde \(model.versionText)")
             }
 
             if let message = model.message {
@@ -231,76 +145,46 @@ private struct TildeSettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .frame(minWidth: 500, minHeight: 680)
-        .task {
-            guard model.localOCREvaluationAvailable else { return }
-            while !Task.isCancelled {
-                await model.refreshLocalOCREvaluationSummary()
-                try? await Task.sleep(for: .seconds(2))
-            }
+        .frame(minWidth: 500, minHeight: 620)
+        .sheet(isPresented: $showPrivacyAndData) {
+            PrivacyAndDataView(model: model)
+        }
+        .sheet(isPresented: $showTroubleshooting) {
+            TroubleshootingView(model: model)
         }
         .confirmationDialog(
-            "Turn off Screen Memory?",
-            isPresented: $confirmDisableScreenMemory
+            "Turn on Personalization?",
+            isPresented: $confirmEnablePersonalization
         ) {
-            Button("Turn Off", role: .destructive) { model.setScreenMemoryEnabled(false) }
+            Button("Turn On") { model.setPersonalizationEnabled(true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Screen Memory is required for Tilde suggestions. Turning it off pauses Tilde.")
-        }
-        .confirmationDialog(
-            "Turn on Personal Learning?",
-            isPresented: $confirmEnableLearning
-        ) {
-            Button("Turn On") { model.setPersonalHistoryEnabled(true) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Tilde will store encrypted writing history on this Mac to improve suggestions. Nothing is uploaded.")
-        }
-        .confirmationDialog(
-            "Delete all learning data?",
-            isPresented: $confirmDeleteLearning
-        ) {
-            Button("Delete", role: .destructive) { model.deleteLearningData() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes encrypted writing history, its Keychain key, and learning signals. The app and downloaded model are preserved.")
-        }
-        .confirmationDialog(
-            "Delete the local model?",
-            isPresented: $confirmDeleteModel
-        ) {
-            Button("Delete Model", role: .destructive) { model.deleteModel() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This stops Tilde, removes the downloaded Gemma 4 E2B model (about 3.43 GB), and starts setup again. Your writing and learning data stay on this Mac.")
-        }
-        .confirmationDialog(
-            "Record raw OCR samples?",
-            isPresented: $confirmEnableOCREvaluation
-        ) {
-            Button("Start Recording") { model.setLocalOCREvaluationEnabled(true) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Visible text from your screen will be stored unredacted on this Mac in an owner-only file. Collection is limited to this development build and the newest 100 samples or 10 MB.")
-        }
-        .confirmationDialog(
-            "Delete all OCR evaluation samples?",
-            isPresented: $confirmDeleteOCREvaluation
-        ) {
-            Button("Delete and Turn Off", role: .destructive) {
-                model.deleteLocalOCREvaluationData()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently removes the local raw OCR evaluation corpus and disables further recording.")
+            Text("Tilde will store encrypted writing history on this Mac and use it to improve suggestions. Nothing is uploaded.")
         }
     }
 }
 
-private extension ModelState {
-    var isFailure: Bool {
-        if case .failed = self { return true }
-        return false
+private struct SettingsDestinationRow: View {
+    let title: String
+    let action: () -> Void
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens \(title.lowercased())")
     }
 }

@@ -6,7 +6,7 @@ import Foundation
 /// today's personal/agreed/base split without reading the diagnostics log.
 /// Same daily-bucket-in-the-keyboard-suite convention as `TildeStats`/
 /// `GhostStats` (a `"personal-suggestions.\(yyyy-MM-dd)"` key holding a
-/// `[String: Int]` dict) — three integers per UTC day, never any
+/// `[String: Int]` dict) — three integers per local calendar day, never any
 /// suggestion text. `GhostBrainServerHost` runs in this app's own process
 /// (not the keyboard extension), so, unlike `GhostStats`, this writes
 /// directly rather than batching: completion requests are already rare
@@ -32,9 +32,10 @@ enum PersonalSuggestionStats {
         }
     }
 
-    private static func dayKey(for date: Date) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
+    static func dayKey(
+        for date: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         let year = components.year ?? 1970
         let month = components.month ?? 1

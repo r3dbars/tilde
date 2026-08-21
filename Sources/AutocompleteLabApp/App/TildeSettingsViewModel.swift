@@ -16,6 +16,17 @@ enum TildeModelPresentation {
     static let description = "\(name) · \(approximateSize)"
 }
 
+enum TildeSettingsPresentation {
+    static func simpleStatusText(for statusText: String) -> String {
+        switch statusText {
+        case "Tilde is Ready": "Ready"
+        case "Tilde is Paused": "Paused"
+        case "Model is Loading": "Getting ready…"
+        default: "Needs attention"
+        }
+    }
+}
+
 struct TildeModelDownloadProgress: Equatable {
     let receivedBytes: Int64
     let totalBytes: Int64
@@ -41,10 +52,7 @@ final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var launchAtLoginEnabled = true
     @Published private(set) var screenMemoryEnabled = true
     @Published private(set) var screenRecordingGranted = false
-    @Published private(set) var personalHistoryEnabled = false
-    @Published private(set) var personalSuggestionsEnabled = false
-    @Published private(set) var localOCREvaluationAvailable = false
-    @Published private(set) var localOCREvaluationEnabled = false
+    @Published private(set) var personalizationEnabled = false
     @Published private(set) var hasLocalOCREvaluationSamples = false
     @Published private(set) var localOCREvaluationData = "No samples"
     @Published private(set) var excludedApplications: [ExcludedApplication] = []
@@ -74,6 +82,14 @@ final class TildeSettingsViewModel: ObservableObject {
 
     var modelDescription: String {
         appDelegate?.modelDescription() ?? TildeModelPresentation.description
+    }
+
+    var simpleStatusText: String {
+        TildeSettingsPresentation.simpleStatusText(for: statusText)
+    }
+
+    var screenAccessNeedsAttention: Bool {
+        !screenMemoryEnabled || !screenRecordingGranted
     }
 
     var modelProgress: TildeModelDownloadProgress? {
@@ -107,11 +123,7 @@ final class TildeSettingsViewModel: ObservableObject {
         launchAtLoginEnabled = settings.launchAtLoginEnabled
         screenMemoryEnabled = settings.screenMemoryEnabled
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
-        personalHistoryEnabled = personalHistory.isEnabled
-        personalSuggestionsEnabled = settings.personalSuggestionsServingEnabled
-        localOCREvaluationAvailable = LocalOCREvaluationStore.isAvailableInCurrentBuild
-        localOCREvaluationEnabled = localOCREvaluationAvailable
-            && settings.localOCREvaluationEnabled
+        personalizationEnabled = personalHistory.isEnabled
         Task { [weak self] in
             await self?.refreshLocalOCREvaluationSummary()
         }
@@ -189,11 +201,11 @@ final class TildeSettingsViewModel: ObservableObject {
         }
     }
 
-    func setScreenMemoryEnabled(_ enabled: Bool) {
-        settings.screenMemoryEnabled = enabled
-        screenMemoryEnabled = enabled
-        if enabled, !ScreenRecordingPermission.isGranted() {
-            ScreenRecordingPermission.request()
+    func enableScreenAccess() {
+        settings.screenMemoryEnabled = true
+        screenMemoryEnabled = true
+        if !ScreenRecordingPermission.isGranted(), !ScreenRecordingPermission.request() {
+            openScreenRecordingSettings()
         }
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
         statusText = appDelegate?.applicationState().statusText ?? statusText
@@ -207,31 +219,9 @@ final class TildeSettingsViewModel: ObservableObject {
         appDelegate?.showSetup()
     }
 
-    func setPersonalHistoryEnabled(_ enabled: Bool) {
+    func setPersonalizationEnabled(_ enabled: Bool) {
         personalHistory.isEnabled = enabled
-        personalHistoryEnabled = enabled
-        if !enabled {
-            settings.personalSuggestionsServingEnabled = false
-            personalSuggestionsEnabled = false
-        }
-    }
-
-    func setPersonalSuggestionsEnabled(_ enabled: Bool) {
-        settings.personalSuggestionsServingEnabled = enabled
-        personalSuggestionsEnabled = enabled
-    }
-
-    func setLocalOCREvaluationEnabled(_ enabled: Bool) {
-        guard localOCREvaluationAvailable else { return }
-        if enabled, !LocalOCREvaluationStore.shared.beginCollection() {
-            message = "Local OCR evaluation could not start safely."
-            return
-        }
-        settings.localOCREvaluationEnabled = enabled
-        localOCREvaluationEnabled = enabled
-        message = enabled
-            ? "Local OCR evaluation is recording paired raw samples."
-            : "Local OCR evaluation is off. Existing samples remain until deleted."
+        personalizationEnabled = enabled
     }
 
     func revealLocalOCREvaluationData() {
@@ -248,7 +238,6 @@ final class TildeSettingsViewModel: ObservableObject {
         isDeletingOCREvaluationData = true
         localOCREvaluationSummaryGeneration &+= 1
         settings.localOCREvaluationEnabled = false
-        localOCREvaluationEnabled = false
         LocalOCREvaluationStore.shared.flush()
         if LocalOCREvaluationStore.shared.deleteAll() {
             hasLocalOCREvaluationSamples = false
@@ -294,8 +283,7 @@ final class TildeSettingsViewModel: ObservableObject {
             do {
                 try await personalHistory.deleteAll()
                 self.learningDataSize = "No learning data"
-                self.personalHistoryEnabled = false
-                self.personalSuggestionsEnabled = false
+                self.personalizationEnabled = false
                 self.message = "Learning data was deleted."
             } catch {
                 self.message = "Learning data could not be deleted. Quit and reopen Tilde, then try again."
