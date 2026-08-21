@@ -4,6 +4,67 @@ import AppKit
 /// one unified window opened from a single menu action.
 @MainActor
 final class StatusMenuHost: NSObject {
+    struct Presentation: Equatable {
+        let status: String
+        let detail: String
+        let primaryAction: String?
+
+        static func make(
+            state: TildeApplicationState,
+            model: ModelState,
+            wordsToday: Int
+        ) -> Self {
+            if state.requiresUserAttention {
+                return Self(
+                    status: "Tilde Needs Attention",
+                    detail: "Finish setup to start suggesting",
+                    primaryAction: "Finish Setup"
+                )
+            }
+
+            if case let .downloading(receivedBytes, totalBytes) = model,
+               state == .preparingModel {
+                let fraction = totalBytes > 0
+                    ? min(1, max(0, Double(receivedBytes) / Double(totalBytes)))
+                    : 0
+                let percent = Int((fraction * 100).rounded())
+                let progress = TildeModelDownloadProgress(
+                    receivedBytes: receivedBytes,
+                    totalBytes: totalBytes
+                )
+                return Self(
+                    status: "Downloading Local Model · \(percent)%",
+                    detail: progress.detail,
+                    primaryAction: nil
+                )
+            }
+
+            switch state {
+            case .ready:
+                return Self(
+                    status: "Tilde is Ready",
+                    detail: "\(wordsToday.formatted()) words with Tilde today",
+                    primaryAction: "Pause for 1 Hour"
+                )
+            case .paused, .disabled:
+                return Self(
+                    status: "Tilde is Paused",
+                    detail: "\(wordsToday.formatted()) words with Tilde today",
+                    primaryAction: "Resume Tilde"
+                )
+            case .needsKeyboard, .needsPermission, .recoverableError:
+                assertionFailure("User-attention states are handled above")
+                return Self(status: "Tilde Needs Attention", detail: "Finish setup", primaryAction: "Finish Setup")
+            case .preparingModel:
+                return Self(
+                    status: "Tilde is Getting Ready",
+                    detail: "Preparing local model",
+                    primaryAction: nil
+                )
+            }
+        }
+    }
+
     private weak var appDelegate: AppDelegate?
     private let personalHistory: PersonalHistoryController
     private let settings = TildeSettings()
@@ -28,17 +89,12 @@ final class StatusMenuHost: NSObject {
         item.button?.image = Self.menuBarMark()
 
         let menu = NSMenu()
-        statusLineItem = addInfoRow(to: menu, "Model is Loading")
-        todayItem = addInfoRow(to: menu, "Today: 0 words with Tilde")
+        statusLineItem = addAction(to: menu, "Tilde is Getting Ready", #selector(openStatus(_:)))
+        todayItem = addAction(to: menu, "0 words with Tilde today", #selector(openYourTilde(_:)))
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
-        setupOrTildeItem = addAction(
-            to: menu,
-            "Open Tilde…",
-            #selector(openTilde(_:)),
-            key: ","
-        )
+        setupOrTildeItem = addAction(to: menu, "Open Tilde", #selector(openTilde(_:)))
         menu.addItem(.separator())
         addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
 
@@ -51,24 +107,29 @@ final class StatusMenuHost: NSObject {
     func refresh() {
         guard let appDelegate else { return }
         let state = appDelegate.applicationState()
-        statusLineItem?.title = state.statusText
-        todayItem?.title = "Today: \(TildeStats.todayWordsAccepted().formatted()) words with Tilde"
-        setupOrTildeItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Open Tilde…"
-
-        if let until = settings.pausedUntil {
-            let minutes = max(1, Int(ceil(until.timeIntervalSinceNow / 60)))
-            pauseItem?.title = "Resume Tilde (\(minutes)m left)"
-        } else {
-            pauseItem?.title = "Pause for 1 Hour"
-        }
-        pauseItem?.isEnabled = settings.suggestionsEnabled
+        let presentation = Presentation.make(
+            state: state,
+            model: appDelegate.modelState(),
+            wordsToday: TildeStats.todayWordsAccepted()
+        )
+        statusLineItem?.title = presentation.status
+        todayItem?.title = presentation.detail
+        pauseItem?.title = presentation.primaryAction ?? ""
+        pauseItem?.isHidden = presentation.primaryAction == nil
+        setupOrTildeItem?.title = "Open Tilde"
 
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
     }
 
     @objc private func togglePause(_ sender: Any?) {
-        if settings.pausedUntil != nil {
+        if appDelegate?.applicationState().requiresUserAttention == true {
+            appDelegate?.showSetup()
+        } else if settings.pausedUntil != nil {
+            settings.resume()
+        } else if appDelegate?.applicationState() == .disabled {
+            settings.suggestionsEnabled = true
+            settings.screenMemoryEnabled = true
             settings.resume()
         } else {
             settings.pause(for: 3_600)
@@ -76,8 +137,20 @@ final class StatusMenuHost: NSObject {
         refresh()
     }
 
+    @objc private func openStatus(_ sender: Any?) {
+        if appDelegate?.applicationState().requiresUserAttention == true {
+            appDelegate?.showSetup()
+        } else {
+            showYourTilde()
+        }
+    }
+
+    @objc private func openYourTilde(_ sender: Any?) {
+        showYourTilde()
+    }
+
     @objc private func openTilde(_ sender: Any?) {
-        showTilde()
+        showYourTilde()
     }
 
     func showTilde() {
@@ -86,6 +159,11 @@ final class StatusMenuHost: NSObject {
             appDelegate.showSetup()
             return
         }
+        showYourTilde()
+    }
+
+    private func showYourTilde() {
+        guard let appDelegate else { return }
         if tildeWindow == nil {
             tildeWindow = TildeSettingsWindowController(
                 appDelegate: appDelegate,
@@ -146,14 +224,6 @@ final class StatusMenuHost: NSObject {
         image.accessibilityDescription = "Tilde"
         image.isTemplate = true
         return image
-    }
-
-    @discardableResult
-    private func addInfoRow(to menu: NSMenu, _ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        menu.addItem(item)
-        return item
     }
 
     @discardableResult
