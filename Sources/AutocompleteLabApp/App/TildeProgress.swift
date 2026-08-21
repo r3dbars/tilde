@@ -2,8 +2,8 @@ import AutocompleteLabCore
 import Foundation
 
 struct TildeProgressSnapshot: Equatable, Sendable {
-    let wordsSavedToday: Int
-    let wordsSavedLifetime: Int
+    let wordsWrittenWithTildeToday: Int
+    let wordsWrittenWithTildeLifetime: Int
     let wordsLearnedFrom: Int
     let activeWritingDays: Int
     let personalSuggestionsToday: Int
@@ -97,8 +97,8 @@ enum TildeProgress {
         }
 
         return TildeProgressSnapshot(
-            wordsSavedToday: max(0, wordsSavedToday),
-            wordsSavedLifetime: max(0, wordsSavedLifetime),
+            wordsWrittenWithTildeToday: max(0, wordsSavedToday),
+            wordsWrittenWithTildeLifetime: max(0, wordsSavedLifetime),
             wordsLearnedFrom: max(0, experiment.opportunities),
             activeWritingDays: max(0, experiment.activeDays),
             personalSuggestionsToday: max(0, personalSuggestionsToday),
