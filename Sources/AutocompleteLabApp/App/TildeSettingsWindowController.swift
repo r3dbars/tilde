@@ -19,7 +19,7 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
             progressModel: progressModel
         )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 820),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 720),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -75,12 +75,11 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
 private struct TildeSettingsView: View {
     @ObservedObject var model: TildeSettingsViewModel
     @ObservedObject var progressModel: YourTildeViewModel
-    @State private var confirmDisableScreenMemory = false
-    @State private var confirmEnableLearning = false
-    @State private var confirmDeleteLearning = false
-    @State private var confirmDeleteModel = false
-    @State private var confirmEnableOCREvaluation = false
-    @State private var confirmDeleteOCREvaluation = false
+
+    @State private var confirmEnablePersonalization = false
+    @State private var showIgnoredApps = false
+    @State private var showLocalData = false
+    @State private var showTroubleshooting = false
 
     var body: some View {
         Form {
@@ -88,162 +87,53 @@ private struct TildeSettingsView: View {
                 YourTildeSummaryView(model: progressModel)
             }
 
-            Section("General") {
-                Toggle("Tilde On", isOn: Binding(
+            Section("Tilde") {
+                Toggle("Tilde", isOn: Binding(
                     get: { model.suggestionsEnabled },
                     set: { model.setSuggestionsEnabled($0) }
                 ))
 
-                Toggle("Launch Tilde at Login", isOn: Binding(
+                Toggle("Open at Login", isOn: Binding(
                     get: { model.launchAtLoginEnabled },
                     set: { model.setLaunchAtLoginEnabled($0) }
                 ))
 
-                Toggle("Screen Memory", isOn: Binding(
-                    get: { model.screenMemoryEnabled },
+                LabeledContent("Status", value: model.simpleStatusText)
+
+                if model.screenAccessNeedsAttention {
+                    HStack {
+                        LabeledContent("Screen Access", value: "Needs attention")
+                        Button("Fix Access") { model.enableScreenAccess() }
+                    }
+                } else {
+                    LabeledContent("Screen Access", value: "Ready")
+                }
+            }
+
+            Section("Personalization") {
+                Toggle("Personalization", isOn: Binding(
+                    get: { model.personalizationEnabled },
                     set: { enabled in
-                        if enabled { model.setScreenMemoryEnabled(true) }
-                        else { confirmDisableScreenMemory = true }
+                        if enabled { confirmEnablePersonalization = true }
+                        else { model.setPersonalizationEnabled(false) }
                     }
                 ))
 
-                if model.screenMemoryEnabled, !model.screenRecordingGranted {
-                    HStack {
-                        Text("Screen Recording permission is required for suggestions.")
-                            .foregroundStyle(.red)
-                        Spacer()
-                        Button("Open System Settings") { model.openScreenRecordingSettings() }
-                    }
-                }
-
-                LabeledContent("Status", value: model.statusText)
-            }
-
-            Section {
-                if model.excludedApplications.isEmpty {
-                    Text("No excluded applications")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(model.excludedApplications) { application in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(application.name)
-                                Text(application.bundleIdentifier)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                model.removeExcludedApplication(application)
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.plain)
-                            .help("Remove application")
-                        }
-                    }
-                }
-
-                Button("Add Application…") { model.chooseApplicationToExclude() }
-            } header: {
-                Text("Apps")
-            } footer: {
-                Text("Tilde never observes or suggests inside excluded applications. Screen capture also pauses while an excluded app is visible.")
+                Text("Tilde learns your writing patterns and uses them to improve suggestions.")
+                    .foregroundStyle(.secondary)
             }
 
             Section("Privacy") {
-                Text("Your screen, writing, and personal learning data stay on this Mac. Tilde connects only to download the fixed Gemma 4 E2B model.")
+                Text("Your screen, writing, and learning stay on this Mac.")
 
-                Toggle("Personal Learning", isOn: Binding(
-                    get: { model.personalHistoryEnabled },
-                    set: { enabled in
-                        if enabled { confirmEnableLearning = true }
-                        else { model.setPersonalHistoryEnabled(false) }
-                    }
-                ))
-
-                if model.personalHistoryEnabled {
-                    Toggle("Use Personal Suggestions", isOn: Binding(
-                        get: { model.personalSuggestionsEnabled },
-                        set: { model.setPersonalSuggestionsEnabled($0) }
-                    ))
-                }
-
-                LabeledContent("Learning data", value: model.learningDataSize)
-
-                Button("Delete Learning Data…", role: .destructive) {
-                    confirmDeleteLearning = true
-                }
-                .disabled(model.isDeletingLearningData || model.learningDataSize == "No learning data")
-
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledContent("Model", value: model.modelDescription)
-                    if let progress = model.modelProgress {
-                        if let fraction = progress.fraction {
-                            ProgressView(value: fraction)
-                                .progressViewStyle(.linear)
-                        } else {
-                            ProgressView()
-                                .progressViewStyle(.linear)
-                        }
-                        Text(progress.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(model.modelStatusText)
-                            .font(.caption)
-                            .foregroundStyle(model.modelState.isFailure ? .red : .secondary)
-                    }
-                }
-
-                Button("Delete Model…", role: .destructive) {
-                    confirmDeleteModel = true
-                }
-                .disabled(!model.canDeleteModel || model.isDeletingModel)
+                Button("Apps Tilde Ignores…") { showIgnoredApps = true }
+                Button("Manage Local Data…") { showLocalData = true }
             }
 
-            if model.localOCREvaluationAvailable {
-                Section("OCR Evaluation — Development") {
-                    Toggle("Record Raw Paired OCR Samples", isOn: Binding(
-                        get: { model.localOCREvaluationEnabled },
-                        set: { enabled in
-                            if enabled { confirmEnableOCREvaluation = true }
-                            else { model.setLocalOCREvaluationEnabled(false) }
-                        }
-                    ))
-
-                    Text("Runs full OCR beside incremental OCR on the same frame and stores both raw outputs locally. This may capture sensitive text and slow Tilde while enabled.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
-                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
-                        .disabled(!model.hasLocalOCREvaluationSamples)
-                    Button("Delete Evaluation Data…", role: .destructive) {
-                        confirmDeleteOCREvaluation = true
-                    }
-                    .disabled(model.isDeletingOCREvaluationData || !model.hasLocalOCREvaluationSamples)
-                }
-            } else if model.hasLocalOCREvaluationSamples {
-                Section("OCR Evaluation Data") {
-                    Text("Raw OCR evaluation data from a development build remains on this Mac. Recording is unavailable in this build.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    LabeledContent("Evaluation data", value: model.localOCREvaluationData)
-                    Button("Reveal Evaluation Data") { model.revealLocalOCREvaluationData() }
-                    Button("Delete Evaluation Data…", role: .destructive) {
-                        confirmDeleteOCREvaluation = true
-                    }
-                    .disabled(model.isDeletingOCREvaluationData)
-                }
-            }
-
-            Section("Support") {
-                LabeledContent("Version", value: model.versionText)
-                Button("Export Diagnostics…") { model.exportDiagnostics() }
-                Button("Check for Updates…") {}
-                    .disabled(true)
-                Button("Run Setup Again…") { model.runSetupAgain() }
+            Section {
+                Button("Troubleshooting…") { showTroubleshooting = true }
+            } footer: {
+                Text("Tilde \(model.versionText)")
             }
 
             if let message = model.message {
@@ -255,76 +145,24 @@ private struct TildeSettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .frame(minWidth: 500, minHeight: 680)
-        .task {
-            guard model.localOCREvaluationAvailable else { return }
-            while !Task.isCancelled {
-                await model.refreshLocalOCREvaluationSummary()
-                try? await Task.sleep(for: .seconds(2))
-            }
+        .frame(minWidth: 500, minHeight: 620)
+        .sheet(isPresented: $showIgnoredApps) {
+            IgnoredAppsView(model: model)
+        }
+        .sheet(isPresented: $showLocalData) {
+            LocalDataView(model: model)
+        }
+        .sheet(isPresented: $showTroubleshooting) {
+            TroubleshootingView(model: model)
         }
         .confirmationDialog(
-            "Turn off Screen Memory?",
-            isPresented: $confirmDisableScreenMemory
+            "Turn on Personalization?",
+            isPresented: $confirmEnablePersonalization
         ) {
-            Button("Turn Off", role: .destructive) { model.setScreenMemoryEnabled(false) }
+            Button("Turn On") { model.setPersonalizationEnabled(true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Screen Memory is required for Tilde suggestions. Turning it off pauses Tilde.")
+            Text("Tilde will store encrypted writing history on this Mac and use it to improve suggestions. Nothing is uploaded.")
         }
-        .confirmationDialog(
-            "Turn on Personal Learning?",
-            isPresented: $confirmEnableLearning
-        ) {
-            Button("Turn On") { model.setPersonalHistoryEnabled(true) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Tilde will store encrypted writing history on this Mac to improve suggestions. Nothing is uploaded.")
-        }
-        .confirmationDialog(
-            "Delete all learning data?",
-            isPresented: $confirmDeleteLearning
-        ) {
-            Button("Delete", role: .destructive) { model.deleteLearningData() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes encrypted writing history, its Keychain key, and learning signals. The app and downloaded model are preserved.")
-        }
-        .confirmationDialog(
-            "Delete the local model?",
-            isPresented: $confirmDeleteModel
-        ) {
-            Button("Delete Model", role: .destructive) { model.deleteModel() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This stops Tilde, removes the downloaded Gemma 4 E2B model (about 3.43 GB), and starts setup again. Your writing and learning data stay on this Mac.")
-        }
-        .confirmationDialog(
-            "Record raw OCR samples?",
-            isPresented: $confirmEnableOCREvaluation
-        ) {
-            Button("Start Recording") { model.setLocalOCREvaluationEnabled(true) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Visible text from your screen will be stored unredacted on this Mac in an owner-only file. Collection is limited to this development build and the newest 100 samples or 10 MB.")
-        }
-        .confirmationDialog(
-            "Delete all OCR evaluation samples?",
-            isPresented: $confirmDeleteOCREvaluation
-        ) {
-            Button("Delete and Turn Off", role: .destructive) {
-                model.deleteLocalOCREvaluationData()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently removes the local raw OCR evaluation corpus and disables further recording.")
-        }
-    }
-}
-
-private extension ModelState {
-    var isFailure: Bool {
-        if case .failed = self { return true }
-        return false
     }
 }

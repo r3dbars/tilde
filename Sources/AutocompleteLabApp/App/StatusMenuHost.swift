@@ -11,9 +11,6 @@ final class StatusMenuHost: NSObject {
     private var statusItem: NSStatusItem?
     private var statusLineItem: NSMenuItem?
     private var todayItem: NSMenuItem?
-    private var engineItem: NSMenuItem?
-    private var screenMemoryItem: NSMenuItem?
-    private var suggestionsItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
     private var setupOrTildeItem: NSMenuItem?
 
@@ -33,11 +30,8 @@ final class StatusMenuHost: NSObject {
         let menu = NSMenu()
         statusLineItem = addInfoRow(to: menu, "Model is Loading")
         todayItem = addInfoRow(to: menu, "Today: 0 words saved")
-        engineItem = addInfoRow(to: menu, "Engine: Gemma (starting…)")
-        screenMemoryItem = addInfoRow(to: menu, "Screen Memory: checking…")
         menu.addItem(.separator())
 
-        suggestionsItem = addAction(to: menu, "Tilde On", #selector(toggleSuggestions(_:)))
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
         setupOrTildeItem = addAction(
             to: menu,
@@ -59,8 +53,6 @@ final class StatusMenuHost: NSObject {
         let state = appDelegate.applicationState()
         statusLineItem?.title = state.statusText
         todayItem?.title = "Today: \(TildeStats.todayWordsAccepted().formatted()) words saved"
-        engineItem?.title = appDelegate.engineStatusLine()
-        suggestionsItem?.state = settings.suggestionsEnabled ? .on : .off
         setupOrTildeItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Open Tilde…"
 
         if let until = settings.pausedUntil {
@@ -71,15 +63,8 @@ final class StatusMenuHost: NSObject {
         }
         pauseItem?.isEnabled = settings.suggestionsEnabled
 
-        refreshScreenMemoryLine()
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
-    }
-
-    @objc private func toggleSuggestions(_ sender: Any?) {
-        settings.suggestionsEnabled.toggle()
-        if !settings.suggestionsEnabled { settings.resume() }
-        refresh()
     }
 
     @objc private func togglePause(_ sender: Any?) {
@@ -114,16 +99,6 @@ final class StatusMenuHost: NSObject {
         UserDefaults(suiteName: TildeSettings.keyboardSuiteName)?
             .set(true, forKey: "GhostBrainQuietQuit")
         NSApp.terminate(nil)
-    }
-
-    private func refreshScreenMemoryLine() {
-        guard settings.screenMemoryEnabled else {
-            screenMemoryItem?.title = "Screen Memory: Off"
-            return
-        }
-        screenMemoryItem?.title = ScreenRecordingPermission.isGranted()
-            ? "Screen Memory: Ready"
-            : "Screen Memory: Permission Required"
     }
 
     private func refreshIcon(for appearance: TildeMenuIconAppearance) {
