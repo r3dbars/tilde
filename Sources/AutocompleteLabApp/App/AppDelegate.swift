@@ -325,6 +325,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupWindow?.refresh()
     }
 
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        guard launchMode == .production else { return false }
+        statusMenuHost.showTilde()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Deaths must leave a trace: an unexplained brainless morning
         // (2026-08-04) had no shutdown line to tell crash from quit. Flush,
@@ -470,6 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.setupVersion = TildeSettings.currentSetupVersion
         statusMenuHost.refresh()
         setupWindow?.close()
+        statusMenuHost.showTilde()
     }
 
     func openKeyboardSettings() { ghostKeyboardInstallerHost.openKeyboardSettings() }
