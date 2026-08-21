@@ -87,9 +87,11 @@ identity are out of scope.
   history tail. It processes new allowed events in append order, scores both
   recipes on the same fresh words, censors the tail's first possibly truncated
   token, predicts before learning, ignores accepted model suggestions, and
-  deduplicates recent stable event IDs. Neither recipe affects visible
-  suggestions. The menu reports if the learned table reaches its fixed memory
-  capacity.
+  deduplicates recent stable event IDs. The paired score does not select the
+  visible suggestion. When Personal History is enabled, a separate read-only
+  baseline-recipe lookup can replace Gemma's suggestion after conservative
+  support checks without mutating that score. The menu reports if the learned
+  table reaches its fixed memory capacity.
 - The only persistent shadow state is bounded aggregate lifetime totals and up
   to 64 daily buckets,
   encrypted in the same history-log append as the events it scores. It has no

@@ -1,8 +1,11 @@
 # Road to paid — agent plan
 
-Status: PROPOSED. Owner approval = merging this PR. The product goal, in the
-owner's words (2026-08-17): "I want to charge people for this app eventually,
-and I want it to be a good experience for them and make it feel like magic."
+Status: HISTORICAL PLAN, IMPLEMENTED IN PART. Personal serving and the first-run
+setup described below now exist; their remaining proof gaps are noted in place.
+Current product and privacy behavior lives in `README.md`, `PRIVACY.md`, and
+`docs/evaluation.md`. The product goal, in the owner's words (2026-08-17): "I
+want to charge people for this app eventually, and I want it to be a good
+experience for them and make it feel like magic."
 
 ## What magic means here, measurably
 
@@ -54,10 +57,11 @@ forgive lost text or a creepy one.
 1. Vault (Screen Memory 3c): persistence of redacted screen text into the
    encrypted store. Gated on #355 (GLiNER) merged and the redaction eval
    bars holding in release proof.
-2. Personal serving: promote the shadow next-word model via Smart Compose
-   interpolation (P = α·personal + (1-α)·global); α swept in replay, gated
-   on the shadow experiment's own thresholds; per-app exclusions extend to
-   serving.
+2. Shipped baseline: when Personal History is enabled, a conservative read-only
+   personal lookup runs beside Gemma and may replace the base suggestion after
+   support checks; per-app exclusions apply to serving. This is not Smart
+   Compose probability interpolation, and visible-path lift remains unproven.
+   The next decision is to prove this serving behavior or remove it.
 3. Personal-recognition metric added to replay-eval output (count ghosts
    containing tokens present only in personal/screen history).
 4. Exit bar: replay shows ≥5% relative accept-rate lift from the blend
@@ -65,11 +69,10 @@ forgive lost text or a creepy one.
 
 ## Phase 4 — Stranger-ready (exit: cold-start install succeeds unassisted)
 
-1. First-run experience: a single window that (a) explains the product in
-   two sentences, (b) earns Screen Recording with the honest pitch —
-   because nothing leaves the Mac, it can see everything — with grant +
-   settings deep-link (flow exists from #357; give it real design), (c)
-   teaches Tab-walking with a 20-second interactive sandbox field.
+1. Shipped baseline: one setup window explains the product, requests Screen
+   Recording, installs the keyboard, and downloads/resumes the pinned model.
+   The 20-second interactive Tab sandbox and fresh-account unassisted proof
+   remain open.
 2. Auto-update: Sparkle 2 fed by the notarized pipeline (appcast generation
    in package_app.sh; EdDSA keys pinned like other release inputs). The
    fast dev-lane (in flight) stays separate from this channel.
