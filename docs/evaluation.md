@@ -72,8 +72,11 @@ on-device paired personal next-word shadow. The fixed baseline is
 `r1435-live-v1`; the candidate is `r1945-live-v1`. At each fresh eligible word
 boundary, both recipes freeze a prediction from the same prior authored words,
 score against the same next authored word, and then learn that word. Accepted
-suggestions are censored from both truth and training. This is observational:
-neither recipe changes the visible suggestion path.
+suggestions are censored from both truth and training. This paired score is
+observational and does not itself choose the visible suggestion. Separately,
+when Personal History is enabled, production can query the conservative
+baseline recipe without mutating the score and select its word over Gemma only
+when the personal result clears the serving policy's support checks.
 
 The aggregate result contains shared opportunities, baseline and candidate
 prediction and exact-hit counts, a paired 3-by-3 silent/correct/wrong outcome
@@ -102,6 +105,7 @@ shows candidate versus baseline effective rate, defined as exact hits divided by
 the shared fresh-word opportunities. These thresholds are a descriptive reading
 rule, not a significance test or a causal claim.
 
-This live shadow is observational evidence, not a claim about acceptance or
-improvement to the visible product. Any promotion still requires separate proof
-on the visible suggestion path.
+This live shadow remains observational evidence, not proof that personal
+serving improves acceptance. A conservative personal lookup is already on the
+visible path when Personal History is enabled; its product value still requires
+separate visible-path evaluation.

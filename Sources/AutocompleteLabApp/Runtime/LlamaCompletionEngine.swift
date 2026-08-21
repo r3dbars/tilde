@@ -3,6 +3,10 @@ import Foundation
 
 /// One deterministic, final-only completion request to the app-owned llama server.
 final class LlamaCompletionEngine: @unchecked Sendable {
+    private struct CompletionPayload: Decodable {
+        let content: String
+    }
+
     private let baseURL: URL
     private let cleaner = CompletionOutputCleaner()
     private let diagnostics: DiagnosticsLog
@@ -16,11 +20,11 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         textBeforeCursor: String,
         appBundleIdentifier: String?
     ) async throws -> CompletionSuggestion? {
-        try await evidence(
+        try await suggestion(
             textBeforeCursor: textBeforeCursor,
             appBundleIdentifier: appBundleIdentifier,
             scene: nil
-        ).suggestion
+        )
     }
 
     func suggestion(
@@ -28,30 +32,6 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?
     ) async throws -> CompletionSuggestion? {
-        try await evidence(
-            textBeforeCursor: textBeforeCursor,
-            appBundleIdentifier: appBundleIdentifier,
-            scene: scene
-        ).suggestion
-    }
-
-    /// Same completion the user already receives, plus a memory-only token
-    /// uncertainty trace. `temperature: -1` is llama-server's documented
-    /// greedy mode; with `n_probs > 0` it also returns a simple softmax of the
-    /// logits, giving Tilde useful uncertainty without sampling a different
-    /// visible answer or issuing extra model calls.
-    ///
-    /// The trace and its shortening are opt-in (`ConsensusShorteningEnabled`):
-    /// live measurement 2026-08-17 showed greedy prose dips below any casual
-    /// probability bar within a token or two (0.50 and 0.20 both trimmed most
-    /// ghosts to 1–4 words) and the n_probs softmax added ~160ms to p50, so
-    /// the default path stays the pre-evidence request until a swept,
-    /// phrase-level signal earns the tax.
-    func evidence(
-        textBeforeCursor: String,
-        appBundleIdentifier: String?,
-        scene: ScreenScene.Scene?
-    ) async throws -> CompletionEvidence {
         let startedAt = Date()
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
@@ -59,7 +39,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             register: register,
             scene: scene
         )
-        guard !recipe.prompt.isEmpty else { return CompletionEvidence(suggestion: nil, tokens: []) }
+        guard !recipe.prompt.isEmpty else { return nil }
 
         let prompt = Self.promptByAddingIntentFutures(
             to: recipe.prompt,
@@ -67,16 +47,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             textBeforeCursor: textBeforeCursor
         )
 
-        let consensusEnabled = TildeSettings().consensusShorteningEnabled
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "prompt": prompt,
             "n_predict": register.generatedTokenBudget,
-            "temperature": consensusEnabled ? -1 : 0,
+            "temperature": 0,
             "cache_prompt": true,
             "stop": ["\n"],
             "stream": false,
         ]
-        if consensusEnabled { body["n_probs"] = 8 }
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
@@ -89,31 +67,18 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
-        let decoded: (content: String, tokens: [CompletionTokenEvidence])
+        let content: String
         do {
-            decoded = try LlamaCompletionEvidenceParser.decode(data)
+            content = try JSONDecoder().decode(CompletionPayload.self, from: data).content
         } catch {
             throw URLError(.cannotParseResponse)
         }
 
-        let normalized = recipe.normalizedContinuation(decoded.content)
+        let normalized = recipe.normalizedContinuation(content)
         let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
-        var suggestion = clean.suggestion
+        let suggestion = clean.suggestion
 
-        if consensusEnabled, let current = suggestion {
-            let normalizedVisible = String(normalized.drop(while: \.isWhitespace))
-            let visibleWords = current.visibleText.split(whereSeparator: \.isWhitespace).count
-            if normalizedVisible.hasPrefix(current.visibleText),
-               let budget = ConsensusGhostPolicy.visibleWordBudget(
-                   tokens: decoded.tokens,
-                   currentVisibleWords: visibleWords
-               ) {
-                let shortened = CompletionSuggestion(text: current.visibleText, maxVisibleWords: budget)
-                if !shortened.visibleText.isEmpty { suggestion = shortened }
-            }
-        }
-
-        if suggestion == nil, !decoded.content.isEmpty, let reason = clean.rejectionReason {
+        if suggestion == nil, !content.isEmpty, let reason = clean.rejectionReason {
             diagnostics.record("llama-suggestion-rejected", metadata: [
                 "reason": String(describing: reason),
             ])
@@ -122,7 +87,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             "totalMilliseconds": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
         ])
-        return CompletionEvidence(suggestion: suggestion, tokens: decoded.tokens)
+        return suggestion
     }
 
     static func promptByAddingIntentFutures(
