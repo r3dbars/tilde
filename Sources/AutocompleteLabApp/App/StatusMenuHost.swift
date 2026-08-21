@@ -92,6 +92,10 @@ final class StatusMenuHost: NSObject {
     }
 
     @objc private func openTilde(_ sender: Any?) {
+        showTilde()
+    }
+
+    func showTilde() {
         guard let appDelegate else { return }
         if appDelegate.setupRequired() {
             appDelegate.showSetup()
