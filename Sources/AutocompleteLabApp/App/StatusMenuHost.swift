@@ -29,7 +29,7 @@ final class StatusMenuHost: NSObject {
 
         let menu = NSMenu()
         statusLineItem = addInfoRow(to: menu, "Model is Loading")
-        todayItem = addInfoRow(to: menu, "Today: 0 words saved")
+        todayItem = addInfoRow(to: menu, "Today: 0 words with Tilde")
         menu.addItem(.separator())
 
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
@@ -52,7 +52,7 @@ final class StatusMenuHost: NSObject {
         guard let appDelegate else { return }
         let state = appDelegate.applicationState()
         statusLineItem?.title = state.statusText
-        todayItem?.title = "Today: \(TildeStats.todayWordsAccepted().formatted()) words saved"
+        todayItem?.title = "Today: \(TildeStats.todayWordsAccepted().formatted()) words with Tilde"
         setupOrTildeItem?.title = appDelegate.setupRequired() ? "Finish Setup…" : "Open Tilde…"
 
         if let until = settings.pausedUntil {

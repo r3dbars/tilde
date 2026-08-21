@@ -3,8 +3,8 @@ import SwiftUI
 @MainActor
 final class YourTildeViewModel: ObservableObject {
     @Published private(set) var snapshot = TildeProgressSnapshot(
-        wordsSavedToday: 0,
-        wordsSavedLifetime: 0,
+        wordsWrittenWithTildeToday: 0,
+        wordsWrittenWithTildeLifetime: 0,
         wordsLearnedFrom: 0,
         activeWritingDays: 0,
         personalSuggestionsToday: 0,
@@ -35,8 +35,8 @@ struct YourTildeSummaryView: View {
     @ObservedObject var model: YourTildeViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(stageTitle)
                     .font(.headline)
                 Text(stageDetail)
@@ -44,72 +44,63 @@ struct YourTildeSummaryView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let stageProgress {
+                    HStack {
+                        Text(progressStartLabel)
+                        Spacer()
+                        Text(progressEndLabel)
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
                     ProgressView(value: stageProgress)
-                        .progressViewStyle(.linear)
-                        .tint(.accentColor)
-                } else {
-                    ProgressView()
                         .progressViewStyle(.linear)
                         .tint(.accentColor)
                 }
             }
 
             if let milestone {
-                Label(milestone, systemImage: "sparkles")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(milestone.title)
+                            .font(.subheadline.weight(.medium))
+                        Text(milestone.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
-            HStack(alignment: .top, spacing: 0) {
-                metric(
-                    value: model.snapshot.wordsSavedToday.formatted(),
-                    label: "words saved today",
-                    detail: "\(model.snapshot.wordsSavedLifetime.formatted()) all time"
-                )
-                Divider().frame(height: 58)
-                metric(
-                    value: model.snapshot.wordsLearnedFrom.formatted(),
-                    label: "words learned from"
-                )
-                Divider().frame(height: 58)
-                metric(
-                    value: model.snapshot.activeWritingDays.formatted(),
-                    label: "writing days"
-                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.snapshot.wordsWrittenWithTildeToday.formatted())
+                    .font(.system(size: 32, weight: .semibold))
+                    .monospacedDigit()
+                Text("words written with Tilde today")
+                    .font(.subheadline)
+                Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
 
             if model.snapshot.personalSuggestionsToday > 0 {
-                Text("\(model.snapshot.personalSuggestionsToday.formatted()) suggestions came from your patterns today")
+                Text("\(model.snapshot.personalSuggestionsToday.formatted()) suggestions were personalized today")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
 
-            Label("All learning stays on this Mac.", systemImage: "lock.fill")
+            Text("Keep Tilde on and write normally. Every writing day makes it more personal.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Label("Your writing and learning stay on this Mac.", systemImage: "lock.fill")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
-    }
-
-    private func metric(value: String, label: String, detail: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .monospacedDigit()
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let detail {
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
     }
 
     private var stageTitle: String {
@@ -134,13 +125,39 @@ struct YourTildeSummaryView: View {
         case .unavailable:
             "Tilde could not read learning progress. Your writing was not exposed."
         case let .learningWords(current, goal):
-            "\(current.formatted()) of \(goal.formatted()) words learned from. Keep writing normally."
+            "\(max(0, goal - current).formatted()) more words until Tilde starts checking whether personalization helps."
         case let .buildingConfidence(days, goal):
-            "\(days) of \(goal) writing days. Tilde is testing which personal patterns actually help."
+            "\(max(0, goal - days)) more writing days until Tilde can show whether it predicts you better."
         case .validating:
-            "Tilde hasn’t proven a personal improvement yet. Keep writing normally."
+            "Tilde is checking whether personalized predictions are more accurate."
         case let .tuned(candidate, baseline):
-            "Your personal model is beating the generic model: \(percent(candidate)) vs \(percent(baseline))."
+            "Tilde now predicts your writing better than its general starting point: \(percent(candidate)) vs \(percent(baseline))."
+        }
+    }
+
+    private var progressStartLabel: String {
+        switch model.snapshot.personalizationStage {
+        case let .learningWords(current, goal):
+            "\(min(current, goal).formatted()) of \(goal.formatted()) words"
+        case let .buildingConfidence(days, goal):
+            "\(min(days, goal)) of \(goal) writing days"
+        case .tuned:
+            "Personalization ready"
+        case .off, .loading, .unavailable, .validating:
+            ""
+        }
+    }
+
+    private var progressEndLabel: String {
+        switch model.snapshot.personalizationStage {
+        case let .learningWords(current, goal):
+            "\(max(0, goal - current).formatted()) to go"
+        case let .buildingConfidence(days, goal):
+            "\(max(0, goal - days)) to go"
+        case .tuned:
+            "Complete"
+        case .off, .loading, .unavailable, .validating:
+            ""
         }
     }
 
@@ -156,15 +173,24 @@ struct YourTildeSummaryView: View {
         }
     }
 
-    private var milestone: String? {
+    private var milestone: (title: String, detail: String)? {
         if model.snapshot.activeWritingDays >= 14 {
-            return "14 writing days — enough history to measure personalization."
+            return (
+                "14-writing-day milestone reached",
+                "Tilde has enough history to measure personalization."
+            )
         }
         if model.snapshot.wordsLearnedFrom >= 2_000 {
-            return "2,000 words — enough writing to begin validating the personal model."
+            return (
+                "2,000-word learning milestone reached",
+                "Learned from \(model.snapshot.wordsLearnedFrom.formatted()) words of your writing."
+            )
         }
         if model.snapshot.wordsLearnedFrom >= 500 {
-            return "500 words — Tilde is beginning to recognize your patterns."
+            return (
+                "500-word learning milestone reached",
+                "Tilde is beginning to recognize your patterns."
+            )
         }
         return nil
     }
