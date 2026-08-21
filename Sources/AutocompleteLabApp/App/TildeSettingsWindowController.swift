@@ -19,7 +19,7 @@ final class TildeSettingsWindowController: NSWindowController, NSWindowDelegate 
             progressModel: progressModel
         )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 720),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 660),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -77,8 +77,7 @@ private struct TildeSettingsView: View {
     @ObservedObject var progressModel: YourTildeViewModel
 
     @State private var confirmEnablePersonalization = false
-    @State private var showIgnoredApps = false
-    @State private var showLocalData = false
+    @State private var showPrivacyAndData = false
     @State private var showTroubleshooting = false
 
     var body: some View {
@@ -87,51 +86,52 @@ private struct TildeSettingsView: View {
                 YourTildeSummaryView(model: progressModel)
             }
 
-            Section("Tilde") {
-                Toggle("Tilde", isOn: Binding(
-                    get: { model.suggestionsEnabled },
-                    set: { model.setSuggestionsEnabled($0) }
-                ))
+            Section("Settings") {
+                VStack(alignment: .leading, spacing: 5) {
+                    Toggle("Tilde", isOn: Binding(
+                        get: { model.suggestionsEnabled },
+                        set: { model.setSuggestionsEnabled($0) }
+                    ))
 
-                Toggle("Open at Login", isOn: Binding(
+                    if model.screenAccessNeedsAttention {
+                        HStack {
+                            Text("Screen Access is required")
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Button("Fix Access…") { model.enableScreenAccess() }
+                        }
+                        .font(.caption)
+                    } else {
+                        Text(model.simpleStatusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Toggle("Start Tilde when I log in", isOn: Binding(
                     get: { model.launchAtLoginEnabled },
                     set: { model.setLaunchAtLoginEnabled($0) }
                 ))
 
-                LabeledContent("Status", value: model.simpleStatusText)
+                VStack(alignment: .leading, spacing: 5) {
+                    Toggle("Personalized suggestions", isOn: Binding(
+                        get: { model.personalizationEnabled },
+                        set: { enabled in
+                            if enabled { confirmEnablePersonalization = true }
+                            else { model.setPersonalizationEnabled(false) }
+                        }
+                    ))
 
-                if model.screenAccessNeedsAttention {
-                    HStack {
-                        LabeledContent("Screen Access", value: "Needs attention")
-                        Button("Fix Access") { model.enableScreenAccess() }
-                    }
-                } else {
-                    LabeledContent("Screen Access", value: "Ready")
+                    Text("Learns from your writing on this Mac to improve suggestions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Section("Personalization") {
-                Toggle("Personalization", isOn: Binding(
-                    get: { model.personalizationEnabled },
-                    set: { enabled in
-                        if enabled { confirmEnablePersonalization = true }
-                        else { model.setPersonalizationEnabled(false) }
-                    }
-                ))
-
-                Text("Tilde learns your writing patterns and uses them to improve suggestions.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Privacy") {
-                Text("Your screen, writing, and learning stay on this Mac.")
-
-                Button("Apps Tilde Ignores…") { showIgnoredApps = true }
-                Button("Manage Local Data…") { showLocalData = true }
-            }
-
             Section {
-                Button("Troubleshooting…") { showTroubleshooting = true }
+                SettingsDestinationRow("Privacy & Data") { showPrivacyAndData = true }
+                SettingsDestinationRow("Help & Troubleshooting") { showTroubleshooting = true }
             } footer: {
                 Text("Tilde \(model.versionText)")
             }
@@ -146,11 +146,8 @@ private struct TildeSettingsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .frame(minWidth: 500, minHeight: 620)
-        .sheet(isPresented: $showIgnoredApps) {
-            IgnoredAppsView(model: model)
-        }
-        .sheet(isPresented: $showLocalData) {
-            LocalDataView(model: model)
+        .sheet(isPresented: $showPrivacyAndData) {
+            PrivacyAndDataView(model: model)
         }
         .sheet(isPresented: $showTroubleshooting) {
             TroubleshootingView(model: model)
@@ -164,5 +161,30 @@ private struct TildeSettingsView: View {
         } message: {
             Text("Tilde will store encrypted writing history on this Mac and use it to improve suggestions. Nothing is uploaded.")
         }
+    }
+}
+
+private struct SettingsDestinationRow: View {
+    let title: String
+    let action: () -> Void
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens \(title.lowercased())")
     }
 }

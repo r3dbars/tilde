@@ -35,8 +35,29 @@ struct YourTildeSummaryView: View {
     @ObservedObject var model: YourTildeViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(model.snapshot.wordsWrittenWithTildeToday.formatted())
+                    .font(.system(size: 36, weight: .semibold))
+                    .monospacedDigit()
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("words written with Tilde today")
+                        .font(.subheadline)
+                    Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary.opacity(0.72))
+                        .monospacedDigit()
+                }
+            }
+
+            if model.snapshot.personalSuggestionsToday > 0 {
+                Text("\(model.snapshot.personalSuggestionsToday.formatted()) suggestions were personalized today")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text(stageTitle)
                     .font(.headline)
                 Text(stageDetail)
@@ -59,49 +80,19 @@ struct YourTildeSummaryView: View {
                 }
             }
 
-            if let milestone {
-                HStack(alignment: .top, spacing: 7) {
+            if let milestone = TildeProgressPresentation.milestoneText(for: model.snapshot) {
+                HStack(spacing: 7) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(milestone.title)
-                            .font(.subheadline.weight(.medium))
-                        Text(milestone.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(milestone)
                 }
-            }
-
-            HStack(alignment: .center, spacing: 12) {
-                Text(model.snapshot.wordsWrittenWithTildeToday.formatted())
-                    .font(.system(size: 32, weight: .semibold))
-                    .monospacedDigit()
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("words written with Tilde today")
-                        .font(.subheadline)
-                    Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary.opacity(0.72))
-                        .monospacedDigit()
-                }
-            }
-
-            if model.snapshot.personalSuggestionsToday > 0 {
-                Text("\(model.snapshot.personalSuggestionsToday.formatted()) suggestions were personalized today")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    .font(.subheadline.weight(.medium))
             }
 
             Text("Keep Tilde on and write normally. Every writing day makes it more personal.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Label("Your writing and learning stay on this Mac.", systemImage: "lock.fill")
-                .font(.caption)
-                .foregroundStyle(.primary.opacity(0.72))
         }
     }
 
@@ -175,29 +166,22 @@ struct YourTildeSummaryView: View {
         }
     }
 
-    private var milestone: (title: String, detail: String)? {
-        if model.snapshot.activeWritingDays >= 14 {
-            return (
-                "14-writing-day milestone reached",
-                "Tilde has enough history to measure personalization."
-            )
-        }
-        if model.snapshot.wordsLearnedFrom >= 2_000 {
-            return (
-                "2,000-word learning milestone reached",
-                "Learned from \(model.snapshot.wordsLearnedFrom.formatted()) words of your writing."
-            )
-        }
-        if model.snapshot.wordsLearnedFrom >= 500 {
-            return (
-                "500-word learning milestone reached",
-                "Tilde is beginning to recognize your patterns."
-            )
-        }
-        return nil
-    }
-
     private func percent(_ value: Double) -> String {
         value.formatted(.percent.precision(.fractionLength(1)))
+    }
+}
+
+enum TildeProgressPresentation {
+    static func milestoneText(for snapshot: TildeProgressSnapshot) -> String? {
+        if snapshot.activeWritingDays >= 14 {
+            return "14 writing days completed"
+        }
+        if snapshot.wordsLearnedFrom >= 2_000 {
+            return "Learned from \(snapshot.wordsLearnedFrom.formatted()) words"
+        }
+        if snapshot.wordsLearnedFrom >= 500 {
+            return "Learning from \(snapshot.wordsLearnedFrom.formatted()) words"
+        }
+        return nil
     }
 }

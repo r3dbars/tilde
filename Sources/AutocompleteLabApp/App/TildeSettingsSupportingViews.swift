@@ -1,5 +1,38 @@
 import SwiftUI
 
+struct PrivacyAndDataView: View {
+    @ObservedObject var model: TildeSettingsViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var showIgnoredApps = false
+    @State private var showLocalData = false
+
+    var body: some View {
+        Form {
+            Section("Privacy & Data") {
+                Text("Your screen, writing, and learning stay on this Mac.")
+                Button("Apps Tilde Ignores…") { showIgnoredApps = true }
+                Button("Manage Local Data…") { showLocalData = true }
+            }
+
+            Section {
+                HStack {
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460, height: 240)
+        .sheet(isPresented: $showIgnoredApps) {
+            IgnoredAppsView(model: model)
+        }
+        .sheet(isPresented: $showLocalData) {
+            LocalDataView(model: model)
+        }
+    }
+}
+
 struct IgnoredAppsView: View {
     @ObservedObject var model: TildeSettingsViewModel
     @Environment(\.dismiss) private var dismiss

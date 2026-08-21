@@ -66,6 +66,19 @@ struct TildeProgressTests {
         #expect(progress(status: status(phase: .unavailable)).personalizationStage == .unavailable)
     }
 
+    @Test("Progress story keeps completed learning to one short line")
+    func milestoneCopy() {
+        let early = progress(status: status(opportunities: 499, activeDays: 3))
+        #expect(TildeProgressPresentation.milestoneText(for: early) == nil)
+
+        let learned = progress(status: status(opportunities: 2_500, activeDays: 7))
+        #expect(TildeProgressPresentation.milestoneText(for: learned)
+            == "Learned from \(learned.wordsLearnedFrom.formatted()) words")
+
+        let complete = progress(status: status(opportunities: 3_000, activeDays: 14))
+        #expect(TildeProgressPresentation.milestoneText(for: complete) == "14 writing days completed")
+    }
+
     @Test("User-facing source counters follow the local calendar")
     func localDayBuckets() {
         var utc = Calendar(identifier: .gregorian)
