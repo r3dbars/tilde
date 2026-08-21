@@ -16,6 +16,17 @@ enum TildeModelPresentation {
     static let description = "\(name) · \(approximateSize)"
 }
 
+enum TildeSettingsPresentation {
+    static func simpleStatusText(for statusText: String) -> String {
+        switch statusText {
+        case "Tilde is Ready": "Ready"
+        case "Tilde is Paused": "Paused"
+        case "Model is Loading": "Getting ready…"
+        default: "Needs attention"
+        }
+    }
+}
+
 struct TildeModelDownloadProgress: Equatable {
     let receivedBytes: Int64
     let totalBytes: Int64
@@ -74,12 +85,7 @@ final class TildeSettingsViewModel: ObservableObject {
     }
 
     var simpleStatusText: String {
-        switch statusText {
-        case "Tilde is Ready": "Tilde is working"
-        case "Tilde is Paused": "Tilde is paused"
-        case "Model is Loading": "Tilde is getting ready"
-        default: "Tilde needs attention"
-        }
+        TildeSettingsPresentation.simpleStatusText(for: statusText)
     }
 
     var screenAccessNeedsAttention: Bool {
