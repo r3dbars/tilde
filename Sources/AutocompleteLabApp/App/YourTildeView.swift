@@ -35,8 +35,8 @@ struct YourTildeSummaryView: View {
     @ObservedObject var model: YourTildeViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(stageTitle)
                     .font(.headline)
                 Text(stageDetail)
@@ -82,7 +82,7 @@ struct YourTildeSummaryView: View {
                         .font(.subheadline)
                     Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary.opacity(0.72))
                         .monospacedDigit()
                 }
             }
@@ -101,7 +101,7 @@ struct YourTildeSummaryView: View {
 
             Label("Your writing and learning stay on this Mac.", systemImage: "lock.fill")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary.opacity(0.72))
         }
     }
 
