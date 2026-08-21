@@ -35,8 +35,8 @@ struct YourTildeSummaryView: View {
     @ObservedObject var model: YourTildeViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(stageTitle)
                     .font(.headline)
                 Text(stageDetail)
@@ -73,16 +73,18 @@ struct YourTildeSummaryView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .center, spacing: 12) {
                 Text(model.snapshot.wordsWrittenWithTildeToday.formatted())
                     .font(.system(size: 32, weight: .semibold))
                     .monospacedDigit()
-                Text("words written with Tilde today")
-                    .font(.subheadline)
-                Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("words written with Tilde today")
+                        .font(.subheadline)
+                    Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) all time")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
 
             if model.snapshot.personalSuggestionsToday > 0 {
