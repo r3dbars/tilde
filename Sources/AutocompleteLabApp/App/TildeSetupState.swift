@@ -4,7 +4,9 @@ import Foundation
 /// `ModelFailure` lets the setup window distinguish a model problem from an
 /// input-method or runtime problem without teaching the model manager about UI.
 enum TildeSetupRepairTarget: Equatable {
-    case keyboard
+    /// `nil` means the keyboard is simply absent (no bundled copy and nothing
+    /// installed); a failure explains why the bundled copy could not be used.
+    case keyboard(GhostKeyboardInstallerHost.KeyboardInstallFailure?)
     case model(ModelFailure)
     case runtime
 }
@@ -35,9 +37,11 @@ enum TildeSetupState: Equatable {
         requireInitialInputSourceSelection: Bool = true
     ) -> Self {
         guard let keyboardInstallResult else { return .installingKeyboard }
-        if keyboardInstallResult == .failed { return .recoverableError(.keyboard) }
+        if case let .failed(failure) = keyboardInstallResult {
+            return .recoverableError(.keyboard(failure))
+        }
         if keyboardInstallResult == .unavailableInDevelopment,
-           inputSourceStatus == .missing { return .recoverableError(.keyboard) }
+           inputSourceStatus == .missing { return .recoverableError(.keyboard(nil)) }
         guard inputSourceStatus != .missing else { return .needsKeyboard }
         guard screenRecordingGranted else { return .needsScreenRecording }
 

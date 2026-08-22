@@ -13,7 +13,30 @@ final class GhostKeyboardInstallerHost {
         case installed
         case alreadyInstalled
         case unavailableInDevelopment
-        case failed
+        case failed(KeyboardInstallFailure)
+    }
+
+    /// Why the bundled keyboard could not be installed. `isRetryable` is false
+    /// when retrying from the setup window cannot succeed without a different
+    /// build, so the UI must not offer "Try Again" as the fix.
+    enum KeyboardInstallFailure: Equatable {
+        /// The app itself has no strictly valid Team ID signature (ad hoc or
+        /// unsigned development build); the IME trust chain cannot start.
+        case appNotTeamSigned
+        /// The bundled keyboard is not signed by the app's team or its bundle
+        /// shape is invalid.
+        case bundledKeyboardUntrusted
+        /// Copying into ~/Library/Input Methods failed (permissions, disk).
+        case copyFailed
+        /// macOS Text Input Services refused to register the installed keyboard.
+        case registrationRefused
+
+        var isRetryable: Bool {
+            switch self {
+            case .appNotTeamSigned, .bundledKeyboardUntrusted: false
+            case .copyFailed, .registrationRefused: true
+            }
+        }
     }
 
     enum TildeInputSourceStatus: Equatable {
@@ -40,10 +63,11 @@ final class GhostKeyboardInstallerHost {
         let installed = URL(fileURLWithPath: Self.installedPath)
         var changed = false
 
+        guard let ownerTeam = Self.strictSignatureTeamIdentifier(at: Bundle.main.bundleURL) else {
+            DiagnosticsLog.shared.record("ime-install-failed", metadata: ["reason": "app-not-team-signed"])
+            return .failed(.appNotTeamSigned)
+        }
         do {
-            guard let ownerTeam = Self.strictSignatureTeamIdentifier(at: Bundle.main.bundleURL) else {
-                throw CocoaError(.fileReadNoPermission)
-            }
             changed = try Self.installIfNeeded(
                 bundled: bundled,
                 installed: installed,
@@ -57,16 +81,19 @@ final class GhostKeyboardInstallerHost {
                     .filter { $0.bundleIdentifier == Self.bundleIdentifier }
                     .forEach { $0.terminate() }
             }
+        } catch let error as CocoaError where [.fileReadNoPermission, .fileReadCorruptFile, .fileReadNoSuchFile].contains(error.code) {
+            DiagnosticsLog.shared.record("ime-install-failed", metadata: ["reason": "bundled-keyboard-untrusted"])
+            return .failed(.bundledKeyboardUntrusted)
         } catch {
-            DiagnosticsLog.shared.record("ime-install-failed", metadata: [:])
-            return .failed
+            DiagnosticsLog.shared.record("ime-install-failed", metadata: ["reason": "copy-failed"])
+            return .failed(.copyFailed)
         }
 
         // Registration is wiped whenever TextInputMenuAgent restarts — re-run
         // every launch; it is idempotent.
         guard TISRegisterInputSource(installed as CFURL) == noErr else {
             DiagnosticsLog.shared.record("ime-register-failed", metadata: [:])
-            return .failed
+            return .failed(.registrationRefused)
         }
         return changed ? .installed : .alreadyInstalled
     }

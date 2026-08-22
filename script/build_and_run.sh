@@ -14,6 +14,7 @@ VERSION="0.1.0"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 JOBS=""
 SIGN_IDENTITY=""
+EMBED_IME=1
 
 usage() {
   cat <<'EOF'
@@ -28,10 +29,13 @@ Options:
   --version VERSION         Set CFBundleShortVersionString.
   --build-number NUMBER     Set CFBundleVersion.
   --sign-identity SHA1      Sign with this exact SHA-1; use - for explicit ad hoc signing.
+  --no-ime                  Skip building and embedding the InlineGhostIME keyboard.
 
 Without --sign-identity, the sole eligible Apple Development identity is used.
-Zero or multiple eligible identities fail loudly. Ad hoc bundles cannot exercise
-the authenticated app-to-IME runtime.
+Zero or multiple eligible identities fail loudly. The keyboard is built with
+the same identity and embedded at Contents/Library/InlineGhostIME.app so the
+app can install it on first run. Ad hoc bundles have no Team ID, so the app
+refuses to install the keyboard from them: use them only for UI work.
 EOF
 }
 
@@ -39,6 +43,9 @@ while (($#)); do
   case "$1" in
     --release)
       CONFIGURATION="release"
+      ;;
+    --no-ime)
+      EMBED_IME=0
       ;;
     --scratch-path|--jobs|--version|--build-number|--sign-identity)
       [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
@@ -69,9 +76,19 @@ if [[ -n "$JOBS" ]]; then
   [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo "jobs must be a positive integer" >&2; exit 2; }
 fi
 SIGN_IDENTITY="$(tilde_resolve_signing_identity "$SIGN_IDENTITY")"
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  cat >&2 <<'EOF'
+warning: building an AD HOC bundle. It has no Team ID, so Tilde will refuse to
+warning: install its keyboard and setup will stop at "This build can't install
+warning: its keyboard". For a working install, add an Apple Development
+warning: certificate (Xcode > Settings > Accounts > Manage Certificates) and
+warning: rebuild without --sign-identity -.
+EOF
+fi
 
 APP="$ROOT_DIR/dist/Tilde.app"
 CONTENTS="$APP/Contents"
+IME_DIST="$ROOT_DIR/dist/InlineGhostIME.app"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 GENERATED_ICON="$ROOT_DIR/dist/Tilde.generated-icon.$$.icns"
@@ -87,8 +104,17 @@ fi
 swift build "${BUILD_ARGS[@]}"
 BIN_PATH="$(swift build --scratch-path "$SCRATCH_PATH" -c "$CONFIGURATION" --show-bin-path)"
 
+if [[ "$EMBED_IME" == "1" ]]; then
+  "$ROOT_DIR/script/build_ime.sh" \
+    --version "$VERSION" --build-number "$BUILD_NUMBER" --sign-identity "$SIGN_IDENTITY"
+fi
+
 rm -rf "$APP"
 mkdir -p "$MACOS" "$RESOURCES"
+if [[ "$EMBED_IME" == "1" ]]; then
+  mkdir -p "$CONTENTS/Library"
+  cp -R "$IME_DIST" "$CONTENTS/Library/InlineGhostIME.app"
+fi
 cp "$BIN_PATH/Tilde" "$MACOS/Tilde"
 cp "$GENERATED_ICON" "$RESOURCES/AppIcon.icns"
 if [[ "$CONFIGURATION" == "release" ]]; then

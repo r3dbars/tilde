@@ -28,11 +28,21 @@ struct TildeSetupStateTests {
 
     @Test("Installation, runtime, and socket failures are recoverable")
     func failures() {
-        #expect(resolve(install: .failed) == .recoverableError(.keyboard))
-        #expect(resolve(install: .unavailableInDevelopment, input: .missing) == .recoverableError(.keyboard))
+        #expect(resolve(install: .failed(.registrationRefused)) == .recoverableError(.keyboard(.registrationRefused)))
+        #expect(resolve(install: .failed(.appNotTeamSigned)) == .recoverableError(.keyboard(.appNotTeamSigned)))
+        #expect(resolve(install: .unavailableInDevelopment, input: .missing) == .recoverableError(.keyboard(nil)))
         #expect(resolve(input: .selected, model: .failed(.checksumMismatch)) == .recoverableError(.model(.checksumMismatch)))
         #expect(resolve(input: .selected, runtime: .failed(.assetsMissing)) == .recoverableError(.runtime))
         #expect(resolve(input: .selected, socket: false) == .recoverableError(.runtime))
+    }
+
+    @Test("Signing failures are not presented as retryable")
+    func keyboardFailureRetryability() {
+        typealias Failure = GhostKeyboardInstallerHost.KeyboardInstallFailure
+        #expect(!Failure.appNotTeamSigned.isRetryable)
+        #expect(!Failure.bundledKeyboardUntrusted.isRetryable)
+        #expect(Failure.copyFailed.isRetryable)
+        #expect(Failure.registrationRefused.isRetryable)
     }
 
     @Test("First-run setup waits for Tilde to be selected, but later checks can skip that gate")

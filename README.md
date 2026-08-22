@@ -78,11 +78,17 @@ The project is a Swift 6.2 package with no Xcode project file.
 ```
 
 The two build scripts create development bundles; they do not contain the
-release model or helper. By default, both require the one eligible Apple
+release model or helper. `build_and_run.sh` also runs `build_ime.sh` and embeds
+the keyboard at `Contents/Library/InlineGhostIME.app` (skip with `--no-ime`),
+so copying `dist/Tilde.app` to `/Applications` and launching it installs the
+keyboard on first run. By default, both require the one eligible Apple
 Development identity in the keychain, so the app and IME receive matching,
 non-empty Team IDs. If multiple identities exist, pass the same exact SHA-1 to
-both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles,
-which cannot exercise the authenticated app-to-IME runtime.
+both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles:
+they have no Team ID, so the app refuses to install the keyboard from them and
+the setup window says so instead of offering a retry. Create an Apple
+Development certificate in Xcode (Settings → Accounts → Manage Certificates)
+to get a working local install.
 `script/proof.sh fast` is the pre-merge gate.
 `script/package_app.sh` is the single manual release driver. It requires the
 helper hash and an explicitly named `--proof-model` preseed. That model is

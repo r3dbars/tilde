@@ -167,7 +167,12 @@ private final class TildeSetupViewModel: ObservableObject {
             refresh()
         case .ready:
             appDelegate.completeSetup()
-        case .recoverableError:
+        case let .recoverableError(target):
+            if case let .keyboard(failure) = target, !(failure?.isRetryable ?? true) {
+                // A retry cannot fix a signing problem; send people to the
+                // manual path and re-check in case they added the keyboard.
+                appDelegate.openKeyboardSettings()
+            }
             appDelegate.retrySetup()
             refresh()
         case .installingKeyboard, .downloadingModel, .verifyingModel, .startingRuntime:
@@ -280,7 +285,7 @@ private struct TildeSetupView: View {
         case .startingRuntime: "Starting Tilde…"
         case .needsInputSourceSelection: "Select Tilde as your keyboard"
         case .ready: "Tilde is ready"
-        case .recoverableError: "Tilde needs a quick retry"
+        case let .recoverableError(target): recoveryHeadline(for: target)
         }
     }
 
@@ -314,14 +319,36 @@ private struct TildeSetupView: View {
         case .startingRuntime: model.finishingSetup ? "Reopening…" : "Starting…"
         case .needsInputSourceSelection: "Select Tilde"
         case .ready: "Start Typing"
-        case .recoverableError: "Try Again"
+        case let .recoverableError(target): recoveryButtonTitle(for: target)
         }
+    }
+
+    private func recoveryHeadline(for target: TildeSetupRepairTarget) -> String {
+        if case let .keyboard(failure) = target, failure?.isRetryable == false {
+            return "This build can’t install its keyboard"
+        }
+        return "Tilde needs a quick retry"
+    }
+
+    private func recoveryButtonTitle(for target: TildeSetupRepairTarget) -> String {
+        if case let .keyboard(failure) = target, failure?.isRetryable == false {
+            return "Open Keyboard Settings"
+        }
+        return "Try Again"
     }
 
     private func recoveryExplanation(for target: TildeSetupRepairTarget) -> String {
         switch target {
-        case .keyboard:
-            return "Tilde couldn’t install its keyboard. Try again; if it still fails, open Keyboard Settings and add Tilde."
+        case .keyboard(nil):
+            return "This Tilde build doesn’t include its keyboard. Rebuild with script/build_and_run.sh, or open Keyboard Settings and add an installed Tilde keyboard."
+        case .keyboard(.appNotTeamSigned):
+            return "Tilde isn’t signed with an Apple Development certificate, so macOS won’t trust its keyboard. Retrying can’t help: rebuild with a signing identity, or add the keyboard manually in Keyboard Settings."
+        case .keyboard(.bundledKeyboardUntrusted):
+            return "The keyboard inside this Tilde build isn’t signed by the same team as Tilde. Rebuild both with the same signing identity."
+        case .keyboard(.copyFailed):
+            return "Tilde couldn’t copy its keyboard into ~/Library/Input Methods. Check disk space and folder permissions, then try again."
+        case .keyboard(.registrationRefused):
+            return "macOS didn’t register the Tilde keyboard. Try again; if it still fails, open Keyboard Settings and add Tilde."
         case .runtime:
             return "Tilde couldn’t start its local engine. Try again; your downloaded model will be checked before it runs."
         case let .model(failure):
