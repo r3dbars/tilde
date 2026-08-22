@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   fast-proof:
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
