@@ -171,7 +171,24 @@ run_swift() {
     BLOCKING_FAILURES=$((BLOCKING_FAILURES + 1))
     return
   fi
-  run_blocking "swift test --jobs 1 (full suite)" swift test --jobs 1
+  # SwiftPM on a Command Line Tools-only Mac (no Xcode) omits the framework
+  # search path and runtime rpaths for Swift Testing, so every `import Testing`
+  # fails with "no such module" and the bundle cannot dlopen
+  # lib_TestingInterop. Supply them when that is the active toolchain.
+  local -a clt_testing_flags=()
+  local dev_dir
+  dev_dir="$(xcode-select -p 2>/dev/null || true)"
+  if [[ "$dev_dir" == */CommandLineTools && -d "$dev_dir/Library/Developer/Frameworks/Testing.framework" ]]; then
+    local fw="$dev_dir/Library/Developer/Frameworks"
+    local lib="$dev_dir/Library/Developer/usr/lib"
+    clt_testing_flags=(
+      -Xswiftc -F -Xswiftc "$fw"
+      -Xlinker -F -Xlinker "$fw"
+      -Xlinker -rpath -Xlinker "$fw"
+      -Xlinker -rpath -Xlinker "$lib"
+    )
+  fi
+  run_blocking "swift test --jobs 1 (full suite)" swift test --jobs 1 ${clt_testing_flags[@]+"${clt_testing_flags[@]}"}
 }
 
 summarize_and_exit() {

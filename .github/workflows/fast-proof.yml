@@ -43,7 +43,7 @@ jobs:
           python-version: "3.11"
 
       - name: Toolchain
-        run: xcodebuild -version
+        run: swift --version
 
       - name: Full proof
         run: bash script/proof.sh fast
