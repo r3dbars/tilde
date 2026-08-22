@@ -120,12 +120,12 @@ private final class TildeSetupViewModel: ObservableObject {
         guard !finishingSetup else { return }
         let permissionGranted = ScreenRecordingPermission.isGranted()
         modelState = appDelegate?.modelState() ?? .missing
-        state = appDelegate?.setupState() ?? .recoverableError(.runtime)
+        state = appDelegate?.setupState() ?? .recoverableError(.runtime(nil))
         let canSelectInputSource = state == .needsInputSourceSelection
         if canSelectInputSource, !attemptedInputSourceSelection {
             attemptedInputSourceSelection = true
             showInputSourceFallback = appDelegate?.selectInputSourceIfAvailable() != true
-            state = appDelegate?.setupState() ?? .recoverableError(.runtime)
+            state = appDelegate?.setupState() ?? .recoverableError(.runtime(nil))
         }
         if state != .needsInputSourceSelection {
             showInputSourceFallback = false
@@ -324,17 +324,25 @@ private struct TildeSetupView: View {
     }
 
     private func recoveryHeadline(for target: TildeSetupRepairTarget) -> String {
-        if case let .keyboard(failure) = target, failure?.isRetryable == false {
+        switch target {
+        case let .keyboard(failure) where failure?.isRetryable == false:
             return "This build can’t install its keyboard"
+        case .runtime(.assetsMissing):
+            return "This build has no local engine"
+        default:
+            return "Tilde needs a quick retry"
         }
-        return "Tilde needs a quick retry"
     }
 
     private func recoveryButtonTitle(for target: TildeSetupRepairTarget) -> String {
-        if case let .keyboard(failure) = target, failure?.isRetryable == false {
+        switch target {
+        case let .keyboard(failure) where failure?.isRetryable == false:
             return "Open Keyboard Settings"
+        case .runtime(.assetsMissing):
+            return "Check Again"
+        default:
+            return "Try Again"
         }
-        return "Try Again"
     }
 
     private func recoveryExplanation(for target: TildeSetupRepairTarget) -> String {
@@ -349,6 +357,10 @@ private struct TildeSetupView: View {
             return "Tilde couldn’t copy its keyboard into ~/Library/Input Methods. Check disk space and folder permissions, then try again."
         case .keyboard(.registrationRefused):
             return "macOS didn’t register the Tilde keyboard. Try again; if it still fails, open Keyboard Settings and add Tilde."
+        case .runtime(.assetsMissing):
+            return "Tilde’s llama-server engine isn’t inside this app bundle, so retrying can’t help. Rebuild with script/build_and_run.sh --llama-server PATH, or reinstall a release build."
+        case .runtime(.portInUse):
+            return "Another program is using Tilde’s local port. Quit it or wait a moment, then try again."
         case .runtime:
             return "Tilde couldn’t start its local engine. Try again; your downloaded model will be checked before it runs."
         case let .model(failure):

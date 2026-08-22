@@ -8,7 +8,8 @@ enum TildeSetupRepairTarget: Equatable {
     /// installed); a failure explains why the bundled copy could not be used.
     case keyboard(GhostKeyboardInstallerHost.KeyboardInstallFailure?)
     case model(ModelFailure)
-    case runtime
+    /// `nil` when the local socket is unavailable rather than the engine.
+    case runtime(LlamaRuntimeSnapshot.FailureReason?)
 }
 
 enum TildeSetupState: Equatable {
@@ -61,7 +62,7 @@ enum TildeSetupState: Equatable {
             break
         }
 
-        guard socketAvailable else { return .recoverableError(.runtime) }
+        guard socketAvailable else { return .recoverableError(.runtime(nil)) }
 
         switch runtime {
         case .starting, .retrying: return .startingRuntime
@@ -70,7 +71,7 @@ enum TildeSetupState: Equatable {
                 return .needsInputSourceSelection
             }
             return .ready
-        case .failed: return .recoverableError(.runtime)
+        case let .failed(reason): return .recoverableError(.runtime(reason))
         }
     }
 }

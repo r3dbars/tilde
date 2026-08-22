@@ -15,6 +15,8 @@ BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 JOBS=""
 SIGN_IDENTITY=""
 EMBED_IME=1
+LLAMA_SERVER="${TILDE_DEV_LLAMA_SERVER:-}"
+LLAMA_SERVER="${TILDE_DEV_LLAMA_SERVER:-}"
 
 usage() {
   cat <<'EOF'
@@ -30,6 +32,16 @@ Options:
   --build-number NUMBER     Set CFBundleVersion.
   --sign-identity SHA1      Sign with this exact SHA-1; use - for explicit ad hoc signing.
   --no-ime                  Skip building and embedding the InlineGhostIME keyboard.
+  --llama-server PATH       Embed this llama-server binary (and any dylibs next
+                            to it) at Contents/Helpers so the local engine can
+                            start. Defaults to $TILDE_DEV_LLAMA_SERVER. A
+                            prebuilt macOS build from llama.cpp's GitHub
+                            releases works for development.
+  --llama-server PATH       Embed this llama-server binary (and any dylibs next
+                            to it) at Contents/Helpers so the local engine can
+                            start. Defaults to $TILDE_DEV_LLAMA_SERVER. A
+                            prebuilt macOS build from llama.cpp's GitHub
+                            releases works for development.
 
 Without --sign-identity, the sole eligible Apple Development identity is used.
 Zero or multiple eligible identities fail loudly. The keyboard is built with
@@ -47,10 +59,11 @@ while (($#)); do
     --no-ime)
       EMBED_IME=0
       ;;
-    --scratch-path|--jobs|--version|--build-number|--sign-identity)
+    --scratch-path|--jobs|--version|--build-number|--sign-identity|--llama-server)
       [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
       case "$1" in
         --scratch-path) SCRATCH_PATH="$2" ;;
+        --llama-server) LLAMA_SERVER="$2" ;;
         --jobs) JOBS="$2" ;;
         --version) VERSION="$2" ;;
         --build-number) BUILD_NUMBER="$2" ;;
@@ -74,6 +87,28 @@ done
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "build number must be numeric" >&2; exit 2; }
 if [[ -n "$JOBS" ]]; then
   [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo "jobs must be a positive integer" >&2; exit 2; }
+fi
+if [[ -n "$LLAMA_SERVER" ]]; then
+  [[ -x "$LLAMA_SERVER" ]] || { echo "--llama-server is not an executable file: $LLAMA_SERVER" >&2; exit 2; }
+else
+  cat >&2 <<'EOF'
+warning: no --llama-server given (and TILDE_DEV_LLAMA_SERVER is unset), so this
+warning: bundle has no local engine. Setup will stop at "This build has no
+warning: local engine". Download a macOS arm64 build from
+warning: https://github.com/ggml-org/llama.cpp/releases and pass
+warning: --llama-server PATH/TO/llama-server to embed it.
+EOF
+fi
+if [[ -n "$LLAMA_SERVER" ]]; then
+  [[ -x "$LLAMA_SERVER" ]] || { echo "--llama-server is not an executable file: $LLAMA_SERVER" >&2; exit 2; }
+else
+  cat >&2 <<'EOF'
+warning: no --llama-server given (and TILDE_DEV_LLAMA_SERVER is unset), so this
+warning: bundle has no local engine. Setup will stop at "This build has no
+warning: local engine". Download a macOS arm64 build from
+warning: https://github.com/ggml-org/llama.cpp/releases and pass
+warning: --llama-server PATH/TO/llama-server to embed it.
+EOF
 fi
 SIGN_IDENTITY="$(tilde_resolve_signing_identity "$SIGN_IDENTITY")"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
@@ -114,6 +149,42 @@ mkdir -p "$MACOS" "$RESOURCES"
 if [[ "$EMBED_IME" == "1" ]]; then
   mkdir -p "$CONTENTS/Library"
   cp -R "$IME_DIST" "$CONTENTS/Library/InlineGhostIME.app"
+fi
+if [[ -n "$LLAMA_SERVER" ]]; then
+  HELPERS="$CONTENTS/Helpers"
+  mkdir -p "$HELPERS"
+  cp "$LLAMA_SERVER" "$HELPERS/llama-server"
+  chmod +x "$HELPERS/llama-server"
+  # Prebuilt llama.cpp binaries resolve their libraries via @loader_path, so
+  # dylibs that sit next to the binary travel with it.
+  LLAMA_DIR="$(cd "$(dirname "$LLAMA_SERVER")" && pwd)"
+  for dylib in "$LLAMA_DIR"/*.dylib; do
+    [[ -e "$dylib" ]] || continue
+    cp "$dylib" "$HELPERS/"
+  done
+  # Sign nested code before the outer bundle so the app's seal covers it.
+  for nested in "$HELPERS"/*.dylib "$HELPERS/llama-server"; do
+    [[ -e "$nested" ]] || continue
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$nested" >/dev/null
+  done
+fi
+if [[ -n "$LLAMA_SERVER" ]]; then
+  HELPERS="$CONTENTS/Helpers"
+  mkdir -p "$HELPERS"
+  cp "$LLAMA_SERVER" "$HELPERS/llama-server"
+  chmod +x "$HELPERS/llama-server"
+  # Prebuilt llama.cpp binaries resolve their libraries via @loader_path, so
+  # dylibs that sit next to the binary travel with it.
+  LLAMA_DIR="$(cd "$(dirname "$LLAMA_SERVER")" && pwd)"
+  for dylib in "$LLAMA_DIR"/*.dylib; do
+    [[ -e "$dylib" ]] || continue
+    cp "$dylib" "$HELPERS/"
+  done
+  # Sign nested code before the outer bundle so the app's seal covers it.
+  for nested in "$HELPERS"/*.dylib "$HELPERS/llama-server"; do
+    [[ -e "$nested" ]] || continue
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$nested" >/dev/null
+  done
 fi
 cp "$BIN_PATH/Tilde" "$MACOS/Tilde"
 cp "$GENERATED_ICON" "$RESOURCES/AppIcon.icns"

@@ -81,7 +81,11 @@ The two build scripts create development bundles; they do not contain the
 release model or helper. `build_and_run.sh` also runs `build_ime.sh` and embeds
 the keyboard at `Contents/Library/InlineGhostIME.app` (skip with `--no-ime`),
 so copying `dist/Tilde.app` to `/Applications` and launching it installs the
-keyboard on first run. By default, both require the one eligible Apple
+keyboard on first run. Pass `--llama-server PATH` (or set
+`TILDE_DEV_LLAMA_SERVER`) to embed a local engine; a prebuilt macOS arm64
+`llama-server` from llama.cpp's GitHub releases, with its dylibs alongside, is
+enough for development. Without it the setup window stops at "This build has
+no local engine". By default, both require the one eligible Apple
 Development identity in the keychain, so the app and IME receive matching,
 non-empty Team IDs. If multiple identities exist, pass the same exact SHA-1 to
 both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles:

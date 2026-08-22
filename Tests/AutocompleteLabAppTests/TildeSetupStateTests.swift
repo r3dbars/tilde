@@ -32,8 +32,9 @@ struct TildeSetupStateTests {
         #expect(resolve(install: .failed(.appNotTeamSigned)) == .recoverableError(.keyboard(.appNotTeamSigned)))
         #expect(resolve(install: .unavailableInDevelopment, input: .missing) == .recoverableError(.keyboard(nil)))
         #expect(resolve(input: .selected, model: .failed(.checksumMismatch)) == .recoverableError(.model(.checksumMismatch)))
-        #expect(resolve(input: .selected, runtime: .failed(.assetsMissing)) == .recoverableError(.runtime))
-        #expect(resolve(input: .selected, socket: false) == .recoverableError(.runtime))
+        #expect(resolve(input: .selected, runtime: .failed(.assetsMissing)) == .recoverableError(.runtime(.assetsMissing)))
+        #expect(resolve(input: .selected, runtime: .failed(.healthTimeout)) == .recoverableError(.runtime(.healthTimeout)))
+        #expect(resolve(input: .selected, socket: false) == .recoverableError(.runtime(nil)))
     }
 
     @Test("Signing failures are not presented as retryable")
