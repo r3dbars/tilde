@@ -243,6 +243,33 @@ struct ScreenSceneTests {
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.conversationTurns.count == 2)
+    @Test("Bubble width is window-relative: a normal chat window on a large display still reads as a list")
+    func bubbleWidthIsWindowRelative() {
+        // A ~560pt Messages window on a 3024px display is ~0.185 of the
+        // display. Its 300-340pt bubbles are ~0.11 of the display -- below
+        // bubbleMinWidth -- but ~0.6 of the window. Found live 2026-08-23:
+        // every request from such a window classified as composing.
+        let smallWindow = ScreenScene.NormalizedRect(x: 0.4, y: 0.2, width: 0.185, height: 0.5)
+        let blocks = [
+            block("Do you know what time the pharmacy closes?", x: 0.41, y: 0.25, width: 0.11, window: slack, windowFrame: smallWindow),
+            block("I think it's 9, but let me double check.", x: 0.47, y: 0.35, width: 0.11, window: slack, windowFrame: smallWindow),
+            block("Want me to swing by after work?", x: 0.41, y: 0.55, width: 0.10, window: slack, windowFrame: smallWindow),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.count == 3)
+        #expect(scene.conversationTurns.map(\.speaker) == [.other, .selfSpeaker, .other])
+    }
+
+    @Test("A full-window-wide block is not a bubble even when it is narrow on the display")
+    func fullWindowWidthBlockIsNotABubble() {
+        let smallWindow = ScreenScene.NormalizedRect(x: 0.4, y: 0.2, width: 0.185, height: 0.5)
+        let blocks = [
+            block("Thread title banner across the whole window", x: 0.4, y: 0.22, width: 0.18, window: slack, windowFrame: smallWindow),
+            block("Another banner line across the window", x: 0.4, y: 0.42, width: 0.18, window: slack, windowFrame: smallWindow),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode != .replying)
     }
 
     @Test("Speaker falls back to other when the window frame is unknown, even with attribution")
