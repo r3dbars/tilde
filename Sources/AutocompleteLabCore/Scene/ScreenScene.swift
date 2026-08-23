@@ -124,11 +124,11 @@ public enum ScreenScene {
     /// sentences long, so the caps allow one more turn and a bigger shared
     /// budget than the bubble-era 3/600 — still under
     /// `RawContinuationPrompt.maxSceneContextCharacters` (1,000).
-    public static let maxTurns = 4
+    public static let maxTurns = 8
     /// Combined character budget across every surviving turn's text.
-    public static let maxTurnsCharacterBudget = 800
+    public static let maxTurnsCharacterBudget = 2_000
     /// Character cap on the single reference snippet.
-    public static let maxReferenceCharacters = 400
+    public static let maxReferenceCharacters = 1_000
 
     // MARK: - Classification
 
