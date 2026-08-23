@@ -50,9 +50,11 @@ memory-only personal next-word recipes from manually typed history. Replay
 rebuilds learned contexts but is not scored. On fresh eligible word boundaries,
 both recipes freeze a prediction from the same prior authored words, compare it
 with the same next authored word, and learn only afterward. This paired shadow
-experiment does not change visible suggestions, perform retrieval, or train the
-fixed Gemma 4 E2B model. Accepted Tilde suggestions are excluded from learning
-and scoring.
+experiment does not itself choose visible suggestions. When Personal History is
+enabled, a separate read-only lookup can replace Gemma's visible base suggestion
+with a local personal word after conservative support checks. That lookup does
+not change the paired score, retrieve raw history, or train the fixed Gemma 4
+E2B model. Accepted Tilde suggestions are excluded from learning and scoring.
 
 Capture stops when Personal History is disabled, when macOS Secure Event Input
 is active, when the host app cannot be identified safely, or when the current
