@@ -243,6 +243,8 @@ struct ScreenSceneTests {
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.conversationTurns.count == 2)
+    }
+
     @Test("Bubble width is window-relative: a normal chat window on a large display still reads as a list")
     func bubbleWidthIsWindowRelative() {
         // A ~560pt Messages window on a 3024px display is ~0.185 of the
