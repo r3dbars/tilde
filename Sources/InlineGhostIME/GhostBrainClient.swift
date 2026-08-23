@@ -2,7 +2,9 @@ import AutocompleteLabCore
 import Foundation
 import Security
 
-/// One cancellable, final-only request to Tilde's owner-only unix socket.
+/// One cancellable, newline-delimited streaming request to Tilde's owner-only
+/// unix socket. The connection is closed on task cancellation, which also
+/// gives the app a concrete disconnect signal to cancel model inference.
 enum GhostBrainClient {
     static let socketPath = NSString(
         string: "~/Library/Application Support/Tilde/ghost.sock"
@@ -15,8 +17,14 @@ enum GhostBrainClient {
         attributes: .concurrent
     )
 
-    static func complete(context: String, app: String?) async -> GhostBrainResponse {
-        await send(GhostBrainRequest(context: context, app: app))
+    /// `onPartial` is invoked on the client's worker queue with each stable
+    /// streamed prefix; callers must hop to their own actor.
+    static func complete(
+        context: String,
+        app: String?,
+        onPartial: (@Sendable (String) -> Void)? = nil
+    ) async -> GhostBrainResponse {
+        await send(GhostBrainRequest(context: context, app: app), onPartial: onPartial)
     }
 
     static func recordPersonalHistory(
@@ -35,13 +43,16 @@ enum GhostBrainClient {
             && encoded(GhostBrainRequest(personalHistoryEvents: events)) != nil
     }
 
-    private static func send(_ request: GhostBrainRequest) async -> GhostBrainResponse {
+    private static func send(
+        _ request: GhostBrainRequest,
+        onPartial: (@Sendable (String) -> Void)? = nil
+    ) async -> GhostBrainResponse {
         guard let payload = encoded(request) else { return .invalidRequest }
         guard let connection = Connection(path: socketPath) else { return .unavailable }
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 worker.async {
-                    continuation.resume(returning: connection.run(payload: payload))
+                    continuation.resume(returning: connection.run(payload: payload, onPartial: onPartial))
                 }
             }
         } onCancel: {
@@ -57,10 +68,13 @@ enum GhostBrainClient {
 
     private final class Connection: @unchecked Sendable {
         private let fd: Int32
-        private let deadline: UInt64
+        /// Idle deadline: every received line extends it, so a stream that is
+        /// still producing stable words is never torn down mid-sentence.
+        private var deadline: UInt64
         private let lock = NSLock()
         private var cancelled = false
         private var closed = false
+        private var receiveBuffer = Data()
 
         init?(path: String) {
             let directory = (path as NSString).deletingLastPathComponent
@@ -91,14 +105,26 @@ enum GhostBrainClient {
             lock.unlock()
         }
 
-        func run(payload: Data) -> GhostBrainResponse {
+        func run(
+            payload: Data,
+            onPartial: (@Sendable (String) -> Void)? = nil
+        ) -> GhostBrainResponse {
             defer { finish() }
             guard !isCancelled, connect(), !isCancelled, verifyPeer() else { return .unavailable }
             guard write(payload + [0x0A]) else { return timedOut ? .timeout : .unavailable }
-            guard let line = readLine(maximumBytes: 8_192) else {
-                return timedOut ? .timeout : .unavailable
+            while !timedOut, !isCancelled {
+                guard let line = readLine(maximumBytes: 8_192) else {
+                    return timedOut ? .timeout : .unavailable
+                }
+                deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+                let event = GhostBrainResponse.decode(line)
+                if !event.final {
+                    if let text = event.suggestion, !text.isEmpty { onPartial?(text) }
+                    continue
+                }
+                return event
             }
-            return GhostBrainResponse.decode(line)
+            return timedOut ? .timeout : .unavailable
         }
 
         private func connect() -> Bool {
@@ -193,21 +219,26 @@ enum GhostBrainClient {
         }
 
         private func readLine(maximumBytes: Int) -> Data? {
-            var data = Data()
             var buffer = [UInt8](repeating: 0, count: 2_048)
-            while data.count < maximumBytes {
+            while true {
+                if let newline = receiveBuffer.firstIndex(of: 0x0A) {
+                    let line = receiveBuffer.prefix(upTo: newline)
+                    receiveBuffer.removeSubrange(...newline)
+                    return Data(line)
+                }
+                guard receiveBuffer.count < maximumBytes else { return nil }
                 guard wait(for: Int16(POLLIN)) else { return nil }
-                let count = Darwin.read(fd, &buffer, min(buffer.count, maximumBytes - data.count))
+                let count = Darwin.read(
+                    fd,
+                    &buffer,
+                    min(buffer.count, maximumBytes - receiveBuffer.count)
+                )
                 guard count > 0 else {
                     if count < 0, errno == EINTR || errno == EAGAIN { continue }
                     return nil
                 }
-                data.append(contentsOf: buffer[0..<count])
-                if let newline = data.firstIndex(of: 0x0A) {
-                    return data.prefix(upTo: newline)
-                }
+                receiveBuffer.append(contentsOf: buffer[0..<count])
             }
-            return nil
         }
 
         private func wait(for events: Int16) -> Bool {
