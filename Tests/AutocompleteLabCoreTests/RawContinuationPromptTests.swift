@@ -212,16 +212,20 @@ struct ScreenContextPromptAssemblyTests {
         #expect(prompt.prompt.hasSuffix("Text: \(tail)\nContinuation:"))
     }
 
-    @Test("Scene context is capped at 1,000 characters even when far more budget remains")
+    @Test("Scene context is capped at its own limit even when far more budget remains")
     func sceneContextCappedAtOneThousandRegardlessOfRemainingBudget() {
-        let manyTurns = (1...40).map {
+        let manyTurns = (1...120).map {
             ScreenScene.ConversationTurn(speaker: $0.isMultiple(of: 2) ? .selfSpeaker : .other, text: "turn number \($0) with some extra words padding it out")
         }
         // ScreenScene itself caps turns to 3 / 600 chars, but this proves
         // RawContinuationPrompt's OWN cap holds independently of that,
         // against a scene built directly (not through ScreenScene.classify).
         let bigScene = ScreenScene.Scene(mode: .replying, conversationTurns: manyTurns, referenceSnippets: [])
-        let prompt = RawContinuationPrompt(textBeforeCursor: "short ", scene: bigScene, maxContextCharacters: 3000)
+        let prompt = RawContinuationPrompt(
+            textBeforeCursor: "short ",
+            scene: bigScene,
+            maxContextCharacters: RawContinuationPrompt.maxSceneContextCharacters + 2_000
+        )
 
         let contextStart = prompt.prompt.range(of: "Conversation:")!.lowerBound
         let textStart = prompt.prompt.range(of: "Text: short")!.lowerBound

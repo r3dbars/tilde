@@ -378,25 +378,26 @@ struct ScreenSceneTests {
 
     @Test("At most maxTurns turns survive, keeping the most recent (bottom-most) ones")
     func capsAtMostRecentTurns() {
-        let blocks = [
-            block("message one oldest", x: 0.05, y: 0.10, window: slack),
-            block("message two", x: 0.55, y: 0.30, window: slack),
-            block("message three", x: 0.05, y: 0.50, window: slack),
-            block("message four", x: 0.55, y: 0.70, window: slack),
-            block("message five newest", x: 0.05, y: 0.90, window: slack),
-        ]
+        let blocks = (1...10).map { index in
+            block(
+                "message number \(index)",
+                x: index.isMultiple(of: 2) ? 0.55 : 0.05,
+                y: 0.05 + Double(index) * 0.09,
+                window: slack
+            )
+        }
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.mode == .replying)
         #expect(scene.conversationTurns.count == ScreenScene.maxTurns)
         let texts = scene.conversationTurns.map(\.text)
-        #expect(texts == ["message two", "message three", "message four", "message five newest"])
+        #expect(texts == (3...10).map { "message number \($0)" })
     }
 
     @Test("Turn text is capped to the shared character budget, freshest kept fullest")
     func turnsShareTheCharacterBudget() {
-        let oldest = String(repeating: "a", count: 300)
-        let middle = String(repeating: "b", count: 300)
-        let newest = String(repeating: "c", count: 300)
+        let oldest = String(repeating: "a", count: 800)
+        let middle = String(repeating: "b", count: 800)
+        let newest = String(repeating: "c", count: 800)
         let blocks = [
             block(oldest, x: 0.05, y: 0.10, window: slack),
             block(middle, x: 0.55, y: 0.40, window: slack),
@@ -407,10 +408,10 @@ struct ScreenSceneTests {
         #expect(totalChars <= ScreenScene.maxTurnsCharacterBudget)
         // Newest turn is spent first and kept fully intact.
         #expect(scene.conversationTurns.last?.text == newest)
-        #expect(scene.conversationTurns.last?.text.count == 300)
-        // The 800 budget covers newest + middle in full and leaves 200 for
-        // the oldest, which is the one that gets truncated.
-        #expect(scene.conversationTurns.map(\.text.count) == [200, 300, 300])
+        #expect(scene.conversationTurns.last?.text.count == 800)
+        // The 2,000 budget covers newest + middle in full and leaves 400
+        // for the oldest, which is the one that gets truncated.
+        #expect(scene.conversationTurns.map(\.text.count) == [400, 800, 800])
     }
 
     /// Live bug 2026-08-18: the merged block's own growing height was the
@@ -585,10 +586,10 @@ struct ScreenSceneTests {
         #expect(scene.mode == .composing)
     }
 
-    @Test("Reference snippet is capped at 400 characters")
+    @Test("Reference snippet is capped at the reference character budget")
     func referenceSnippetCappedAt400Characters() {
         let fieldText = "checking the invoice details now"
-        let longText = "Invoice details: " + String(repeating: "x", count: 500)
+        let longText = "Invoice details: " + String(repeating: "x", count: 1_500)
         let blocks = [block(longText, x: 0.60, y: 0.20, window: notes)]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: textEdit, fieldText: fieldText)
         #expect(scene.mode == .referencing)
