@@ -22,6 +22,27 @@ struct InlineSuggestionStateTests {
         }
     }
 
+    @Test("A streamed update may extend only the same live ticket")
+    func streamedUpdateRequiresCurrentTicket() {
+        let current = ticket(request: 4)
+        let stale = ticket(request: 3)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+
+        #expect(state.reduce(.update(" world", stale)).isEmpty)
+        #expect(!state.isVisible)
+        #expect(state.reduce(.update(" world", current)) == [
+            .shown, .show(" world"),
+        ])
+        #expect(state.reduce(.update(" world again", current)) == [
+            .show(" world again"),
+        ])
+        #expect(state.reduce(.update(" world", current)).isEmpty)
+        #expect(state.reduce(.update(" rewritten", current)).isEmpty)
+        #expect(state.reduce(.update(" world again", current)).isEmpty)
+        #expect(state.visibleText == " world again")
+    }
+
     @Test("A newer request rejects an older result for the same field state")
     func requestOrderRejectsLateResult() {
         let older = ticket(request: 1)
@@ -336,6 +357,20 @@ struct InlineSuggestionStateTests {
             current: afterAccept,
             advanced: afterTyping
         )) == [.hide, .insert("a"), .show("gain")])
+    }
+
+    @Test("A stale callback cannot dismiss a newer request")
+    func targetedDismissPreservesNewerRequest() {
+        let old = ticket(request: 1)
+        let newer = ticket(context: "hello ", location: 6, request: 2)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(old))
+        _ = state.reduce(.present(" world", old))
+        _ = state.reduce(.awaitSuggestion(newer))
+
+        #expect(state.reduce(.dismissTicket(old)).isEmpty)
+        #expect(state.pendingTicket == newer)
+        #expect(!state.isVisible)
     }
 
     private func ticket(
