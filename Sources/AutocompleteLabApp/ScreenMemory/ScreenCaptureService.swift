@@ -895,9 +895,17 @@ actor ScreenCaptureService {
     /// Retina panels, 1 otherwise. Falls back to 1 when the display has no
     /// pixel dimensions (mirrored/virtual displays during setup).
     static func pixelScale(of display: SCDisplay) -> Double {
-        let pixels = Double(CGDisplayPixelsWide(display.displayID))
-        guard pixels > 0, display.width > 0 else { return 1 }
-        return max(1, (pixels / Double(display.width)).rounded())
+        // `CGDisplayPixelsWide` reports the LOGICAL width in scaled Retina
+        // modes (it equals `display.width`), which is exactly the 1x trap
+        // this helper exists to avoid. The display mode carries the true
+        // backing size.
+        let mode = CGDisplayCopyDisplayMode(display.displayID)
+        return pixelScale(pixelWidth: mode?.pixelWidth ?? 0, pointWidth: display.width)
+    }
+
+    static func pixelScale(pixelWidth: Int, pointWidth: Int) -> Double {
+        guard pixelWidth > 0, pointWidth > 0 else { return 1 }
+        return max(1, (Double(pixelWidth) / Double(pointWidth)).rounded())
     }
 
     static func milliseconds(from start: Date, to end: Date) -> Int {
