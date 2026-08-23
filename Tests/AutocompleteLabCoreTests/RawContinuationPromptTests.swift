@@ -144,14 +144,14 @@ struct ScreenContextPromptAssemblyTests {
         let withoutScene = RawContinuationPrompt(textBeforeCursor: "since we ", register: .chat)
         let withNilScene = RawContinuationPrompt(textBeforeCursor: "since we ", register: .chat, scene: nil)
         #expect(withoutScene == withNilScene)
-        #expect(!withoutScene.prompt.contains("Conversation:"))
+        #expect(liveConversationBlocks(in: withoutScene.prompt) == 0)
         #expect(!withoutScene.prompt.contains("Reference:"))
     }
 
     @Test("A composing-mode scene contributes no context block")
     func composingSceneContributesNothing() {
         let prompt = RawContinuationPrompt(textBeforeCursor: "since we ", register: .chat, scene: composingScene)
-        #expect(!prompt.prompt.contains("Conversation:"))
+        #expect(liveConversationBlocks(in: prompt.prompt) == 0)
         #expect(!prompt.prompt.contains("Reference:"))
         #expect(prompt.prompt.hasSuffix("Text: since we\nContinuation:"))
     }
@@ -163,8 +163,9 @@ struct ScreenContextPromptAssemblyTests {
         #expect(prompt.prompt.contains(
             "Conversation:\nThem: hey are you around today\nYou: yeah free after 3pm works\n\n"
         ))
+        #expect(liveConversationBlocks(in: prompt.prompt) == 1)
         // Context sits between the scaffold and the field text.
-        let conversationRange = prompt.prompt.range(of: "Conversation:")
+        let conversationRange = prompt.prompt.range(of: "Conversation:", options: .backwards)
         let textRange = prompt.prompt.range(of: "Text: sure,")
         #expect(conversationRange != nil && textRange != nil)
         #expect(conversationRange!.lowerBound < textRange!.lowerBound)
@@ -333,5 +334,13 @@ struct ScreenContextPromptAssemblyTests {
         #expect(prompt.prompt.contains("Conversation:\n"))
         #expect(prompt.prompt.contains("\n\nText: \(fieldTail)\nContinuation:"))
         #expect(!prompt.prompt.contains("Conversation:\nThem: hey are you around today\nYou: yeah free after 3pm works\n\n"))
+    }
+
+    /// The chat scaffold's own examples carry Conversation blocks; only
+    /// blocks beyond those come from a live scene.
+    private func liveConversationBlocks(in prompt: String) -> Int {
+        let scaffoldBlocks = RawContinuationPrompt.scaffold(for: .chat)
+            .components(separatedBy: "Conversation:").count - 1
+        return prompt.components(separatedBy: "Conversation:").count - 1 - scaffoldBlocks
     }
 }
