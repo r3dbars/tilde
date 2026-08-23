@@ -5,7 +5,7 @@ public enum DiagnosticsMetadataRedactor {
         "launch-failed", "assets-missing", "port-in-use", "health-timeout", "directory",
         "already-running",
         "unsafeHiddenOrControlCharacter", "emptyOutput", "noSuggestionSentinel",
-        "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext",
+        "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext", "replaysScene",
         "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
         "store-corrupt", "key-unavailable", "storage-unavailable", "internal-error",
         // Screen Memory's `screen-capture-skipped` reason vocabulary
