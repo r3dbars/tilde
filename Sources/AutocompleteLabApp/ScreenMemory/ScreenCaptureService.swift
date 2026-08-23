@@ -481,8 +481,13 @@ actor ScreenCaptureService {
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int(window.frame.width.rounded()))
-        configuration.height = max(1, Int(window.frame.height.rounded()))
+        // Capture at the display's native pixel scale, not point size.
+        // `.fast` OCR reads 1x (half-resolution on Retina) text as noise;
+        // the 2026-08-23 sweep measured its 9-15x speedup only at native
+        // resolution, and the live app was silently capturing at 1x.
+        let scale = Self.pixelScale(of: display)
+        configuration.width = max(1, Int((window.frame.width * scale).rounded()))
+        configuration.height = max(1, Int((window.frame.height * scale).rounded()))
         configuration.showsCursor = false
         configuration.capturesAudio = false
 
@@ -678,8 +683,9 @@ actor ScreenCaptureService {
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
-        configuration.width = display.width
-        configuration.height = display.height
+        let scale = Self.pixelScale(of: display)
+        configuration.width = Int((Double(display.width) * scale).rounded())
+        configuration.height = Int((Double(display.height) * scale).rounded())
         configuration.showsCursor = false
         configuration.capturesAudio = false
 
@@ -885,6 +891,15 @@ actor ScreenCaptureService {
     /// level like the rest of ScreenCaptureKit-shaped code in this type (see
     /// the type doc comment), so this is the one piece of the duty-cycle
     /// math that CAN be proven without a live display.
+    /// Backing pixels per point for the display being captured; 2 on
+    /// Retina panels, 1 otherwise. Falls back to 1 when the display has no
+    /// pixel dimensions (mirrored/virtual displays during setup).
+    static func pixelScale(of display: SCDisplay) -> Double {
+        let pixels = Double(CGDisplayPixelsWide(display.displayID))
+        guard pixels > 0, display.width > 0 else { return 1 }
+        return max(1, (pixels / Double(display.width)).rounded())
+    }
+
     static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
     }
