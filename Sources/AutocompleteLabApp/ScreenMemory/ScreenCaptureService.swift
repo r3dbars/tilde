@@ -92,7 +92,7 @@ actor ScreenCaptureService {
     private let now: @Sendable () -> Date
     private let diagnostics: @Sendable (String, [String: String]) -> Void
     /// "OCR only the changed screen region" experiment arm
-    /// (`TildeSettings.incrementalOCREnabled`, default true). Read fresh on
+    /// (`TildeSettings.incrementalOCREnabled`, default false). Read fresh on
     /// every capture, same live-provider pattern as `enabled`/`excludedApps`
     /// — a menu-level kill switch takes effect on the very next capture with
     /// nothing to keep in sync. `false` restores today's always-full-OCR
