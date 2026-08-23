@@ -142,7 +142,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                     // token can legitimately equal the text so far (" is" + " is").
                     rawOutput += piece
                     if StableStreamPrefix.mayAdvanceBoundary(piece),
-                       let partial = stablePartial(rawOutput, recipe: recipe, textBeforeCursor: textBeforeCursor),
+                       let partial = stablePartial(rawOutput, recipe: recipe, textBeforeCursor: textBeforeCursor, scene: scene),
                        partial.visibleText != lastPartialVisibleText {
                         if firstPartialMilliseconds == nil {
                             firstPartialMilliseconds = Self.milliseconds(since: startedAt)
@@ -161,11 +161,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         let normalized = recipe.normalizedContinuation(content)
         let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
-        let suggestion = clean.suggestion
+        var suggestion = clean.suggestion
+        var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
+        if let candidate = suggestion, SceneEchoPolicy.isEcho(candidate.visibleText, scene: scene) {
+            suggestion = nil
+            rejectionReason = "replaysScene"
+        }
 
-        if suggestion == nil, !content.isEmpty, let reason = clean.rejectionReason {
+        if suggestion == nil, !content.isEmpty, let reason = rejectionReason {
             diagnostics.record("llama-suggestion-rejected", metadata: [
-                "reason": String(describing: reason),
+                "reason": reason,
             ])
         }
         var timing = [
@@ -196,12 +201,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     private func stablePartial(
         _ rawOutput: String,
         recipe: RawContinuationPrompt,
-        textBeforeCursor: String
+        textBeforeCursor: String,
+        scene: ScreenScene.Scene?
     ) -> CompletionSuggestion? {
         guard let cleaned = cleaner.cleanWithReason(
             recipe.normalizedContinuation(rawOutput),
             after: textBeforeCursor
         ).suggestion else { return nil }
+        guard !SceneEchoPolicy.isEcho(cleaned.visibleText, scene: scene) else { return nil }
         guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else { return nil }
         return CompletionSuggestion(text: prefix)
     }
