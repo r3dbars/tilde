@@ -676,35 +676,66 @@ final class GhostInputController: IMKInputController {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = client.bundleIdentifier()
         modelTask = Task { [weak self] in
-            let result = await GhostBrainClient.complete(context: tail, app: bundle)
+            let result = await GhostBrainClient.complete(
+                context: tail,
+                app: bundle,
+                onPartial: { [weak self] text in
+                    // Called on the socket worker; the ticket check in
+                    // `present` is what discards a partial that arrives late.
+                    Task { @MainActor [weak self] in
+                        self?.present(text, ticket: requestTicket)
+                    }
+                }
+            )
             guard !Task.isCancelled else { return }
             switch result.outcome {
             case .suggestion:
-                guard let text = result.suggestion else { return }
-                await self?.present(text, ticket: requestTicket)
+                if let text = result.suggestion {
+                    await self?.present(text, ticket: requestTicket)
+                } else {
+                    await self?.settle(ticket: requestTicket)
+                }
             case .unavailable:
+                await self?.settle(ticket: requestTicket)
                 Self.summonBrainIfNeeded()
             case .error, .timeout, .invalidRequest:
+                await self?.settle(ticket: requestTicket)
                 GhostStats.recordFailure(result.outcome)
             case .silence, .recorded:
-                break
+                await self?.settle(ticket: requestTicket)
             }
         }
     }
 
+    /// Shows a streamed or final suggestion for `requestTicket`. The reducer
+    /// only ever grows the visible text, so a final that equals or trims the
+    /// streamed prefix leaves the ghost exactly where the writer saw it.
     @MainActor
     private func present(_ text: String, ticket requestTicket: InlineSuggestionTicket) {
         guard let liveClient = client() else { return }
         guard !stopForSecureInput(liveClient) else { return }
         let currentContext = contextBeforeCaret(liveClient)
-        guard ticket(for: liveClient, context: currentContext) == requestTicket else { return }
+        guard ticket(for: liveClient, context: currentContext) == requestTicket else {
+            apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
+            return
+        }
         guard SuggestionActivationPolicy.isAtGrowingEdge(
             trailingTextAfterCaret: trailingTextAfterCaret(liveClient)
         ) else {
             dismiss(liveClient)
             return
         }
-        apply(state.reduce(.present(text, requestTicket)), to: liveClient)
+        apply(state.reduce(.update(text, requestTicket)), to: liveClient)
+    }
+
+    /// The request ended without a longer suggestion. A partial that is
+    /// already visible stays — it passed the same cleaner — and silence and
+    /// retraction are both worse than a shorter word-boundary ghost. Only a
+    /// still-pending ticket is released.
+    @MainActor
+    private func settle(ticket requestTicket: InlineSuggestionTicket) {
+        guard state.visibleTicket != requestTicket, let liveClient = client() else { return }
+        apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
     }
 
     private func cancelPendingWork() {

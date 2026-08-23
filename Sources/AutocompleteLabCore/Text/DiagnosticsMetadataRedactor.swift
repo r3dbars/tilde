@@ -68,7 +68,10 @@ public enum DiagnosticsMetadataRedactor {
              // (`waitedMilliseconds` on `personal-lookup-timing`), and the
              // socket request total (`requestMilliseconds` on
              // `ghost-request-timing`) — all whole milliseconds, no text.
-             "milliseconds", "ocrMilliseconds", "waitedMilliseconds", "requestMilliseconds":
+             "milliseconds", "ocrMilliseconds", "waitedMilliseconds", "requestMilliseconds",
+             // Streaming split on `llama-completion-timing`: first token and
+             // first complete-word partial, whole milliseconds, no text.
+             "firstTokenMilliseconds", "firstPartialMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall":
             safe = value == "true" || value == "false"
