@@ -196,8 +196,17 @@ public enum ScreenScene {
     private static let bubbleMaxWidth = 0.85
     private static let verticalBandCount = 10
 
+    /// Width is measured against the block's own window when the frame is
+    /// known, for the same reason speaker bucketing is window-relative: a
+    /// 340pt bubble in a normal-sized Messages window is 11% of a 3024px
+    /// display and would fail `bubbleMinWidth` while being a perfectly
+    /// ordinary message. Without a window frame the display is the only
+    /// reference there is.
     private static func isBubbleCandidate(_ block: OCRBlock) -> Bool {
-        let width = block.boundingBox.width
+        var width = block.boundingBox.width
+        if let windowFrame = block.windowFrame, windowFrame.width > 0 {
+            width = block.boundingBox.width / windowFrame.width
+        }
         return width >= bubbleMinWidth && width <= bubbleMaxWidth && !block.text.isEmpty
     }
 
