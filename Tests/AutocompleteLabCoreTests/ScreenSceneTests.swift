@@ -210,6 +210,41 @@ struct ScreenSceneTests {
         #expect(scene.conversationTurns.allSatisfy { $0.speaker == .other })
     }
 
+    @Test("Nothing at or below the compose field counts as a message")
+    func composeFieldIsTheConversationFloor() {
+        // Live 2026-08-23 geometry: five bubbles, then the user's wrapped
+        // typed text in the reply box, then a label under the box.
+        let frame = ScreenScene.NormalizedRect(x: 0.4, y: 0.2, width: 0.2, height: 0.6)
+        let blocks = [
+            block("Hey, are you free Thursday afternoon?", x: 0.41, y: 0.45, width: 0.15, window: slack, windowFrame: frame),
+            block("Should be, what time were you thinking?", x: 0.48, y: 0.50, width: 0.12, window: slack, windowFrame: frame),
+            block("Could you make 3pm on Thursday?", x: 0.41, y: 0.56, width: 0.14, window: slack, windowFrame: frame),
+            block("Let me check my calendar real quick.", x: 0.45, y: 0.60, width: 0.15, window: slack, windowFrame: frame),
+            block("No rush, just let me know today if you can.", x: 0.41, y: 0.64, width: 0.13, window: slack, windowFrame: frame),
+            // Typed text read back from the compose field, wrapped into fragments.
+            block("I can make it", x: 0.48, y: 0.71, width: 0.05, window: slack, windowFrame: frame),
+            block("on Thursday", x: 0.48, y: 0.73, width: 0.05, window: slack, windowFrame: frame),
+            block("type your reply above", x: 0.47, y: 0.77, width: 0.07, window: slack, windowFrame: frame),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "I can make it on Thursday ")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.last?.text == "No rush, just let me know today if you can.")
+        #expect(scene.conversationTurns.last?.speaker == .other)
+        #expect(!scene.conversationTurns.contains { $0.text.contains("type your reply") })
+        #expect(!scene.conversationTurns.contains { $0.text.contains("I can make it") })
+    }
+
+    @Test("With nothing typed there is no floor and the bottom bubbles are used as before")
+    func emptyFieldKeepsLegacySelection() {
+        let frame = ScreenScene.NormalizedRect(x: 0.4, y: 0.2, width: 0.2, height: 0.6)
+        let blocks = [
+            block("Could you make 3pm on Thursday?", x: 0.41, y: 0.45, width: 0.14, window: slack, windowFrame: frame),
+            block("No rush, just let me know today if you can.", x: 0.41, y: 0.64, width: 0.13, window: slack, windowFrame: frame),
+        ]
+        let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.conversationTurns.count == 2)
+    }
+
     @Test("Speaker falls back to other when the window frame is unknown, even with attribution")
     func speakerFallsBackToOtherWithoutWindowFrame() {
         // Bypass the `block()` helper's "window implies fullscreen frame"
