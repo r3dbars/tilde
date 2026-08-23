@@ -19,7 +19,16 @@ enum ScreenTextRecognizer {
         case requestFailed
     }
 
+    /// Runs Vision at utility priority so OCR never competes with the
+    /// completion request it is meant to inform (2026-08-23: a capture
+    /// overlapped 52% of ghost requests and added ~45ms to their p99).
     static func recognize(image: CGImage) async throws -> [RecognizedBlock] {
+        try await Task.detached(priority: .utility) {
+            try await recognizeNow(image: image)
+        }.value
+    }
+
+    private static func recognizeNow(image: CGImage) async throws -> [RecognizedBlock] {
         try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error {
@@ -39,8 +48,16 @@ enum ScreenTextRecognizer {
                 }
                 continuation.resume(returning: blocks)
             }
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
+            // `.fast` without language correction, at native capture
+            // resolution. Measured 2026-08-23 on synthetic iMessage / Slack /
+            // Mail / desktop frames with exact ground truth: 9-15x faster
+            // than `.accurate` + correction with equal or better word recall
+            // and line exactness — correction rewrote wrapped UI text into
+            // non-literal wording. `.fast` degrades sharply on downscaled
+            // input, so the capture paths must keep passing full-resolution
+            // pixels; lower resolution is not the lever here.
+            request.recognitionLevel = .fast
+            request.usesLanguageCorrection = false
 
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             do {

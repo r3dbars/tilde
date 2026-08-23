@@ -48,15 +48,18 @@ actor ScreenCaptureService {
     /// `defaultStalenessCapSeconds`), infrequent enough that most captures
     /// still get the window-only path's ~2x OCR speedup and exact
     /// attribution.
-    private var captureCounter = 0
-    private static let fullDisplayCaptureInterval = 3
+    /// Window-first capture (`CaptureKindPolicy`): the display is read only
+    /// when the last window capture found no conversation and the previous
+    /// display read has aged past the scene staleness window.
+    private var lastWindowSceneHadConversation: Bool?
+    private var lastFullDisplayCaptureAt: Date?
 
     /// What a full or region OCR pass leaves behind for the NEXT capture on
     /// the same path to diff against: the luminance grid it was computed
     /// from, the geometry it was captured under, and the resulting snapshot
     /// (its blocks are what `.unchanged` reuses and what `.region` merges
     /// into). Window and display captures keep entirely separate baselines
-    /// — they alternate every `fullDisplayCaptureInterval` captures, and a
+    /// — `CaptureKindPolicy` switches between them, and a
     /// display frame must never be diffed against a window frame or vice
     /// versa. There is nothing else to "reset" on a kind switch: each path
     /// only ever reads and writes its own baseline, and `CaptureChangeDetector`'s
@@ -95,7 +98,7 @@ actor ScreenCaptureService {
     private let now: @Sendable () -> Date
     private let diagnostics: @Sendable (String, [String: String]) -> Void
     /// "OCR only the changed screen region" experiment arm
-    /// (`TildeSettings.incrementalOCREnabled`, default true). Read fresh on
+    /// (`TildeSettings.incrementalOCREnabled`, default false). Read fresh on
     /// every capture, same live-provider pattern as `enabled`/`excludedApps`
     /// — a menu-level kill switch takes effect on the very next capture with
     /// nothing to keep in sync. `false` restores today's always-full-OCR
@@ -446,8 +449,8 @@ actor ScreenCaptureService {
     }
 
     /// Chooses window-only vs full-display capture and dispatches to the
-    /// matching path. `captureCounter` decides the periodic full-display
-    /// pass (see its doc comment); on any capture that isn't forced full,
+    /// matching path. `CaptureKindPolicy` decides when the display is worth
+    /// reading (see its doc comment); on any capture that isn't forced full,
     /// `frontmostWindow` still has to actually find a layer-0 window or this
     /// falls back to full-display anyway — a window-only capture is never
     /// attempted blind.
@@ -462,12 +465,15 @@ actor ScreenCaptureService {
             return .captureFailed
         }
 
-        captureCounter += 1
-        let forceFullDisplay = forceFullDisplay
-            || captureCounter % Self.fullDisplayCaptureInterval == 0
+        let kind = CaptureKindPolicy.kind(
+            forcedFullDisplay: forceFullDisplay,
+            lastWindowSceneHadConversation: lastWindowSceneHadConversation,
+            secondsSinceLastFullDisplay: lastFullDisplayCaptureAt.map { moment.timeIntervalSince($0) },
+            stalenessCapSeconds: ScreenScene.defaultStalenessCapSeconds
+        )
         let zRanks = Self.onScreenZOrderRanks()
 
-        if !forceFullDisplay, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
+        if kind == .window, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
             return await performWindowCapture(
                 window: window,
                 display: display,
@@ -500,8 +506,13 @@ actor ScreenCaptureService {
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int(window.frame.width.rounded()))
-        configuration.height = max(1, Int(window.frame.height.rounded()))
+        // Capture at the display's native pixel scale, not point size.
+        // `.fast` OCR reads 1x (half-resolution on Retina) text as noise;
+        // the 2026-08-23 sweep measured its 9-15x speedup only at native
+        // resolution, and the live app was silently capturing at 1x.
+        let scale = Self.pixelScale(of: display)
+        configuration.width = max(1, Int((window.frame.width * scale).rounded()))
+        configuration.height = max(1, Int((window.frame.height * scale).rounded()))
         configuration.showsCursor = false
         configuration.capturesAudio = false
 
@@ -646,6 +657,14 @@ actor ScreenCaptureService {
             latestSnapshot = snapshot
             latestWindowSnapshot = snapshot
             lastCaptureAt = moment
+            // Count-free probe of the thing the display read would add:
+            // if this window already reads as a conversation, other
+            // windows' reference snippets are never consulted.
+            lastWindowSceneHadConversation = ScreenScene.classify(
+                snapshot: snapshot,
+                frontmostBundleID: window.owningApplication?.bundleIdentifier,
+                fieldText: ""
+            ).mode == .replying
             windowBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
                 "screen-capture-completed",
@@ -690,8 +709,9 @@ actor ScreenCaptureService {
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let configuration = SCStreamConfiguration()
-        configuration.width = display.width
-        configuration.height = display.height
+        let scale = Self.pixelScale(of: display)
+        configuration.width = Int((Double(display.width) * scale).rounded())
+        configuration.height = Int((Double(display.height) * scale).rounded())
         configuration.showsCursor = false
         configuration.capturesAudio = false
 
@@ -857,6 +877,7 @@ actor ScreenCaptureService {
             )
             latestSnapshot = snapshot
             lastCaptureAt = moment
+            lastFullDisplayCaptureAt = moment
             displayBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
                 "screen-capture-completed",
@@ -896,6 +917,23 @@ actor ScreenCaptureService {
     /// level like the rest of ScreenCaptureKit-shaped code in this type (see
     /// the type doc comment), so this is the one piece of the duty-cycle
     /// math that CAN be proven without a live display.
+    /// Backing pixels per point for the display being captured; 2 on
+    /// Retina panels, 1 otherwise. Falls back to 1 when the display has no
+    /// pixel dimensions (mirrored/virtual displays during setup).
+    static func pixelScale(of display: SCDisplay) -> Double {
+        // `CGDisplayPixelsWide` reports the LOGICAL width in scaled Retina
+        // modes (it equals `display.width`), which is exactly the 1x trap
+        // this helper exists to avoid. The display mode carries the true
+        // backing size.
+        let mode = CGDisplayCopyDisplayMode(display.displayID)
+        return pixelScale(pixelWidth: mode?.pixelWidth ?? 0, pointWidth: display.width)
+    }
+
+    static func pixelScale(pixelWidth: Int, pointWidth: Int) -> Double {
+        guard pixelWidth > 0, pointWidth > 0 else { return 1 }
+        return max(1, (Double(pixelWidth) / Double(pointWidth)).rounded())
+    }
+
     static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
     }

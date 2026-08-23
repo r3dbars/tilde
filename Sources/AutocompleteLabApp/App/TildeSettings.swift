@@ -147,8 +147,13 @@ struct TildeSettings {
     /// disabling the experiment costs nothing extra either. `ocrScope` on
     /// `screen-capture-completed` is this experiment's measurement
     /// instrument regardless of which arm is live.
+    /// Off by default since 2026-08-23: with `.fast` OCR a full window read
+    /// costs ~10-30ms, and the region merge kept stale lines from a
+    /// previous conversation alive (a chat about a calendar leaked
+    /// "calendar link" into a reply about a lease). An explicit choice
+    /// still persists either way.
     var incrementalOCREnabled: Bool {
-        get { flag(.incrementalOCREnabled) }
+        get { keyboard.object(forKey: KeyboardKey.incrementalOCREnabled.rawValue) as? Bool ?? false }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.incrementalOCREnabled.rawValue) }
     }
 
