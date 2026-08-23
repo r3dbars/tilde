@@ -27,6 +27,12 @@ actor ScreenCaptureService {
     private var lastCaptureAt: Date?
     private var lastActivityAt: Date?
     private(set) var latestSnapshot: ScreenSnapshot?
+    /// The most recent window-only capture, kept separately from
+    /// `latestSnapshot` so a full-display read landing a second later can
+    /// never replace a good conversation read with a weaker one (display
+    /// reads attribute blocks to windows best-effort; window reads are
+    /// exact). `freshScene` asks this one first.
+    private(set) var latestWindowSnapshot: ScreenSnapshot?
     private var pendingTypingPauseTask: Task<Void, Never>?
     private var pendingTextFieldCaptureTask: Task<Void, Never>?
     private var activeTextFieldSessionIdentifier: String?
@@ -224,29 +230,44 @@ actor ScreenCaptureService {
         fieldText: String,
         now: Date = Date()
     ) -> ScreenScene.Scene? {
-        guard let snapshot = latestSnapshot else { return nil }
+        guard latestSnapshot != nil else { return nil }
         let currentlyExcluded = excludedApps()
-        let filteredSnapshot: ScreenSnapshot
-        if currentlyExcluded.isEmpty {
-            filteredSnapshot = snapshot
-        } else {
+        func filtered(_ snapshot: ScreenSnapshot?) -> ScreenSnapshot? {
+            guard let snapshot else { return nil }
+            guard !currentlyExcluded.isEmpty else { return snapshot }
             let keptBlocks = snapshot.blocks.filter {
                 guard let owner = $0.windowOwnerBundleIdentifier else { return true }
                 return !currentlyExcluded.contains(owner)
             }
-            filteredSnapshot = ScreenSnapshot(
+            return ScreenSnapshot(
                 capturedAt: snapshot.capturedAt,
                 displayID: snapshot.displayID,
                 blocks: keptBlocks
             )
         }
         let classificationStart = self.now()
-        let scene = ScreenScene.freshScene(
-            from: filteredSnapshot,
-            now: now,
-            frontmostBundleID: frontmostBundleID,
-            fieldText: fieldText
-        )
+        // Window read first: it is the exact read of the app being typed
+        // into. Only when it holds no conversation does the latest read of
+        // any kind get a turn — that is where reference snippets from
+        // other windows come from.
+        var scene: ScreenScene.Scene?
+        if latestWindowSnapshot != latestSnapshot,
+           let windowScene = ScreenScene.freshScene(
+               from: filtered(latestWindowSnapshot),
+               now: now,
+               frontmostBundleID: frontmostBundleID,
+               fieldText: fieldText
+           ),
+           windowScene.mode == .replying {
+            scene = windowScene
+        } else {
+            scene = ScreenScene.freshScene(
+                from: filtered(latestSnapshot),
+                now: now,
+                frontmostBundleID: frontmostBundleID,
+                fieldText: fieldText
+            )
+        }
         // Count-only diagnostics (2026-08-16 dogfood fix): mode plus two
         // integers, never the OCR'd text itself, so a classification going
         // wrong live is never opaque again — this was the exact gap that
@@ -280,6 +301,10 @@ actor ScreenCaptureService {
     /// `attemptCapture`; nothing outside tests calls this.
     func setLatestSnapshotForTesting(_ snapshot: ScreenSnapshot?) {
         latestSnapshot = snapshot
+    }
+
+    func setLatestWindowSnapshotForTesting(_ snapshot: ScreenSnapshot?) {
+        latestWindowSnapshot = snapshot
     }
 
     func noteCompletionActivity() {
@@ -630,6 +655,7 @@ actor ScreenCaptureService {
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
             let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
             latestSnapshot = snapshot
+            latestWindowSnapshot = snapshot
             lastCaptureAt = moment
             // Count-free probe of the thing the display read would add:
             // if this window already reads as a conversation, other
