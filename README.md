@@ -39,10 +39,14 @@ login:
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
 text the user produces to the Tilde app. The app stores a local encrypted event
-log and quietly compares two bounded personal next-word recipes. The comparison
-is shadow-only: neither recipe changes visible suggestions. Its bounded lifetime
-and daily aggregate checkpoint is encrypted in the same app-owned history log as the
-batch it scores; it contains no words, candidate text, or per-case rows.
+log and quietly compares two bounded personal next-word recipes. That paired
+comparison remains shadow-only, but the same opt-in also lets a conservative,
+read-only personal prediction run beside Gemma. When it has enough local
+support, it can replace the visible base suggestion; otherwise Gemma remains.
+Serving never changes the paired score or trains Gemma. The comparison's bounded
+lifetime and daily aggregate checkpoint is encrypted in the same app-owned
+history log as the batch it scores; it contains no words, candidate text, or
+per-case rows.
 Tilde has no cloud inference, analytics, sync, upload, or accept sounds. The
 separate first-run asset phase may make an HTTPS request only to the immutable
 model URL above; it sends no typed text, screen text, prompt, history, or model
