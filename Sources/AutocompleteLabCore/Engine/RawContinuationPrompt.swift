@@ -70,29 +70,30 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         case .chat:
             // The examples carry a Conversation block so the model learns
             // that the block above "Text:" is the thread it is replying to
-            // and that the continuation finishes the typed clause with a
-            // fact from that thread. Measured 2026-08-23 on 24 synthetic
-            // threads x 3 typed prefixes (Gemma 4 E2B, greedy): relevant
-            // keyword hit rate 39% -> 74%, and the "fresh message glued
-            // onto the typed words" failure disappeared. Example content is
-            // deliberately unlike any eval thread.
+            // and that the continuation finishes the typed clause. They
+            // deliberately contain no numbers, times, days, or place nouns:
+            // a 2B model copies specifics from examples into live replies
+            // (measured 2026-08-23: fact-bearing examples leaked into 43%
+            // of outputs and invented facts in 31%; these examples leak
+            // into 1% and invent in 14%, with keyword relevance 76%).
             return """
             Real chat messages, continued naturally in the same casual voice.
             Continue You's message, replying to Them's last message. Output only the rest of the message.
+            Use only facts from the Conversation above. Never reuse wording from the examples.
 
             Conversation:
-            Them: did you want the blue one or the green one
-            You: honestly either is fine
+            Them: should we do the earlier one or the later one?
+            You: earlier is fine
 
-            Text: ok let's go with
-            Continuation: the green one, it matches the couch.
+            Text: let's do
+            Continuation: the earlier one then.
 
             Conversation:
-            Them: landing around 6, can someone grab me?
-            You: sure, which terminal
+            Them: are you still coming or should I go without you?
+            You: still coming
 
-            Text: I'll be
-            Continuation: outside arrivals at 6, text me when you land.
+            Text: yeah I'm
+            Continuation: still coming, just running a bit behind.
 
 
             """
