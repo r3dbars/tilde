@@ -70,6 +70,9 @@ public struct InlineSuggestionState: Equatable, Sendable {
     public enum Event: Equatable, Sendable {
         case awaitSuggestion(InlineSuggestionTicket)
         case present(String, InlineSuggestionTicket)
+        /// Extends an already-visible streamed suggestion without recording a
+        /// second impression. The ticket must still match the live field.
+        case update(String, InlineSuggestionTicket)
         case type(String, current: InlineSuggestionTicket?, advanced: InlineSuggestionTicket?)
         case acceptNextWord(
             current: InlineSuggestionTicket?,
@@ -77,6 +80,9 @@ public struct InlineSuggestionState: Equatable, Sendable {
             utf16Limit: Int
         )
         case acceptAll(current: InlineSuggestionTicket?)
+        /// Dismisses only the request that still owns pending or visible
+        /// state. A late callback cannot erase a newer request.
+        case dismissTicket(InlineSuggestionTicket)
         case dismiss
     }
 
@@ -123,6 +129,25 @@ public struct InlineSuggestionState: Equatable, Sendable {
             visibleTicket = ticket
             presentationAccepted = false
             return [.shown, .show(text)]
+
+        case let .update(text, ticket):
+            guard !text.isEmpty else { return [] }
+            if pendingTicket == ticket {
+                pendingTicket = nil
+                visibleText = text
+                visibleTicket = ticket
+                presentationAccepted = false
+                return [.shown, .show(text)]
+            }
+            guard visibleTicket == ticket else { return [] }
+            // A stream may only grow the already-visible prefix. Rewrites,
+            // shrinking frames, and duplicate frames are ignored so marked
+            // text never flickers or moves backwards.
+            guard text.count > visibleText.count, text.hasPrefix(visibleText) else { return [] }
+            visibleText = text
+            // `show` replaces the current marked text in IMKit; no hide/show
+            // round-trip keeps streamed updates quiet while the user types.
+            return [.show(text)]
 
         case let .type(grapheme, current, advanced):
             pendingTicket = nil
@@ -191,6 +216,16 @@ public struct InlineSuggestionState: Equatable, Sendable {
             visibleTicket = nil
             presentationAccepted = true
             return [.hide, .insert(accepted), .accepted]
+
+        case let .dismissTicket(ticket):
+            guard pendingTicket == ticket || visibleTicket == ticket else { return [] }
+            let effects: [Effect] = visibleTicket == ticket && isVisible ? [.hide] : []
+            if pendingTicket == ticket { pendingTicket = nil }
+            if visibleTicket == ticket {
+                visibleText = ""
+                visibleTicket = nil
+            }
+            return effects
 
         case .dismiss:
             pendingTicket = nil
