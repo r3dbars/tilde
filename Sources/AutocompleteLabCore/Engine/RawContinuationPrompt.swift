@@ -140,7 +140,10 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     /// spend of the shared budget, regardless of how much the field text
     /// left over. Keeps a near-empty field from handing the whole 3,000-char
     /// budget to OCR'd screen text.
-    public static let maxSceneContextCharacters = 1_000
+    /// Raised 1,000 -> 3,000 on 2026-08-23 (owner call): the scaffold+scene
+    /// prefix is cache_prompt-cached across keystrokes within a scene, so a
+    /// larger block costs one prefill per scene change, not per keystroke.
+    public static let maxSceneContextCharacters = 3_000
 
     /// `register` selects the scaffold voice from the host app's identity.
     /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
