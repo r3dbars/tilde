@@ -68,14 +68,31 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public static func scaffold(for register: ContinuationRegister) -> String {
         switch register {
         case .chat:
+            // The examples carry a Conversation block so the model learns
+            // that the block above "Text:" is the thread it is replying to
+            // and that the continuation finishes the typed clause with a
+            // fact from that thread. Measured 2026-08-23 on 24 synthetic
+            // threads x 3 typed prefixes (Gemma 4 E2B, greedy): relevant
+            // keyword hit rate 39% -> 74%, and the "fresh message glued
+            // onto the typed words" failure disappeared. Example content is
+            // deliberately unlike any eval thread.
             return """
             Real chat messages, continued naturally in the same casual voice.
+            Continue You's message, replying to Them's last message. Output only the rest of the message.
 
-            Text: yeah I think we can
-            Continuation: make that work by friday.
+            Conversation:
+            Them: did you want the blue one or the green one
+            You: honestly either is fine
 
-            Text: running like 10 min late but
-            Continuation: save me a seat, almost there.
+            Text: ok let's go with
+            Continuation: the green one, it matches the couch.
+
+            Conversation:
+            Them: landing around 6, can someone grab me?
+            You: sure, which terminal
+
+            Text: I'll be
+            Continuation: outside arrivals at 6, text me when you land.
 
 
             """

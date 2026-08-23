@@ -43,6 +43,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         let prompt = Self.promptByAddingIntentFutures(
             to: recipe.prompt,
+            register: register,
             scene: scene,
             textBeforeCursor: textBeforeCursor
         )
@@ -90,11 +91,17 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         return suggestion
     }
 
+    /// The chat register gets no hint: on the 2026-08-23 synthetic eval the
+    /// numeric label line placed before "Continuation:" lowered keyword hit
+    /// rate (46% -> 39%) and produced the only empty outputs; the
+    /// conversation-aware scaffold carries the intent instead.
     static func promptByAddingIntentFutures(
         to prompt: String,
+        register: ContinuationRegister,
         scene: ScreenScene.Scene?,
         textBeforeCursor: String
     ) -> String {
+        guard register != .chat else { return prompt }
         let futures = intentFutures(scene: scene, textBeforeCursor: textBeforeCursor)
         let summary = IntentFuturesPlanner.promptHint(for: futures)
         guard !summary.isEmpty,
