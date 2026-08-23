@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 
-from check_runtime_network_egress import model_request, require_owned_model
+from check_runtime_network_egress import model_request as production_model_request, require_owned_model
 
 
 SCHEMA = "tilde.raw-model-continuation-eval.v1"
@@ -38,6 +38,14 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$")
 
 class ProtocolError(Exception):
     """The local model helper did not follow its documented HTTP contract."""
+
+
+def model_request(context):
+    """Use the production prompt recipe but request one aggregate final body."""
+
+    request = production_model_request(context)
+    request["stream"] = False
+    return request
 
 
 def canonical_text(text):
