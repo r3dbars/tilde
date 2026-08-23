@@ -249,8 +249,15 @@ public enum ScreenScene {
     /// budget from the newest turn backward so the freshest message never
     /// gets truncated ahead of older ones.
     private static func conversationTurns(from blocks: [OCRBlock], fieldText: String) -> [ConversationTurn] {
+        // The compose field is the floor of the conversation: the line
+        // where the user's own typed text appears, and everything under
+        // it (a placeholder, "Delivered", a hint label), is not a message.
+        // Live 2026-08-23: the bottom-4 rule read the typed text back as
+        // "Them" and a label under the field as the last message.
+        let composeFloor = composeFieldTop(in: blocks, fieldText: fieldText)
         let usable = blocks
             .filter { isBubbleCandidate($0) && !isDuplicate($0.text, of: fieldText) }
+            .filter { block in composeFloor.map { block.boundingBox.y < $0 } ?? true }
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { $0.boundingBox.y < $1.boundingBox.y }
 
@@ -422,6 +429,33 @@ public enum ScreenScene {
     /// is doing the containing (e.g. "ok", "yes") since they'd trivially
     /// "match" almost any text without actually being the same message.
     private static let dedupeMinimumLength = 6
+    /// Top edge of the highest block that reads back the user's own typed
+    /// text, or `nil` when none does (empty field, or the field is
+    /// scrolled out of view). A wrapped compose field yields several
+    /// fragments; any fragment of two or more words found in the field
+    /// text counts, so the floor sits at the first such line.
+    private static func composeFieldTop(in blocks: [OCRBlock], fieldText: String) -> Double? {
+        let field = normalizedForDedupe(fieldText)
+        guard field.count >= dedupeMinimumLength else { return nil }
+        let matches = blocks.filter { block in
+            let candidate = normalizedForDedupe(block.text)
+            guard candidate.count >= dedupeMinimumLength,
+                  candidate.split(separator: " ").count >= 2 else { return false }
+            return field.contains(candidate) || candidate.contains(field)
+        }
+        // A compose field sits in the lower half of its window. A match
+        // higher up is a quoted or echoed message, not the field; dedupe
+        // still drops it, but it must not cut the thread beneath it.
+        guard let lowest = matches.max(by: { $0.boundingBox.y < $1.boundingBox.y }),
+              windowRelativeY(of: lowest) >= 0.5 else { return nil }
+        return matches.map(\.boundingBox.y).min()
+    }
+
+    private static func windowRelativeY(of block: OCRBlock) -> Double {
+        guard let frame = block.windowFrame, frame.height > 0 else { return block.boundingBox.y }
+        return (block.boundingBox.y - frame.y) / frame.height
+    }
+
     private static func isDuplicate(_ candidateText: String, of fieldText: String) -> Bool {
         let candidate = normalizedForDedupe(candidateText)
         let field = normalizedForDedupe(fieldText)
