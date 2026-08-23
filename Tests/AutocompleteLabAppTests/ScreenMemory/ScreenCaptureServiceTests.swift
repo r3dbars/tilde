@@ -213,6 +213,38 @@ struct ScreenCaptureServiceTests {
         #expect(stale == nil)
     }
 
+    @Test("freshScene prefers a fresh window read with a conversation over a later display read without one")
+    func freshScenePrefersWindowConversation() async {
+        let service = makeService()
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let slack = "com.tinyspeck.slackmacgap"
+        let frame = NormalizedDisplayRect(x: 0.3, y: 0.2, width: 0.4, height: 0.5)
+        let windowRead = ScreenSnapshot(capturedAt: t0, displayID: 1, blocks: [
+            ScreenSnapshot.TextBlock(text: "want me to grab it for you?",
+                boundingBox: NormalizedDisplayRect(x: 0.31, y: 0.30, width: 0.20, height: 0.03),
+                windowOwnerBundleIdentifier: slack, windowFrame: frame),
+            ScreenSnapshot.TextBlock(text: "yes please",
+                boundingBox: NormalizedDisplayRect(x: 0.48, y: 0.50, width: 0.20, height: 0.03),
+                windowOwnerBundleIdentifier: slack, windowFrame: frame),
+        ])
+        // A later full-display read whose attribution missed the window.
+        let displayRead = ScreenSnapshot(capturedAt: t0.addingTimeInterval(2), displayID: 1, blocks: [
+            ScreenSnapshot.TextBlock(text: "want me to grab it for you?",
+                boundingBox: NormalizedDisplayRect(x: 0.31, y: 0.30, width: 0.20, height: 0.03),
+                windowOwnerBundleIdentifier: nil, windowFrame: nil),
+        ])
+        await service.setLatestWindowSnapshotForTesting(windowRead)
+        await service.setLatestSnapshotForTesting(displayRead)
+
+        let scene = await service.freshScene(frontmostBundleID: slack, fieldText: "", now: t0.addingTimeInterval(3))
+        #expect(scene?.mode == .replying)
+        #expect(scene?.conversationTurns.count == 2)
+
+        // Once the window read is stale, the latest read is all there is.
+        let later = await service.freshScene(frontmostBundleID: slack, fieldText: "", now: t0.addingTimeInterval(21))
+        #expect(later?.mode != .replying)
+    }
+
     /// Fix item 4 of "Classify scenes by geometry, not host app": a
     /// classification must never be opaque again. Count-only -- mode plus
     /// two integers, never any of the OCR'd text.
