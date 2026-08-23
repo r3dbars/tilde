@@ -259,17 +259,27 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 return
             }
 
-            let completion = Task {
-                try await self.engine.suggestion(
-                    textBeforeCursor: completionRequest.context,
-                    appBundleIdentifier: completionRequest.app,
-                    scene: scene
-                )
-            }
             // Read fresh, before either task starts, so the personal lookup
             // (if any) runs CONCURRENTLY with the llama call, not after it —
             // "never lengthen latency" (docs/plans/road-to-paid.md Phase 3).
             let personalSuggestionsEnabled = self.personalSuggestionsGate?() ?? false
+            // Stream stable complete-word prefixes to peers that asked for
+            // them. Personal suggestions may replace the base prefix, so
+            // those requests stay final-only: a visible stream is never
+            // rewritten underneath the writer.
+            let partials = PartialResponseSink(
+                connection: connection,
+                enabled: completionRequest.supportsStreamingResponses && !personalSuggestionsEnabled
+            )
+            let completion = Task {
+                try await self.engine.suggestion(
+                    textBeforeCursor: completionRequest.context,
+                    appBundleIdentifier: completionRequest.app,
+                    scene: scene,
+                    onPartialSuggestion: { partials.send($0) }
+                )
+            }
+            partials.onWriteFailure = { completion.cancel() }
             let personalPredictionTask: Task<PersonalNextWordPrediction?, Never>? = {
                 guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
                     return nil
@@ -507,6 +517,41 @@ final class GhostBrainServerHost: @unchecked Sendable {
     }
 
     private enum WireError: Error { case invalid }
+
+    /// Serializes partial writes from the engine's stream loop. A failed
+    /// write means the input method is gone or wedged; the sink then cancels
+    /// inference instead of letting the helper run for nobody.
+    private final class PartialResponseSink: @unchecked Sendable {
+        private let connection: Int32
+        private let enabled: Bool
+        private let lock = NSLock()
+        private var failed = false
+        private var failureHandler: (() -> Void)?
+
+        init(connection: Int32, enabled: Bool) {
+            self.connection = connection
+            self.enabled = enabled
+        }
+
+        var onWriteFailure: (() -> Void)? {
+            get { lock.withLock { failureHandler } }
+            set { lock.withLock { failureHandler = newValue } }
+        }
+
+        func send(_ partial: CompletionSuggestion) {
+            guard enabled else { return }
+            let text = String(partial.visibleText.drop(while: \Character.isWhitespace))
+            guard !text.isEmpty else { return }
+            lock.lock()
+            defer { lock.unlock() }
+            guard !failed else { return }
+            if !GhostBrainServerHost.write(.partial(text), to: connection) {
+                failed = true
+                DiagnosticsLog.shared.record("ghost-partial-write-failed", metadata: [:])
+                failureHandler?()
+            }
+        }
+    }
 
     private static func write(_ response: GhostBrainResponse, to fd: Int32) -> Bool {
         guard var data = try? JSONEncoder().encode(response) else { return false }

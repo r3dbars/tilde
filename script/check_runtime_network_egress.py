@@ -354,7 +354,7 @@ def model_request(context: str) -> dict[str, object]:
         "temperature": 0,
         "cache_prompt": True,
         "stop": ["\n"],
-        "stream": False,
+        "stream": True,
     }
 
 
@@ -369,16 +369,29 @@ def disposable_completion(port: int) -> int:
     with LOCAL_HTTP.open(request, timeout=60) as response:
         if response.status != 200:
             raise RuntimeError(f"llama-server completion returned HTTP {response.status}")
-        payload = json.loads(response.read())
-    completion = payload.get("content")
-    if not isinstance(completion, str) or not completion.strip():
+        pieces: list[str] = []
+        for raw_line in response:
+            line = raw_line.decode("utf-8", errors="strict").strip()
+            if not line.startswith("data:"):
+                continue
+            value = line[len("data:"):].strip()
+            if value == "[DONE]":
+                continue
+            payload = json.loads(value)
+            piece = payload.get("content")
+            if isinstance(piece, str) and piece:
+                pieces.append(piece)
+            if payload.get("stop") is True:
+                break
+    completion = "".join(pieces)
+    if not completion.strip():
         raise RuntimeError("direct synthetic model completion was empty or malformed")
     return len(completion)
 
 
 def selftest() -> None:
     request = model_request(SYNTHETIC_CONTEXT)
-    assert request["stream"] is False
+    assert request["stream"] is True
     assert request["temperature"] == 0
     assert request["stop"] == ["\n"]
     assert request["n_predict"] == 20
