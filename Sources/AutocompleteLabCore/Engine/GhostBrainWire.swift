@@ -12,6 +12,12 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
     public let app: String?
     public let personalHistoryEvents: [PersonalHistoryEvent]?
     public let screenMemoryEvent: ScreenMemoryInputEvent?
+    /// Capability negotiation keeps version-1 peers compatible in both
+    /// directions. Older apps ignore this field; older input methods omit it
+    /// and therefore receive only the terminal response from a newer app.
+    public let streamResponses: Bool?
+
+    public var supportsStreamingResponses: Bool { streamResponses == true }
 
     public init(context: String, app: String?) {
         self.v = Self.version
@@ -19,6 +25,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.app = app
         self.personalHistoryEvents = nil
         self.screenMemoryEvent = nil
+        self.streamResponses = true
     }
 
     public init(personalHistoryEvents: [PersonalHistoryEvent]) {
@@ -27,6 +34,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.app = nil
         self.personalHistoryEvents = personalHistoryEvents
         self.screenMemoryEvent = nil
+        self.streamResponses = nil
     }
 
     public init(screenMemoryEvent: ScreenMemoryInputEvent) {
@@ -35,6 +43,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.app = nil
         self.personalHistoryEvents = nil
         self.screenMemoryEvent = screenMemoryEvent
+        self.streamResponses = nil
     }
 }
 
@@ -71,9 +80,34 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
 
     public let outcome: Outcome
     public let suggestion: String?
+    /// Every socket line is an event. `final == false` is a stable streamed
+    /// prefix; the terminal line always carries `final == true`.
+    public let final: Bool
+
+    public init(outcome: Outcome, suggestion: String?, final: Bool = true) {
+        self.outcome = outcome
+        self.suggestion = suggestion
+        self.final = final
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case outcome, suggestion, final
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        outcome = try container.decode(Outcome.self, forKey: .outcome)
+        suggestion = try container.decodeIfPresent(String.self, forKey: .suggestion)
+        // A response from the pre-stream protocol was necessarily terminal.
+        final = try container.decodeIfPresent(Bool.self, forKey: .final) ?? true
+    }
 
     public static func suggestion(_ text: String) -> Self {
         text.isEmpty ? .silence : Self(outcome: .suggestion, suggestion: text)
+    }
+
+    public static func partial(_ text: String) -> Self {
+        Self(outcome: .suggestion, suggestion: text, final: false)
     }
 
     public static let silence = Self(outcome: .silence, suggestion: nil)

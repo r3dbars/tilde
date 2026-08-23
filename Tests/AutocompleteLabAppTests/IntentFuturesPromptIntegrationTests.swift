@@ -11,9 +11,10 @@ struct IntentFuturesPromptIntegrationTests {
             conversationTurns: [.init(speaker: .other, text: "Can you send it tonight?")],
             referenceSnippets: []
         )
-        let recipe = RawContinuationPrompt(textBeforeCursor: "I can ", register: .chat, scene: scene)
+        let recipe = RawContinuationPrompt(textBeforeCursor: "I can ", register: .email, scene: scene)
         let prompt = LlamaCompletionEngine.promptByAddingIntentFutures(
             to: recipe.prompt,
+            register: .email,
             scene: scene,
             textBeforeCursor: "I can "
         )
@@ -29,9 +30,28 @@ struct IntentFuturesPromptIntegrationTests {
         let recipe = RawContinuationPrompt(textBeforeCursor: "hello there ", register: .prose, scene: nil)
         let prompt = LlamaCompletionEngine.promptByAddingIntentFutures(
             to: recipe.prompt,
+            register: .prose,
             scene: nil,
             textBeforeCursor: "hello there "
         )
         #expect(prompt == recipe.prompt)
+    }
+
+    @Test("The chat register never receives the hint")
+    func chatRegisterSkipsHint() {
+        let scene = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [.init(speaker: .other, text: "Can you send it tonight?")],
+            referenceSnippets: []
+        )
+        let recipe = RawContinuationPrompt(textBeforeCursor: "I can ", register: .chat, scene: scene)
+        let prompt = LlamaCompletionEngine.promptByAddingIntentFutures(
+            to: recipe.prompt,
+            register: .chat,
+            scene: scene,
+            textBeforeCursor: "I can "
+        )
+        #expect(prompt == recipe.prompt)
+        #expect(!prompt.contains("Likely response directions:"))
     }
 }

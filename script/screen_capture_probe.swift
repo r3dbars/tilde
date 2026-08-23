@@ -58,8 +58,9 @@ func recognizeText(in image: CGImage) throws -> [(text: String, box: CGRect)] {
             result.append((candidate.string, topLeftNormalizedBox(observation.boundingBox)))
         }
     }
-    request.recognitionLevel = .accurate
-    request.usesLanguageCorrection = true
+    // Mirror production (ScreenTextRecognizer): fast, no correction.
+    request.recognitionLevel = .fast
+    request.usesLanguageCorrection = false
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try handler.perform([request])
     semaphore.wait()

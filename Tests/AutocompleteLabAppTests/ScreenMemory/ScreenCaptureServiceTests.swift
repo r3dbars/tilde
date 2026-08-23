@@ -393,6 +393,15 @@ struct ScreenCaptureServiceTests {
     // script/screen_capture_probe.swift are the real, live callers that
     // exercise the full instrumented path per docs/plans/screen-memory.md.
 
+    @Test("Capture requests backing pixels, not points, on Retina displays")
+    func pixelScaleUsesBackingSize() {
+        #expect(ScreenCaptureService.pixelScale(pixelWidth: 3024, pointWidth: 1512) == 2)
+        #expect(ScreenCaptureService.pixelScale(pixelWidth: 3840, pointWidth: 1920) == 2)
+        #expect(ScreenCaptureService.pixelScale(pixelWidth: 1920, pointWidth: 1920) == 1)
+        // Unknown backing size must never shrink the capture.
+        #expect(ScreenCaptureService.pixelScale(pixelWidth: 0, pointWidth: 1512) == 1)
+    }
+
     @Test("duration milliseconds rounds to the nearest whole millisecond")
     func durationRoundsToNearestMillisecond() {
         let start = Date(timeIntervalSince1970: 0)
