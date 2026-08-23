@@ -42,15 +42,18 @@ actor ScreenCaptureService {
     /// `defaultStalenessCapSeconds`), infrequent enough that most captures
     /// still get the window-only path's ~2x OCR speedup and exact
     /// attribution.
-    private var captureCounter = 0
-    private static let fullDisplayCaptureInterval = 3
+    /// Window-first capture (`CaptureKindPolicy`): the display is read only
+    /// when the last window capture found no conversation and the previous
+    /// display read has aged past the scene staleness window.
+    private var lastWindowSceneHadConversation: Bool?
+    private var lastFullDisplayCaptureAt: Date?
 
     /// What a full or region OCR pass leaves behind for the NEXT capture on
     /// the same path to diff against: the luminance grid it was computed
     /// from, the geometry it was captured under, and the resulting snapshot
     /// (its blocks are what `.unchanged` reuses and what `.region` merges
     /// into). Window and display captures keep entirely separate baselines
-    /// — they alternate every `fullDisplayCaptureInterval` captures, and a
+    /// — `CaptureKindPolicy` switches between them, and a
     /// display frame must never be diffed against a window frame or vice
     /// versa. There is nothing else to "reset" on a kind switch: each path
     /// only ever reads and writes its own baseline, and `CaptureChangeDetector`'s
@@ -421,8 +424,8 @@ actor ScreenCaptureService {
     }
 
     /// Chooses window-only vs full-display capture and dispatches to the
-    /// matching path. `captureCounter` decides the periodic full-display
-    /// pass (see its doc comment); on any capture that isn't forced full,
+    /// matching path. `CaptureKindPolicy` decides when the display is worth
+    /// reading (see its doc comment); on any capture that isn't forced full,
     /// `frontmostWindow` still has to actually find a layer-0 window or this
     /// falls back to full-display anyway — a window-only capture is never
     /// attempted blind.
@@ -437,12 +440,15 @@ actor ScreenCaptureService {
             return .captureFailed
         }
 
-        captureCounter += 1
-        let forceFullDisplay = forceFullDisplay
-            || captureCounter % Self.fullDisplayCaptureInterval == 0
+        let kind = CaptureKindPolicy.kind(
+            forcedFullDisplay: forceFullDisplay,
+            lastWindowSceneHadConversation: lastWindowSceneHadConversation,
+            secondsSinceLastFullDisplay: lastFullDisplayCaptureAt.map { moment.timeIntervalSince($0) },
+            stalenessCapSeconds: ScreenScene.defaultStalenessCapSeconds
+        )
         let zRanks = Self.onScreenZOrderRanks()
 
-        if !forceFullDisplay, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
+        if kind == .window, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
             return await performWindowCapture(
                 window: window,
                 display: display,
@@ -620,6 +626,14 @@ actor ScreenCaptureService {
             let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
             latestSnapshot = snapshot
             lastCaptureAt = moment
+            // Count-free probe of the thing the display read would add:
+            // if this window already reads as a conversation, other
+            // windows' reference snippets are never consulted.
+            lastWindowSceneHadConversation = ScreenScene.classify(
+                snapshot: snapshot,
+                frontmostBundleID: window.owningApplication?.bundleIdentifier,
+                fieldText: ""
+            ).mode == .replying
             windowBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
                 "screen-capture-completed",
@@ -831,6 +845,7 @@ actor ScreenCaptureService {
             )
             latestSnapshot = snapshot
             lastCaptureAt = moment
+            lastFullDisplayCaptureAt = moment
             displayBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
                 "screen-capture-completed",
