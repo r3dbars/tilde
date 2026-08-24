@@ -56,6 +56,10 @@ public struct ScreenMemoryInputEvent: Codable, Equatable, Sendable {
         case textFieldFocused
         case typingPaused
         case textFieldBlurred
+        /// The text around the caret changed wholesale — a different
+        /// conversation in the same window. The old snapshot is now the
+        /// wrong conversation and must not be served again.
+        case contentReset
     }
 
     public let kind: Kind

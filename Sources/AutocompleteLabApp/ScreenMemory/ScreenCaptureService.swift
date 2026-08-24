@@ -25,6 +25,7 @@ actor ScreenCaptureService {
     }
 
     private var lastCaptureAt: Date?
+    private var lastContentResetAt: Date?
     private var lastActivityAt: Date?
     private(set) var latestSnapshot: ScreenSnapshot?
     /// The most recent window-only capture, kept separately from
@@ -168,6 +169,16 @@ actor ScreenCaptureService {
     /// full display and bypasses the incremental baseline so Vision's
     /// `.accurate` recognizer rebuilds a complete scene. The safety gates
     /// and two-second heavy-capture ceiling still apply.
+    /// The conversation changed in place. Everything captured before this
+    /// moment is the WRONG conversation: serving it beats nothing only if
+    /// wrong beats silence, and it does not. Invalidate first, then try to
+    /// capture fresh content like a field focus would.
+    @discardableResult
+    func noteContentReset(sessionIdentifier: String) async -> CaptureOutcome {
+        lastContentResetAt = now()
+        return await noteTextFieldFocused(sessionIdentifier: sessionIdentifier)
+    }
+
     @discardableResult
     func noteTextFieldFocused(sessionIdentifier: String) async -> CaptureOutcome {
         activeTextFieldSessionIdentifier = sessionIdentifier
@@ -232,8 +243,12 @@ actor ScreenCaptureService {
     ) -> ScreenScene.Scene? {
         guard latestSnapshot != nil else { return nil }
         let currentlyExcluded = excludedApps()
+        let resetAt = lastContentResetAt
         func filtered(_ snapshot: ScreenSnapshot?) -> ScreenSnapshot? {
             guard let snapshot else { return nil }
+            // A snapshot from before the last content reset is the wrong
+            // conversation, not merely a stale one — never serve it.
+            if let resetAt, snapshot.capturedAt < resetAt { return nil }
             guard !currentlyExcluded.isEmpty else { return snapshot }
             let keptBlocks = snapshot.blocks.filter {
                 guard let owner = $0.windowOwnerBundleIdentifier else { return true }
@@ -305,6 +320,10 @@ actor ScreenCaptureService {
 
     func setLatestWindowSnapshotForTesting(_ snapshot: ScreenSnapshot?) {
         latestWindowSnapshot = snapshot
+    }
+
+    func setLastContentResetAtForTesting(_ date: Date?) {
+        lastContentResetAt = date
     }
 
     func noteCompletionActivity() {

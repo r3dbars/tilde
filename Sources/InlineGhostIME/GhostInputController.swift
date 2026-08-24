@@ -576,7 +576,7 @@ final class GhostInputController: IMKInputController {
         // next capture happens now-ish instead of serving the old thread.
         let contextTail = String(contextBeforeCaret(client).suffix(Self.contextLimit))
         if ContextResetDetector.isReset(previous: lastScheduledContextTail, current: contextTail) {
-            notifyScreenMemory(.textFieldFocused)
+            notifyScreenMemory(.contentReset)
         }
         lastScheduledContextTail = contextTail
         cancelPendingWork()
