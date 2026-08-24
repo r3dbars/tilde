@@ -123,3 +123,35 @@ struct SensitiveScenePolicyTests {
         #expect(SensitiveScenePolicy.isSensitive(scene: s))
     }
 }
+
+@Suite("Sensitive scene phrase table")
+struct SensitiveScenePhraseTableTests {
+    /// `containsPhrase` runs a cheap substring check before its boundary
+    /// regex. That is only sound if the substring check never rejects
+    /// something the regex would have matched — and a wrong rejection here is
+    /// silent, letting Tilde suggest into exactly the conversations the policy
+    /// exists to stay out of. Prove it against every shipped phrase, not a
+    /// sample.
+    @Test("Every phrase in the table still fires when it appears on a word boundary")
+    func everyShippedPhraseStillFires() {
+        for (category, phrases) in SensitiveScenePolicy.phrasesByCategory {
+            for phrase in phrases {
+                let s = scene([turn(.other, "so anyway, \(phrase) yesterday.")])
+                #expect(
+                    SensitiveScenePolicy.isSensitive(scene: s),
+                    "\(category) phrase stopped matching: \(phrase)"
+                )
+            }
+        }
+    }
+
+    @Test("The table is non-empty and every phrase is lowercase, as the matcher assumes")
+    func tableShapeHolds() {
+        let all = SensitiveScenePolicy.phrasesByCategory.values.flatMap { $0 }
+        #expect(all.count >= 40)
+        for phrase in all {
+            #expect(phrase == phrase.lowercased(), "phrase is not lowercase: \(phrase)")
+            #expect(!phrase.isEmpty)
+        }
+    }
+}

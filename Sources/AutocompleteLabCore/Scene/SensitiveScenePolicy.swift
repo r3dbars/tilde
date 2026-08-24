@@ -136,6 +136,15 @@ public enum SensitiveScenePolicy {
     /// still match across normal whitespace but not across punctuation-glued
     /// runs.
     private static func containsPhrase(_ phrase: String, in text: String) -> Bool {
+        // Cheap exact-substring gate before the boundary pattern. The pattern
+        // below can only match where the phrase itself already appears
+        // case-insensitively, so a miss here is a guaranteed miss there — the
+        // decision is identical, it just stops escaping and compiling a fresh
+        // NSRegularExpression for the phrases that were never going to match.
+        // `isSensitive` runs every phrase against every conversation turn on
+        // the completion path, so the common case (a non-sensitive scene) was
+        // paying for the full table on every keystroke.
+        guard text.range(of: phrase, options: .caseInsensitive) != nil else { return false }
         let escaped = NSRegularExpression.escapedPattern(for: phrase)
         let pattern = "(?<![A-Za-z0-9])\(escaped)(?![A-Za-z0-9])"
         return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
