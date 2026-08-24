@@ -369,6 +369,82 @@ struct ScreenContextPromptAssemblyTests {
         #expect(!prompt.prompt.contains("\nSystem:\n"))
     }
 
+    // MARK: - Prompt-cache stability (the scene block must not move per keystroke)
+
+    /// Long enough that its rendered block always overruns the budget left
+    /// over by a mid-length field text, so these tests exercise the
+    /// truncating regime — the only regime where the budget can move the
+    /// block at all.
+    private var oversizedReplyingScene: ScreenScene.Scene {
+        let manyTurns = (1...120).map {
+            ScreenScene.ConversationTurn(
+                speaker: $0.isMultiple(of: 2) ? .selfSpeaker : .other,
+                text: "turn number \($0) with some extra words padding it out"
+            )
+        }
+        return ScreenScene.Scene(mode: .replying, conversationTurns: manyTurns, referenceSnippets: [])
+    }
+
+    @Test("One more typed character leaves the scene block byte-identical, so the cached prompt prefix survives")
+    func oneKeystrokeLeavesSceneBlockByteIdentical() {
+        // 3,000 - 1,010 = 1,990 and 3,000 - 1,011 = 1,989 both floor to the
+        // same 1,750-character quantum, so the rendered block must not move.
+        // Before quantization these differed by exactly one character, which
+        // is enough to invalidate llama.cpp's longest-common-prefix reuse for
+        // the whole block AND the field text sitting behind it.
+        let a = RawContinuationPrompt(
+            textBeforeCursor: String(repeating: "a", count: 1_010), scene: oversizedReplyingScene
+        )
+        let b = RawContinuationPrompt(
+            textBeforeCursor: String(repeating: "a", count: 1_011), scene: oversizedReplyingScene
+        )
+
+        let blockA = sceneBlock(in: a.prompt)
+        #expect(!blockA.isEmpty)
+        #expect(blockA == sceneBlock(in: b.prompt))
+    }
+
+    @Test("A whole quantum of typing does shrink the scene's share: field text still wins ties")
+    func crossingAQuantumStillShrinksTheSceneShare() {
+        // 3,000 - 1,000 = 2,000 (a whole quantum) vs 3,000 - 1,001 = 1,999
+        // (floors to 1,750): the budget still tracks the field text, just at
+        // 250-character granularity instead of 1:1.
+        let a = RawContinuationPrompt(
+            textBeforeCursor: String(repeating: "a", count: 1_000), scene: oversizedReplyingScene
+        )
+        let b = RawContinuationPrompt(
+            textBeforeCursor: String(repeating: "a", count: 1_001), scene: oversizedReplyingScene
+        )
+
+        #expect(sceneBlock(in: a.prompt).count > sceneBlock(in: b.prompt).count)
+    }
+
+    @Test("Quantization floors and never rounds up, so the shared budget cannot be overspent")
+    func stableSceneBudgetOnlyEverFloors() {
+        #expect(RawContinuationPrompt.stableSceneBudget(2_000) == 2_000)
+        #expect(RawContinuationPrompt.stableSceneBudget(1_999) == 1_750)
+        #expect(RawContinuationPrompt.stableSceneBudget(250) == 250)
+        // Under one quantum the value passes through untouched, which is what
+        // keeps the existing small-budget truncation behavior intact.
+        #expect(RawContinuationPrompt.stableSceneBudget(249) == 249)
+        #expect(RawContinuationPrompt.stableSceneBudget(30) == 30)
+        #expect(RawContinuationPrompt.stableSceneBudget(0) == 0)
+
+        for remaining in [0, 1, 30, 249, 250, 251, 999, 1_000, 2_999, 3_000] {
+            #expect(RawContinuationPrompt.stableSceneBudget(remaining) <= remaining)
+        }
+    }
+
+    /// The live scene block: everything from the last `Conversation:` label up
+    /// to the field text that always follows it.
+    private func sceneBlock(in prompt: String) -> String {
+        guard let start = prompt.range(of: "Conversation:", options: .backwards)?.lowerBound,
+              let end = prompt.range(of: "Text: ", options: .backwards)?.lowerBound,
+              start < end
+        else { return "" }
+        return String(prompt[start..<end])
+    }
+
     /// The chat scaffold's own examples carry Conversation blocks; only
     /// blocks beyond those come from a live scene.
     private func liveConversationBlocks(in prompt: String) -> Int {
