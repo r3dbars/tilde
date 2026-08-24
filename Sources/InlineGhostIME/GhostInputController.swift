@@ -15,6 +15,10 @@ final class GhostInputController: IMKInputController {
         subsystem: "bar.r3d.inputmethod.InlineGhost",
         category: "typing-performance"
     )
+    private static let roundTripLogger = Logger(
+        subsystem: "bar.r3d.inputmethod.InlineGhost",
+        category: "suggestion-latency"
+    )
 
     struct SlowKeyTiming {
         let totalMilliseconds: Int
@@ -515,14 +519,44 @@ final class GhostInputController: IMKInputController {
 
     // MARK: - Tickets and context
 
-    private func ticket(for client: IMKTextInput, context: String) -> InlineSuggestionTicket {
-        let selection = client.selectedRange()
-        return InlineSuggestionTicket(
+    /// One read of the client's cursor and identity, shared by everything
+    /// that needs it within a single synchronous turn.
+    ///
+    /// Every `selectedRange()` / `bundleIdentifier()` is a cross-process call
+    /// into the app being typed into, made on the same main thread that has to
+    /// service the next keystroke — and `contextBeforeCaret`,
+    /// ticket construction and `trailingTextAfterCaret` each used to make
+    /// those calls independently, so one `present()` paid for three
+    /// `selectedRange()` round trips and `updateSuggestion` for four. The
+    /// client cannot change underneath us mid-turn, so reading once is exactly
+    /// equivalent and materially cheaper — most of all in Electron hosts,
+    /// whose own main thread is often already busy.
+    struct FieldSnapshot {
+        let selection: NSRange
+        let bundleIdentifier: String
+    }
+
+    private func fieldSnapshot(_ client: IMKTextInput) -> FieldSnapshot {
+        // Secure Event Input first, before any read. The readers below checked
+        // this before touching the client at all, and routing them through a
+        // snapshot must not quietly invert that ordering: in a password field
+        // Tilde reads nothing, not even the caret or the host identity.
+        guard !IsSecureEventInputEnabled() else {
+            return FieldSnapshot(selection: Self.unset, bundleIdentifier: "")
+        }
+        return FieldSnapshot(
+            selection: client.selectedRange(),
+            bundleIdentifier: client.bundleIdentifier() ?? ""
+        )
+    }
+
+    private func ticket(context: String, field: FieldSnapshot) -> InlineSuggestionTicket {
+        InlineSuggestionTicket(
             clientIdentifier: suggestionSessionIdentifier,
-            bundleIdentifier: client.bundleIdentifier() ?? "",
+            bundleIdentifier: field.bundleIdentifier,
             contextFingerprint: InlineSuggestionTicket.fingerprint(context),
-            selectionLocation: selection.location == NSNotFound ? -1 : selection.location,
-            selectionLength: selection.length == NSNotFound ? -1 : selection.length,
+            selectionLocation: field.selection.location == NSNotFound ? -1 : field.selection.location,
+            selectionLength: field.selection.length == NSNotFound ? -1 : field.selection.length,
             requestIdentifier: scheduleRevision
         )
     }
@@ -533,14 +567,22 @@ final class GhostInputController: IMKInputController {
         for client: IMKTextInput
     ) -> (ticket: InlineSuggestionTicket, context: String)? {
         guard let visible = state.visibleTicket else { return nil }
-        let context = contextBeforeCaret(client)
-        let current = ticket(for: client, context: context)
+        let field = fieldSnapshot(client)
+        let context = contextBeforeCaret(client, selection: field.selection)
+        let current = ticket(context: context, field: field)
         return visible.matchesFieldState(of: current) ? (visible, context) : nil
     }
 
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
         guard !IsSecureEventInputEnabled() else { return "" }
-        let selection = client.selectedRange()
+        return contextBeforeCaret(client, selection: client.selectedRange())
+    }
+
+    /// Takes the caret alone, never a whole `FieldSnapshot`: this reader has no
+    /// use for the bundle identifier, and making it demand one would add a
+    /// cross-process call per keystroke rather than remove one.
+    private func contextBeforeCaret(_ client: IMKTextInput, selection: NSRange) -> String {
+        guard !IsSecureEventInputEnabled() else { return "" }
         guard selection.location != NSNotFound, selection.length == 0 else { return "" }
         if selection.location > 0 {
             let start = max(0, selection.location - Self.contextLimit)
@@ -554,8 +596,13 @@ final class GhostInputController: IMKInputController {
 
     private func trailingTextAfterCaret(_ client: IMKTextInput) -> String {
         guard !IsSecureEventInputEnabled() else { return "" }
+        return trailingTextAfterCaret(client, selection: client.selectedRange())
+    }
+
+    private func trailingTextAfterCaret(_ client: IMKTextInput, selection: NSRange) -> String {
+        guard !IsSecureEventInputEnabled() else { return "" }
         guard let range = Self.trailingContextRange(
-            selection: client.selectedRange(),
+            selection: selection,
             markedRange: client.markedRange(),
             documentLength: client.length()
         ) else {
@@ -628,15 +675,16 @@ final class GhostInputController: IMKInputController {
 
     private func updateSuggestion(for client: IMKTextInput, revealNotBefore: Date) {
         guard !stopForSecureInput(client) else { return }
-        let selection = client.selectedRange()
+        let field = fieldSnapshot(client)
+        let selection = field.selection
         guard selection.location != NSNotFound, selection.length == 0 else {
             breakHistorySegment()
             dismiss(client)
             resetFallback()
             return
         }
-        let context = contextBeforeCaret(client)
-        let trailingText = trailingTextAfterCaret(client)
+        let context = contextBeforeCaret(client, selection: field.selection)
+        let trailingText = trailingTextAfterCaret(client, selection: field.selection)
         guard SuggestionActivationPolicy.allowsSuggestions(
             afterUserTyped: typedFallback,
             trailingTextAfterCaret: trailingText
@@ -644,7 +692,7 @@ final class GhostInputController: IMKInputController {
             dismiss(client)
             return
         }
-        let requestTicket = ticket(for: client, context: context)
+        let requestTicket = ticket(context: context, field: field)
         apply(state.reduce(.awaitSuggestion(requestTicket)), to: client)
 
         if context.last?.isLetter == true {
@@ -658,7 +706,7 @@ final class GhostInputController: IMKInputController {
             }
         } else if context.last?.isWhitespace == true {
             requestPhrase(
-                for: client,
+                bundleIdentifier: field.bundleIdentifier,
                 context: context,
                 ticket: requestTicket,
                 revealNotBefore: revealNotBefore
@@ -693,17 +741,43 @@ final class GhostInputController: IMKInputController {
         return String(match.dropFirst(partial.count))
     }
 
+    /// The IME-to-app socket round trip, measured from this side.
+    ///
+    /// This was the one segment of the suggestion path with no timing
+    /// anywhere — `script/latency_report.py`'s own docstring names it as the
+    /// known gap. The app times from its side of the socket inward
+    /// (`ghost-request-timing`), so the connect, the peer code-signature
+    /// handshake, and the wire read on this side were invisible, and a
+    /// regression in them could ship without tripping any budget.
+    ///
+    /// Cancelled requests are deliberately not recorded: the user typed past
+    /// them, so their truncated durations would understate the real tail.
+    ///
+    /// Aggregate duration and a fixed outcome word only, never context and
+    /// never a suggestion. `InlineGhostIME` does not depend on the app target
+    /// and so cannot reach `DiagnosticsLog`; this goes to the same OSLog
+    /// subsystem `slow-key` already writes to. Read it with:
+    /// `log show --predicate 'subsystem == "bar.r3d.inputmethod.InlineGhost"'`
+    private static func logRoundTrip(startedAt: TimeInterval, outcome: GhostBrainResponse.Outcome) {
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAt)
+        let milliseconds = Int((elapsed * 1_000).rounded())
+        roundTripLogger.notice(
+            "ghost-round-trip roundTripMilliseconds=\(milliseconds, privacy: .public) outcome=\(outcome.rawValue, privacy: .public)"
+        )
+    }
+
     /// Word boundaries make exactly one request to Tilde's app-owned model.
     private func requestPhrase(
-        for client: IMKTextInput,
+        bundleIdentifier: String,
         context: String,
         ticket requestTicket: InlineSuggestionTicket,
         revealNotBefore: Date
     ) {
         let tail = String(context.suffix(Self.contextLimit))
-        let bundle = client.bundleIdentifier()
-        let fieldSessionIdentifier = suggestionSessionIdentifier
+        let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
+        let fieldSessionIdentifier = requestTicket.clientIdentifier
         modelTask = Task { [weak self] in
+            let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(
                 context: tail,
                 app: bundle,
@@ -721,6 +795,7 @@ final class GhostInputController: IMKInputController {
                 }
             )
             guard !Task.isCancelled else { return }
+            Self.logRoundTrip(startedAt: startedAt, outcome: result.outcome)
             switch result.outcome {
             case .suggestion:
                 if let text = result.suggestion {
@@ -755,13 +830,14 @@ final class GhostInputController: IMKInputController {
     ) {
         guard let liveClient = client() else { return }
         guard !stopForSecureInput(liveClient) else { return }
-        let currentContext = contextBeforeCaret(liveClient)
-        guard ticket(for: liveClient, context: currentContext) == requestTicket else {
+        let field = fieldSnapshot(liveClient)
+        let currentContext = contextBeforeCaret(liveClient, selection: field.selection)
+        guard ticket(context: currentContext, field: field) == requestTicket else {
             apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
             return
         }
         guard SuggestionActivationPolicy.isAtGrowingEdge(
-            trailingTextAfterCaret: trailingTextAfterCaret(liveClient)
+            trailingTextAfterCaret: trailingTextAfterCaret(liveClient, selection: field.selection)
         ) else {
             dismiss(liveClient)
             return

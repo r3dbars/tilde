@@ -44,7 +44,7 @@ public enum SensitiveScenePolicy {
     }
 
     /// Phrases are matched case-insensitively with word/phrase boundaries
-    /// (see `containsPhrase`), so entries should be written lowercase and as
+    /// (see `compiledPhrases`), so entries should be written lowercase and as
     /// their natural reading form — no need to hand-author regex.
     static let phrasesByCategory: [Category: [String]] = [
         .bereavement: [
@@ -118,26 +118,42 @@ public enum SensitiveScenePolicy {
     }
 
     private static func matchedCategory(in text: String) -> Category? {
+        let range = NSRange(text.startIndex..., in: text)
         for category in Category.allCases {
-            guard let phrases = phrasesByCategory[category] else { continue }
-            if phrases.contains(where: { containsPhrase($0, in: text) }) {
+            guard let patterns = compiledPhrases[category] else { continue }
+            if patterns.contains(where: { $0.firstMatch(in: text, range: range) != nil }) {
                 return category
             }
         }
         return nil
     }
 
-    /// Case-insensitive containment with word/phrase boundaries: the phrase
-    /// must not be immediately preceded or followed by another letter or
-    /// digit, so e.g. "rip" doesn't match inside "ripe" or "stripped", and
-    /// "died" doesn't match inside "died-in-the-wool" (not a real word, but
-    /// illustrates the guard). This is intentionally simple substring/regex
-    /// matching, not tokenization, so multi-word phrases ("passed away")
-    /// still match across normal whitespace but not across punctuation-glued
-    /// runs.
-    private static func containsPhrase(_ phrase: String, in text: String) -> Bool {
-        let escaped = NSRegularExpression.escapedPattern(for: phrase)
-        let pattern = "(?<![A-Za-z0-9])\(escaped)(?![A-Za-z0-9])"
-        return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
-    }
+    /// One pattern per phrase, compiled once at type load.
+    ///
+    /// `isSensitive` runs the whole table against every conversation turn on
+    /// the completion path, and each check used to escape its phrase and build
+    /// a fresh `NSRegularExpression`. A non-sensitive scene — the common case,
+    /// and the one that never early-exits — therefore paid for hundreds of
+    /// regex compiles per keystroke. Compiling once removes that cost outright.
+    ///
+    /// A cheap substring pre-filter was tried here first and deliberately
+    /// reverted: Swift's `range(of:options:.caseInsensitive)` folds case by a
+    /// different rule than ICU's regex engine (full case folding, canonical
+    /// equivalence), so it could reject a phrase the pattern would have
+    /// matched. That is a silent miss in the one policy whose entire job is to
+    /// keep Tilde out of grief and crisis conversations — the wrong place to
+    /// trade a guarantee for speed when compiling once costs nothing.
+    private static let compiledPhrases: [Category: [NSRegularExpression]] = {
+        var table: [Category: [NSRegularExpression]] = [:]
+        for (category, phrases) in phrasesByCategory {
+            table[category] = phrases.compactMap { phrase in
+                let escaped = NSRegularExpression.escapedPattern(for: phrase)
+                return try? NSRegularExpression(
+                    pattern: "(?<![A-Za-z0-9])\(escaped)(?![A-Za-z0-9])",
+                    options: [.caseInsensitive]
+                )
+            }
+        }
+        return table
+    }()
 }

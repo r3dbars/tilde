@@ -78,7 +78,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         scene: ScreenScene.Scene?,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
-        let startedAt = Date()
+        let startedAt = ProcessInfo.processInfo.systemUptime
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
@@ -122,13 +122,17 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             var rawOutput = ""
             var lastPartialVisibleText = ""
             var sawCompletionFrame = false
+            // One decoder for the whole stream. Building a JSONDecoder per SSE
+            // frame meant one allocation per token; it stays local to this
+            // closure so nothing crosses an isolation boundary.
+            let frameDecoder = JSONDecoder()
             for try await line in stream.lines {
                 guard line.hasPrefix("data:") else { continue }
                 let json = line.dropFirst("data:".count).trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !json.isEmpty, json != "[DONE]" else { continue }
                 let frame: StreamFrame
                 do {
-                    frame = try JSONDecoder().decode(StreamFrame.self, from: Data(json.utf8))
+                    frame = try frameDecoder.decode(StreamFrame.self, from: Data(json.utf8))
                 } catch {
                     throw URLError(.cannotParseResponse)
                 }
@@ -191,8 +195,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     /// numeric label line placed before "Continuation:" lowered keyword hit
     /// rate (46% -> 39%) and produced the only empty outputs; the
     /// conversation-aware scaffold carries the intent instead.
-    private static func milliseconds(since start: Date) -> Int {
-        Int(Date().timeIntervalSince(start) * 1_000)
+    /// Monotonic, and clamped. `Date()` is wall-clock: an NTP correction or a
+    /// manual clock change mid-request could produce a negative duration,
+    /// which `latency_report.py`'s float parser would accept and fold
+    /// straight into the percentile arrays these budgets depend on.
+    /// `systemUptime` cannot step backwards, matching what
+    /// `GhostInputController.slowKeyTiming` already does.
+    private static func milliseconds(since start: TimeInterval) -> Int {
+        max(0, Int(((ProcessInfo.processInfo.systemUptime - start) * 1_000).rounded()))
     }
 
     /// A partial is the cleaned continuation cut back to its last complete

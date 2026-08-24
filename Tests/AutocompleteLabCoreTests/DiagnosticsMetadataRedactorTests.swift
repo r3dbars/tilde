@@ -111,9 +111,13 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("waitedMilliseconds", "250") == "waitedMilliseconds=250")
         // Socket request total (`GhostBrainServerHost`'s `ghost-request-timing`).
         #expect(field("requestMilliseconds", "38") == "requestMilliseconds=38")
+        // Accept-to-parsed handshake on its own timing event: the peer
+        // code-signature verification plus the wire read.
+        #expect(field("handshakeMilliseconds", "12") == "handshakeMilliseconds=12")
         // Nothing free-text ever gets through any of these keys either.
         #expect(field("milliseconds", "private") == "milliseconds=String(7 chars)")
         #expect(field("waitedMilliseconds", "-5") == "waitedMilliseconds=String(2 chars)")
+        #expect(field("handshakeMilliseconds", "soon") == "handshakeMilliseconds=String(4 chars)")
     }
 
     @Test("The personal-lookup-timing outcome vocabulary survives as its literal enum case")

@@ -30,9 +30,19 @@ Stages covered today (field in parentheses):
   personal-lookup-timing    the 250ms personal-brain race (waitedMilliseconds)
   ghost-request-timing      socket request total, parse to response write
                             (requestMilliseconds)
-Stages logged but not yet timed (gaps show as absent rows):
-  IME socket round-trip (InlineGhostIME's slow-key os_log path is out of
-  scope for this diagnostics log — see AGENTS.md).
+  ghost-handshake-timing    accept to parsed: the peer code-signature
+                            verification plus the wire read that run *before*
+                            ghost-request-timing starts (handshakeMilliseconds)
+The IME side of the socket round-trip is now timed too, but it lands in
+OSLog rather than this diagnostics log: InlineGhostIME has no dependency on
+the app target, so it cannot reach DiagnosticsLog. Read those samples with
+
+  log show --predicate 'subsystem == "bar.r3d.inputmethod.InlineGhost"' \
+      --style compact --last 8h | grep ghost-round-trip
+
+which emits `roundTripMilliseconds=` and a fixed `outcome=` word per
+completed (non-cancelled) request. Folding that stream into this table is
+the obvious next step; it needs a `log show` reader, not just a new field.
 """
 
 import argparse
@@ -53,6 +63,7 @@ TIMING_FIELDS = (
     "ocrMilliseconds",
     "waitedMilliseconds",
     "requestMilliseconds",
+    "handshakeMilliseconds",
 )
 LINE = re.compile(r"^(\S+)\s+(\S+)\s*(.*)$")
 PAIR = re.compile(r"(\w+)=(\S+)")

@@ -193,6 +193,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
         var noSigpipe: Int32 = 1
         setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
 
+        // Clock starts here, not inside the task: the wait for a cooperative
+        // pool slot is part of accept-to-parsed, and under load it is exactly
+        // the tail this measurement exists to expose. Monotonic, so a clock
+        // step cannot fabricate a 0ms sample for the percentiles.
+        let acceptedAt = ProcessInfo.processInfo.systemUptime
         Task.detached(priority: .userInitiated) { [weak self] in
             defer { close(connection) }
             guard let self else { return }
@@ -204,6 +209,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 _ = Self.write(.invalidRequest, to: connection)
                 return
             }
+            // `authorizedPeer` resolves two full code-signing identities (the
+            // peer's and our own) per accepted connection; that plus the wire
+            // read is the most expensive fixed cost on the request path, and it
+            // runs before `ghost-request-timing` starts counting. Its own event
+            // rather than a second field on that one: a second timing field
+            // would re-key the existing series and hand its whole-request
+            // budget to this segment alone, leaving the sum unbudgeted.
+            DiagnosticsLog.shared.record("ghost-handshake-timing", metadata: [
+                "handshakeMilliseconds": String(Self.milliseconds(since: acceptedAt)),
+            ])
             if case let .personalHistory(events) = request {
                 let accepted = await self.personalHistory.ingest(events)
                 _ = Self.write(accepted ? .recorded : .error, to: connection)
@@ -485,6 +500,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// testable.
     static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
+    }
+
+    /// Monotonic counterpart, for spans timed with `systemUptime`.
+    static func milliseconds(since start: TimeInterval) -> Int {
+        max(0, Int(((ProcessInfo.processInfo.systemUptime - start) * 1_000).rounded()))
     }
 
     /// Adds `source` only when the "Personal suggestions (experimental)"

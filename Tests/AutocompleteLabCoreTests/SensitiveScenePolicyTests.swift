@@ -123,3 +123,33 @@ struct SensitiveScenePolicyTests {
         #expect(SensitiveScenePolicy.isSensitive(scene: s))
     }
 }
+
+@Suite("Sensitive scene phrase table")
+struct SensitiveScenePhraseTableTests {
+    /// The compiled table must preserve every shipped phrase and boundary.
+    /// A missing or malformed pattern would fail silently and let Tilde suggest
+    /// into exactly the conversations this policy exists to stay out of, so
+    /// prove the whole table rather than a sample.
+    @Test("Every phrase in the table still fires when it appears on a word boundary")
+    func everyShippedPhraseStillFires() {
+        for (category, phrases) in SensitiveScenePolicy.phrasesByCategory {
+            for phrase in phrases {
+                let s = scene([turn(.other, "so anyway, \(phrase) yesterday.")])
+                #expect(
+                    SensitiveScenePolicy.isSensitive(scene: s),
+                    "\(category) phrase stopped matching: \(phrase)"
+                )
+            }
+        }
+    }
+
+    @Test("The table is non-empty and every phrase is lowercase, as the matcher assumes")
+    func tableShapeHolds() {
+        let all = SensitiveScenePolicy.phrasesByCategory.values.flatMap { $0 }
+        #expect(all.count >= 40)
+        for phrase in all {
+            #expect(phrase == phrase.lowercased(), "phrase is not lowercase: \(phrase)")
+            #expect(!phrase.isEmpty)
+        }
+    }
+}

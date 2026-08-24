@@ -264,11 +264,41 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         }
     }
 
+    /// Readiness probes ran on a flat 2-second cadence, so a helper that was
+    /// actually serving 300ms after launch was not discovered until the next
+    /// tick — up to ~1.7s of pure waiting added to the first suggestion after
+    /// every launch, wake, or helper restart. That first suggestion is by
+    /// definition a p99 sample, and usually the worst one the owner ever sees.
+    /// Probe fast while a healthy start is still plausible, then settle back
+    /// to the original 2s cadence for the long tail of a genuinely stuck
+    /// helper.
+    ///
+    /// The attempt count is set so the ceiling to `health-timeout` matches the
+    /// flat loop this replaced. That budget is *not* just the sleeps: each
+    /// attempt also runs `probeHealth`, which can itself block for its own
+    /// 2-second request timeout against a helper that accepts the connection
+    /// but never answers. The old loop was 45 x (2s probe + 2s sleep) = 180s
+    /// worst case; 51 attempts on this ladder is 179.4s. Counting only the
+    /// sleeps would have quietly stretched the timeout by ~27 seconds, which
+    /// is how long the menu would keep saying "starting" for a helper that is
+    /// actually wedged.
+    static let healthProbeAttempts = 51
+
+    static func healthProbeDelayMilliseconds(attempt: Int) -> Int {
+        switch attempt {
+        case ..<4: return 100
+        case ..<8: return 250
+        case ..<12: return 500
+        case ..<16: return 1_000
+        default: return 2_000
+        }
+    }
+
     private func pollHealth(of child: Process) {
         healthTask?.cancel()
         let task = Task { [weak self, weak child] in
             guard let self, let child else { return }
-            for _ in 0..<45 {
+            for attempt in 0..<Self.healthProbeAttempts {
                 guard !Task.isCancelled, self.isCurrent(child) else { return }
                 if await self.probeHealth(of: child) {
                     let transitioned = self.lifecycle.sync { () -> Bool in
@@ -282,7 +312,9 @@ final class LlamaServerProcessHost: @unchecked Sendable {
                     }
                     return
                 }
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(
+                    for: .milliseconds(Self.healthProbeDelayMilliseconds(attempt: attempt))
+                )
             }
             guard self.isCurrent(child) else { return }
             let timedOut = self.lifecycle.sync { () -> Bool in
@@ -310,19 +342,75 @@ final class LlamaServerProcessHost: @unchecked Sendable {
               let http = response as? HTTPURLResponse,
               http.statusCode == 200,
               String(data: data, encoding: .utf8)?.contains("ok") == true else { return false }
-        return await Task.detached(priority: .utility) {
+        let owns = await Task.detached(priority: .utility) {
             Self.listenerBelongs(to: child, port: self.port)
         }.value
+        if !owns, child.isRunning {
+            // `/health` answered but the child shows no listening socket on our
+            // port. The likeliest cause is the kernel refusing the libproc
+            // lookup across the process boundary (App Sandbox or hardened
+            // runtime) — which the unit test cannot reach, since it can only
+            // inspect itself, and which would otherwise gate every completion
+            // to `.unavailable` with no visible cause anywhere.
+            DiagnosticsLog.shared.record("llama-server-unowned-listener", metadata: [:])
+        }
+        return owns
     }
 
+    /// Recheck runs before every completion request, so it has to be cheap.
+    /// This used to shell out to `lsof -a -p <pid> -iTCP:<port> -sTCP:LISTEN`,
+    /// which cost a fork/exec plus a `DispatchSemaphore` wait on a cooperative
+    /// pool thread — the first thing inside the measured `ghost-request-timing`
+    /// span, and up to 1.4 seconds of it on the TERM-to-KILL path in `command`.
+    /// libproc answers the identical question straight from the kernel.
+    ///
+    /// The check itself is unchanged and still per-request: cached health alone
+    /// cannot prove the current listener is still our child, so nothing here is
+    /// cached or given a staleness window — it just stops costing a subprocess.
     private static func listenerBelongs(to child: Process, port: Int) -> Bool {
-        guard child.isRunning,
-              let output = command(
-                  "/usr/sbin/lsof",
-                  ["-nP", "-a", "-p", String(child.processIdentifier),
-                   "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
-              ) else { return false }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines) == String(child.processIdentifier)
+        guard child.isRunning else { return false }
+        return holdsListeningSocket(pid: child.processIdentifier, port: port)
+    }
+
+    /// True when `pid` holds a TCP socket in LISTEN on `port`.
+    ///
+    /// Fail-closed in every direction: a libproc error, a short read, a
+    /// descriptor that cannot be inspected, or a socket that is not
+    /// listening TCP all answer "no", exactly as an `lsof` failure did.
+    static func holdsListeningSocket(pid: pid_t, port: Int) -> Bool {
+        let entrySize = MemoryLayout<proc_fdinfo>.stride
+        let sized = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard sized > 0 else { return false }
+
+        var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(sized) / entrySize)
+        guard !descriptors.isEmpty else { return false }
+        // Bytes actually allocated, not the kernel's sizing answer: the count
+        // above truncates, so `sized` can exceed the buffer and overrun it.
+        let capacity = Int32(descriptors.count * entrySize)
+        let written = descriptors.withUnsafeMutableBufferPointer { buffer -> Int32 in
+            proc_pidinfo(pid, PROC_PIDLISTFDS, 0, buffer.baseAddress, capacity)
+        }
+        guard written > 0 else { return false }
+
+        // `sizeof` in C includes trailing padding, so this must be `.stride`.
+        // `.size` can be smaller; the kernel rejects a short buffer, every
+        // descriptor would be skipped, and the gate would answer "no" forever.
+        let wanted = Int32(MemoryLayout<socket_fdinfo>.stride)
+        let usable = min(descriptors.count, Int(written) / entrySize)
+        for index in 0..<usable
+        where descriptors[index].proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) {
+            var info = socket_fdinfo()
+            guard proc_pidfdinfo(
+                pid, descriptors[index].proc_fd, PROC_PIDFDSOCKETINFO, &info, wanted
+            ) == wanted else { continue }
+            guard info.psi.soi_kind == SOCKINFO_TCP else { continue }
+            let tcp = info.psi.soi_proto.pri_tcp
+            guard tcp.tcpsi_state == TSI_S_LISTEN else { continue }
+            // libproc reports ports in network byte order.
+            let listening = UInt16(bigEndian: UInt16(truncatingIfNeeded: tcp.tcpsi_ini.insi_lport))
+            if Int(listening) == port { return true }
+        }
+        return false
     }
 
     /// Reap only a re-parented helper from this exact app asset. Any other
