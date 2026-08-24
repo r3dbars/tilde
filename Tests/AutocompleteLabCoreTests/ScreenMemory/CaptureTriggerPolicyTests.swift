@@ -130,20 +130,39 @@ struct CaptureTriggerPolicyTests {
         #expect(decide(lastCaptureAt: nil) == .capture)
     }
 
-    @Test("A capture within the cadence cap is blocked, with remaining time reported")
+    @Test("A typing-pause capture within the cadence cap is blocked, with remaining time reported")
     func cadenceCapBlocksWithinWindow() {
         let last = epoch
         let elapsed = CaptureTriggerPolicy.cadenceCapSeconds / 2
         let now = epoch.addingTimeInterval(elapsed)
-        let decision = decide(lastCaptureAt: last, now: now)
+        let decision = decide(trigger: .typingPause(elapsedSeconds: 1), lastCaptureAt: last, now: now)
         #expect(decision == .skip(.cadence(secondsRemaining: CaptureTriggerPolicy.cadenceCapSeconds - elapsed)))
+    }
+
+    @Test("Focus and window changes wait only the content-change floor, not the full cadence")
+    func contentChangeTriggersUseTighterFloor() {
+        let last = epoch
+        let justPastFloor = epoch.addingTimeInterval(CaptureTriggerPolicy.contentChangeCadenceFloorSeconds + 0.001)
+        #expect(decide(trigger: .textFieldFocused, lastCaptureAt: last, now: justPastFloor) == .capture)
+        #expect(decide(trigger: .windowChanged, lastCaptureAt: last, now: justPastFloor) == .capture)
+        // Inside the floor they are still blocked — a focus storm cannot
+        // capture more than ~2x per second.
+        let insideFloor = epoch.addingTimeInterval(CaptureTriggerPolicy.contentChangeCadenceFloorSeconds / 2)
+        if case .skip(.cadence) = decide(trigger: .textFieldFocused, lastCaptureAt: last, now: insideFloor) {} else {
+            Issue.record("expected cadence skip inside the floor")
+        }
+        // The typing-pause trigger keeps the full cadence cap.
+        let betweenFloors = epoch.addingTimeInterval(1.0)
+        if case .skip(.cadence) = decide(trigger: .typingPause(elapsedSeconds: 1), lastCaptureAt: last, now: betweenFloors) {} else {
+            Issue.record("expected cadence skip for typing pause at 1s")
+        }
     }
 
     @Test("A capture exactly at the cadence cap boundary is allowed")
     func cadenceCapBoundaryAllows() {
         let last = epoch
         let now = epoch.addingTimeInterval(CaptureTriggerPolicy.cadenceCapSeconds)
-        #expect(decide(lastCaptureAt: last, now: now) == .capture)
+        #expect(decide(trigger: .typingPause(elapsedSeconds: 1), lastCaptureAt: last, now: now) == .capture)
     }
 
     @Test("A capture just past the cadence cap boundary is allowed")
