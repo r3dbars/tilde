@@ -15,7 +15,10 @@ safer, or simpler.
   immutable Gemma 4 E2B model asset; it carries no user-derived request data.
   Never print personal writing data in logs or scripts.
 - The product is the input method. Render with IMKit marked text in the focused
-  app; do not add an Accessibility/overlay insertion path.
+  app; do not add an Accessibility/overlay insertion path. Reading screen
+  text through the Accessibility API is permitted under the same Screen
+  Memory covenant and gates as OCR — it is a faster, exact source of the
+  same on-device, memory-only data, never an insertion mechanism.
 - Inference is app-owned. The signed `llama-server` helper remains inside the
   app, while the pinned Gemma 4 E2B GGUF is downloaded once into external,
   app-owned storage and verified before use. Users must not install Ollama,
