@@ -16,9 +16,14 @@ enum AXWindowTextReader {
     static let nodeBudget = 3_000
     static let timeoutSeconds = 0.15
     /// Below this much text the tree is considered unreadable and the
-    /// caller falls back to OCR.
-    static let minimumBlocks = 2
-    static let minimumCharacters = 40
+    /// caller falls back to OCR. Set high deliberately: a thin AX read is
+    /// worse than OCR, not better — live 2026-08-24 a degraded Messages
+    /// tree yielded 2 blocks where OCR saw 19, and the old 2-block floor
+    /// accepted it, collapsing an 8-turn conversation to 1. Windows with
+    /// genuinely little text lose nothing by falling back: OCR reads them
+    /// equally well.
+    static let minimumBlocks = 6
+    static let minimumCharacters = 150
 
     static func isAvailable() -> Bool { AXIsProcessTrusted() }
 
