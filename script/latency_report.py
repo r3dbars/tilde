@@ -29,7 +29,9 @@ Stages covered today (field in parentheses):
   scene-classified          ScreenScene.freshScene classification (milliseconds)
   personal-lookup-timing    the 250ms personal-brain race (waitedMilliseconds)
   ghost-request-timing      socket request total, parse to response write
-                            (requestMilliseconds)
+                            (requestMilliseconds); the accept-to-parsed peer
+                            code-signature handshake plus wire read that runs
+                            *before* it, same event (handshakeMilliseconds)
 Stages logged but not yet timed (gaps show as absent rows):
   IME socket round-trip (InlineGhostIME's slow-key os_log path is out of
   scope for this diagnostics log — see AGENTS.md).
@@ -53,6 +55,7 @@ TIMING_FIELDS = (
     "ocrMilliseconds",
     "waitedMilliseconds",
     "requestMilliseconds",
+    "handshakeMilliseconds",
 )
 LINE = re.compile(r"^(\S+)\s+(\S+)\s*(.*)$")
 PAIR = re.compile(r"(\w+)=(\S+)")
