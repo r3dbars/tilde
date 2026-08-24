@@ -69,6 +69,10 @@ public enum DiagnosticsMetadataRedactor {
              // socket request total (`requestMilliseconds` on
              // `ghost-request-timing`) — all whole milliseconds, no text.
              "milliseconds", "ocrMilliseconds", "waitedMilliseconds", "requestMilliseconds",
+             // Accept-to-parsed on `ghost-handshake-timing`: the peer
+             // code-signature handshake plus the wire read, before
+             // `ghost-request-timing` starts. A whole millisecond count, no text.
+             "handshakeMilliseconds",
              // Streaming split on `llama-completion-timing`: first token and
              // first complete-word partial, whole milliseconds, no text.
              "firstTokenMilliseconds", "firstPartialMilliseconds":

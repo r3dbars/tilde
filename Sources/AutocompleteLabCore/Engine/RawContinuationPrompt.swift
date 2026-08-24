@@ -148,6 +148,36 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     /// larger block costs one prefill per scene change, not per keystroke.
     public static let maxSceneContextCharacters = 3_000
 
+    /// The granularity at which a scene block's share of the shared budget is
+    /// allowed to move. `remainingForScene` below shrinks by one character per
+    /// keystroke, and the scene block sits *ahead* of the field text in the
+    /// assembled prompt — so letting the budget track the field length 1:1
+    /// re-truncates the block by one character on every keystroke, which moves
+    /// the prompt's cached prefix and forces a full re-prefill of the scene
+    /// block *and* the field text behind it, every keystroke, for the rest of
+    /// the compose session. Quantizing holds the rendered block byte-identical
+    /// across a run of keystrokes, which is what actually delivers the
+    /// `cache_prompt` reuse `maxSceneContextCharacters` above already assumes
+    /// ("one prefill per scene change, not per keystroke").
+    static let sceneBudgetQuantum = 250
+
+    /// Floors `remaining` to a whole number of quanta so the rendered scene
+    /// block stops moving between keystrokes. Flooring (never rounding up)
+    /// keeps "field text always wins ties" intact: the scene can only ever be
+    /// granted less of the shared budget than is actually left over, never
+    /// more.
+    ///
+    /// Budgets under one quantum pass through unchanged, for two reasons: the
+    /// existing header/trailer guard in `truncatedBlock` already governs that
+    /// range, and by the time the field text has claimed all but a couple
+    /// hundred characters of the total budget it is itself sliding left one
+    /// character per keystroke (`textBeforeCursor.suffix(totalBudget)`), so
+    /// there is no stable cached prefix left to protect anyway.
+    static func stableSceneBudget(_ remaining: Int) -> Int {
+        guard remaining >= sceneBudgetQuantum else { return remaining }
+        return (remaining / sceneBudgetQuantum) * sceneBudgetQuantum
+    }
+
     /// `register` selects the scaffold voice from the host app's identity.
     /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
     /// 2a) — `nil` (no capture, capture disabled/no-permission, or stale)
@@ -185,7 +215,10 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         let trimmed = String(fullTrimmed.suffix(fieldBudget))
 
         let remainingForScene = max(0, totalBudget - trimmed.count)
-        let sceneBudget = min(Self.maxSceneContextCharacters, remainingForScene)
+        let sceneBudget = min(
+            Self.maxSceneContextCharacters,
+            Self.stableSceneBudget(remainingForScene)
+        )
         let sceneBlock = Self.sceneContextBlock(for: scene, budget: sceneBudget)
 
         prompt = Self.scaffold(for: register) + sceneBlock + "Text: " + trimmed + "\nContinuation:"

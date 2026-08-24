@@ -1,8 +1,17 @@
 {
-  "_comment": "p99 latency budgets for script/latency_report.py --budget. These are FIRST budgets, deliberately generous: set to give headroom above what dogfooding has shown so the tripwire catches real regressions, not day-to-day noise. Tighten them as we collect more live diagnostics data. Each stage name matches a latency_report.py series key with any [kind] and :field suffix stripped.",
+  "_comment": "p99 latency budgets for script/latency_report.py --budget. These are FIRST budgets, deliberately generous: set to give headroom above what dogfooding has shown so the tripwire catches real regressions, not day-to-day noise. Tighten them as we collect more live diagnostics data. ghost-handshake-timing (accept -> peer code-signature verification -> request parsed) has no dogfood history yet, so its first budget is a guess set well under the whole-request budget; tighten or loosen it once the live report has samples. Each stage name matches a latency_report.py series key with any [kind] and :field suffix stripped.",
   "budgets": {
-    "llama-completion-timing": { "p99_ms": 400 },
-    "ghost-request-timing": { "p99_ms": 500 },
-    "screen-capture-completed": { "p99_ms": 900 }
+    "llama-completion-timing": {
+      "p99_ms": 400
+    },
+    "ghost-request-timing": {
+      "p99_ms": 500
+    },
+    "screen-capture-completed": {
+      "p99_ms": 900
+    },
+    "ghost-handshake-timing": {
+      "p99_ms": 250
+    }
   }
 }
