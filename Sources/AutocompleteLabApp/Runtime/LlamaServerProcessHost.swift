@@ -1,3 +1,4 @@
+import AutocompleteLabCore
 import Foundation
 import Security
 
@@ -300,6 +301,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
                     }
                     if transitioned {
                         DiagnosticsLog.shared.record("llama-server-healthy", metadata: [:])
+                        await self.warmUp(child)
                     }
                     return
                 }
@@ -322,6 +324,47 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     private func isCurrent(_ child: Process) -> Bool {
         lifecycle.sync { !stopped && process === child }
+    }
+
+    /// One throwaway completion, immediately after the helper reports healthy.
+    ///
+    /// Without it the first real keystroke pays for everything llama.cpp defers
+    /// to first use — Metal shader compilation and the model graph warm-up —
+    /// plus a cold prefill of the scaffold that every prompt shares. That first
+    /// suggestion after each launch, wake, or helper restart is by definition a
+    /// p99 sample, and usually the worst one the owner ever sees.
+    ///
+    /// Readiness is published before this runs, so a user who is already typing
+    /// is never made to wait on it; the warm-up simply races ahead of them.
+    ///
+    /// The prompt is the compiled-in prose scaffold and nothing else: no field
+    /// text, no scene, no Personal History, no user-derived bytes of any kind.
+    /// It is exactly the prefix real requests reuse through `cache_prompt`, so
+    /// warming it also leaves that prefix cached for the first real request.
+    private func warmUp(_ child: Process) async {
+        var request = URLRequest(url: baseURL.appendingPathComponent("completion"))
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.timeoutInterval = 30
+        let body: [String: Any] = [
+            "prompt": RawContinuationPrompt.scaffold(for: .prose) + "Text: the\nContinuation:",
+            "n_predict": 1,
+            "temperature": 0,
+            "cache_prompt": true,
+            "stream": false,
+        ]
+        guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return }
+        request.httpBody = payload
+
+        let startedAt = Date()
+        let warmed = (try? await LocalhostURLSession.shared.data(for: request)) != nil
+        guard isCurrent(child) else { return }
+        DiagnosticsLog.shared.record("llama-server-warmed", metadata: [
+            "outcome": warmed ? "warmed" : "warm-failed",
+            "milliseconds": String(max(0, Int((Date().timeIntervalSince(startedAt) * 1000).rounded()))),
+        ])
     }
 
     private func probeHealth(of child: Process) async -> Bool {
