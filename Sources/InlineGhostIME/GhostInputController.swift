@@ -98,6 +98,7 @@ final class GhostInputController: IMKInputController {
     private var fallbackOwner: FallbackOwner?
     private var historyOwner: FallbackOwner?
     private var scheduleRevision = 0
+    private var lastScheduledContextTail = ""
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
     private var screenMemoryTypingTask: Task<Void, Never>?
@@ -571,6 +572,13 @@ final class GhostInputController: IMKInputController {
     // MARK: - Suggestion paths
 
     private func scheduleSuggestion(for client: IMKTextInput, afterUserTyped grapheme: String) {
+        // Same field, different conversation: tell Screen Memory so the
+        // next capture happens now-ish instead of serving the old thread.
+        let contextTail = String(contextBeforeCaret(client).suffix(Self.contextLimit))
+        if ContextResetDetector.isReset(previous: lastScheduledContextTail, current: contextTail) {
+            notifyScreenMemory(.textFieldFocused)
+        }
+        lastScheduledContextTail = contextTail
         cancelPendingWork()
         scheduleRevision += 1
         let revision = scheduleRevision
