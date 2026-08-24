@@ -96,6 +96,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="require release-proof mode and omit all input-method observation",
     )
+    parser.add_argument(
+        "--stimulus-proof",
+        type=Path,
+        help=(
+            "require the release-proof app to have written this Screen Memory "
+            "capture/redaction stimulus report during the observation window"
+        ),
+    )
     parser.add_argument("--selftest", action="store_true")
     return parser.parse_args()
 
@@ -390,6 +398,26 @@ def disposable_completion(port: int) -> int:
 
 
 def selftest() -> None:
+    good_stimulus = {
+        "schema": STIMULUS_SCHEMA,
+        "sceneMode": "replying",
+        "classifiedTurns": 3,
+        "promptContainsConversation": True,
+        "completionRan": True,
+        "completionCharacters": 12,
+        "redactionOutcome": "dropped-modelUnavailable",
+        "rawTextPersisted": False,
+    }
+    assert validate_stimulus(good_stimulus) == []
+    assert validate_stimulus({**good_stimulus, "redactionOutcome": "redacted"}) == []
+    assert validate_stimulus({**good_stimulus, "redactionOutcome": "raw"})
+    assert validate_stimulus({**good_stimulus, "sceneMode": "composing"})
+    assert validate_stimulus({**good_stimulus, "classifiedTurns": 1})
+    assert validate_stimulus({**good_stimulus, "promptContainsConversation": False})
+    assert validate_stimulus({**good_stimulus, "completionRan": False})
+    assert validate_stimulus({**good_stimulus, "rawTextPersisted": True})
+    assert validate_stimulus({**good_stimulus, "schema": "other"})
+    assert validate_stimulus("not-a-dict")
     request = model_request(SYNTHETIC_CONTEXT)
     assert request["stream"] is True
     assert request["temperature"] == 0
@@ -481,6 +509,51 @@ def observe(
     return sample_count, remotes, failures
 
 
+STIMULUS_SCHEMA = "tilde.release-proof-screen-memory-stimulus.v1"
+
+
+def validate_stimulus(payload: object) -> list[str]:
+    """Assert the packaged capture/redaction stimulus report.
+
+    The report is written by the observed release-proof app itself; this
+    validates that Screen Memory's code paths actually ran and behaved:
+    a synthetic conversation classified, the scene reached the prompt, the
+    helper completed it, redaction either redacted or FAILED CLOSED
+    (dropped), and no raw text was persisted or included in the report.
+    """
+    failures: list[str] = []
+    if not isinstance(payload, dict):
+        return ["stimulus report is not a JSON object"]
+    if payload.get("schema") != STIMULUS_SCHEMA:
+        failures.append("stimulus schema mismatch")
+    if payload.get("sceneMode") != "replying":
+        failures.append("stimulus scene did not classify as a conversation")
+    if not isinstance(payload.get("classifiedTurns"), int) or payload["classifiedTurns"] < 2:
+        failures.append("stimulus classified fewer than 2 turns")
+    if payload.get("promptContainsConversation") is not True:
+        failures.append("scene context did not reach the prompt")
+    if payload.get("completionRan") is not True:
+        failures.append("stimulus completion did not run against the packaged helper")
+    outcome = payload.get("redactionOutcome")
+    if not (outcome == "redacted" or (isinstance(outcome, str) and outcome.startswith("dropped-"))):
+        failures.append("redaction neither redacted nor failed closed")
+    if payload.get("rawTextPersisted") is not False:
+        failures.append("stimulus reports raw text persistence")
+    return failures
+
+
+def read_stimulus(path: Path, wait_seconds: float = 60.0) -> tuple[dict | None, list[str]]:
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        if path.exists():
+            try:
+                return json.loads(path.read_text()), []
+            except (OSError, json.JSONDecodeError) as error:
+                return None, [f"stimulus report unreadable: {error}"]
+        time.sleep(0.5)
+    return None, ["stimulus report was not written within the wait window"]
+
+
 def main() -> int:
     args = parse_args()
     if args.selftest:
@@ -534,6 +607,13 @@ def main() -> int:
         else:
             failures.append("socket observation did not complete")
 
+    stimulus_payload: dict | None = None
+    if args.stimulus_proof is not None and not failures:
+        stimulus_payload, stimulus_failures = read_stimulus(args.stimulus_proof)
+        failures.extend(stimulus_failures)
+        if stimulus_payload is not None:
+            failures.extend(validate_stimulus(stimulus_payload))
+
     if samples < args.min_samples:
         failures.append(
             f"captured {samples} socket samples; require at least {args.min_samples}"
@@ -549,6 +629,12 @@ def main() -> int:
         "the helper returned a nonempty completion for the fixed synthetic prompt",
         "no non-loopback open socket was visible for the observed processes during the window",
     ]
+    if args.stimulus_proof is not None:
+        proves.append(
+            "the observed app process itself classified a synthetic conversation, "
+            "carried it into the production prompt, completed it against the packaged "
+            "helper over loopback, and redaction redacted or failed closed"
+        )
     does_not_prove = [
         "packet-level absence of network traffic",
         "the separate first-run HTTPS model-download phase",
@@ -576,6 +662,7 @@ def main() -> int:
         "direct_synthetic_model_completion_nonempty": completion_chars > 0,
         "direct_synthetic_model_completion_chars": completion_chars,
         "non_loopback_endpoints": sorted(remotes),
+        "screen_memory_stimulus": stimulus_payload,
         "failures": failures,
         "stimulation": (
             "direct POST to the exact packaged llama-server child over loopback "

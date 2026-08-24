@@ -27,9 +27,12 @@ safer, or simpler.
   ban; 2026-08-16 owner directive made Screen Memory required, not opt-in):
   Tilde may capture on-device screen text under these non-negotiables —
   on-device only, no cloud, and no user-derived network egress; the only
-  permitted network phase is the fixed model-asset download. Before ship the
-  release egress proof must be extended with a packaged capture/redaction
-  stimulus so the gate actually exercises Screen Memory's code paths;
+  permitted network phase is the fixed model-asset download. The release
+  egress proof runs a packaged capture/redaction stimulus inside the
+  observed release-proof process — a synthetic conversation is classified,
+  carried into the scene-bearing prompt, completed over loopback, and
+  redaction must redact or fail closed — so the gate actually exercises
+  Screen Memory's code paths;
   redaction runs before persistence and fails closed, so a redactor error
   drops the capture rather than storing it raw; capture is excluded whenever
   macOS Secure Event Input is active, or any visible window — not just the
