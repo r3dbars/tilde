@@ -18,19 +18,27 @@ struct ScreenSceneSnapshotBridgeTests {
         x: Double,
         y: Double,
         width: Double = 0.35,
-        window: String? = nil
+        window: String? = nil,
+        windowIdentifier: UInt32? = nil,
+        confidence: Double? = nil
     ) -> ScreenSnapshot.TextBlock {
         ScreenSnapshot.TextBlock(
             text: text,
             boundingBox: NormalizedDisplayRect(x: x, y: y, width: width, height: 0.05),
             windowOwnerBundleIdentifier: window,
+            windowIdentifier: windowIdentifier,
             windowTitle: nil,
-            windowFrame: window != nil ? fullDisplay : nil
+            windowFrame: window != nil ? fullDisplay : nil,
+            confidence: confidence
         )
     }
 
-    private func snapshot(capturedAt: Date, blocks: [ScreenSnapshot.TextBlock]) -> ScreenSnapshot {
-        ScreenSnapshot(capturedAt: capturedAt, displayID: 1, blocks: blocks)
+    private func snapshot(
+        capturedAt: Date,
+        blocks: [ScreenSnapshot.TextBlock],
+        evidence: ScreenTextExtractionEvidence? = nil
+    ) -> ScreenSnapshot {
+        ScreenSnapshot(capturedAt: capturedAt, displayID: 1, blocks: blocks, evidence: evidence)
     }
 
     // MARK: - Conversion correctness
@@ -63,6 +71,54 @@ struct ScreenSceneSnapshotBridgeTests {
         let converted = ScreenScene.OCRBlock(snapshotBlock: raw)
         #expect(converted.windowOwnerBundleID == nil)
         #expect(converted.windowFrame == nil)
+    }
+
+    @Test("Snapshot conversion preserves exact window identity and OCR confidence")
+    func conversionPreservesWindowIdentityAndConfidence() {
+        let raw = textBlock(
+            "recognized text",
+            x: 0.1,
+            y: 0.2,
+            window: slack,
+            windowIdentifier: 42,
+            confidence: 0.73
+        )
+        let converted = ScreenScene.OCRBlock(snapshotBlock: raw)
+        #expect(converted.windowIdentifier == 42)
+        #expect(converted.confidence == 0.73)
+    }
+
+    @Test("A reply scene uses only the exact target window when one app has several windows")
+    func replySceneUsesOnlyExactTargetWindow() {
+        let target = TypingTargetIdentity(
+            bundleIdentifier: slack,
+            processIdentifier: 99,
+            windowIdentifier: 42,
+            fieldSessionIdentifier: "field-a",
+            generation: 7
+        )
+        let blocks = [
+            textBlock("wrong window oldest", x: 0.05, y: 0.20, window: slack, windowIdentifier: 41),
+            textBlock("wrong window newest", x: 0.55, y: 0.50, window: slack, windowIdentifier: 41),
+            textBlock("right window oldest", x: 0.05, y: 0.30, window: slack, windowIdentifier: 42),
+            textBlock("right window newest", x: 0.55, y: 0.60, window: slack, windowIdentifier: 42),
+        ]
+        let snap = snapshot(
+            capturedAt: referenceMoment,
+            blocks: blocks,
+            evidence: ScreenTextExtractionEvidence(
+                source: .visionFull,
+                completed: true,
+                confidence: 0.8,
+                observedAt: referenceMoment,
+                recognizedAt: referenceMoment,
+                target: target
+            )
+        )
+
+        let scene = ScreenScene.classify(snapshot: snap, frontmostBundleID: slack, fieldText: "")
+        #expect(scene.mode == .replying)
+        #expect(scene.conversationTurns.map(\.text) == ["right window oldest", "right window newest"])
     }
 
     // MARK: - Staleness gate
@@ -101,6 +157,31 @@ struct ScreenSceneSnapshotBridgeTests {
         let now = referenceMoment.addingTimeInterval(20.001)
         let scene = ScreenScene.freshScene(from: snap, now: now, frontmostBundleID: slack, fieldText: "")
         #expect(scene == nil)
+    }
+
+    @Test("Fresh pixels cannot disguise reused OCR text whose recognition is stale")
+    func staleRecognitionIsDroppedEvenWhenObservationIsFresh() {
+        let now = referenceMoment.addingTimeInterval(25)
+        let evidence = ScreenTextExtractionEvidence(
+            source: .visionReused,
+            completed: true,
+            confidence: 0.91,
+            observedAt: now.addingTimeInterval(-1),
+            recognizedAt: referenceMoment,
+            reuseCount: 2
+        )
+        let snap = snapshot(
+            capturedAt: evidence.observedAt,
+            blocks: [textBlock("hey are you around today", x: 0.05, y: 0.30, window: slack)],
+            evidence: evidence
+        )
+
+        #expect(ScreenScene.freshScene(
+            from: snap,
+            now: now,
+            frontmostBundleID: slack,
+            fieldText: ""
+        ) == nil)
     }
 
     @Test("A snapshot stamped in the future is dropped fail-closed, not treated as instantly fresh")

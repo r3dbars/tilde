@@ -47,6 +47,7 @@ public enum ScreenScene {
         public let text: String
         public let boundingBox: NormalizedRect
         public let windowOwnerBundleID: String?
+        public let windowIdentifier: UInt32?
         public let windowTitle: String?
         /// The owning window's own bounding box, in the same display-
         /// normalized coordinate space as `boundingBox` — sourced from the
@@ -56,19 +57,24 @@ public enum ScreenScene {
         /// every block's *display*-relative centerX on one side regardless
         /// of which side of the *window* it's actually on.
         public let windowFrame: NormalizedRect?
+        public let confidence: Double?
 
         public init(
             text: String,
             boundingBox: NormalizedRect,
             windowOwnerBundleID: String? = nil,
+            windowIdentifier: UInt32? = nil,
             windowTitle: String? = nil,
-            windowFrame: NormalizedRect? = nil
+            windowFrame: NormalizedRect? = nil,
+            confidence: Double? = nil
         ) {
             self.text = text
             self.boundingBox = boundingBox
             self.windowOwnerBundleID = windowOwnerBundleID
+            self.windowIdentifier = windowIdentifier
             self.windowTitle = windowTitle
             self.windowFrame = windowFrame
+            self.confidence = confidence
         }
     }
 
@@ -85,12 +91,12 @@ public enum ScreenScene {
     }
 
     /// Who plausibly said a conversation turn. Attribution is a left/right
-    /// alignment guess, not identity — `other` is also the fallback for
-    /// "couldn't tell," so an unreadable layout never gets misread as the
-    /// user's own words.
+    /// alignment guess, not identity. Ambiguous geometry stays explicitly
+    /// unknown; falsely assigning a turn is worse than neutral attribution.
     public enum Speaker: String, Equatable, Sendable {
         case selfSpeaker = "self"
         case other
+        case unknown
     }
 
     public struct ConversationTurn: Equatable, Sendable {
@@ -140,6 +146,7 @@ public enum ScreenScene {
     public static func classify(
         blocks: [OCRBlock],
         frontmostBundleID: String?,
+        targetWindowIdentifier: UInt32? = nil,
         fieldText: String
     ) -> Scene {
         // Geometry-first, host-agnostic (fix for the "demo page rendered in
@@ -161,7 +168,9 @@ public enum ScreenScene {
             // all of them) could get folded into the conversation as if the
             // user's own chat partner said it. Drop-on-doubt beats guessing.
             let ownWindowBlocks = blocks.filter {
-                $0.windowOwnerBundleID == frontmostBundleID
+                guard $0.windowOwnerBundleID == frontmostBundleID else { return false }
+                guard let targetWindowIdentifier else { return true }
+                return $0.windowIdentifier == targetWindowIdentifier
             }
             if looksLikeMessageList(ownWindowBlocks) {
                 let turns = conversationTurns(from: ownWindowBlocks, fieldText: fieldText)
@@ -224,9 +233,9 @@ public enum ScreenScene {
     /// Left-aligned bubbles are read as the other party, right-aligned as
     /// the user, matching the near-universal iMessage/Slack/WhatsApp DM
     /// convention. A block straddling the middle (or left of it) is
-    /// ambiguous and falls back to `other` per the plan ("else mark speaker
-    /// unknown-other").
+    /// ambiguous and remains unknown.
     private static let rightBucketMin = 0.58
+    private static let leftBucketMax = 0.42
 
     /// Bucketing needs the block's horizontal position *within its window*,
     /// not within the display: a chat window docked to, say, the right
@@ -234,13 +243,14 @@ public enum ScreenScene {
     /// centerX past the midpoint, which would read every incoming message
     /// as `self`. When the window's frame isn't known, there's no honest
     /// way to recover window-relative position from a display-relative
-    /// coordinate — guessing risks exactly that mislabeling, so this falls
-    /// back to `other` rather than assuming the window is fullscreen.
+    /// coordinate — guessing risks exactly that mislabeling, so this stays
+    /// unknown rather than assuming the window is fullscreen.
     private static func speaker(for block: OCRBlock) -> Speaker {
-        guard let windowFrame = block.windowFrame, windowFrame.width > 0 else { return .other }
+        guard let windowFrame = block.windowFrame, windowFrame.width > 0 else { return .unknown }
         let relativeCenter = (block.boundingBox.centerX - windowFrame.x) / windowFrame.width
         if relativeCenter >= rightBucketMin { return .selfSpeaker }
-        return .other
+        if relativeCenter <= leftBucketMax { return .other }
+        return .unknown
     }
 
     /// Bottom-most blocks are the most recent messages (the compose field
@@ -333,8 +343,10 @@ public enum ScreenScene {
                             height: bottom - last.boundingBox.y
                         ),
                         windowOwnerBundleID: last.windowOwnerBundleID,
+                        windowIdentifier: last.windowIdentifier,
                         windowTitle: last.windowTitle,
-                        windowFrame: last.windowFrame
+                        windowFrame: last.windowFrame,
+                        confidence: mergedConfidence(last.confidence, block.confidence)
                     )
                     lastLineHeights[lastLineHeights.count - 1] = block.boundingBox.height
                     continue
@@ -344,6 +356,14 @@ public enum ScreenScene {
             lastLineHeights.append(block.boundingBox.height)
         }
         return merged
+    }
+
+    private static func mergedConfidence(_ lhs: Double?, _ rhs: Double?) -> Double? {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?): return min(lhs, rhs)
+        case let (value?, nil), let (nil, value?): return value
+        case (nil, nil): return nil
+        }
     }
 
     // MARK: - Referencing: cross-window shared-rare-word snippet

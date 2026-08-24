@@ -22,9 +22,17 @@ enum GhostBrainClient {
     static func complete(
         context: String,
         app: String?,
+        fieldSessionIdentifier: String? = nil,
         onPartial: (@Sendable (String) -> Void)? = nil
     ) async -> GhostBrainResponse {
-        await send(GhostBrainRequest(context: context, app: app), onPartial: onPartial)
+        await send(
+            GhostBrainRequest(
+                context: context,
+                app: app,
+                fieldSessionIdentifier: fieldSessionIdentifier
+            ),
+            onPartial: onPartial
+        )
     }
 
     static func recordPersonalHistory(

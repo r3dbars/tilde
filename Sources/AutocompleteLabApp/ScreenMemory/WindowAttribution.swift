@@ -7,10 +7,23 @@ import AutocompleteLabCore
 enum WindowAttribution {
     struct WindowInfo: Equatable, Sendable {
         let bundleIdentifier: String?
+        let windowIdentifier: UInt32?
         let title: String?
         /// Same top-left-origin space, normalized to the captured display,
         /// as the OCR block's `boundingBox`.
         let frame: NormalizedDisplayRect
+
+        init(
+            bundleIdentifier: String?,
+            windowIdentifier: UInt32? = nil,
+            title: String?,
+            frame: NormalizedDisplayRect
+        ) {
+            self.bundleIdentifier = bundleIdentifier
+            self.windowIdentifier = windowIdentifier
+            self.title = title
+            self.frame = frame
+        }
     }
 
     /// `windows` must be front-to-back ordered (frontmost first) — Apple

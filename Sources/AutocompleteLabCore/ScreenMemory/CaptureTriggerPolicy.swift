@@ -32,6 +32,8 @@ public enum CaptureTriggerPolicy {
         case belowTypingPauseThreshold
         case excludedWindow(appBundleIdentifier: String)
         case cadence(secondsRemaining: TimeInterval)
+        case noTargetWindow
+        case targetChanged
     }
 
     /// Typing must be still this long, with a session active, before a pause
@@ -102,19 +104,27 @@ public enum CaptureTriggerPolicy {
             return .skip(.excludedWindow(appBundleIdentifier: excludedOwner))
         }
 
-        if let lastCaptureAt {
-            let floor: TimeInterval
-            switch trigger {
-            case .windowChanged, .textFieldFocused: floor = contentChangeCadenceFloorSeconds
-            case .typingPause: floor = cadenceCapSeconds
-            }
-            let sinceLastCapture = now.timeIntervalSince(lastCaptureAt)
-            if sinceLastCapture < floor {
-                return .skip(.cadence(secondsRemaining: floor - sinceLastCapture))
-            }
-        }
+        return cadenceDecision(for: trigger, lastCaptureAt: lastCaptureAt, now: now)
+    }
 
-        return .capture
+    /// The one cadence calculation used by both the pure policy and the
+    /// actor's atomic reservation. Keeping trigger-specific floors here
+    /// prevents orchestration from silently replacing the 0.5s focus/window
+    /// path with the ordinary 2s typing ceiling.
+    public static func cadenceDecision(
+        for trigger: Trigger,
+        lastCaptureAt: Date?,
+        now: Date
+    ) -> Decision {
+        guard let lastCaptureAt else { return .capture }
+        let floor: TimeInterval
+        switch trigger {
+        case .windowChanged, .textFieldFocused: floor = contentChangeCadenceFloorSeconds
+        case .typingPause: floor = cadenceCapSeconds
+        }
+        let sinceLastCapture = now.timeIntervalSince(lastCaptureAt)
+        guard sinceLastCapture < floor else { return .capture }
+        return .skip(.cadence(secondsRemaining: floor - sinceLastCapture))
     }
 
     /// Whether the last observed IME activity is recent enough to call a

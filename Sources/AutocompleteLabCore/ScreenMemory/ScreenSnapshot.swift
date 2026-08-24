@@ -1,5 +1,88 @@
 import Foundation
 
+/// The exact field/window generation a Screen Memory read belongs to.
+/// Plain integer identifiers keep Core free of AppKit/CoreGraphics while the
+/// app target converts from `pid_t`/`CGWindowID` at the boundary.
+public struct TypingTargetIdentity: Equatable, Sendable {
+    public let bundleIdentifier: String?
+    public let processIdentifier: Int32?
+    public let windowIdentifier: UInt32?
+    public let fieldSessionIdentifier: String
+    public let generation: UInt64
+
+    public init(
+        bundleIdentifier: String?,
+        processIdentifier: Int32?,
+        windowIdentifier: UInt32?,
+        fieldSessionIdentifier: String,
+        generation: UInt64
+    ) {
+        self.bundleIdentifier = bundleIdentifier
+        self.processIdentifier = processIdentifier
+        self.windowIdentifier = windowIdentifier
+        self.fieldSessionIdentifier = fieldSessionIdentifier
+        self.generation = generation
+    }
+
+    /// Request-time comparison deliberately ignores the capture generation:
+    /// the service owns that counter, while the IME/app can independently
+    /// prove that the field session and exact OS window are still current.
+    public func matchesWindowAndField(of other: Self) -> Bool {
+        bundleIdentifier == other.bundleIdentifier
+            && processIdentifier == other.processIdentifier
+            && windowIdentifier == other.windowIdentifier
+            && fieldSessionIdentifier == other.fieldSessionIdentifier
+    }
+}
+
+public enum ScreenTextExtractionSource: String, Equatable, Sendable {
+    case accessibility
+    case visionFull
+    case visionRegion
+    case visionReused
+    case unspecified
+}
+
+/// Provenance stays attached to text instead of flattening AX, fresh Vision,
+/// and reused Vision into one indistinguishable timestamp.
+public struct ScreenTextExtractionEvidence: Equatable, Sendable {
+    public let source: ScreenTextExtractionSource
+    public let completed: Bool
+    public let confidence: Double
+    public let observedAt: Date
+    public let recognizedAt: Date
+    public let reuseCount: Int
+    public let target: TypingTargetIdentity?
+
+    public init(
+        source: ScreenTextExtractionSource,
+        completed: Bool,
+        confidence: Double,
+        observedAt: Date,
+        recognizedAt: Date,
+        reuseCount: Int = 0,
+        target: TypingTargetIdentity? = nil
+    ) {
+        self.source = source
+        self.completed = completed
+        self.confidence = min(1, max(0, confidence))
+        self.observedAt = observedAt
+        self.recognizedAt = recognizedAt
+        self.reuseCount = max(0, reuseCount)
+        self.target = target
+    }
+
+    public static func unspecified(at date: Date) -> Self {
+        Self(
+            source: .unspecified,
+            completed: true,
+            confidence: 1,
+            observedAt: date,
+            recognizedAt: date
+        )
+    }
+}
+
 /// A capture-space rectangle normalized to the full display, origin top-left,
 /// (0,0)-(1,1). Deliberately not CGRect: Core stays free of CoreGraphics so
 /// this type — and everything built on it — has no AppKit/CoreGraphics
@@ -50,6 +133,9 @@ public struct ScreenSnapshot: Equatable, Sendable {
         public let text: String
         public let boundingBox: NormalizedDisplayRect
         public let windowOwnerBundleIdentifier: String?
+        /// Exact owner window when attribution succeeded. Bundle identity is
+        /// insufficient when two Slack/Chrome windows are visible together.
+        public let windowIdentifier: UInt32?
         public let windowTitle: String?
         /// The owning window's own frame, same normalized/display-relative
         /// space as `boundingBox` — `nil` exactly when attribution is `nil`.
@@ -57,19 +143,26 @@ public struct ScreenSnapshot: Equatable, Sendable {
         /// as self/other by its position *within its window*, not within
         /// the display (see `ScreenScene.OCRBlock.windowFrame`).
         public let windowFrame: NormalizedDisplayRect?
+        /// Vision candidate confidence. AX text is exact and records `1`;
+        /// legacy/test blocks may leave this unknown.
+        public let confidence: Double?
 
         public init(
             text: String,
             boundingBox: NormalizedDisplayRect,
             windowOwnerBundleIdentifier: String? = nil,
+            windowIdentifier: UInt32? = nil,
             windowTitle: String? = nil,
-            windowFrame: NormalizedDisplayRect? = nil
+            windowFrame: NormalizedDisplayRect? = nil,
+            confidence: Double? = nil
         ) {
             self.text = text
             self.boundingBox = boundingBox
             self.windowOwnerBundleIdentifier = windowOwnerBundleIdentifier
+            self.windowIdentifier = windowIdentifier
             self.windowTitle = windowTitle
             self.windowFrame = windowFrame
+            self.confidence = confidence.map { min(1, max(0, $0)) }
         }
     }
 
@@ -78,11 +171,18 @@ public struct ScreenSnapshot: Equatable, Sendable {
     /// CoreGraphics' display headers for one integer.
     public let displayID: UInt32
     public let blocks: [TextBlock]
+    public let evidence: ScreenTextExtractionEvidence
 
-    public init(capturedAt: Date, displayID: UInt32, blocks: [TextBlock]) {
+    public init(
+        capturedAt: Date,
+        displayID: UInt32,
+        blocks: [TextBlock],
+        evidence: ScreenTextExtractionEvidence? = nil
+    ) {
         self.capturedAt = capturedAt
         self.displayID = displayID
         self.blocks = blocks
+        self.evidence = evidence ?? .unspecified(at: capturedAt)
     }
 
     /// Every window bundle identifier this snapshot's text touched, deduped.

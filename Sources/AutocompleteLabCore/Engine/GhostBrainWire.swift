@@ -16,16 +16,21 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
     /// directions. Older apps ignore this field; older input methods omit it
     /// and therefore receive only the terminal response from a newer app.
     public let streamResponses: Bool?
+    /// The IMKit controller that owns this completion. The app combines it
+    /// with the current PID/window number so context and response delivery
+    /// can be bound to the exact field/window, not merely an app bundle.
+    public let fieldSessionIdentifier: String?
 
     public var supportsStreamingResponses: Bool { streamResponses == true }
 
-    public init(context: String, app: String?) {
+    public init(context: String, app: String?, fieldSessionIdentifier: String? = nil) {
         self.v = Self.version
         self.context = context
         self.app = app
         self.personalHistoryEvents = nil
         self.screenMemoryEvent = nil
         self.streamResponses = true
+        self.fieldSessionIdentifier = fieldSessionIdentifier
     }
 
     public init(personalHistoryEvents: [PersonalHistoryEvent]) {
@@ -35,6 +40,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.personalHistoryEvents = personalHistoryEvents
         self.screenMemoryEvent = nil
         self.streamResponses = nil
+        self.fieldSessionIdentifier = nil
     }
 
     public init(screenMemoryEvent: ScreenMemoryInputEvent) {
@@ -44,6 +50,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.personalHistoryEvents = nil
         self.screenMemoryEvent = screenMemoryEvent
         self.streamResponses = nil
+        self.fieldSessionIdentifier = nil
     }
 }
 
