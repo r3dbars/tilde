@@ -105,6 +105,7 @@ actor ScreenCaptureService {
     /// nothing to keep in sync. `false` restores today's always-full-OCR
     /// behavior exactly: the luminance-grid sampling and
     /// `CaptureChangeDetector` call are skipped entirely, not just ignored.
+    private let axWindowBlocks: @Sendable (SCWindow, SCDisplay) -> [ScreenSnapshot.TextBlock]?
     private let incrementalOCREnabled: @Sendable () -> Bool
     /// Explicit dev-build-only paired evaluator. When enabled, region/skip
     /// decisions run one additional full OCR pass over the same in-memory
@@ -125,6 +126,9 @@ actor ScreenCaptureService {
         },
         recognizeText: @escaping (CGImage) async throws -> [ScreenTextRecognizer.RecognizedBlock] = {
             try await ScreenTextRecognizer.recognize(image: $0)
+        },
+        axWindowBlocks: @escaping @Sendable (SCWindow, SCDisplay) -> [ScreenSnapshot.TextBlock]? = {
+            AXWindowTextReader.blocks(for: $0, display: $1)
         },
         now: @escaping @Sendable () -> Date = Date.init,
         diagnostics: @escaping @Sendable (String, [String: String]) -> Void = { event, metadata in
@@ -149,6 +153,7 @@ actor ScreenCaptureService {
         self.secureInputActive = secureInputActive
         self.shareableContent = shareableContent
         self.recognizeText = recognizeText
+        self.axWindowBlocks = axWindowBlocks
         self.now = now
         self.diagnostics = diagnostics
         self.incrementalOCREnabled = incrementalOCREnabled
@@ -493,6 +498,33 @@ actor ScreenCaptureService {
         let zRanks = Self.onScreenZOrderRanks()
 
         if kind == .window, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
+            // Accessibility-first: the exact strings the app draws, in ~1ms,
+            // when the user granted the permission and the app's tree
+            // carries real text. Anything less falls straight through to
+            // the screenshot+OCR path unchanged.
+            let axStart = now()
+            if let blocks = axWindowBlocks(window, display) {
+                let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
+                latestSnapshot = snapshot
+                latestWindowSnapshot = snapshot
+                lastCaptureAt = moment
+                lastWindowSceneHadConversation = ScreenScene.classify(
+                    snapshot: snapshot,
+                    frontmostBundleID: window.owningApplication?.bundleIdentifier,
+                    fieldText: ""
+                ).mode == .replying
+                diagnostics(
+                    "screen-capture-completed",
+                    [
+                        "blocks": String(blocks.count),
+                        "duration_ms": String(Self.milliseconds(from: axStart, to: now())),
+                        "ocrMilliseconds": "0",
+                        "kind": "ax",
+                        "ocrScope": "skipped",
+                    ]
+                )
+                return .captured(blockCount: blocks.count)
+            }
             return await performWindowCapture(
                 window: window,
                 display: display,
@@ -1114,7 +1146,7 @@ actor ScreenCaptureService {
     /// keeps multi-monitor arrangements correct: a window's frame is
     /// expressed relative to the display it was captured from, matching the
     /// 0...1 space Vision's OCR boxes already use for that capture.
-    private static func normalize(_ frame: CGRect, in displayFrame: CGRect) -> NormalizedDisplayRect {
+    static func normalize(_ frame: CGRect, in displayFrame: CGRect) -> NormalizedDisplayRect {
         guard displayFrame.width > 0, displayFrame.height > 0 else {
             return NormalizedDisplayRect(x: 0, y: 0, width: 0, height: 0)
         }
