@@ -32,9 +32,16 @@ Stages covered today (field in parentheses):
                             (requestMilliseconds); the accept-to-parsed peer
                             code-signature handshake plus wire read that runs
                             *before* it, same event (handshakeMilliseconds)
-Stages logged but not yet timed (gaps show as absent rows):
-  IME socket round-trip (InlineGhostIME's slow-key os_log path is out of
-  scope for this diagnostics log — see AGENTS.md).
+The IME side of the socket round-trip is now timed too, but it lands in
+OSLog rather than this diagnostics log: InlineGhostIME has no dependency on
+the app target, so it cannot reach DiagnosticsLog. Read those samples with
+
+  log show --predicate 'subsystem == "bar.r3d.inputmethod.InlineGhost"' \
+      --style compact --last 8h | grep ghost-round-trip
+
+which emits `roundTripMilliseconds=` and a fixed `outcome=` word per
+completed (non-cancelled) request. Folding that stream into this table is
+the obvious next step; it needs a `log show` reader, not just a new field.
 """
 
 import argparse
