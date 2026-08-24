@@ -46,11 +46,6 @@ public enum DiagnosticsMetadataRedactor {
         // region, or none at all because nothing changed. Never any
         // captured text or the region's coordinates.
         "full", "region", "skipped",
-        // `llama-server-warmed`'s outcome (`LlamaServerProcessHost.warmUp`) —
-        // whether the one post-launch priming completion landed. The warm-up
-        // prompt is the compiled-in scaffold, so neither value can carry user
-        // text, and the event reports only that plus its duration.
-        "warmed", "warm-failed",
         // "P99 at every section": `GhostBrainServerHost.awaitPersonalPrediction`'s
         // outcome vocabulary, logged as the `outcome` field on
         // `personal-lookup-timing` — which arm of the 250ms personal-brain
@@ -74,10 +69,9 @@ public enum DiagnosticsMetadataRedactor {
              // socket request total (`requestMilliseconds` on
              // `ghost-request-timing`) — all whole milliseconds, no text.
              "milliseconds", "ocrMilliseconds", "waitedMilliseconds", "requestMilliseconds",
-             // Accept-to-parsed on `ghost-request-timing`: the peer
-             // code-signature handshake plus the wire read, the segment that
-             // runs before `requestMilliseconds` starts counting. A whole
-             // millisecond count, no text.
+             // Accept-to-parsed on `ghost-handshake-timing`: the peer
+             // code-signature handshake plus the wire read, before
+             // `ghost-request-timing` starts. A whole millisecond count, no text.
              "handshakeMilliseconds",
              // Streaming split on `llama-completion-timing`: first token and
              // first complete-word partial, whole milliseconds, no text.

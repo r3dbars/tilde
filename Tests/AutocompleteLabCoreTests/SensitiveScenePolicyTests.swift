@@ -126,12 +126,10 @@ struct SensitiveScenePolicyTests {
 
 @Suite("Sensitive scene phrase table")
 struct SensitiveScenePhraseTableTests {
-    /// `containsPhrase` runs a cheap substring check before its boundary
-    /// regex. That is only sound if the substring check never rejects
-    /// something the regex would have matched — and a wrong rejection here is
-    /// silent, letting Tilde suggest into exactly the conversations the policy
-    /// exists to stay out of. Prove it against every shipped phrase, not a
-    /// sample.
+    /// The compiled table must preserve every shipped phrase and boundary.
+    /// A missing or malformed pattern would fail silently and let Tilde suggest
+    /// into exactly the conversations this policy exists to stay out of, so
+    /// prove the whole table rather than a sample.
     @Test("Every phrase in the table still fires when it appears on a word boundary")
     func everyShippedPhraseStillFires() {
         for (category, phrases) in SensitiveScenePolicy.phrasesByCategory {

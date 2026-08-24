@@ -111,7 +111,7 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("waitedMilliseconds", "250") == "waitedMilliseconds=250")
         // Socket request total (`GhostBrainServerHost`'s `ghost-request-timing`).
         #expect(field("requestMilliseconds", "38") == "requestMilliseconds=38")
-        // Accept-to-parsed handshake on the same event: the peer
+        // Accept-to-parsed handshake on its own timing event: the peer
         // code-signature verification plus the wire read.
         #expect(field("handshakeMilliseconds", "12") == "handshakeMilliseconds=12")
         // Nothing free-text ever gets through any of these keys either.
@@ -125,9 +125,6 @@ struct DiagnosticsMetadataRedactorTests {
         #expect(field("outcome", "resolved") == "outcome=resolved")
         #expect(field("outcome", "timeout") == "outcome=timeout")
         #expect(field("outcome", "disabled") == "outcome=disabled")
-        // The post-launch warm-up's own outcome (`llama-server-warmed`).
-        #expect(field("outcome", "warmed") == "outcome=warmed")
-        #expect(field("outcome", "warm-failed") == "outcome=warm-failed")
         // Nothing free-text ever gets through the "outcome" key either.
         #expect(field("outcome", "maybe") == "outcome=String(5 chars)")
     }

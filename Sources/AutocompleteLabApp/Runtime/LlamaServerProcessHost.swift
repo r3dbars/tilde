@@ -1,4 +1,3 @@
-import AutocompleteLabCore
 import Foundation
 import Security
 
@@ -302,17 +301,6 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             for attempt in 0..<Self.healthProbeAttempts {
                 guard !Task.isCancelled, self.isCurrent(child) else { return }
                 if await self.probeHealth(of: child) {
-                    // Warm up while still `.starting`, never after publishing
-                    // `.ready`. llama-server is launched with one slot, so a real
-                    // request arriving mid-warm-up would queue behind it — and if
-                    // that pushed past the completion engine's 8s timeout the
-                    // helper would be reported failed and restarted, turning a
-                    // cold start into a restart loop on exactly the path this is
-                    // meant to speed up. Staying `.starting` costs the user
-                    // nothing they were not already going to pay on the first
-                    // keystroke; it just makes them wait for it honestly.
-                    await self.warmUp(child)
-                    guard !Task.isCancelled, self.isCurrent(child) else { return }
                     let transitioned = self.lifecycle.sync { () -> Bool in
                         guard !self.stopped, self.runtimeSnapshot == .starting,
                               self.process === child else { return false }
@@ -343,48 +331,6 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     private func isCurrent(_ child: Process) -> Bool {
         lifecycle.sync { !stopped && process === child }
-    }
-
-    /// One throwaway completion, immediately after the helper reports healthy.
-    ///
-    /// Without it the first real keystroke pays for everything llama.cpp defers
-    /// to first use — Metal shader compilation and the model graph warm-up —
-    /// plus a cold prefill of the scaffold that every prompt shares. That first
-    /// suggestion after each launch, wake, or helper restart is by definition a
-    /// p99 sample, and usually the worst one the owner ever sees.
-    ///
-    /// Readiness is published before this runs, so a user who is already typing
-    /// is never made to wait on it; the warm-up simply races ahead of them.
-    ///
-    /// The prompt is the compiled-in prose scaffold and nothing else: no field
-    /// text, no scene, no Personal History, no user-derived bytes of any kind.
-    /// It is exactly the prefix real requests reuse through `cache_prompt`, so
-    /// warming it also leaves that prefix cached for the first real request.
-    private func warmUp(_ child: Process) async {
-        var request = URLRequest(url: baseURL.appendingPathComponent("completion"))
-        request.httpMethod = "POST"
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        request.timeoutInterval = 30
-        let body: [String: Any] = [
-            "prompt": RawContinuationPrompt.scaffold(for: .prose) + "Text: the\nContinuation:",
-            "n_predict": 1,
-            "temperature": 0,
-            "cache_prompt": true,
-            "stream": false,
-        ]
-        guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return }
-        request.httpBody = payload
-
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        let warmed = (try? await LocalhostURLSession.shared.data(for: request)) != nil
-        guard isCurrent(child) else { return }
-        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAt)
-        DiagnosticsLog.shared.record("llama-server-warmed", metadata: [
-            "outcome": warmed ? "warmed" : "warm-failed",
-            "milliseconds": String(Int((elapsed * 1_000).rounded())),
-        ])
     }
 
     private func probeHealth(of child: Process) async -> Bool {

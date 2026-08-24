@@ -32,7 +32,8 @@ struct LlamaHealthProbeCadenceTests {
         #expect(LlamaServerProcessHost.healthProbeDelayMilliseconds(attempt: 11) == 500)
         #expect(LlamaServerProcessHost.healthProbeDelayMilliseconds(attempt: 12) == 1_000)
         #expect(LlamaServerProcessHost.healthProbeDelayMilliseconds(attempt: 16) == 2_000)
-        #expect(LlamaServerProcessHost.healthProbeDelayMilliseconds(attempt: 57) == 2_000)
+        #expect(LlamaServerProcessHost.healthProbeAttempts == 51)
+        #expect(LlamaServerProcessHost.healthProbeDelayMilliseconds(attempt: 50) == 2_000)
     }
 
     /// The whole point of the ladder: a helper serving 300ms after launch is

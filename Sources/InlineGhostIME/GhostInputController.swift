@@ -525,7 +525,7 @@ final class GhostInputController: IMKInputController {
     /// Every `selectedRange()` / `bundleIdentifier()` is a cross-process call
     /// into the app being typed into, made on the same main thread that has to
     /// service the next keystroke — and `contextBeforeCaret`,
-    /// `ticket(for:context:)` and `trailingTextAfterCaret` each used to make
+    /// ticket construction and `trailingTextAfterCaret` each used to make
     /// those calls independently, so one `present()` paid for three
     /// `selectedRange()` round trips and `updateSuggestion` for four. The
     /// client cannot change underneath us mid-turn, so reading once is exactly
@@ -706,7 +706,7 @@ final class GhostInputController: IMKInputController {
             }
         } else if context.last?.isWhitespace == true {
             requestPhrase(
-                for: client,
+                bundleIdentifier: field.bundleIdentifier,
                 context: context,
                 ticket: requestTicket,
                 revealNotBefore: revealNotBefore
@@ -768,14 +768,14 @@ final class GhostInputController: IMKInputController {
 
     /// Word boundaries make exactly one request to Tilde's app-owned model.
     private func requestPhrase(
-        for client: IMKTextInput,
+        bundleIdentifier: String,
         context: String,
         ticket requestTicket: InlineSuggestionTicket,
         revealNotBefore: Date
     ) {
         let tail = String(context.suffix(Self.contextLimit))
-        let bundle = client.bundleIdentifier()
-        let fieldSessionIdentifier = suggestionSessionIdentifier
+        let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
+        let fieldSessionIdentifier = requestTicket.clientIdentifier
         modelTask = Task { [weak self] in
             let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(
