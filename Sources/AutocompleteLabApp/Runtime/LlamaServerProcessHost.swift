@@ -264,11 +264,32 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         }
     }
 
+    /// Readiness probes ran on a flat 2-second cadence, so a helper that was
+    /// actually serving 300ms after launch was not discovered until the next
+    /// tick — up to ~1.7s of pure waiting added to the first suggestion after
+    /// every launch, wake, or helper restart. That first suggestion is by
+    /// definition a p99 sample, and usually the worst one the owner ever sees.
+    /// Probe fast while a healthy start is still plausible, then settle back
+    /// to the original 2s cadence for the long tail of a genuinely stuck
+    /// helper. The ladder keeps the same ~90-second overall ceiling the flat
+    /// 45x2s loop had, so `health-timeout` still fires at the same point.
+    static let healthProbeAttempts = 58
+
+    static func healthProbeDelayMilliseconds(attempt: Int) -> Int {
+        switch attempt {
+        case ..<4: return 100
+        case ..<8: return 250
+        case ..<12: return 500
+        case ..<16: return 1_000
+        default: return 2_000
+        }
+    }
+
     private func pollHealth(of child: Process) {
         healthTask?.cancel()
         let task = Task { [weak self, weak child] in
             guard let self, let child else { return }
-            for _ in 0..<45 {
+            for attempt in 0..<Self.healthProbeAttempts {
                 guard !Task.isCancelled, self.isCurrent(child) else { return }
                 if await self.probeHealth(of: child) {
                     let transitioned = self.lifecycle.sync { () -> Bool in
@@ -282,7 +303,9 @@ final class LlamaServerProcessHost: @unchecked Sendable {
                     }
                     return
                 }
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(
+                    for: .milliseconds(Self.healthProbeDelayMilliseconds(attempt: attempt))
+                )
             }
             guard self.isCurrent(child) else { return }
             let timedOut = self.lifecycle.sync { () -> Bool in
