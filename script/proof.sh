@@ -160,6 +160,8 @@ check_release_contract() {
     || { echo "release driver does not state that the proof model is external" >&2; return 1; }
   grep -F -- 'gemma-4-E2B.Q4_K_M.gguf' <<<"$help" >/dev/null \
     || { echo "release driver does not identify the pinned Gemma 4 E2B file" >&2; return 1; }
+  grep -F -- 'capture/redaction' <<<"$help" >/dev/null \
+    || { echo "release driver does not describe the Screen Memory capture/redaction stimulus" >&2; return 1; }
 }
 
 run_swift() {
