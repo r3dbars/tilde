@@ -280,6 +280,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         startModelPreparation()
+        if launchMode == .releaseProof,
+           let stimulusOut = ProcessInfo.processInfo.environment[ScreenMemoryProofStimulus.environmentKey],
+           !stimulusOut.isEmpty {
+            // The release gate's packaged capture/redaction stimulus: runs
+            // in THIS observed process so the egress lane's socket window
+            // covers Screen Memory's code paths. Synthetic data only.
+            let port = launchMode.llamaServerPort
+            Task.detached {
+                await ScreenMemoryProofStimulus.run(port: port, outputPath: stimulusOut)
+            }
+        }
         if launchMode.allowsDailyDriverMutation {
             registerAsLoginItemIfNeeded()
             keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
