@@ -38,7 +38,7 @@ public enum DiagnosticsMetadataRedactor {
         // `screen-capture-completed`/`screen-capture-failed`'s `kind` field
         // (`ScreenCaptureService.performWindowCapture`/`performFullDisplayCapture`)
         // — which capture path ran, never any captured text.
-        "window", "display",
+        "window", "display", "ax",
         // `screen-capture-completed`'s `ocrScope` field (incremental OCR,
         // `ScreenCaptureService.performWindowCapture`/`performFullDisplayCapture`,
         // backed by `CaptureChangeDetector`) — how much of the frame the OCR

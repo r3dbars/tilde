@@ -9,7 +9,8 @@ suggestions. Type normally, then use:
 - `Esc` to dismiss
 
 Suggestions are IMKit marked text inside the app where you are writing. Tilde
-does not use an overlay, Accessibility, or synthetic paste events. Screen
+does not use an overlay, Accessibility-based insertion, or synthetic paste
+events. Screen
 Memory uses macOS Screen Recording and on-device OCR when enabled by its
 privacy controls; screen text stays on this Mac and is never sent for cloud
 inference.
