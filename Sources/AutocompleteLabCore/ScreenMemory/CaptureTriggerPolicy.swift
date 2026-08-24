@@ -44,6 +44,13 @@ public enum CaptureTriggerPolicy {
     /// cost, so the ceiling change scales total cost by at most 2.5x while
     /// typing, and captures still only fire on real triggers.
     public static let cadenceCapSeconds: TimeInterval = 2.0
+    /// Focus and window changes signal that the content probably changed —
+    /// the previous snapshot is the wrong conversation, and waiting out the
+    /// full cadence serves stale context (live 2026-08-23: switching
+    /// threads inside one window kept the old thread's scene for up to 2s).
+    /// These triggers get a tighter floor instead of a bypass so a focus
+    /// storm still cannot exceed ~2 captures per second.
+    public static let contentChangeCadenceFloorSeconds: TimeInterval = 0.5
     /// A completion session is "active" if the IME's last observed activity
     /// (a completion request reaching the socket) was within this long ago.
     /// Chosen to comfortably span the typing-pause threshold itself: a
@@ -96,9 +103,14 @@ public enum CaptureTriggerPolicy {
         }
 
         if let lastCaptureAt {
+            let floor: TimeInterval
+            switch trigger {
+            case .windowChanged, .textFieldFocused: floor = contentChangeCadenceFloorSeconds
+            case .typingPause: floor = cadenceCapSeconds
+            }
             let sinceLastCapture = now.timeIntervalSince(lastCaptureAt)
-            if sinceLastCapture < cadenceCapSeconds {
-                return .skip(.cadence(secondsRemaining: cadenceCapSeconds - sinceLastCapture))
+            if sinceLastCapture < floor {
+                return .skip(.cadence(secondsRemaining: floor - sinceLastCapture))
             }
         }
 
