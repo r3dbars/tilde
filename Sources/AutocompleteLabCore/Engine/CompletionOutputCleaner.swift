@@ -71,13 +71,21 @@ public struct CompletionOutputCleaner: Sendable {
         guard !isInstructionLeak(candidate) else { return .rejected(.promptInstructionEcho) }
 
         var continuation = candidate.first?.isWhitespace == true ? candidate : " " + candidate
+        // Tokenize the typed context once. `trimTypedPrefix` (and its
+        // `stripLeadingWordEcho` branch) and `replaysContext` below all want
+        // exactly this list off exactly this string, and each used to derive
+        // it independently — over the whole bounded context, on every streamed
+        // word of every request.
+        let contextWords = textBeforeCursor.map { normalizedWords(in: $0) } ?? []
         if let textBeforeCursor {
-            continuation = trimTypedPrefix(continuation, after: textBeforeCursor)
+            continuation = trimTypedPrefix(
+                continuation, after: textBeforeCursor, contextWords: contextWords
+            )
         }
         guard !continuation.trimmingCharacters(in: .whitespaces).isEmpty else {
             return .rejected(.emptyAfterPrefixTrimming)
         }
-        if let textBeforeCursor, replaysContext(continuation, context: textBeforeCursor) {
+        if textBeforeCursor != nil, replaysContext(continuation, contextWords: contextWords) {
             return .rejected(.replaysContext)
         }
 
@@ -133,7 +141,9 @@ public struct CompletionOutputCleaner: Sendable {
         }
     }
 
-    private func trimTypedPrefix(_ suggestion: String, after context: String) -> String {
+    private func trimTypedPrefix(
+        _ suggestion: String, after context: String, contextWords: [String]
+    ) -> String {
         if context.last?.isWhitespace == true {
             let dropped = String(suggestion.drop(while: \.isWhitespace))
             // The word-boundary-only echo guard: when the cursor sits right
@@ -149,13 +159,12 @@ public struct CompletionOutputCleaner: Sendable {
             // leading run of fully-repeated words — down to a single word —
             // gets stripped here, before `replaysContext`'s coarser check
             // ever runs.
-            return stripLeadingWordEcho(dropped, typedContext: context)
+            return stripLeadingWordEcho(dropped, contextWords: contextWords)
         }
         // A punctuation-only trailing token has no fragment. Treating its
         // normalized empty string as a prefix used to drop the first character.
         guard context.last?.isLetter == true else { return suggestion }
 
-        let contextWords = normalizedWords(in: context)
         let suggestionRanges = wordRanges(in: suggestion)
         let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
         guard !contextWords.isEmpty, !suggestionWords.isEmpty else { return suggestion }
@@ -186,13 +195,12 @@ public struct CompletionOutputCleaner: Sendable {
     }
 
     /// Strips a leading run of whole words in `suggestion` that exactly
-    /// repeats the tail of `typedContext`, longest match first (so "I will"
+    /// repeats the tail of the typed context, longest match first (so "I will"
     /// trims as one unit rather than leaving a dangling "will"). Only exact,
     /// case/punctuation-normalized whole-word matches count — this runs only
-    /// when `typedContext` ends in whitespace, so there is no partial last
+    /// when the typed context ends in whitespace, so there is no partial last
     /// word to reason about the way `trimTypedPrefix`'s other branch does.
-    private func stripLeadingWordEcho(_ suggestion: String, typedContext: String) -> String {
-        let contextWords = normalizedWords(in: typedContext)
+    private func stripLeadingWordEcho(_ suggestion: String, contextWords: [String]) -> String {
         let suggestionRanges = wordRanges(in: suggestion)
         let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
         guard !contextWords.isEmpty, !suggestionWords.isEmpty else { return suggestion }
@@ -207,9 +215,8 @@ public struct CompletionOutputCleaner: Sendable {
         return suggestion
     }
 
-    private func replaysContext(_ suggestion: String, context: String) -> Bool {
+    private func replaysContext(_ suggestion: String, contextWords typed: [String]) -> Bool {
         let offered = normalizedWords(in: suggestion)
-        let typed = normalizedWords(in: context)
         guard offered.count >= 3, typed.count >= 3 else { return false }
 
         for size in stride(from: min(4, offered.count), through: 3, by: -1) {
