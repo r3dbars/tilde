@@ -38,4 +38,14 @@ struct SuggestionRevealDelayPolicyTests {
             calmMarkedText: true
         ) == 200_000_000)
     }
+
+    @Test("Chromium and Electron start inference immediately and delay only reveal")
+    func calmHostsDelayOnlyReveal() {
+        let timing = SuggestionRevealDelayPolicy.schedule(
+            afterUserTyped: " ",
+            calmMarkedText: true
+        )
+        #expect(timing.inferenceDelayNanoseconds == 0)
+        #expect(timing.revealDelayNanoseconds == 200_000_000)
+    }
 }

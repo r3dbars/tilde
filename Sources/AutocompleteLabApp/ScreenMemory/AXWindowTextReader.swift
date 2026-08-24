@@ -13,6 +13,12 @@ import ScreenCaptureKit
 /// toggle, Secure Input, exclusion list) because this runs inside the same
 /// capture attempt that OCR would.
 enum AXWindowTextReader {
+    struct Result: Sendable {
+        let blocks: [ScreenSnapshot.TextBlock]
+        let completed: Bool
+        let confidence: Double
+    }
+
     static let nodeBudget = 3_000
     static let timeoutSeconds = 0.15
     /// Below this much text the tree is considered unreadable and the
@@ -63,7 +69,7 @@ enum AXWindowTextReader {
     /// Walks the AX window matching `window` and returns display-normalized
     /// text blocks in the exact shape the OCR path produces, or nil when
     /// the tree yields too little to trust.
-    static func blocks(for window: SCWindow, display: SCDisplay) -> [ScreenSnapshot.TextBlock]? {
+    static func read(for window: SCWindow, display: SCDisplay) -> Result? {
         guard isAvailable(), let pid = window.owningApplication?.processID else { return nil }
         let app = AXUIElementCreateApplication(pid)
         // A wedged target app must cost at most one bounded call, never the
@@ -97,17 +103,24 @@ enum AXWindowTextReader {
             queue.append(contentsOf: boundedChildren(element))
         }
 
+        let completed = index >= queue.count
         let totalCharacters = collected.reduce(0) { $0 + $1.0.count }
         guard collected.count >= minimumBlocks, totalCharacters >= minimumCharacters else { return nil }
-        return collected.map { text, frame in
+        let blocks = collected.map { text, frame in
             ScreenSnapshot.TextBlock(
                 text: text,
                 boundingBox: ScreenCaptureService.normalize(frame, in: display.frame),
                 windowOwnerBundleIdentifier: owner,
+                windowIdentifier: window.windowID,
                 windowTitle: window.title,
-                windowFrame: windowFrame
+                windowFrame: windowFrame,
+                confidence: 1
             )
         }
+        // AX strings are exact. An incomplete bounded walk is still slightly
+        // less trustworthy as a *scene* than a completed one, even after it
+        // clears the conservative coverage gate above.
+        return Result(blocks: blocks, completed: completed, confidence: completed ? 1 : 0.9)
     }
 
     private static func matchWindow(app: AXUIElement, frame: CGRect) -> AXUIElement? {

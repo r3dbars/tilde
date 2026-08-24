@@ -101,6 +101,7 @@ final class GhostInputController: IMKInputController {
     private var lastScheduledContextTail = ""
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
+    private var bufferedReveal: (text: String, ticket: InlineSuggestionTicket)?
     private var screenMemoryTypingTask: Task<Void, Never>?
     private var calmRevealByBundle = [String: Bool]()
 
@@ -583,18 +584,24 @@ final class GhostInputController: IMKInputController {
         scheduleRevision += 1
         let revision = scheduleRevision
         let expectedBundle = client.bundleIdentifier() ?? ""
-        let delay = SuggestionRevealDelayPolicy.nanoseconds(
+        let timing = SuggestionRevealDelayPolicy.schedule(
             afterUserTyped: grapheme,
             calmMarkedText: usesCalmReveal(for: expectedBundle)
         )
-
-        revealTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: delay)
-            guard let self, self.scheduleRevision == revision, let liveClient = self.client() else {
-                return
-            }
-            guard (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
-            self.updateSuggestion(for: liveClient)
+        guard scheduleRevision == revision,
+              (client.bundleIdentifier() ?? "") == expectedBundle else { return }
+        let revealNotBefore = Date().addingTimeInterval(
+            Double(timing.revealDelayNanoseconds) / 1_000_000_000
+        )
+        // Yield only until the key callback returns; there is no timing
+        // sleep before inference. Only marked-text presentation waits for
+        // the calm-caret window in Chromium/Electron editors.
+        Task { @MainActor [weak self] in
+            guard let self,
+                  self.scheduleRevision == revision,
+                  let liveClient = self.client(),
+                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
+            self.updateSuggestion(for: liveClient, revealNotBefore: revealNotBefore)
         }
     }
 
@@ -619,7 +626,7 @@ final class GhostInputController: IMKInputController {
         return calm
     }
 
-    private func updateSuggestion(for client: IMKTextInput) {
+    private func updateSuggestion(for client: IMKTextInput, revealNotBefore: Date) {
         guard !stopForSecureInput(client) else { return }
         let selection = client.selectedRange()
         guard selection.location != NSNotFound, selection.length == 0 else {
@@ -642,9 +649,20 @@ final class GhostInputController: IMKInputController {
 
         if context.last?.isLetter == true {
             let suffix = spellCheckerSuffix(for: context)
-            apply(state.reduce(.present(suffix, requestTicket)), to: client)
+            Task { @MainActor [weak self] in
+                self?.present(
+                    suffix,
+                    ticket: requestTicket,
+                    revealNotBefore: revealNotBefore
+                )
+            }
         } else if context.last?.isWhitespace == true {
-            requestPhrase(for: client, context: context, ticket: requestTicket)
+            requestPhrase(
+                for: client,
+                context: context,
+                ticket: requestTicket,
+                revealNotBefore: revealNotBefore
+            )
         }
     }
 
@@ -679,19 +697,26 @@ final class GhostInputController: IMKInputController {
     private func requestPhrase(
         for client: IMKTextInput,
         context: String,
-        ticket requestTicket: InlineSuggestionTicket
+        ticket requestTicket: InlineSuggestionTicket,
+        revealNotBefore: Date
     ) {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = client.bundleIdentifier()
+        let fieldSessionIdentifier = suggestionSessionIdentifier
         modelTask = Task { [weak self] in
             let result = await GhostBrainClient.complete(
                 context: tail,
                 app: bundle,
+                fieldSessionIdentifier: fieldSessionIdentifier,
                 onPartial: { [weak self] text in
                     // Called on the socket worker; the ticket check in
                     // `present` is what discards a partial that arrives late.
                     Task { @MainActor [weak self] in
-                        self?.present(text, ticket: requestTicket)
+                        self?.present(
+                            text,
+                            ticket: requestTicket,
+                            revealNotBefore: revealNotBefore
+                        )
                     }
                 }
             )
@@ -699,7 +724,11 @@ final class GhostInputController: IMKInputController {
             switch result.outcome {
             case .suggestion:
                 if let text = result.suggestion {
-                    await self?.present(text, ticket: requestTicket)
+                    await self?.present(
+                        text,
+                        ticket: requestTicket,
+                        revealNotBefore: revealNotBefore
+                    )
                 } else {
                     await self?.settle(ticket: requestTicket)
                 }
@@ -719,7 +748,11 @@ final class GhostInputController: IMKInputController {
     /// only ever grows the visible text, so a final that equals or trims the
     /// streamed prefix leaves the ghost exactly where the writer saw it.
     @MainActor
-    private func present(_ text: String, ticket requestTicket: InlineSuggestionTicket) {
+    private func present(
+        _ text: String,
+        ticket requestTicket: InlineSuggestionTicket,
+        revealNotBefore: Date = .distantPast
+    ) {
         guard let liveClient = client() else { return }
         guard !stopForSecureInput(liveClient) else { return }
         let currentContext = contextBeforeCaret(liveClient)
@@ -733,7 +766,37 @@ final class GhostInputController: IMKInputController {
             dismiss(liveClient)
             return
         }
+        if Date() < revealNotBefore {
+            bufferReveal(text, ticket: requestTicket, until: revealNotBefore)
+            return
+        }
+        if bufferedReveal?.ticket == requestTicket { bufferedReveal = nil }
         apply(state.reduce(.update(text, requestTicket)), to: liveClient)
+    }
+
+    @MainActor
+    private func bufferReveal(
+        _ text: String,
+        ticket: InlineSuggestionTicket,
+        until deadline: Date
+    ) {
+        guard !text.isEmpty else { return }
+        if let bufferedReveal, bufferedReveal.ticket == ticket {
+            guard text.count > bufferedReveal.text.count,
+                  text.hasPrefix(bufferedReveal.text) else { return }
+        }
+        bufferedReveal = (text, ticket)
+        revealTask?.cancel()
+        let nanoseconds = UInt64(max(0, deadline.timeIntervalSinceNow) * 1_000_000_000)
+        revealTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled,
+                  let self,
+                  let buffered = self.bufferedReveal,
+                  buffered.ticket == ticket else { return }
+            self.bufferedReveal = nil
+            self.present(buffered.text, ticket: buffered.ticket)
+        }
     }
 
     /// The request ended without a longer suggestion. A partial that is
@@ -750,6 +813,7 @@ final class GhostInputController: IMKInputController {
         scheduleRevision += 1
         revealTask?.cancel()
         revealTask = nil
+        bufferedReveal = nil
         modelTask?.cancel()
         modelTask = nil
     }
