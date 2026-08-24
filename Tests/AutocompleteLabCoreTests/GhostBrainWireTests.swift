@@ -16,6 +16,22 @@ struct GhostBrainWireTests {
         #expect(decoded.supportsStreamingResponses)
     }
 
+    @Test("Completion requests carry the exact field session across the wire")
+    func completionCarriesFieldSession() throws {
+        let session = UUID().uuidString
+        let request = GhostBrainRequest(
+            context: "hello ",
+            app: "com.google.Chrome",
+            fieldSessionIdentifier: session
+        )
+        let decoded = try JSONDecoder().decode(
+            GhostBrainRequest.self,
+            from: JSONEncoder().encode(request)
+        )
+        #expect(decoded.fieldSessionIdentifier == session)
+        #expect(decoded == request)
+    }
+
     @Test("Requests without the stream flag remain final-only")
     func legacyRequestIsFinalOnly() throws {
         let current = GhostBrainRequest(context: "hello ", app: "com.apple.TextEdit")

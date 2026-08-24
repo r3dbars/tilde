@@ -34,8 +34,12 @@ extension ScreenScene {
         fieldText: String
     ) -> Scene? {
         guard let snapshot else { return nil }
-        let age = now.timeIntervalSince(snapshot.capturedAt)
-        guard age >= 0, age <= stalenessCapSeconds else { return nil }
+        let observedAge = now.timeIntervalSince(snapshot.evidence.observedAt)
+        let recognitionAge = now.timeIntervalSince(snapshot.evidence.recognizedAt)
+        guard observedAge >= 0,
+              recognitionAge >= 0,
+              observedAge <= stalenessCapSeconds,
+              recognitionAge <= stalenessCapSeconds else { return nil }
         return classify(snapshot: snapshot, frontmostBundleID: frontmostBundleID, fieldText: fieldText)
     }
 
@@ -50,6 +54,7 @@ extension ScreenScene {
         classify(
             blocks: snapshot.blocks.map(OCRBlock.init(snapshotBlock:)),
             frontmostBundleID: frontmostBundleID,
+            targetWindowIdentifier: snapshot.evidence.target?.windowIdentifier,
             fieldText: fieldText
         )
     }
@@ -64,8 +69,10 @@ extension ScreenScene.OCRBlock {
             text: snapshotBlock.text,
             boundingBox: ScreenScene.NormalizedRect(rect: snapshotBlock.boundingBox),
             windowOwnerBundleID: snapshotBlock.windowOwnerBundleIdentifier,
+            windowIdentifier: snapshotBlock.windowIdentifier,
             windowTitle: snapshotBlock.windowTitle,
-            windowFrame: snapshotBlock.windowFrame.map(ScreenScene.NormalizedRect.init(rect:))
+            windowFrame: snapshotBlock.windowFrame.map(ScreenScene.NormalizedRect.init(rect:)),
+            confidence: snapshotBlock.confidence
         )
     }
 }

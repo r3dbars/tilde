@@ -28,7 +28,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// `AppDelegate`). `nil` — no provider, or the provider itself returning
     /// `nil` — means exactly today's (no-context) completion behavior; this
     /// file never inspects capture state itself.
-    private let sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)?
+    private let sceneProvider: (@Sendable (
+        String?, String, String?, TypingTargetIdentity?
+    ) async -> ScreenScene.Scene?)?
+    /// Resolves the exact current field/window. Production fails closed when
+    /// it cannot prove this identity; tests and proof hosts may omit it.
+    private let targetProvider: (@Sendable (String?, String?) -> TypingTargetIdentity?)?
     /// 2026-08-16 owner directive: Screen Recording permission is required
     /// for Tilde to suggest at all, not merely to enrich suggestions with
     /// screen context. `nil` means "always allowed" (release-proof mode and
@@ -65,7 +70,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
     init(
         runtime: LlamaServerProcessHost,
         personalHistory: any PersonalHistoryIngesting,
-        sceneProvider: (@Sendable (String?, String) async -> ScreenScene.Scene?)? = nil,
+        sceneProvider: (@Sendable (
+            String?, String, String?, TypingTargetIdentity?
+        ) async -> ScreenScene.Scene?)? = nil,
+        targetProvider: (@Sendable (String?, String?) -> TypingTargetIdentity?)? = nil,
         onCompletionActivity: (@Sendable () -> Void)? = nil,
         onScreenMemoryEvent: (@Sendable (ScreenMemoryInputEvent) -> Void)? = nil,
         suggestionsGate: (@Sendable () -> Bool)? = nil,
@@ -76,6 +84,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
+        self.targetProvider = targetProvider
         self.onCompletionActivity = onCompletionActivity
         self.onScreenMemoryEvent = onScreenMemoryEvent
         self.suggestionsGate = suggestionsGate
@@ -238,10 +247,35 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 return
             }
 
+            let expectedTarget = self.targetProvider?(
+                completionRequest.app,
+                completionRequest.fieldSessionIdentifier
+            )
+            if self.targetProvider != nil, expectedTarget == nil {
+                _ = Self.write(.silence, to: connection)
+                return
+            }
+            let targetIsCurrent: @Sendable () -> Bool = { [targetProvider = self.targetProvider] in
+                guard let targetProvider else { return true }
+                return targetProvider(
+                    completionRequest.app,
+                    completionRequest.fieldSessionIdentifier
+                ) == expectedTarget
+            }
+
             // Read-only and fast (an actor property read, not a capture) —
             // resolved before the completion Task starts so the request
             // that follows already carries whatever context exists.
-            let scene = await self.sceneProvider?(completionRequest.app, completionRequest.context)
+            let scene = await self.sceneProvider?(
+                completionRequest.app,
+                completionRequest.context,
+                completionRequest.fieldSessionIdentifier,
+                expectedTarget
+            )
+            guard targetIsCurrent() else {
+                _ = Self.write(.silence, to: connection)
+                return
+            }
 
             // Trust-critical fix (2026-08-16, build 2705 dogfood): a grief
             // conversation produced a garbled-relationship suggestion and,
@@ -269,7 +303,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // rewritten underneath the writer.
             let partials = PartialResponseSink(
                 connection: connection,
-                enabled: completionRequest.supportsStreamingResponses && !personalSuggestionsEnabled
+                enabled: completionRequest.supportsStreamingResponses && !personalSuggestionsEnabled,
+                targetIsCurrent: targetIsCurrent
             )
             let completion = Task {
                 try await self.engine.suggestion(
@@ -318,6 +353,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 disconnect.cancel()
             }
             guard !completion.isCancelled else { return }
+            guard targetIsCurrent() else {
+                _ = Self.write(.silence, to: connection)
+                return
+            }
 
             let response: GhostBrainResponse
             let servedMetadata: [String: String]?
@@ -491,6 +530,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             if let events = request.personalHistoryEvents {
                 guard request.context.isEmpty, request.app == nil,
                       request.screenMemoryEvent == nil,
+                      request.fieldSessionIdentifier == nil,
                       PersonalHistoryEvent.validBatch(events) else {
                     return .failure(WireError.invalid)
                 }
@@ -499,6 +539,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             if let event = request.screenMemoryEvent {
                 guard request.context.isEmpty, request.app == nil,
                       request.personalHistoryEvents == nil,
+                      request.fieldSessionIdentifier == nil,
                       UUID(uuidString: event.sessionIdentifier) != nil else {
                     return .failure(WireError.invalid)
                 }
@@ -508,6 +549,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                   request.screenMemoryEvent == nil,
                   request.context.count <= 3_000,
                   request.context.last?.isWhitespace == true,
+                  request.fieldSessionIdentifier.map({ UUID(uuidString: $0) != nil }) ?? true,
                   (request.app?.count ?? 0) <= 512 else {
                 return .failure(WireError.invalid)
             }
@@ -524,13 +566,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private final class PartialResponseSink: @unchecked Sendable {
         private let connection: Int32
         private let enabled: Bool
+        private let targetIsCurrent: @Sendable () -> Bool
         private let lock = NSLock()
         private var failed = false
         private var failureHandler: (() -> Void)?
 
-        init(connection: Int32, enabled: Bool) {
+        init(
+            connection: Int32,
+            enabled: Bool,
+            targetIsCurrent: @escaping @Sendable () -> Bool
+        ) {
             self.connection = connection
             self.enabled = enabled
+            self.targetIsCurrent = targetIsCurrent
         }
 
         var onWriteFailure: (() -> Void)? {
@@ -540,6 +588,14 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
         func send(_ partial: CompletionSuggestion) {
             guard enabled else { return }
+            guard targetIsCurrent() else {
+                lock.withLock {
+                    guard !failed else { return }
+                    failed = true
+                    failureHandler?()
+                }
+                return
+            }
             let text = String(partial.visibleText.drop(while: \Character.isWhitespace))
             guard !text.isEmpty else { return }
             lock.lock()

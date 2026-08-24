@@ -181,7 +181,7 @@ struct ScreenSceneTests {
         #expect(scene.referenceSnippets.isEmpty)
     }
 
-    @Test("A block straddling the horizontal center is ambiguous and attributed to other")
+    @Test("A block straddling the horizontal center remains unknown")
     func ambiguousAlignmentFallsBackToOther() {
         let blocks = [
             block("centered system message", x: 0.30, y: 0.30, width: 0.40, window: slack), // center 0.50
@@ -189,7 +189,7 @@ struct ScreenSceneTests {
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.mode == .replying)
-        #expect(scene.conversationTurns[0].speaker == .other)
+        #expect(scene.conversationTurns[0].speaker == .unknown)
         #expect(scene.conversationTurns[1].speaker == .selfSpeaker)
     }
 
@@ -274,7 +274,7 @@ struct ScreenSceneTests {
         #expect(scene.mode != .replying)
     }
 
-    @Test("Speaker falls back to other when the window frame is unknown, even with attribution")
+    @Test("Speaker remains unknown when the window frame is unavailable")
     func speakerFallsBackToOtherWithoutWindowFrame() {
         // Bypass the `block()` helper's "window implies fullscreen frame"
         // default -- this constructs bundle-ID attribution WITHOUT a frame,
@@ -294,7 +294,7 @@ struct ScreenSceneTests {
         ]
         let scene = ScreenScene.classify(blocks: blocks, frontmostBundleID: slack, fieldText: "")
         #expect(scene.mode == .replying)
-        #expect(scene.conversationTurns.allSatisfy { $0.speaker == .other })
+        #expect(scene.conversationTurns.allSatisfy { $0.speaker == .unknown })
     }
 
     @Test("Blocks with no window attribution are excluded from the reply thread (unknown != frontmost)")
