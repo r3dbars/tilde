@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AutocompleteLabApp
 
@@ -52,5 +53,56 @@ struct LlamaHealthProbeCadenceTests {
         // The flat loop it replaced was 45 probes x 2,000ms.
         #expect(total >= 90_000)
         #expect(total <= 95_000)
+    }
+}
+
+@Suite("Llama listener ownership")
+struct LlamaListenerOwnershipTests {
+    /// The readiness gate runs this before every completion request. A wrong
+    /// "no" here does not degrade a suggestion — it withholds every suggestion,
+    /// silently, for as long as it is wrong. So prove it against a real
+    /// listening socket rather than trusting the kernel query by inspection.
+    @Test("The kernel query sees a real listening socket, and stops seeing it once closed")
+    func tracksARealListeningSocket() throws {
+        let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+        try #require(descriptor >= 0)
+        var stillOpen = true
+        defer { if stillOpen { close(descriptor) } }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0 // the kernel picks a free port
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+
+        let size = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(descriptor, $0, size) }
+        }
+        try #require(bound == 0)
+        try #require(listen(descriptor, 1) == 0)
+
+        var assigned = sockaddr_in()
+        var length = size
+        let named = withUnsafeMutablePointer(to: &assigned) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(descriptor, $0, &length) }
+        }
+        try #require(named == 0)
+        let port = Int(UInt16(bigEndian: assigned.sin_port))
+        try #require(port > 0)
+
+        #expect(LlamaServerProcessHost.holdsListeningSocket(pid: getpid(), port: port))
+
+        // Same process, same port, socket gone: the gate must fail closed.
+        close(descriptor)
+        stillOpen = false
+        #expect(!LlamaServerProcessHost.holdsListeningSocket(pid: getpid(), port: port))
+    }
+
+    @Test("A port this process never bound is not reported as ours")
+    func rejectsAPortWeDoNotHold() {
+        // Port 0 is never a real listening port, so this exercises the
+        // scan-finds-nothing path without racing another process's socket.
+        #expect(!LlamaServerProcessHost.holdsListeningSocket(pid: getpid(), port: 0))
     }
 }

@@ -338,14 +338,54 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         }.value
     }
 
+    /// Recheck runs before every completion request, so it has to be cheap.
+    /// This used to shell out to `lsof -a -p <pid> -iTCP:<port> -sTCP:LISTEN`,
+    /// which cost a fork/exec plus a `DispatchSemaphore` wait on a cooperative
+    /// pool thread — the first thing inside the measured `ghost-request-timing`
+    /// span, and up to 1.4 seconds of it on the TERM-to-KILL path in `command`.
+    /// libproc answers the identical question straight from the kernel.
+    ///
+    /// The check itself is unchanged and still per-request: cached health alone
+    /// cannot prove the current listener is still our child, so nothing here is
+    /// cached or given a staleness window — it just stops costing a subprocess.
     private static func listenerBelongs(to child: Process, port: Int) -> Bool {
-        guard child.isRunning,
-              let output = command(
-                  "/usr/sbin/lsof",
-                  ["-nP", "-a", "-p", String(child.processIdentifier),
-                   "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
-              ) else { return false }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines) == String(child.processIdentifier)
+        guard child.isRunning else { return false }
+        return holdsListeningSocket(pid: child.processIdentifier, port: port)
+    }
+
+    /// True when `pid` holds a TCP socket in LISTEN on `port`.
+    ///
+    /// Fail-closed in every direction: a libproc error, a short read, a
+    /// descriptor that cannot be inspected, or a socket that is not
+    /// listening TCP all answer "no", exactly as an `lsof` failure did.
+    static func holdsListeningSocket(pid: pid_t, port: Int) -> Bool {
+        let entrySize = MemoryLayout<proc_fdinfo>.stride
+        let sized = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard sized > 0 else { return false }
+
+        var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(sized) / entrySize)
+        guard !descriptors.isEmpty else { return false }
+        let written = descriptors.withUnsafeMutableBufferPointer { buffer -> Int32 in
+            proc_pidinfo(pid, PROC_PIDLISTFDS, 0, buffer.baseAddress, sized)
+        }
+        guard written > 0 else { return false }
+
+        let wanted = Int32(MemoryLayout<socket_fdinfo>.size)
+        let usable = min(descriptors.count, Int(written) / entrySize)
+        for index in 0..<usable
+        where descriptors[index].proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) {
+            var info = socket_fdinfo()
+            guard proc_pidfdinfo(
+                pid, descriptors[index].proc_fd, PROC_PIDFDSOCKETINFO, &info, wanted
+            ) == wanted else { continue }
+            guard info.psi.soi_kind == SOCKINFO_TCP else { continue }
+            let tcp = info.psi.soi_proto.pri_tcp
+            guard tcp.tcpsi_state == TSI_S_LISTEN else { continue }
+            // libproc reports ports in network byte order.
+            let listening = UInt16(bigEndian: UInt16(truncatingIfNeeded: tcp.tcpsi_ini.insi_lport))
+            if Int(listening) == port { return true }
+        }
+        return false
     }
 
     /// Reap only a re-parented helper from this exact app asset. Any other
