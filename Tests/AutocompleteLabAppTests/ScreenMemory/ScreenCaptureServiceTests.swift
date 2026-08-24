@@ -245,6 +245,34 @@ struct ScreenCaptureServiceTests {
         #expect(later?.mode != .replying)
     }
 
+    @Test("A snapshot captured before a content reset is never served")
+    func contentResetInvalidatesOlderSnapshots() async {
+        let service = makeService()
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let slack = "com.tinyspeck.slackmacgap"
+        let frame = NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+        let snapshot = ScreenSnapshot(capturedAt: t0, displayID: 1, blocks: [
+            ScreenSnapshot.TextBlock(text: "want me to grab it for you today?",
+                boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                windowOwnerBundleIdentifier: slack, windowFrame: frame),
+            ScreenSnapshot.TextBlock(text: "yes please, that would be great",
+                boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                windowOwnerBundleIdentifier: slack, windowFrame: frame),
+        ])
+        await service.setLatestSnapshotForTesting(snapshot)
+        await service.setLatestWindowSnapshotForTesting(snapshot)
+
+        // Fresh and valid before the reset...
+        let before = await service.freshScene(frontmostBundleID: slack, fieldText: "", now: t0.addingTimeInterval(2))
+        #expect(before?.mode == .replying)
+
+        // ...gone the moment the content reset lands, even though the
+        // snapshot is still inside the staleness window.
+        await service.setLastContentResetAtForTesting(t0.addingTimeInterval(3))
+        let after = await service.freshScene(frontmostBundleID: slack, fieldText: "", now: t0.addingTimeInterval(4))
+        #expect(after == nil)
+    }
+
     /// Fix item 4 of "Classify scenes by geometry, not host app": a
     /// classification must never be opaque again. Count-only -- mode plus
     /// two integers, never any of the OCR'd text.

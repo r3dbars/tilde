@@ -179,6 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     _ = await service.noteTypingPaused(sessionIdentifier: event.sessionIdentifier)
                 case .textFieldBlurred:
                     await service.noteTextFieldBlurred(sessionIdentifier: event.sessionIdentifier)
+                case .contentReset:
+                    _ = await service.noteContentReset(sessionIdentifier: event.sessionIdentifier)
                 }
             }
         }
