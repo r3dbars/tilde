@@ -159,6 +159,134 @@ struct ScreenCaptureServiceTests {
         #expect(await service.latestSnapshot == nil)
     }
 
+    @Test("The actor owns one cadence reservation for all capture triggers")
+    func centralCadenceReservationCoalescesTriggers() async {
+        let service = makeService()
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let typing = CaptureTriggerPolicy.Trigger.typingPause(
+            elapsedSeconds: CaptureTriggerPolicy.typingPauseThresholdSeconds
+        )
+
+        #expect(await service.reserveCaptureSlot(trigger: .windowChanged, at: t0) == .reserved(previousCaptureAt: nil))
+        #expect(await service.reserveCaptureSlot(trigger: .textFieldFocused, at: t0) == .blocked(.cadence(secondsRemaining: 0.5)))
+        #expect(await service.reserveCaptureSlot(trigger: typing, at: t0.addingTimeInterval(0.5)) == .blocked(.cadence(secondsRemaining: 1.5)))
+        #expect(await service.reserveCaptureSlot(trigger: .windowChanged, at: t0.addingTimeInterval(0.5)) == .reserved(previousCaptureAt: t0))
+    }
+
+    @Test("Cached screen context is bound to the exact field and window generation")
+    func cachedContextRequiresExactTypingTarget() async {
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let slack = "com.tinyspeck.slackmacgap"
+        let session = UUID().uuidString
+        let service = ScreenCaptureService(
+            enabled: { false },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { t0 },
+            diagnostics: { _, _ in }
+        )
+        let proposed = TypingTargetIdentity(
+            bundleIdentifier: slack,
+            processIdentifier: 99,
+            windowIdentifier: 42,
+            fieldSessionIdentifier: session,
+            generation: 0
+        )
+        _ = await service.noteTextFieldFocused(sessionIdentifier: session, target: proposed)
+
+        func snapshot(target: TypingTargetIdentity) -> ScreenSnapshot {
+            let frame = NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+            return ScreenSnapshot(
+                capturedAt: t0,
+                displayID: 1,
+                blocks: [
+                    ScreenSnapshot.TextBlock(
+                        text: "hey are you around today",
+                        boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                        windowOwnerBundleIdentifier: slack,
+                        windowIdentifier: target.windowIdentifier,
+                        windowFrame: frame,
+                        confidence: 0.9
+                    ),
+                    ScreenSnapshot.TextBlock(
+                        text: "yeah free after 3pm works",
+                        boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                        windowOwnerBundleIdentifier: slack,
+                        windowIdentifier: target.windowIdentifier,
+                        windowFrame: frame,
+                        confidence: 0.8
+                    ),
+                ],
+                evidence: ScreenTextExtractionEvidence(
+                    source: .visionFull,
+                    completed: true,
+                    confidence: 0.85,
+                    observedAt: t0,
+                    recognizedAt: t0,
+                    target: target
+                )
+            )
+        }
+
+        let wrongWindow = TypingTargetIdentity(
+            bundleIdentifier: slack,
+            processIdentifier: 99,
+            windowIdentifier: 41,
+            fieldSessionIdentifier: session,
+            generation: 1
+        )
+        await service.setLatestSnapshotForTesting(snapshot(target: wrongWindow))
+        #expect(await service.freshScene(
+            frontmostBundleID: slack,
+            fieldText: "",
+            fieldSessionIdentifier: session,
+            now: t0
+        ) == nil)
+
+        let exact = TypingTargetIdentity(
+            bundleIdentifier: slack,
+            processIdentifier: 99,
+            windowIdentifier: 42,
+            fieldSessionIdentifier: session,
+            generation: 1
+        )
+        await service.setLatestSnapshotForTesting(snapshot(target: exact))
+        #expect(await service.freshScene(
+            frontmostBundleID: slack,
+            fieldText: "",
+            fieldSessionIdentifier: session,
+            expectedTarget: proposed,
+            now: t0
+        )?.mode == .replying)
+
+        let nextWindow = TypingTargetIdentity(
+            bundleIdentifier: slack,
+            processIdentifier: 99,
+            windowIdentifier: 43,
+            fieldSessionIdentifier: session,
+            generation: 0
+        )
+        // The request-time OS identity changes before the service receives
+        // its window-change pulse: stale context still fails closed.
+        #expect(await service.freshScene(
+            frontmostBundleID: slack,
+            fieldText: "",
+            fieldSessionIdentifier: session,
+            expectedTarget: nextWindow,
+            now: t0
+        ) == nil)
+        _ = await service.noteWindowChanged(target: nextWindow)
+        #expect(await service.freshScene(
+            frontmostBundleID: slack,
+            fieldText: "",
+            fieldSessionIdentifier: session,
+            now: t0
+        ) == nil)
+    }
+
     // MARK: - freshScene (Screen Memory plan Phase 2 PR 2b)
 
     private func makeService() -> ScreenCaptureService {

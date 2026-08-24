@@ -24,6 +24,11 @@ actor ScreenCaptureService {
         case captureFailed
     }
 
+    enum CaptureReservation: Equatable, Sendable {
+        case reserved(previousCaptureAt: Date?)
+        case blocked(CaptureTriggerPolicy.BlockReason)
+    }
+
     private var lastCaptureAt: Date?
     private var lastContentResetAt: Date?
     private var lastActivityAt: Date?
@@ -34,9 +39,10 @@ actor ScreenCaptureService {
     /// reads attribute blocks to windows best-effort; window reads are
     /// exact). `freshScene` asks this one first.
     private(set) var latestWindowSnapshot: ScreenSnapshot?
-    private var pendingTypingPauseTask: Task<Void, Never>?
     private var pendingTextFieldCaptureTask: Task<Void, Never>?
     private var activeTextFieldSessionIdentifier: String?
+    private var activeTypingTarget: TypingTargetIdentity?
+    private var typingTargetGeneration: UInt64 = 0
     private var textFieldRequiresFullRefresh = false
 
     /// Counts every capture that reaches `performCapture` (cadence/exclusion
@@ -71,6 +77,10 @@ actor ScreenCaptureService {
         let grid: CaptureChangeDetector.LuminanceGrid
         let snapshot: ScreenSnapshot
     }
+    /// Coarse image reuse is a latency optimization, never proof that text
+    /// was freshly recognized forever. Periodically force a real pass.
+    private static let maximumRecognitionAgeForReuse: TimeInterval = 5
+    private static let maximumConsecutiveReuses = 3
     private var windowBaseline: CaptureBaseline?
     private var displayBaseline: CaptureBaseline?
 
@@ -105,7 +115,7 @@ actor ScreenCaptureService {
     /// nothing to keep in sync. `false` restores today's always-full-OCR
     /// behavior exactly: the luminance-grid sampling and
     /// `CaptureChangeDetector` call are skipped entirely, not just ignored.
-    private let axWindowBlocks: @Sendable (SCWindow, SCDisplay) -> [ScreenSnapshot.TextBlock]?
+    private let axWindowText: @Sendable (SCWindow, SCDisplay) -> AXWindowTextReader.Result?
     private let incrementalOCREnabled: @Sendable () -> Bool
     /// Explicit dev-build-only paired evaluator. When enabled, region/skip
     /// decisions run one additional full OCR pass over the same in-memory
@@ -127,8 +137,8 @@ actor ScreenCaptureService {
         recognizeText: @escaping (CGImage) async throws -> [ScreenTextRecognizer.RecognizedBlock] = {
             try await ScreenTextRecognizer.recognize(image: $0)
         },
-        axWindowBlocks: @escaping @Sendable (SCWindow, SCDisplay) -> [ScreenSnapshot.TextBlock]? = {
-            AXWindowTextReader.blocks(for: $0, display: $1)
+        axWindowText: @escaping @Sendable (SCWindow, SCDisplay) -> AXWindowTextReader.Result? = {
+            AXWindowTextReader.read(for: $0, display: $1)
         },
         now: @escaping @Sendable () -> Date = Date.init,
         diagnostics: @escaping @Sendable (String, [String: String]) -> Void = { event, metadata in
@@ -153,7 +163,7 @@ actor ScreenCaptureService {
         self.secureInputActive = secureInputActive
         self.shareableContent = shareableContent
         self.recognizeText = recognizeText
-        self.axWindowBlocks = axWindowBlocks
+        self.axWindowText = axWindowText
         self.now = now
         self.diagnostics = diagnostics
         self.incrementalOCREnabled = incrementalOCREnabled
@@ -166,8 +176,11 @@ actor ScreenCaptureService {
     /// text session is active, but an ordinary app switch with no active
     /// text field is rejected by the shared capture policy.
     @discardableResult
-    func noteWindowChanged() async -> CaptureOutcome {
-        await attemptCapture(trigger: .windowChanged)
+    func noteWindowChanged(target: TypingTargetIdentity? = nil) async -> CaptureOutcome {
+        if let sessionIdentifier = activeTextFieldSessionIdentifier {
+            adoptTarget(target, sessionIdentifier: sessionIdentifier, forceNewGeneration: false)
+        }
+        return await attemptCapture(trigger: .windowChanged)
     }
 
     /// A real IMKit input session became active. The first refresh uses the
@@ -179,14 +192,29 @@ actor ScreenCaptureService {
     /// wrong beats silence, and it does not. Invalidate first, then try to
     /// capture fresh content like a field focus would.
     @discardableResult
-    func noteContentReset(sessionIdentifier: String) async -> CaptureOutcome {
+    func noteContentReset(
+        sessionIdentifier: String,
+        target: TypingTargetIdentity? = nil
+    ) async -> CaptureOutcome {
         lastContentResetAt = now()
-        return await noteTextFieldFocused(sessionIdentifier: sessionIdentifier)
+        activeTextFieldSessionIdentifier = sessionIdentifier
+        adoptTarget(target, sessionIdentifier: sessionIdentifier, forceNewGeneration: true)
+        lastActivityAt = now()
+        textFieldRequiresFullRefresh = true
+        pendingTextFieldCaptureTask?.cancel()
+        pendingTextFieldCaptureTask = nil
+        let outcome = await attemptTextFieldCapture(trigger: .textFieldFocused)
+        scheduleRetryAfterCadenceIfNeeded(outcome, trigger: .textFieldFocused)
+        return outcome
     }
 
     @discardableResult
-    func noteTextFieldFocused(sessionIdentifier: String) async -> CaptureOutcome {
+    func noteTextFieldFocused(
+        sessionIdentifier: String,
+        target: TypingTargetIdentity? = nil
+    ) async -> CaptureOutcome {
         activeTextFieldSessionIdentifier = sessionIdentifier
+        adoptTarget(target, sessionIdentifier: sessionIdentifier, forceNewGeneration: false)
         lastActivityAt = now()
         textFieldRequiresFullRefresh = true
         pendingTextFieldCaptureTask?.cancel()
@@ -200,8 +228,12 @@ actor ScreenCaptureService {
     /// the active session may refresh; a late pulse from an old field is
     /// ignored. Incremental OCR then recognizes only the changed region.
     @discardableResult
-    func noteTypingPaused(sessionIdentifier: String) async -> CaptureOutcome? {
+    func noteTypingPaused(
+        sessionIdentifier: String,
+        target: TypingTargetIdentity? = nil
+    ) async -> CaptureOutcome? {
         guard activeTextFieldSessionIdentifier == sessionIdentifier else { return nil }
+        adoptTarget(target, sessionIdentifier: sessionIdentifier, forceNewGeneration: false)
         lastActivityAt = now()
         pendingTextFieldCaptureTask?.cancel()
         pendingTextFieldCaptureTask = nil
@@ -218,6 +250,7 @@ actor ScreenCaptureService {
     func noteTextFieldBlurred(sessionIdentifier: String) {
         guard activeTextFieldSessionIdentifier == sessionIdentifier else { return }
         activeTextFieldSessionIdentifier = nil
+        activeTypingTarget = nil
         pendingTextFieldCaptureTask?.cancel()
         pendingTextFieldCaptureTask = nil
     }
@@ -244,13 +277,30 @@ actor ScreenCaptureService {
     func freshScene(
         frontmostBundleID: String?,
         fieldText: String,
+        fieldSessionIdentifier: String? = nil,
+        expectedTarget: TypingTargetIdentity? = nil,
         now: Date = Date()
     ) -> ScreenScene.Scene? {
         guard latestSnapshot != nil else { return nil }
+        let target = activeTypingTarget
+        if let fieldSessionIdentifier,
+           target?.fieldSessionIdentifier != fieldSessionIdentifier {
+            return nil
+        }
+        if let expectedTarget,
+           target?.matchesWindowAndField(of: expectedTarget) != true {
+            return nil
+        }
         let currentlyExcluded = excludedApps()
         let resetAt = lastContentResetAt
         func filtered(_ snapshot: ScreenSnapshot?) -> ScreenSnapshot? {
             guard let snapshot else { return nil }
+            // Bundle matching is not enough: two Slack/Chrome windows can
+            // coexist. Only the exact target generation may feed a reply.
+            if snapshot.evidence.source != .unspecified,
+               snapshot.evidence.target != target {
+                return nil
+            }
             // A snapshot from before the last content reset is the wrong
             // conversation, not merely a stale one — never serve it.
             if let resetAt, snapshot.capturedAt < resetAt { return nil }
@@ -262,7 +312,8 @@ actor ScreenCaptureService {
             return ScreenSnapshot(
                 capturedAt: snapshot.capturedAt,
                 displayID: snapshot.displayID,
-                blocks: keptBlocks
+                blocks: keptBlocks,
+                evidence: snapshot.evidence
             )
         }
         let classificationStart = self.now()
@@ -332,17 +383,50 @@ actor ScreenCaptureService {
     }
 
     func noteCompletionActivity() {
-        let stamp = now()
-        lastActivityAt = stamp
-        pendingTypingPauseTask?.cancel()
-        pendingTypingPauseTask = Task { [weak self] in
-            let nanoseconds = UInt64(CaptureTriggerPolicy.typingPauseThresholdSeconds * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            guard !Task.isCancelled else { return }
-            _ = await self?.attemptCapture(
-                trigger: .typingPause(elapsedSeconds: CaptureTriggerPolicy.typingPauseThresholdSeconds)
-            )
+        lastActivityAt = now()
+    }
+
+    /// Updates exact window ownership without making every repeated focus or
+    /// typing pulse a new generation. A real window/session/content change
+    /// invalidates older snapshots immediately; silence beats serving the
+    /// previous conversation while the replacement capture is in flight.
+    private func adoptTarget(
+        _ proposed: TypingTargetIdentity?,
+        sessionIdentifier: String,
+        forceNewGeneration: Bool
+    ) {
+        guard let proposed,
+              proposed.windowIdentifier != nil,
+              proposed.processIdentifier != nil else {
+            if forceNewGeneration || activeTypingTarget != nil {
+                typingTargetGeneration &+= 1
+                activeTypingTarget = nil
+                lastContentResetAt = now()
+                latestWindowSnapshot = nil
+                textFieldRequiresFullRefresh = true
+            }
+            return
         }
+        let candidate = TypingTargetIdentity(
+            bundleIdentifier: proposed.bundleIdentifier,
+            processIdentifier: proposed.processIdentifier,
+            windowIdentifier: proposed.windowIdentifier,
+            fieldSessionIdentifier: sessionIdentifier,
+            generation: activeTypingTarget?.generation ?? typingTargetGeneration
+        )
+        let changed = activeTypingTarget?.matchesWindowAndField(of: candidate) != true
+        guard forceNewGeneration || changed else { return }
+        typingTargetGeneration &+= 1
+        activeTypingTarget = TypingTargetIdentity(
+            bundleIdentifier: candidate.bundleIdentifier,
+            processIdentifier: candidate.processIdentifier,
+            windowIdentifier: candidate.windowIdentifier,
+            fieldSessionIdentifier: sessionIdentifier,
+            generation: typingTargetGeneration
+        )
+        lastContentResetAt = now()
+        latestWindowSnapshot = nil
+        textFieldRequiresFullRefresh = true
     }
 
     @discardableResult
@@ -396,6 +480,12 @@ actor ScreenCaptureService {
             record(.skip(.noActiveTextField))
             return .skipped(.noActiveTextField)
         }
+        guard let captureTarget = activeTypingTarget,
+              captureTarget.windowIdentifier != nil,
+              captureTarget.processIdentifier != nil else {
+            record(.skip(.noTargetWindow))
+            return .skipped(.noTargetWindow)
+        }
 
         let sessionActive = CaptureTriggerPolicy.isCompletionSessionActive(
             lastActivityAt: lastActivityAt,
@@ -410,27 +500,25 @@ actor ScreenCaptureService {
         // on to capture. Recording `moment` now closes that window; if this
         // attempt turns out not to actually capture (enumeration failure,
         // excluded window, etc.), the reservation is rolled back below.
-        let priorCaptureAt = lastCaptureAt
-        if let priorCaptureAt {
-            let sinceLastCapture = moment.timeIntervalSince(priorCaptureAt)
-            if sinceLastCapture < CaptureTriggerPolicy.cadenceCapSeconds {
-                let reason = CaptureTriggerPolicy.BlockReason.cadence(
-                    secondsRemaining: CaptureTriggerPolicy.cadenceCapSeconds - sinceLastCapture
-                )
-                record(.skip(reason))
-                return .skipped(reason)
-            }
+        let priorCaptureAt: Date?
+        switch reserveCaptureSlot(trigger: trigger, at: moment) {
+        case let .reserved(previous): priorCaptureAt = previous
+        case let .blocked(reason): return .skipped(reason)
         }
-        lastCaptureAt = moment
 
         // Visible-window enumeration is required to honor "exclude if ANY
         // visible window belongs to an excluded app" — not just frontmost.
         // If we cannot enumerate, we cannot prove the exclusion list is
         // satisfied, so this fails closed rather than capturing blind.
         guard let content = try? await shareableContent() else {
-            lastCaptureAt = priorCaptureAt
+            rollbackCaptureSlot(reservedAt: moment, to: priorCaptureAt)
             diagnostics("screen-capture-skipped", ["reason": "enumeration-failed"])
             return .captureFailed
+        }
+        guard activeTypingTarget == captureTarget else {
+            rollbackCaptureSlot(reservedAt: moment, to: priorCaptureAt)
+            record(.skip(.targetChanged))
+            return .skipped(.targetChanged)
         }
         let visibleOwners = content.windows.compactMap(\.owningApplication?.bundleIdentifier)
 
@@ -460,16 +548,56 @@ actor ScreenCaptureService {
         )
         guard case let .skip(reason) = decision else {
             // decision is exhaustively .capture or .skip — reaching here means .capture.
-            return await performCapture(
+            let outcome = await performCapture(
                 content: content,
                 moment: moment,
+                target: captureTarget,
                 forceFullDisplay: forceFullDisplay,
                 forceFullOCR: forceFullOCR
             )
+            if case .captured = outcome {
+                return outcome
+            }
+            rollbackCaptureSlot(reservedAt: moment, to: priorCaptureAt)
+            return outcome
         }
-        lastCaptureAt = priorCaptureAt
+        rollbackCaptureSlot(reservedAt: moment, to: priorCaptureAt)
         record(.skip(reason))
         return .skipped(reason)
+    }
+
+    /// Atomically reserves the trigger-specific cadence slot before the
+    /// first suspension point. Tests call this seam to prove the actor path,
+    /// not only the pure policy in isolation.
+    func reserveCaptureSlot(
+        trigger: CaptureTriggerPolicy.Trigger,
+        at moment: Date
+    ) -> CaptureReservation {
+        let prior = lastCaptureAt
+        switch CaptureTriggerPolicy.cadenceDecision(
+            for: trigger,
+            lastCaptureAt: prior,
+            now: moment
+        ) {
+        case .capture:
+            lastCaptureAt = moment
+            return .reserved(previousCaptureAt: prior)
+        case let .skip(reason):
+            record(.skip(reason))
+            return .blocked(reason)
+        }
+    }
+
+    private func rollbackCaptureSlot(reservedAt: Date, to prior: Date?) {
+        // Do not erase a newer successful reservation if this task resumed
+        // after another actor call advanced the slot.
+        guard lastCaptureAt == reservedAt else { return }
+        lastCaptureAt = prior
+    }
+
+    private func commitCaptureSlot(at moment: Date) {
+        if let current = lastCaptureAt, current > moment { return }
+        lastCaptureAt = moment
     }
 
     /// Chooses window-only vs full-display capture and dispatches to the
@@ -481,10 +609,12 @@ actor ScreenCaptureService {
     private func performCapture(
         content: SCShareableContent,
         moment: Date,
+        target: TypingTargetIdentity,
         forceFullDisplay: Bool,
         forceFullOCR: Bool
     ) async -> CaptureOutcome {
-        guard let display = Self.activeDisplay(in: content) else {
+        guard let targetWindow = Self.targetWindow(for: target, among: content.windows),
+              let display = Self.display(containing: targetWindow, in: content.displays) else {
             diagnostics("screen-capture-skipped", ["reason": "no-display"])
             return .captureFailed
         }
@@ -497,38 +627,55 @@ actor ScreenCaptureService {
         )
         let zRanks = Self.onScreenZOrderRanks()
 
-        if kind == .window, let window = Self.frontmostWindow(among: content.windows, zRanks: zRanks) {
+        if kind == .window {
             // Accessibility-first: the exact strings the app draws, in ~1ms,
             // when the user granted the permission and the app's tree
             // carries real text. Anything less falls straight through to
             // the screenshot+OCR path unchanged.
             let axStart = now()
-            if let blocks = axWindowBlocks(window, display) {
-                let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
+            if let result = axWindowText(targetWindow, display) {
+                let snapshot = ScreenSnapshot(
+                    capturedAt: moment,
+                    displayID: display.displayID,
+                    blocks: result.blocks,
+                    evidence: ScreenTextExtractionEvidence(
+                        source: .accessibility,
+                        completed: result.completed,
+                        confidence: result.confidence,
+                        observedAt: moment,
+                        recognizedAt: moment,
+                        target: target
+                    )
+                )
                 latestSnapshot = snapshot
                 latestWindowSnapshot = snapshot
-                lastCaptureAt = moment
+                commitCaptureSlot(at: moment)
+                // AX may have been succeeding for many captures. If it later
+                // fails, Vision must establish a fresh baseline instead of
+                // comparing against a pre-AX image.
+                windowBaseline = nil
                 lastWindowSceneHadConversation = ScreenScene.classify(
                     snapshot: snapshot,
-                    frontmostBundleID: window.owningApplication?.bundleIdentifier,
+                    frontmostBundleID: target.bundleIdentifier,
                     fieldText: ""
                 ).mode == .replying
                 diagnostics(
                     "screen-capture-completed",
                     [
-                        "blocks": String(blocks.count),
+                        "blocks": String(result.blocks.count),
                         "duration_ms": String(Self.milliseconds(from: axStart, to: now())),
                         "ocrMilliseconds": "0",
                         "kind": "ax",
                         "ocrScope": "skipped",
                     ]
                 )
-                return .captured(blockCount: blocks.count)
+                return .captured(blockCount: result.blocks.count)
             }
             return await performWindowCapture(
-                window: window,
+                window: targetWindow,
                 display: display,
                 moment: moment,
+                target: target,
                 forceFullOCR: forceFullOCR
             )
         }
@@ -537,6 +684,7 @@ actor ScreenCaptureService {
             display: display,
             zRanks: zRanks,
             moment: moment,
+            target: target,
             forceFullOCR: forceFullOCR
         )
     }
@@ -553,6 +701,7 @@ actor ScreenCaptureService {
         window: SCWindow,
         display: SCDisplay,
         moment: Date,
+        target: TypingTargetIdentity,
         forceFullOCR: Bool
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(desktopIndependentWindow: window)
@@ -591,7 +740,9 @@ actor ScreenCaptureService {
             // re-enable starts from a fresh baseline instead of diffing
             // against a possibly very old frame.
             let incrementalEnabled = incrementalOCREnabled()
-            let priorBaseline = incrementalEnabled && !forceFullOCR ? windowBaseline : nil
+            let priorBaseline = incrementalEnabled && !forceFullOCR
+                ? reusableBaseline(windowBaseline, at: moment, target: target)
+                : nil
             let currentGrid = incrementalEnabled ? LuminanceGridSampler.sample(image) : nil
             let geometry = CaptureChangeDetector.GeometryKey(
                 kind: .window,
@@ -627,8 +778,10 @@ actor ScreenCaptureService {
                         text: block.text,
                         boundingBox: WindowAttribution.mapWindowRelativeBox(block.boundingBox, windowFrame: windowFrame),
                         windowOwnerBundleIdentifier: ownerBundleIdentifier,
+                        windowIdentifier: window.windowID,
                         windowTitle: window.title,
-                        windowFrame: windowFrame
+                        windowFrame: windowFrame,
+                        confidence: block.confidence
                     )
                 }
                 return (mapped, ocrMilliseconds)
@@ -676,8 +829,10 @@ actor ScreenCaptureService {
                             text: block.text,
                             boundingBox: WindowAttribution.mapWindowRelativeBox(windowRelative, windowFrame: windowFrame),
                             windowOwnerBundleIdentifier: ownerBundleIdentifier,
+                            windowIdentifier: window.windowID,
                             windowTitle: window.title,
-                            windowFrame: windowFrame
+                            windowFrame: windowFrame,
+                            confidence: block.confidence
                         )
                     }
                     // The merge intersects against PREVIOUS blocks, whose
@@ -704,10 +859,53 @@ actor ScreenCaptureService {
             }
 
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
-            let snapshot = ScreenSnapshot(capturedAt: moment, displayID: display.displayID, blocks: blocks)
+            let source: ScreenTextExtractionSource
+            let reuseCount: Int
+            let recognizedAt: Date
+            switch ocrScope {
+            case "skipped":
+                source = .visionReused
+                reuseCount = (priorBaseline?.snapshot.evidence.reuseCount ?? 0) + 1
+                recognizedAt = priorBaseline?.snapshot.evidence.recognizedAt ?? moment
+            case "region":
+                source = .visionRegion
+                reuseCount = (priorBaseline?.snapshot.evidence.reuseCount ?? 0) + 1
+                // The merged snapshot still contains blocks reused from the
+                // baseline, so its oldest recognition time stays attached.
+                recognizedAt = priorBaseline?.snapshot.evidence.recognizedAt ?? moment
+            default:
+                source = .visionFull
+                reuseCount = 0
+                recognizedAt = moment
+            }
+            guard activeTypingTarget == target else {
+                record(.skip(.targetChanged))
+                return .skipped(.targetChanged)
+            }
+            // An older capture may finish after a newer one for the same
+            // target. It spent the work, but must not roll memory backward.
+            if let current = latestSnapshot,
+               current.evidence.target == target,
+               current.capturedAt > moment {
+                return .captured(blockCount: blocks.count)
+            }
+            let snapshot = ScreenSnapshot(
+                capturedAt: moment,
+                displayID: display.displayID,
+                blocks: blocks,
+                evidence: ScreenTextExtractionEvidence(
+                    source: source,
+                    completed: true,
+                    confidence: Self.aggregateConfidence(of: blocks),
+                    observedAt: moment,
+                    recognizedAt: recognizedAt,
+                    reuseCount: reuseCount,
+                    target: target
+                )
+            )
             latestSnapshot = snapshot
             latestWindowSnapshot = snapshot
-            lastCaptureAt = moment
+            commitCaptureSlot(at: moment)
             // Count-free probe of the thing the display read would add:
             // if this window already reads as a conversation, other
             // windows' reference snippets are never consulted.
@@ -756,6 +954,7 @@ actor ScreenCaptureService {
         display: SCDisplay,
         zRanks: [CGWindowID: Int],
         moment: Date,
+        target: TypingTargetIdentity,
         forceFullOCR: Bool
     ) async -> CaptureOutcome {
         let filter = SCContentFilter(display: display, excludingWindows: [])
@@ -803,6 +1002,7 @@ actor ScreenCaptureService {
             let windows = frontToBackWindows.map { window in
                 WindowAttribution.WindowInfo(
                     bundleIdentifier: window.owningApplication?.bundleIdentifier,
+                    windowIdentifier: window.windowID,
                     title: window.title,
                     frame: Self.normalize(window.frame, in: display.frame)
                 )
@@ -814,7 +1014,9 @@ actor ScreenCaptureService {
             // `displayBaseline` — never the window path's, since a display
             // frame and a window frame are never comparable.
             let incrementalEnabled = incrementalOCREnabled()
-            let priorBaseline = incrementalEnabled && !forceFullOCR ? displayBaseline : nil
+            let priorBaseline = incrementalEnabled && !forceFullOCR
+                ? reusableBaseline(displayBaseline, at: moment, target: target)
+                : nil
             let currentGrid = incrementalEnabled ? LuminanceGridSampler.sample(image) : nil
             let geometry = CaptureChangeDetector.GeometryKey(
                 kind: .display,
@@ -850,8 +1052,10 @@ actor ScreenCaptureService {
                         text: block.text,
                         boundingBox: block.boundingBox,
                         windowOwnerBundleIdentifier: owner?.bundleIdentifier,
+                        windowIdentifier: owner?.windowIdentifier,
                         windowTitle: owner?.title,
-                        windowFrame: owner?.frame
+                        windowFrame: owner?.frame,
+                        confidence: block.confidence
                     )
                 }
                 return (mapped, ocrMilliseconds)
@@ -896,8 +1100,10 @@ actor ScreenCaptureService {
                             text: block.text,
                             boundingBox: displayRelative,
                             windowOwnerBundleIdentifier: owner?.bundleIdentifier,
+                            windowIdentifier: owner?.windowIdentifier,
                             windowTitle: owner?.title,
-                            windowFrame: owner?.frame
+                            windowFrame: owner?.frame,
+                            confidence: block.confidence
                         )
                     }
                     blocks = CaptureChangeDetector.mergeBlocks(
@@ -921,13 +1127,48 @@ actor ScreenCaptureService {
             // part of the "capture+OCR" duty cycle the plan's power budget
             // assertions (script/capture_power_probe.sh) measure.
             let dutyCycleMilliseconds = Self.milliseconds(from: dutyCycleStart, to: now())
+            let source: ScreenTextExtractionSource
+            let reuseCount: Int
+            let recognizedAt: Date
+            switch ocrScope {
+            case "skipped":
+                source = .visionReused
+                reuseCount = (priorBaseline?.snapshot.evidence.reuseCount ?? 0) + 1
+                recognizedAt = priorBaseline?.snapshot.evidence.recognizedAt ?? moment
+            case "region":
+                source = .visionRegion
+                reuseCount = (priorBaseline?.snapshot.evidence.reuseCount ?? 0) + 1
+                recognizedAt = priorBaseline?.snapshot.evidence.recognizedAt ?? moment
+            default:
+                source = .visionFull
+                reuseCount = 0
+                recognizedAt = moment
+            }
+            guard activeTypingTarget == target else {
+                record(.skip(.targetChanged))
+                return .skipped(.targetChanged)
+            }
+            if let current = latestSnapshot,
+               current.evidence.target == target,
+               current.capturedAt > moment {
+                return .captured(blockCount: blocks.count)
+            }
             let snapshot = ScreenSnapshot(
                 capturedAt: moment,
                 displayID: display.displayID,
-                blocks: blocks
+                blocks: blocks,
+                evidence: ScreenTextExtractionEvidence(
+                    source: source,
+                    completed: true,
+                    confidence: Self.aggregateConfidence(of: blocks),
+                    observedAt: moment,
+                    recognizedAt: recognizedAt,
+                    reuseCount: reuseCount,
+                    target: target
+                )
             )
             latestSnapshot = snapshot
-            lastCaptureAt = moment
+            commitCaptureSlot(at: moment)
             lastFullDisplayCaptureAt = moment
             displayBaseline = currentGrid.map { CaptureBaseline(geometry: geometry, grid: $0, snapshot: snapshot) }
             diagnostics(
@@ -987,6 +1228,28 @@ actor ScreenCaptureService {
 
     static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int((end.timeIntervalSince(start) * 1000).rounded()))
+    }
+
+    private func reusableBaseline(
+        _ baseline: CaptureBaseline?,
+        at moment: Date,
+        target: TypingTargetIdentity
+    ) -> CaptureBaseline? {
+        guard let baseline,
+              baseline.snapshot.evidence.target == target,
+              baseline.snapshot.evidence.reuseCount < Self.maximumConsecutiveReuses else {
+            return nil
+        }
+        let recognitionAge = moment.timeIntervalSince(baseline.snapshot.evidence.recognizedAt)
+        guard recognitionAge >= 0,
+              recognitionAge <= Self.maximumRecognitionAgeForReuse else { return nil }
+        return baseline
+    }
+
+    private static func aggregateConfidence(of blocks: [ScreenSnapshot.TextBlock]) -> Double {
+        let values = blocks.compactMap(\.confidence)
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
     }
 
     func recordLocalOCREvaluationIfEnabled(
@@ -1064,29 +1327,28 @@ actor ScreenCaptureService {
         case .belowTypingPauseThreshold: return "below-threshold"
         case .excludedWindow: return "excluded-app"
         case .cadence: return "cadence"
+        case .noTargetWindow: return "no-target-window"
+        case .targetChanged: return "target-changed"
         }
     }
 
-    /// Picks the display holding the focused window, not just "whichever
-    /// display SCShareableContent listed first" — on a multi-monitor setup
-    /// that's frequently the wrong screen, so capture would OCR an idle
-    /// display and miss the content the user is actually looking at. The
-    /// frontmost window (lowest `windowLayer`, same front-to-back proxy used
-    /// elsewhere in this type) locates the active display by which display's
-    /// frame contains that window's center point. Falls back to the first
-    /// display if there are no windows to locate, or none of their frames
-    /// land inside a known display (e.g. a stale/off-screen window frame).
-    private static func activeDisplay(in content: SCShareableContent) -> SCDisplay? {
-        guard content.displays.count > 1 else { return content.displays.first }
-        let zRanks = onScreenZOrderRanks()
-        let frontToBack = content.windows.sorted { frontToBackPrecedes($0, $1, zRanks: zRanks) }
-        for window in frontToBack {
-            let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
-            if let match = content.displays.first(where: { $0.frame.contains(center) }) {
-                return match
-            }
+    private static func targetWindow(
+        for target: TypingTargetIdentity,
+        among windows: [SCWindow]
+    ) -> SCWindow? {
+        guard let windowIdentifier = target.windowIdentifier,
+              let processIdentifier = target.processIdentifier else { return nil }
+        return windows.first {
+            $0.windowID == windowIdentifier
+                && $0.owningApplication?.processID == processIdentifier
+                && (target.bundleIdentifier == nil
+                    || $0.owningApplication?.bundleIdentifier == target.bundleIdentifier)
         }
-        return content.displays.first
+    }
+
+    private static func display(containing window: SCWindow, in displays: [SCDisplay]) -> SCDisplay? {
+        let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        return displays.first(where: { $0.frame.contains(center) }) ?? displays.first
     }
 
     /// True front-to-back ranks for on-screen windows, from
@@ -1122,22 +1384,6 @@ actor ScreenCaptureService {
         case (nil, .some): return false
         case (nil, nil): return a.windowLayer < b.windowLayer
         }
-    }
-
-    /// The window the window-only capture path targets: the top-ranked
-    /// normal-layer (`0`) window, front-to-back. This does not scope to a
-    /// caller-supplied frontmost bundle id — `attemptCapture`'s trigger flow
-    /// (`noteWindowChanged`/`noteCompletionActivity`) does not carry one
-    /// through to `performCapture`, unlike `freshScene`, which only learns it
-    /// from the completion request at read time — so this uses the same
-    /// "top-ranked layer-0 window overall" proxy `AppDelegate.currentFrontWindowIdentity()`
-    /// already relies on elsewhere for the same purpose. Layer-0 excludes
-    /// menu bar extras, the dock, and other chrome that would otherwise win
-    /// on raw z-order alone.
-    private static func frontmostWindow(among windows: [SCWindow], zRanks: [CGWindowID: Int]) -> SCWindow? {
-        windows
-            .sorted { frontToBackPrecedes($0, $1, zRanks: zRanks) }
-            .first { $0.windowLayer == 0 }
     }
 
     /// `SCWindow.frame` is in global desktop points; `display.frame` is that

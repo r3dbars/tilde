@@ -2,10 +2,10 @@ import AutocompleteLabCore
 import CoreGraphics
 import Vision
 
-/// Runs on-device Vision OCR over a single captured frame. Accurate mode
-/// only — Screen Memory triggers are cadence-capped to 1/2s already, so
-/// there is no throughput pressure pushing toward the faster, less precise
-/// `.fast` recognition level.
+/// Runs on-device Vision OCR over a native-resolution captured frame. The
+/// measured `.fast` configuration below preserves each candidate's
+/// confidence so downstream freshness/evidence decisions do not flatten
+/// uncertain OCR into certain text.
 enum ScreenTextRecognizer {
     struct RecognizedBlock: Equatable, Sendable {
         let text: String
@@ -13,6 +13,7 @@ enum ScreenTextRecognizer {
         /// from Vision's native bottom-left convention so every consumer
         /// downstream of this type shares one coordinate convention.
         let boundingBox: NormalizedDisplayRect
+        let confidence: Double
     }
 
     enum RecognitionError: Error {
@@ -43,7 +44,8 @@ enum ScreenTextRecognizer {
                     guard let candidate = observation.topCandidates(1).first else { return nil }
                     return RecognizedBlock(
                         text: candidate.string,
-                        boundingBox: Self.topLeftNormalized(observation.boundingBox)
+                        boundingBox: Self.topLeftNormalized(observation.boundingBox),
+                        confidence: Double(candidate.confidence)
                     )
                 }
                 continuation.resume(returning: blocks)

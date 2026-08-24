@@ -105,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtime: llamaServerHost,
         personalHistory: personalHistoryController,
         sceneProvider: Self.sceneProvider(for: screenCaptureService),
+        targetProvider: Self.suggestionTargetProvider,
         // A bare activity pulse only — see GhostBrainServerHost's doc comment.
         onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService),
         onScreenMemoryEvent: Self.screenMemoryEventHandler(for: screenCaptureService),
@@ -174,13 +175,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task {
                 switch event.kind {
                 case .textFieldFocused:
-                    _ = await service.noteTextFieldFocused(sessionIdentifier: event.sessionIdentifier)
+                    _ = await service.noteTextFieldFocused(
+                        sessionIdentifier: event.sessionIdentifier,
+                        target: Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                    )
                 case .typingPaused:
-                    _ = await service.noteTypingPaused(sessionIdentifier: event.sessionIdentifier)
+                    _ = await service.noteTypingPaused(
+                        sessionIdentifier: event.sessionIdentifier,
+                        target: Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                    )
                 case .textFieldBlurred:
                     await service.noteTextFieldBlurred(sessionIdentifier: event.sessionIdentifier)
                 case .contentReset:
-                    _ = await service.noteContentReset(sessionIdentifier: event.sessionIdentifier)
+                    _ = await service.noteContentReset(
+                        sessionIdentifier: event.sessionIdentifier,
+                        target: Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                    )
                 }
             }
         }
@@ -198,11 +208,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// falls back to plain autocomplete — degraded, not dead.
     private nonisolated static func sceneProvider(
         for service: ScreenCaptureService
-    ) -> @Sendable (String?, String) async -> ScreenScene.Scene? {
-        { appBundleIdentifier, fieldText in
+    ) -> @Sendable (
+        String?, String, String?, TypingTargetIdentity?
+    ) async -> ScreenScene.Scene? {
+        { appBundleIdentifier, fieldText, fieldSessionIdentifier, expectedTarget in
             guard TildeSettings().screenMemoryEnabled else { return nil }
-            return await service.freshScene(frontmostBundleID: appBundleIdentifier, fieldText: fieldText)
+            return await service.freshScene(
+                frontmostBundleID: appBundleIdentifier,
+                fieldText: fieldText,
+                fieldSessionIdentifier: fieldSessionIdentifier,
+                expectedTarget: expectedTarget
+            )
         }
+    }
+
+    private nonisolated static func suggestionTargetProvider(
+        _ appBundleIdentifier: String?,
+        _ fieldSessionIdentifier: String?
+    ) -> TypingTargetIdentity? {
+        guard let fieldSessionIdentifier,
+              let target = currentTypingTarget(sessionIdentifier: fieldSessionIdentifier),
+              appBundleIdentifier == nil || target.bundleIdentifier == appBundleIdentifier else {
+            return nil
+        }
+        return target
     }
 
     init(launchMode: TildeLaunchMode = .production) {
@@ -371,7 +400,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [screenCaptureService] _ in
-            Task { await screenCaptureService.noteWindowChanged() }
+            Task {
+                await screenCaptureService.noteWindowChanged(
+                    target: Self.currentTypingTarget(sessionIdentifier: "")
+                )
+            }
         }
         lastFrontWindowIdentity = Self.currentFrontWindowIdentity()
         windowIdentityPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -380,21 +413,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Fires the window-changed trigger whenever the true frontmost window
-    /// (by process + `CGWindowID`) differs from the last poll — this is what
-    /// catches a same-app window switch that `NSWorkspace` cannot see.
-    /// `ScreenCaptureService`'s own cadence cap (one capture per 5s) keeps a
-    /// 1s poll interval cheap: most polls just update the identity and
-    /// return without ever reaching ScreenCaptureKit.
+    /// (by process + `CGWindowID`) differs from the last poll — this catches
+    /// a same-app window switch that `NSWorkspace` cannot see. The service's
+    /// central cadence gate coalesces overlapping triggers before capture.
     private func pollFrontWindowIdentityForScreenMemory() {
         let identity = Self.currentFrontWindowIdentity()
         guard identity != lastFrontWindowIdentity else { return }
         lastFrontWindowIdentity = identity
-        Task { [screenCaptureService] in await screenCaptureService.noteWindowChanged() }
+        Task { [screenCaptureService] in
+            await screenCaptureService.noteWindowChanged(
+                target: identity.map { Self.typingTarget(from: $0, sessionIdentifier: "") }
+            )
+        }
     }
 
-    struct FrontWindowIdentity: Equatable {
+    struct FrontWindowIdentity: Equatable, Sendable {
         let ownerProcessIdentifier: pid_t
         let windowNumber: CGWindowID
+        let bundleIdentifier: String?
     }
 
     /// The true frontmost on-screen window, system-wide, identified by owning
@@ -403,7 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window found is frontmost. Deliberately does not request window
     /// names/titles: this only needs an identity to detect change, and
     /// nothing here reads or stores what the window is titled.
-    private static func currentFrontWindowIdentity() -> FrontWindowIdentity? {
+    private nonisolated static func currentFrontWindowIdentity() -> FrontWindowIdentity? {
         guard let list = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
             kCGNullWindowID
@@ -413,9 +449,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let pid = info[kCGWindowOwnerPID as String] as? pid_t,
                   let windowNumber = info[kCGWindowNumber as String] as? CGWindowID
             else { continue }
-            return FrontWindowIdentity(ownerProcessIdentifier: pid, windowNumber: windowNumber)
+            return FrontWindowIdentity(
+                ownerProcessIdentifier: pid,
+                windowNumber: windowNumber,
+                bundleIdentifier: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+            )
         }
         return nil
+    }
+
+    private nonisolated static func currentTypingTarget(
+        sessionIdentifier: String
+    ) -> TypingTargetIdentity? {
+        currentFrontWindowIdentity().map {
+            typingTarget(from: $0, sessionIdentifier: sessionIdentifier)
+        }
+    }
+
+    private nonisolated static func typingTarget(
+        from identity: FrontWindowIdentity,
+        sessionIdentifier: String
+    ) -> TypingTargetIdentity {
+        TypingTargetIdentity(
+            bundleIdentifier: identity.bundleIdentifier,
+            processIdentifier: identity.ownerProcessIdentifier,
+            windowIdentifier: identity.windowNumber,
+            fieldSessionIdentifier: sessionIdentifier,
+            generation: 0
+        )
     }
 
     /// One line for the status menu: which engine is answering. Honest by
