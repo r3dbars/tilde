@@ -53,7 +53,10 @@ Options:
 
 This is intentionally fail-closed. It creates release artifacts only after the
 full test suite, isolated helper health/completion/socket observation against
-the preseeded external model, Apple notarization, stapling, and Gatekeeper
+the preseeded external model, the in-process Screen Memory capture/redaction
+stimulus (synthetic conversation classified, scene-bearing prompt completed
+over loopback, redaction redacts or fails closed), Apple notarization,
+stapling, and Gatekeeper
 assessment all pass. The proof may append privacy-safe diagnostics but leaves
 the daily driver and input method untouched.
 The production app downloads this exact immutable model URL during its separate
@@ -260,6 +263,7 @@ cp "$PROOF_MODEL" "$PROOF_MODEL_PATH"
 chmod 600 "$PROOF_MODEL_PATH"
 verify_sha256 "isolated proof model" "$PROOF_MODEL_PATH" "$MODEL_SHA256"
 export TILDE_MODEL_DIRECTORY="$PROOF_DIR/model-store"
+export TILDE_RELEASE_PROOF_STIMULUS_OUT="$PROOF_DIR/screen-memory-stimulus.json"
 RELEASE_PROOF_ACTIVE=1
 ./script/restart_app.sh --release-proof
 python3 script/check_runtime_network_egress.py \
@@ -267,10 +271,12 @@ python3 script/check_runtime_network_egress.py \
   --port 17873 \
   --model-path "$PROOF_MODEL_PATH" \
   --synthetic-helper-proof \
+  --stimulus-proof "$PROOF_DIR/screen-memory-stimulus.json" \
   --proof-out "$PROOF_DIR/runtime-socket-observation.json"
 ./script/restart_app.sh --release-proof --cleanup
 RELEASE_PROOF_ACTIVE=0
 unset TILDE_MODEL_DIRECTORY
+unset TILDE_RELEASE_PROOF_STIMULUS_OUT
 
 echo "==> notarizing and stapling the app"
 rm -f "$NOTARY_ZIP"
