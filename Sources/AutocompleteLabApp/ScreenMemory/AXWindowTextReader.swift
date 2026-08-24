@@ -39,11 +39,21 @@ enum AXWindowTextReader {
     /// All attributes a node might need, fetched in ONE round trip.
     /// Per-attribute AXUIElementCopyAttributeValue calls cost one IPC each;
     /// batching measured 41ms -> 27ms on a live Messages window (92 nodes).
+    ///
+    /// Children are deliberately NOT in this batch: asking a container for
+    /// its full children array makes apps like Messages realize an
+    /// accessibility object for every message in the conversation's entire
+    /// history, on their main thread, every walk — a beachball in the
+    /// frontmost app (live 2026-08-24). Children are fetched separately,
+    /// visible-only where the app offers that, and hard-capped otherwise.
     private static let batchedAttributes = [
-        kAXRoleAttribute as String, kAXChildrenAttribute as String,
+        kAXRoleAttribute as String,
         kAXValueAttribute as String, kAXTitleAttribute as String,
         kAXPositionAttribute as String, kAXSizeAttribute as String,
     ]
+
+    /// Never ask any single container for more than this many children.
+    static let childrenCap = 60
 
     /// Walks the AX window matching `window` and returns display-normalized
     /// text blocks in the exact shape the OCR path produces, or nil when
@@ -79,9 +89,7 @@ enum AXWindowTextReader {
                 }
             }
             if prunedRoles.contains(role) { continue }
-            if let children = attributes[kAXChildrenAttribute as String] as? [AXUIElement] {
-                queue.append(contentsOf: children)
-            }
+            queue.append(contentsOf: boundedChildren(element))
         }
 
         let totalCharacters = collected.reduce(0) { $0 + $1.0.count }
@@ -119,6 +127,24 @@ enum AXWindowTextReader {
             return (focused as! AXUIElement)
         }
         return nil
+    }
+
+    /// Visible children when the app exposes them (scroll areas, lists,
+    /// tables — exactly the containers whose full arrays are huge), else a
+    /// ranged fetch capped at `childrenCap`, which cannot force the target
+    /// app to realize its entire backing collection.
+    private static func boundedChildren(_ element: AXUIElement) -> [AXUIElement] {
+        var visible: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXVisibleChildrenAttribute as CFString, &visible) == .success,
+           let list = visible as? [AXUIElement], !list.isEmpty {
+            return Array(list.prefix(childrenCap))
+        }
+        var ranged: CFArray?
+        if AXUIElementCopyAttributeValues(element, kAXChildrenAttribute as CFString, 0, childrenCap, &ranged) == .success,
+           let list = ranged as? [AXUIElement] {
+            return list
+        }
+        return []
     }
 
     private static func batched(_ element: AXUIElement) -> [String: CFTypeRef] {
