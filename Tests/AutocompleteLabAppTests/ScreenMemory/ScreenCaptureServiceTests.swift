@@ -251,8 +251,8 @@ struct ScreenCaptureServiceTests {
         // the contract that keeps Electron/Chromium windows on the OCR
         // path: too few text nodes or too little text means nil, and the
         // walk is bounded so it can never stall a capture.
-        #expect(AXWindowTextReader.minimumBlocks == 2)
-        #expect(AXWindowTextReader.minimumCharacters == 40)
+        #expect(AXWindowTextReader.minimumBlocks == 6)
+        #expect(AXWindowTextReader.minimumCharacters == 150)
         #expect(AXWindowTextReader.timeoutSeconds <= 0.2)
         #expect(AXWindowTextReader.nodeBudget <= 5_000)
     }
