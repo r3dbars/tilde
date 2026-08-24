@@ -272,9 +272,18 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     /// definition a p99 sample, and usually the worst one the owner ever sees.
     /// Probe fast while a healthy start is still plausible, then settle back
     /// to the original 2s cadence for the long tail of a genuinely stuck
-    /// helper. The ladder keeps the same ~90-second overall ceiling the flat
-    /// 45x2s loop had, so `health-timeout` still fires at the same point.
-    static let healthProbeAttempts = 58
+    /// helper.
+    ///
+    /// The attempt count is set so the ceiling to `health-timeout` matches the
+    /// flat loop this replaced. That budget is *not* just the sleeps: each
+    /// attempt also runs `probeHealth`, which can itself block for its own
+    /// 2-second request timeout against a helper that accepts the connection
+    /// but never answers. The old loop was 45 x (2s probe + 2s sleep) = 180s
+    /// worst case; 51 attempts on this ladder is 179.4s. Counting only the
+    /// sleeps would have quietly stretched the timeout by ~27 seconds, which
+    /// is how long the menu would keep saying "starting" for a helper that is
+    /// actually wedged.
+    static let healthProbeAttempts = 51
 
     static func healthProbeDelayMilliseconds(attempt: Int) -> Int {
         switch attempt {
@@ -293,6 +302,17 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             for attempt in 0..<Self.healthProbeAttempts {
                 guard !Task.isCancelled, self.isCurrent(child) else { return }
                 if await self.probeHealth(of: child) {
+                    // Warm up while still `.starting`, never after publishing
+                    // `.ready`. llama-server is launched with one slot, so a real
+                    // request arriving mid-warm-up would queue behind it — and if
+                    // that pushed past the completion engine's 8s timeout the
+                    // helper would be reported failed and restarted, turning a
+                    // cold start into a restart loop on exactly the path this is
+                    // meant to speed up. Staying `.starting` costs the user
+                    // nothing they were not already going to pay on the first
+                    // keystroke; it just makes them wait for it honestly.
+                    await self.warmUp(child)
+                    guard !Task.isCancelled, self.isCurrent(child) else { return }
                     let transitioned = self.lifecycle.sync { () -> Bool in
                         guard !self.stopped, self.runtimeSnapshot == .starting,
                               self.process === child else { return false }
@@ -301,7 +321,6 @@ final class LlamaServerProcessHost: @unchecked Sendable {
                     }
                     if transitioned {
                         DiagnosticsLog.shared.record("llama-server-healthy", metadata: [:])
-                        await self.warmUp(child)
                     }
                     return
                 }
@@ -358,12 +377,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return }
         request.httpBody = payload
 
-        let startedAt = Date()
+        let startedAt = ProcessInfo.processInfo.systemUptime
         let warmed = (try? await LocalhostURLSession.shared.data(for: request)) != nil
         guard isCurrent(child) else { return }
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAt)
         DiagnosticsLog.shared.record("llama-server-warmed", metadata: [
             "outcome": warmed ? "warmed" : "warm-failed",
-            "milliseconds": String(max(0, Int((Date().timeIntervalSince(startedAt) * 1000).rounded()))),
+            "milliseconds": String(Int((elapsed * 1_000).rounded())),
         ])
     }
 
@@ -376,9 +396,19 @@ final class LlamaServerProcessHost: @unchecked Sendable {
               let http = response as? HTTPURLResponse,
               http.statusCode == 200,
               String(data: data, encoding: .utf8)?.contains("ok") == true else { return false }
-        return await Task.detached(priority: .utility) {
+        let owns = await Task.detached(priority: .utility) {
             Self.listenerBelongs(to: child, port: self.port)
         }.value
+        if !owns, child.isRunning {
+            // `/health` answered but the child shows no listening socket on our
+            // port. The likeliest cause is the kernel refusing the libproc
+            // lookup across the process boundary (App Sandbox or hardened
+            // runtime) — which the unit test cannot reach, since it can only
+            // inspect itself, and which would otherwise gate every completion
+            // to `.unavailable` with no visible cause anywhere.
+            DiagnosticsLog.shared.record("llama-server-unowned-listener", metadata: [:])
+        }
+        return owns
     }
 
     /// Recheck runs before every completion request, so it has to be cheap.
@@ -408,12 +438,18 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
         var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(sized) / entrySize)
         guard !descriptors.isEmpty else { return false }
+        // Bytes actually allocated, not the kernel's sizing answer: the count
+        // above truncates, so `sized` can exceed the buffer and overrun it.
+        let capacity = Int32(descriptors.count * entrySize)
         let written = descriptors.withUnsafeMutableBufferPointer { buffer -> Int32 in
-            proc_pidinfo(pid, PROC_PIDLISTFDS, 0, buffer.baseAddress, sized)
+            proc_pidinfo(pid, PROC_PIDLISTFDS, 0, buffer.baseAddress, capacity)
         }
         guard written > 0 else { return false }
 
-        let wanted = Int32(MemoryLayout<socket_fdinfo>.size)
+        // `sizeof` in C includes trailing padding, so this must be `.stride`.
+        // `.size` can be smaller; the kernel rejects a short buffer, every
+        // descriptor would be skipped, and the gate would answer "no" forever.
+        let wanted = Int32(MemoryLayout<socket_fdinfo>.stride)
         let usable = min(descriptors.count, Int(written) / entrySize)
         for index in 0..<usable
         where descriptors[index].proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) {

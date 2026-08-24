@@ -537,14 +537,17 @@ final class GhostInputController: IMKInputController {
     }
 
     private func fieldSnapshot(_ client: IMKTextInput) -> FieldSnapshot {
-        FieldSnapshot(
+        // Secure Event Input first, before any read. The readers below checked
+        // this before touching the client at all, and routing them through a
+        // snapshot must not quietly invert that ordering: in a password field
+        // Tilde reads nothing, not even the caret or the host identity.
+        guard !IsSecureEventInputEnabled() else {
+            return FieldSnapshot(selection: Self.unset, bundleIdentifier: "")
+        }
+        return FieldSnapshot(
             selection: client.selectedRange(),
             bundleIdentifier: client.bundleIdentifier() ?? ""
         )
-    }
-
-    private func ticket(for client: IMKTextInput, context: String) -> InlineSuggestionTicket {
-        ticket(context: context, field: fieldSnapshot(client))
     }
 
     private func ticket(context: String, field: FieldSnapshot) -> InlineSuggestionTicket {
@@ -565,18 +568,21 @@ final class GhostInputController: IMKInputController {
     ) -> (ticket: InlineSuggestionTicket, context: String)? {
         guard let visible = state.visibleTicket else { return nil }
         let field = fieldSnapshot(client)
-        let context = contextBeforeCaret(client, field: field)
+        let context = contextBeforeCaret(client, selection: field.selection)
         let current = ticket(context: context, field: field)
         return visible.matchesFieldState(of: current) ? (visible, context) : nil
     }
 
     private func contextBeforeCaret(_ client: IMKTextInput) -> String {
-        contextBeforeCaret(client, field: fieldSnapshot(client))
+        guard !IsSecureEventInputEnabled() else { return "" }
+        return contextBeforeCaret(client, selection: client.selectedRange())
     }
 
-    private func contextBeforeCaret(_ client: IMKTextInput, field: FieldSnapshot) -> String {
+    /// Takes the caret alone, never a whole `FieldSnapshot`: this reader has no
+    /// use for the bundle identifier, and making it demand one would add a
+    /// cross-process call per keystroke rather than remove one.
+    private func contextBeforeCaret(_ client: IMKTextInput, selection: NSRange) -> String {
         guard !IsSecureEventInputEnabled() else { return "" }
-        let selection = field.selection
         guard selection.location != NSNotFound, selection.length == 0 else { return "" }
         if selection.location > 0 {
             let start = max(0, selection.location - Self.contextLimit)
@@ -589,13 +595,14 @@ final class GhostInputController: IMKInputController {
     }
 
     private func trailingTextAfterCaret(_ client: IMKTextInput) -> String {
-        trailingTextAfterCaret(client, field: fieldSnapshot(client))
+        guard !IsSecureEventInputEnabled() else { return "" }
+        return trailingTextAfterCaret(client, selection: client.selectedRange())
     }
 
-    private func trailingTextAfterCaret(_ client: IMKTextInput, field: FieldSnapshot) -> String {
+    private func trailingTextAfterCaret(_ client: IMKTextInput, selection: NSRange) -> String {
         guard !IsSecureEventInputEnabled() else { return "" }
         guard let range = Self.trailingContextRange(
-            selection: field.selection,
+            selection: selection,
             markedRange: client.markedRange(),
             documentLength: client.length()
         ) else {
@@ -676,8 +683,8 @@ final class GhostInputController: IMKInputController {
             resetFallback()
             return
         }
-        let context = contextBeforeCaret(client, field: field)
-        let trailingText = trailingTextAfterCaret(client, field: field)
+        let context = contextBeforeCaret(client, selection: field.selection)
+        let trailingText = trailingTextAfterCaret(client, selection: field.selection)
         guard SuggestionActivationPolicy.allowsSuggestions(
             afterUserTyped: typedFallback,
             trailingTextAfterCaret: trailingText
@@ -824,13 +831,13 @@ final class GhostInputController: IMKInputController {
         guard let liveClient = client() else { return }
         guard !stopForSecureInput(liveClient) else { return }
         let field = fieldSnapshot(liveClient)
-        let currentContext = contextBeforeCaret(liveClient, field: field)
+        let currentContext = contextBeforeCaret(liveClient, selection: field.selection)
         guard ticket(context: currentContext, field: field) == requestTicket else {
             apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
             return
         }
         guard SuggestionActivationPolicy.isAtGrowingEdge(
-            trailingTextAfterCaret: trailingTextAfterCaret(liveClient, field: field)
+            trailingTextAfterCaret: trailingTextAfterCaret(liveClient, selection: field.selection)
         ) else {
             dismiss(liveClient)
             return

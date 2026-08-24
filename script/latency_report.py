@@ -29,9 +29,10 @@ Stages covered today (field in parentheses):
   scene-classified          ScreenScene.freshScene classification (milliseconds)
   personal-lookup-timing    the 250ms personal-brain race (waitedMilliseconds)
   ghost-request-timing      socket request total, parse to response write
-                            (requestMilliseconds); the accept-to-parsed peer
-                            code-signature handshake plus wire read that runs
-                            *before* it, same event (handshakeMilliseconds)
+                            (requestMilliseconds)
+  ghost-handshake-timing    accept to parsed: the peer code-signature
+                            verification plus the wire read that run *before*
+                            ghost-request-timing starts (handshakeMilliseconds)
 The IME side of the socket round-trip is now timed too, but it lands in
 OSLog rather than this diagnostics log: InlineGhostIME has no dependency on
 the app target, so it cannot reach DiagnosticsLog. Read those samples with

@@ -45,14 +45,22 @@ struct LlamaHealthProbeCadenceTests {
         #expect(waitBeforeFourthProbe == 300)
     }
 
+    /// The ceiling that matters is the whole path to `health-timeout`, not the
+    /// sleeps alone: every attempt also runs `probeHealth`, which can block for
+    /// its own 2-second request timeout against a helper that accepts the
+    /// connection but never answers. Counting only sleeps is what let the
+    /// attempt count drift upward while the ceiling silently grew with it.
     @Test("The ladder keeps the health-timeout ceiling of the flat loop it replaced")
     func ceilingIsPreserved() {
-        let total = (0..<LlamaServerProcessHost.healthProbeAttempts).reduce(0) {
+        let attempts = LlamaServerProcessHost.healthProbeAttempts
+        let sleeping = (0..<attempts).reduce(0) {
             $0 + LlamaServerProcessHost.healthProbeDelayMilliseconds(attempt: $1)
         }
-        // The flat loop it replaced was 45 probes x 2,000ms.
-        #expect(total >= 90_000)
-        #expect(total <= 95_000)
+        let probing = attempts * 2_000
+        // The flat loop it replaced was 45 x (2,000ms probe + 2,000ms sleep).
+        #expect(sleeping + probing <= 180_000)
+        // And it must not collapse either — a helper still gets a real chance.
+        #expect(sleeping + probing >= 170_000)
     }
 }
 
@@ -62,6 +70,14 @@ struct LlamaListenerOwnershipTests {
     /// "no" here does not degrade a suggestion — it withholds every suggestion,
     /// silently, for as long as it is wrong. So prove it against a real
     /// listening socket rather than trusting the kernel query by inspection.
+    ///
+    /// Known limit: this inspects `getpid()`, and self-inspection through
+    /// libproc is always permitted. Production asks about a *child* pid, where
+    /// the App Sandbox and hardened runtime can refuse — a case no unsandboxed
+    /// unit test can reproduce. `probeHealth` records
+    /// `llama-server-unowned-listener` when the helper answers `/health` but
+    /// shows no listening socket, so such a refusal surfaces in diagnostics
+    /// rather than silently disabling every suggestion.
     @Test("The kernel query sees a real listening socket, and stops seeing it once closed")
     func tracksARealListeningSocket() throws {
         let descriptor = socket(AF_INET, SOCK_STREAM, 0)
