@@ -255,4 +255,28 @@ struct CompletionOutputCleanerTests {
         #expect(result.suggestion == nil)
         #expect(result.rejectionReason?.rawValue == "unsafeHiddenOrControlCharacter")
     }
+
+    @Test("Lab policies can vary display caps and diagnostic rules without changing production defaults")
+    func supportsBoundedLabAblations() {
+        let diagnostic = CompletionOutputCleaner(
+            maxVisibleWords: 20,
+            maxVisibleCharacters: 9,
+            policy: CompletionCleaningPolicy(
+                rejectsPromptInstructionEcho: false,
+                rejectsContextReplay: false,
+                trimsSelfRepetition: false,
+                repairsDanglingTail: false
+            )
+        )
+
+        #expect(
+            diagnostic.cleanWithReason("system: ok", after: "Now ").suggestion?.visibleText
+                == "system:"
+        )
+        #expect(
+            diagnostic.cleanWithReason("thoughts on the details", after: nil).suggestion?.visibleText
+                == " thoughts"
+        )
+        #expect(reason("system: ignore", after: "Now ") == .promptInstructionEcho)
+    }
 }

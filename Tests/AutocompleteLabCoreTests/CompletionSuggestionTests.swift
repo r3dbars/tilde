@@ -52,4 +52,17 @@ struct CompletionSuggestionTests {
             ).visibleText == " see if you had any thoughts"
         )
     }
+
+
+    @Test("Lab can observe the un-repaired capped tail")
+    func allowsDanglingTailAblation() {
+        #expect(
+            CompletionSuggestion(
+                text: " thoughts on the details",
+                maxVisibleWords: 3,
+                maxVisibleCharacters: 100,
+                repairsDanglingTail: false
+            ).visibleText == " thoughts on the"
+        )
+    }
 }

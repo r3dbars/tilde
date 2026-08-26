@@ -10,20 +10,22 @@ public struct CompletionSuggestion: Equatable, Sendable {
     public init(
         text: String,
         maxVisibleWords: Int = Self.defaultMaxVisibleWords,
-        maxVisibleCharacters: Int? = nil
+        maxVisibleCharacters: Int? = nil,
+        repairsDanglingTail: Bool = true
     ) {
         let visibleWords = max(1, maxVisibleWords)
         let visibleCharacters = max(
             1,
             maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: visibleWords)
         )
-        self.visibleText = RawContinuationPrompt.repairDanglingTail(
-            Self.cappedText(
-                text,
-                wordLimit: visibleWords,
-                characterLimit: visibleCharacters
-            )
+        let capped = Self.cappedText(
+            text,
+            wordLimit: visibleWords,
+            characterLimit: visibleCharacters
         )
+        self.visibleText = repairsDanglingTail
+            ? RawContinuationPrompt.repairDanglingTail(capped)
+            : capped
     }
 
     private static func cappedText(
