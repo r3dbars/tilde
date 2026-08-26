@@ -10,6 +10,7 @@ final class LabWorkspaceStore {
     var suite: LabScenarioSuite?
     var reports: [LabRunReport] = []
     var campaigns: [LabResearchCampaign] = []
+    var learningLedgerSnapshot: LabLearningLedgerSnapshot?
     var modelBenchmarkSnapshot: LabModelBenchmarkSnapshot?
     var researchConfiguration = LabAutoresearchConfiguration(subsystem: .display)
     var manifest = LabExperimentManifest()
@@ -84,6 +85,7 @@ final class LabWorkspaceStore {
 
     init() {
         loadCertifiedCorpus()
+        learningLedgerSnapshot = try? LabLearningLedgerCatalog.loadBundled()
         modelBenchmarkSnapshot = try? LabModelBenchmarkCatalog.loadBundled()
         Task { [weak self] in
             guard let self else { return }

@@ -9,7 +9,7 @@ struct LabModelBenchmarksView: View {
             if let snapshot {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Model Results")
+                        Text("Directional Model Results")
                             .font(.largeTitle.bold())
                         Text("Checked-in aggregate results · \(snapshot.suiteName)")
                             .foregroundStyle(.secondary)
@@ -24,6 +24,12 @@ struct LabModelBenchmarksView: View {
                         TableColumn("Useful") { Text($0.useful.formatted()) }
                         TableColumn("Wrong") { Text($0.wrong.formatted()) }
                         TableColumn("Silent") { Text($0.silent.formatted()) }
+                        TableColumn("Bad") {
+                            Text(($0.badSuggestionRate * 100).formatted(.number.precision(.fractionLength(1))) + "%")
+                        }
+                        TableColumn("Net saved") {
+                            Text(($0.netKeystrokeSavingsRate * 100).formatted(.number.precision(.fractionLength(1))) + "%")
+                        }
                         TableColumn("First p95") {
                             Text($0.firstTokenP95Milliseconds.map { "\($0) ms" } ?? "—")
                         }
@@ -38,6 +44,10 @@ struct LabModelBenchmarksView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    Text("Protocol groups: \(Set(snapshot.fullComparisons.map(\.comparisonGroupID)).count). Match protocol IDs before making a strict speed or quality claim.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     ForEach(snapshot.promotedConfigurations) { configuration in
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Promoted experimental configuration")
@@ -48,6 +58,9 @@ struct LabModelBenchmarksView: View {
                                 .foregroundStyle(.secondary)
                             Text("Score \(configuration.qualityScore) · Useful \(configuration.useful) · Wrong \(configuration.wrong) · Silent \(configuration.silent) · Total p95 \(configuration.totalP95Milliseconds) ms")
                                 .font(.system(.body, design: .monospaced))
+                            Text("Net typing saved \((configuration.netKeystrokeSavingsRate * 100).formatted(.number.precision(.fractionLength(1))))% · baseline quality \(configuration.baselineQualityScore)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
                             Text(configuration.evidenceNote)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

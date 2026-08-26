@@ -52,13 +52,27 @@ public struct LabModelBenchmarkEntry: Codable, Equatable, Identifiable, Sendable
     public let modelIdentifier: String
     public let modelRevision: String
     public let modelSHA256: String
+    public let suiteDigestSHA256: String
     public let quantization: String
     public let inferenceBackend: String
+    public let helperSHA256: String?
+    public let comparisonGroupID: String
+    public let evidenceTier: String
+    public let evidenceNote: String
+    public let temperature: Double
+    public let predictionTokens: Int
+    public let maximumVisibleWords: Int
+    public let requestMode: String
+    public let workerCount: Int
+    public let slotsPerWorker: Int
+    public let contextSizePerSlot: Int
     public let evaluations: Int
     public let qualityScore: Int
     public let useful: Int
     public let wrong: Int
     public let silent: Int
+    public let badSuggestionRate: Double
+    public let netKeystrokeSavingsRate: Double
     public let factualityRate: Double
     public let firstTokenP95Milliseconds: Int?
     public let totalP95Milliseconds: Int?

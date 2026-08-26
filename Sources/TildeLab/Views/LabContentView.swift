@@ -10,6 +10,8 @@ struct LabContentView: View {
                 Section("Lab") {
                     Label("Autoresearch", systemImage: "arrow.triangle.branch")
                         .tag(LabSidebarSelection.research)
+                    Label("Learning Ledger", systemImage: "brain.head.profile")
+                        .tag(LabSidebarSelection.learningLedger)
                     Label("Model Results", systemImage: "chart.bar.xaxis")
                         .tag(LabSidebarSelection.modelBenchmarks)
                     ForEach(LabBenchKind.allCases) { bench in
@@ -36,6 +38,8 @@ struct LabContentView: View {
             switch store.selection {
             case .research:
                 LabResearchView(store: store)
+            case .learningLedger:
+                LabLearningLedgerView(snapshot: store.learningLedgerSnapshot)
             case .modelBenchmarks:
                 LabModelBenchmarksView(snapshot: store.modelBenchmarkSnapshot)
             case let .bench(bench):

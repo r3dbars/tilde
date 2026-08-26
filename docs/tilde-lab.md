@@ -219,6 +219,17 @@ breadth limit changes.
 
 ## Checked-in model and configuration evidence
 
+The **Learning Ledger** screen is the broader memory of experiments, rejected
+ideas, limitations, promotion gates, and prioritized next work. It and this CLI
+command read the same checked-in aggregate-only source:
+
+```bash
+swift run tilde-lab-runner --learning-ledger
+```
+
+See [Tilde Learning Ledger](learning-ledger.md) for the current synthesis and
+update contract.
+
 The owner-visible **Model Results** screen and this command read the same
 aggregate-only checked-in catalog:
 
@@ -226,13 +237,16 @@ aggregate-only checked-in catalog:
 swift run tilde-lab-runner --model-benchmark-leaderboard
 ```
 
-The complete model table, hashes, revisions, report IDs, quality counts, and
-latency diagnostics live in
+The complete model table, hashes, revisions, helper hashes, generation recipes,
+report IDs, quality counts, and latency diagnostics live in
 `Sources/TildeLabKit/Fixtures/model-benchmark-results-v1.json`. The current
-matched 360-case ranking puts Qwen 3.5 9B Base Q4_K_M first at 43/100 (158
+directional 360-case ranking puts Qwen 3.5 9B Base Q4_K_M first at 43/100 (158
 useful, 93 wrong, 109 silent), immediately ahead of Nemotron Nano 9B v2 Base
-Q4_K_M at 42/100. These are model-baseline comparisons with greedy decoding,
-not live-product promotion results.
+Q4_K_M at 42/100. The historical entries share the suite, prompt, greedy
+sampler, three-word cap, one worker, and one slot, but mix 8-token and 20-token
+budgets across three helper hashes. Use each entry's `comparisonGroupID` for a
+strict runtime claim. These are directional model baselines, not live-product
+promotion results.
 
 The Qwen 9B configuration campaign then screened 50 arms across the same 360
 speak-only development situations: 18,000 evaluations total. Its clean
@@ -263,11 +277,11 @@ were not comparable safety-preserving wins. Relaxing or disabling scene-echo
 rejection produced the same confound. Repeat-penalty variants raised the raw
 score by becoming much more aggressive, but also raised wrong interruptions.
 
-An initial post-install dogfood snapshot—22 model completions, not a promotion
-sample—measured 221 ms median, 365 ms p95, and 458 ms maximum model latency,
-with 21 suggestions served and one cleaner rejection. Treat that snapshot as
-directional until at least 200 live completions accumulate. Operational
-diagnostics remain local, aggregate, and content-free.
+The latest checked snapshot—148 model completions, still not a promotion
+sample—measured 192 ms p50, 366 ms p95, 416 ms p99, and 458 ms maximum model
+latency, with 134 suggestions served and 10 cleaner rejections. It remains below
+the 200-completion verdict floor, and p99 currently exceeds the 400 ms budget.
+Operational diagnostics remain local, aggregate, and content-free.
 
 The semantic shootout retains the strict answer-path score and adds four
 0–100 referee dimensions: intent, usefulness, naturalness, and factuality.
