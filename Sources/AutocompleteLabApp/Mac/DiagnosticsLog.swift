@@ -17,7 +17,9 @@ final class DiagnosticsLog: @unchecked Sendable {
     private init() {
         self.logURL = FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Tilde/diagnostics.log")
+            .appendingPathComponent("Library/Logs")
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName)
+            .appendingPathComponent("diagnostics.log")
         self.enabled = true
     }
 

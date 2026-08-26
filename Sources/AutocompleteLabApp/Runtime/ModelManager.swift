@@ -1,3 +1,4 @@
+import AutocompleteLabCore
 import CryptoKit
 import Foundation
 
@@ -51,18 +52,38 @@ struct ModelDescriptor: Equatable, Sendable {
 
     /// The one model shipped by this Tilde release.
     static let gemma4E2BQ4KM = ModelDescriptor(
-        identifier: "gemma-4-e2b-q4km",
-        version: "3762686d74ff8db6c98f8d3c389f56fbdf994d5a",
-        repository: "mradermacher/gemma-4-E2B-GGUF",
-        revision: "3762686d74ff8db6c98f8d3c389f56fbdf994d5a",
-        fileName: "gemma-4-E2B.Q4_K_M.gguf",
-        expectedBytes: 3_427_861_984,
-        sha256: "389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
+        identifier: ProductionModelAsset.identifier,
+        version: ProductionModelAsset.revision,
+        repository: ProductionModelAsset.repository,
+        revision: ProductionModelAsset.revision,
+        fileName: ProductionModelAsset.fileName,
+        expectedBytes: ProductionModelAsset.expectedBytes,
+        sha256: ProductionModelAsset.sha256
     )
 
     /// Compatibility spelling for call sites that use the model's display
     /// name rather than its quantization suffix.
     static let gemma4E2B = gemma4E2BQ4KM
+
+    static let gemma426BA4BQ4KMPreview = ModelDescriptor(
+        identifier: PreviewModelAsset.identifier,
+        version: PreviewModelAsset.revision,
+        repository: PreviewModelAsset.repository,
+        revision: PreviewModelAsset.revision,
+        fileName: PreviewModelAsset.fileName,
+        expectedBytes: PreviewModelAsset.expectedBytes,
+        sha256: PreviewModelAsset.sha256
+    )
+
+    static let qwen35B9BQ4KMPreview = ModelDescriptor(
+        identifier: Qwen9BPreviewModelAsset.identifier,
+        version: Qwen9BPreviewModelAsset.revision,
+        repository: Qwen9BPreviewModelAsset.repository,
+        revision: Qwen9BPreviewModelAsset.revision,
+        fileName: Qwen9BPreviewModelAsset.fileName,
+        expectedBytes: Qwen9BPreviewModelAsset.expectedBytes,
+        sha256: Qwen9BPreviewModelAsset.sha256
+    )
 
     private static func isSHA256(_ value: String) -> Bool {
         value.utf8.count == 64 && value.utf8.allSatisfy { byte in
@@ -280,7 +301,14 @@ final class ModelManager: @unchecked Sendable {
     typealias ProgressHandler = @Sendable (Int64, Int64) -> Void
     typealias DiskSpaceProvider = @Sendable (URL) -> Int64?
 
-    static let defaultDescriptor = ModelDescriptor.gemma4E2BQ4KM
+    static var defaultDescriptor: ModelDescriptor {
+        switch TildeProductProfile.current {
+        case .production: .gemma4E2BQ4KM
+        case .preview26B: .gemma426BA4BQ4KMPreview
+        case .preview9B: .qwen35B9BQ4KMPreview
+        case .modelPreview: PreviewModelSelection.descriptor(for: .modelPreview)
+        }
+    }
 
     let descriptor: ModelDescriptor
     let rootDirectory: URL
@@ -355,7 +383,7 @@ final class ModelManager: @unchecked Sendable {
         }
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return appSupport
-            .appendingPathComponent("Tilde", isDirectory: true)
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName, isDirectory: true)
             .appendingPathComponent("Models", isDirectory: true)
     }
 

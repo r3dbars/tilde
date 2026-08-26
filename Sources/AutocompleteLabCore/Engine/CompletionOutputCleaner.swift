@@ -25,6 +25,30 @@ public enum CompletionCleanResult: Sendable {
     }
 }
 
+/// Lab-selectable cleanup behavior. Production call sites use `.production`;
+/// experimental callers can ablate individual judgment rules without
+/// weakening unsafe-character rejection or changing the shipping defaults.
+public struct CompletionCleaningPolicy: Equatable, Sendable {
+    public var rejectsPromptInstructionEcho: Bool
+    public var rejectsContextReplay: Bool
+    public var trimsSelfRepetition: Bool
+    public var repairsDanglingTail: Bool
+
+    public static let production = CompletionCleaningPolicy()
+
+    public init(
+        rejectsPromptInstructionEcho: Bool = true,
+        rejectsContextReplay: Bool = true,
+        trimsSelfRepetition: Bool = true,
+        repairsDanglingTail: Bool = true
+    ) {
+        self.rejectsPromptInstructionEcho = rejectsPromptInstructionEcho
+        self.rejectsContextReplay = rejectsContextReplay
+        self.trimsSelfRepetition = trimsSelfRepetition
+        self.repairsDanglingTail = repairsDanglingTail
+    }
+}
+
 public struct CompletionOutputCleaner: Sendable {
     private static let noSuggestion = "<no_suggestion>"
     private static let wrappers = CharacterSet(charactersIn: "\"'`")
@@ -43,9 +67,17 @@ public struct CompletionOutputCleaner: Sendable {
     ]
 
     private let maxVisibleWords: Int
+    private let maxVisibleCharacters: Int?
+    private let policy: CompletionCleaningPolicy
 
-    public init(maxVisibleWords: Int = CompletionSuggestion.defaultMaxVisibleWords) {
+    public init(
+        maxVisibleWords: Int = CompletionSuggestion.defaultMaxVisibleWords,
+        maxVisibleCharacters: Int? = nil,
+        policy: CompletionCleaningPolicy = .production
+    ) {
         self.maxVisibleWords = CompletionSuggestion.clampedVisibleWords(maxVisibleWords)
+        self.maxVisibleCharacters = maxVisibleCharacters.map { max(1, $0) }
+        self.policy = policy
     }
 
     public func cleanWithReason(
@@ -68,7 +100,9 @@ public struct CompletionOutputCleaner: Sendable {
         candidate = unwrapped(strippingAnswerLabel(from: candidate))
         guard !candidate.isEmpty else { return .rejected(.emptyOutput) }
         guard !isNoSuggestion(candidate) else { return .rejected(.noSuggestionSentinel) }
-        guard !isInstructionLeak(candidate) else { return .rejected(.promptInstructionEcho) }
+        if policy.rejectsPromptInstructionEcho, isInstructionLeak(candidate) {
+            return .rejected(.promptInstructionEcho)
+        }
 
         var continuation = candidate.first?.isWhitespace == true ? candidate : " " + candidate
         // Tokenize the typed context once. `trimTypedPrefix` (and its
@@ -85,19 +119,28 @@ public struct CompletionOutputCleaner: Sendable {
         guard !continuation.trimmingCharacters(in: .whitespaces).isEmpty else {
             return .rejected(.emptyAfterPrefixTrimming)
         }
-        if textBeforeCursor != nil, replaysContext(continuation, contextWords: contextWords) {
+        if policy.rejectsContextReplay,
+           textBeforeCursor != nil,
+           replaysContext(continuation, contextWords: contextWords) {
             return .rejected(.replaysContext)
         }
 
-        let deduped = trimmingSelfRepetition(continuation)
-        if deduped != continuation {
-            guard deduped.contains(where: { $0.isLetter || $0.isNumber }) else {
-                return .rejected(.repeatsItself)
+        if policy.trimsSelfRepetition {
+            let deduped = trimmingSelfRepetition(continuation)
+            if deduped != continuation {
+                guard deduped.contains(where: { $0.isLetter || $0.isNumber }) else {
+                    return .rejected(.repeatsItself)
+                }
+                continuation = deduped
             }
-            continuation = deduped
         }
 
-        return .accepted(CompletionSuggestion(text: continuation, maxVisibleWords: maxVisibleWords))
+        return .accepted(CompletionSuggestion(
+            text: continuation,
+            maxVisibleWords: maxVisibleWords,
+            maxVisibleCharacters: maxVisibleCharacters,
+            repairsDanglingTail: policy.repairsDanglingTail
+        ))
     }
 
     private func unwrapped(_ text: String) -> String {

@@ -102,12 +102,40 @@ human review: matching bytes and valid file shapes do not prove provenance.
 For private, aggregate-only model comparisons, see the
 [evaluation guide](docs/evaluation.md).
 
+Tilde Lab is the separate local regression studio for reply quality, judgment,
+Scene Memory, synthetic personalization, real text-system interaction, and
+performance experiments. It runs reproducible multi-arm suites through the
+pinned loopback-only Gemma runtime, includes deterministic policy audits and an
+instrumented AppKit Scene Host, and persists aggregate-only reports for
+baseline/candidate comparison. Its locked headline is **Net Keystrokes Saved**,
+with safety, bad-suggestion, temporal-integrity, privacy, interaction, and
+latency gates outside the number. It includes a 300-case protected curated
+Slack pack with prefix replay/context ablations, the 400-case synthetic quiz,
+and a read-only development-only importer for private accepted/typed-instead
+history:
+
+```bash
+./script/build_and_run.sh --tilde-lab
+swift run tilde-lab-runner --workers 1 --slots 8 --repetitions 10
+swift run tilde-lab-runner --built-in-suite slack-reply-gold-v1
+swift run tilde-lab-runner --manifest ./candidate-matrix.tilde-lab.json
+```
+
+See the [Tilde Lab guide](docs/tilde-lab.md) for the complete knob manifest,
+score and privacy contracts, scenario format, matrix runner, and the boundary
+between high-throughput model evidence and foreground real-IME proof. The
+[Tilde Learning Ledger](docs/learning-ledger.md) preserves what experiments
+taught us, why candidates were kept or rejected, and what should be tested next.
+
 Production code has three parts:
 
 - `Sources/AutocompleteLabCore`: pure, deterministic suggestion policy
 - `Sources/InlineGhostIME`: IMKit input and marked-text presentation
 - `Sources/AutocompleteLabApp`: local socket, app-owned llama lifecycle, menu,
   installation, encrypted Personal History, and redacted diagnostics
+- `Sources/TildeLabKit` + `Sources/TildeLab` + `Sources/TildeLabRunner`:
+  separate regression engine, macOS dashboard, and unattended runner; none is
+  linked into the shipped Tilde app
 
 Read [AGENTS.md](AGENTS.md) before changing behavior.
 

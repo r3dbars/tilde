@@ -1,4 +1,5 @@
 import AppKit
+import AutocompleteLabCore
 
 /// Tilde stays quiet in the menu bar. Personal progress and controls live in
 /// one unified window opened from a single menu action.
@@ -74,6 +75,8 @@ final class StatusMenuHost: NSObject {
     private var todayItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
     private var setupOrTildeItem: NSMenuItem?
+    private var modelPickerItem: NSMenuItem?
+    private var modelChoiceItems: [PreviewModelChoice: NSMenuItem] = [:]
 
     private var tildeWindow: TildeSettingsWindowController?
 
@@ -89,14 +92,33 @@ final class StatusMenuHost: NSObject {
         item.button?.image = Self.menuBarMark()
 
         let menu = NSMenu()
-        statusLineItem = addAction(to: menu, "Tilde is Getting Ready", #selector(openStatus(_:)))
+        let productName = TildeProductProfile.current.displayName
+        statusLineItem = addAction(to: menu, "\(productName) is Getting Ready", #selector(openStatus(_:)))
         todayItem = addAction(to: menu, "0 words with Tilde today", #selector(openYourTilde(_:)))
         menu.addItem(.separator())
 
+        if TildeProductProfile.current == .modelPreview {
+            let picker = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
+            let submenu = NSMenu(title: "Model")
+            for choice in PreviewModelChoice.allCases {
+                let choiceItem = addAction(
+                    to: submenu,
+                    choice.displayName,
+                    #selector(selectModel(_:))
+                )
+                choiceItem.representedObject = choice.rawValue
+                modelChoiceItems[choice] = choiceItem
+            }
+            picker.submenu = submenu
+            menu.addItem(picker)
+            menu.addItem(.separator())
+            modelPickerItem = picker
+        }
+
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
-        setupOrTildeItem = addAction(to: menu, "Open Tilde", #selector(openTilde(_:)))
+        setupOrTildeItem = addAction(to: menu, "Open \(productName)", #selector(openTilde(_:)))
         menu.addItem(.separator())
-        addAction(to: menu, "Quit Tilde", #selector(quit(_:)), key: "q")
+        addAction(to: menu, "Quit \(productName)", #selector(quit(_:)), key: "q")
 
         menu.delegate = self
         item.menu = menu
@@ -112,11 +134,22 @@ final class StatusMenuHost: NSObject {
             model: appDelegate.modelState(),
             wordsToday: TildeStats.todayWordsAccepted()
         )
-        statusLineItem?.title = presentation.status
+        statusLineItem?.title = switch TildeProductProfile.current {
+        case .production: presentation.status
+        case .preview26B: "26B Preview · \(presentation.status)"
+        case .preview9B: "9B Preview · \(presentation.status)"
+        case .modelPreview: "\(appDelegate.selectedPreviewModel()?.shortName ?? "Model Preview") · \(presentation.status)"
+        }
         todayItem?.title = presentation.detail
         pauseItem?.title = presentation.primaryAction ?? ""
         pauseItem?.isHidden = presentation.primaryAction == nil
-        setupOrTildeItem?.title = "Open Tilde"
+        setupOrTildeItem?.title = "Open \(TildeProductProfile.current.displayName)"
+        if let active = appDelegate.selectedPreviewModel() {
+            modelPickerItem?.title = "Model: \(active.shortName)"
+            for (choice, item) in modelChoiceItems {
+                item.state = choice == active ? .on : .off
+            }
+        }
 
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
@@ -151,6 +184,12 @@ final class StatusMenuHost: NSObject {
 
     @objc private func openTilde(_ sender: Any?) {
         showYourTilde()
+    }
+
+    @objc private func selectModel(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let choice = PreviewModelChoice(rawValue: rawValue) else { return }
+        appDelegate?.selectPreviewModel(choice)
     }
 
     func showTilde() {

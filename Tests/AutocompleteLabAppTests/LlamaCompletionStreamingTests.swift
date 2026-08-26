@@ -101,6 +101,27 @@ struct LlamaCompletionStreamingTests {
         #expect(final?.visibleText == "at 10:30 tomorrow morning")
     }
 
+    @Test("9B preview uses its promoted three-word visible cap")
+    func preview9BVisibleCap() async throws {
+        let transport = FixedFrameTransport(lines: [
+            #"data: {"content":" sounds really good today "}"#,
+            #"data: {"stop":true,"tokens_predicted":5,"stopped_limit":true}"#,
+        ])
+        let engine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17875")!,
+            diagnostics: .disabled,
+            transport: transport,
+            productProfile: .preview9B
+        )
+
+        let suggestion = try await engine.suggestion(
+            textBeforeCursor: "That ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        #expect(suggestion?.visibleText == "sounds really good")
+    }
+
     @Test("Malformed or non-SSE success responses fail closed")
     func malformedStreamsFailClosed() async {
         for lines in [
