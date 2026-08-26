@@ -96,6 +96,11 @@ enum PersonalHistoryStorageError: Error, Equatable {
 final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @unchecked Sendable {
     static let service = "bar.r3d.tilde.personal-history"
     static let account = "aes-gcm-key-v1"
+    private let serviceName: String
+
+    init(serviceName: String = TildeProductProfile.current.personalHistoryKeychainService) {
+        self.serviceName = serviceName
+    }
 
     func loadExistingKey() throws -> Data {
         guard let key = try lookupKey() else {
@@ -150,7 +155,7 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
         }
     }
 
-    static func baseQuery() -> [CFString: Any] {
+    static func baseQuery(service: String = service) -> [CFString: Any] {
         [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -159,7 +164,7 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
         ]
     }
 
-    private func baseQuery() -> [CFString: Any] { Self.baseQuery() }
+    private func baseQuery() -> [CFString: Any] { Self.baseQuery(service: serviceName) }
 }
 
 /// A versioned append-only log. Each event is independently authenticated and
@@ -168,7 +173,9 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
 final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Sendable {
     private static let legacyHeader = Data("TILDE-PERSONAL-HISTORY\t1\n".utf8)
     private static let header = Data("TILDE-PERSONAL-HISTORY\t2\n".utf8)
-    private static let authenticatedData = Data("bar.r3d.tilde.personal-history.v1".utf8)
+    private static var authenticatedData: Data {
+        TildeProductProfile.current.personalHistoryAuthenticatedData
+    }
     private static let maximumEncryptedRecordBytes = 64 * 1_024
 
     let location: URL
@@ -179,7 +186,8 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
     init(
         location: URL = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tilde/Personal History/history.v1.enc"),
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName)
+            .appendingPathComponent("Personal History/history.v1.enc"),
         keyProvider: any PersonalHistoryKeyProviding = KeychainPersonalHistoryKeyProvider(),
         diagnostics: DiagnosticsLog = .shared
     ) {

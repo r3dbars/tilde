@@ -12,11 +12,11 @@ final class GhostInputController: IMKInputController {
     private static let trailingContextLimit = 80
     private static let slowKeyThreshold: TimeInterval = 0.050
     private static let slowKeyLogger = Logger(
-        subsystem: "bar.r3d.inputmethod.InlineGhost",
+        subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "typing-performance"
     )
     private static let roundTripLogger = Logger(
-        subsystem: "bar.r3d.inputmethod.InlineGhost",
+        subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "suggestion-latency"
     )
 
@@ -933,7 +933,9 @@ final class GhostInputController: IMKInputController {
         DispatchQueue.main.async {
             guard Date().timeIntervalSince(lastBrainSummon) >= 60 else { return }
             guard !UserDefaults.standard.bool(forKey: "GhostBrainQuietQuit") else { return }
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "bar.r3d.tilde") else {
+            guard let url = NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: TildeProductProfile.current.appBundleIdentifier
+            ) else {
                 return
             }
             lastBrainSummon = Date()

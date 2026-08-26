@@ -12,8 +12,8 @@ __pycache__/
 *.pyc
 
 # Local model/data files stay off git.
-Models/
-Data/
+/Models/
+/Data/
 *.gguf
 *.sqlite
 *.sqlite-shm

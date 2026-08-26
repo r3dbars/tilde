@@ -6,9 +6,13 @@ import Security
 /// context remains memory-only; explicit Personal History batches are routed
 /// to the app-owned encrypted store.
 final class GhostBrainServerHost: @unchecked Sendable {
-    static let socketPath = NSString(
-        string: "~/Library/Application Support/Tilde/ghost.sock"
-    ).expandingTildeInPath
+    static var socketPath: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support")
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName)
+            .appendingPathComponent("ghost.sock")
+            .path
+    }
 
     private let runtime: LlamaServerProcessHost
     private let engine: LlamaCompletionEngine
@@ -81,7 +85,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
         personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil
     ) {
         self.runtime = runtime
-        self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL)
+        self.engine = LlamaCompletionEngine(
+            baseURL: runtime.baseURL,
+            productProfile: PreviewModelSelection.completionProfile(
+                for: TildeProductProfile.current
+            )
+        )
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
         self.targetProvider = targetProvider
@@ -651,16 +660,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
         var gid: gid_t = 0
         guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { return false }
 #if DEBUG
-        if Bundle.main.bundleIdentifier != "bar.r3d.tilde" {
+        if Bundle.main.bundleIdentifier != TildeProductProfile.current.appBundleIdentifier {
             return ProcessInfo.processInfo.environment["TILDE_ALLOW_UNSIGNED_LOCAL_PEER"] == "1"
         }
 #else
-        guard Bundle.main.bundleIdentifier == "bar.r3d.tilde" else { return false }
+        guard Bundle.main.bundleIdentifier == TildeProductProfile.current.appBundleIdentifier else { return false }
 #endif
         var pid: pid_t = 0
         var length = socklen_t(MemoryLayout<pid_t>.size)
         guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 else { return false }
-        guard let peer = identity(pid: pid), peer.identifier == "bar.r3d.inputmethod.InlineGhost",
+        guard let peer = identity(pid: pid),
+              peer.identifier == TildeProductProfile.current.inputMethodBundleIdentifier,
               let own = identity(pid: getpid()) else { return false }
 #if DEBUG
         if let ownTeam = own.team, let peerTeam = peer.team {

@@ -1,4 +1,5 @@
 import AppKit
+import AutocompleteLabCore
 import SwiftUI
 
 @MainActor
@@ -105,6 +106,24 @@ private struct TildeSettingsView: View {
                         Text(model.simpleStatusText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if model.showsPreviewModelPicker {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Picker("Model", selection: Binding(
+                            get: { model.selectedPreviewModel ?? .qwen35B9B },
+                            set: { model.setPreviewModel($0) }
+                        )) {
+                            ForEach(PreviewModelChoice.allCases, id: \.self) { choice in
+                                Text(choice.displayName).tag(choice)
+                            }
+                        }
+
+                        Text("Changing models restarts this preview. Your normal Tilde app is untouched.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 

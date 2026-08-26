@@ -94,7 +94,8 @@ final class LocalOCREvaluationStore: @unchecked Sendable {
     init(
         location: URL = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tilde/OCR Evaluation/samples.jsonl"),
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName)
+            .appendingPathComponent("OCR Evaluation/samples.jsonl"),
         mayPersist: @escaping @Sendable () -> Bool = {
             LocalOCREvaluationStore.isAvailableInCurrentBuild
                 && TildeSettings().localOCREvaluationEnabled

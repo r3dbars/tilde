@@ -6,9 +6,13 @@ import Security
 /// unix socket. The connection is closed on task cancellation, which also
 /// gives the app a concrete disconnect signal to cancel model inference.
 enum GhostBrainClient {
-    static let socketPath = NSString(
-        string: "~/Library/Application Support/Tilde/ghost.sock"
-    ).expandingTildeInPath
+    static var socketPath: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support")
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName)
+            .appendingPathComponent("ghost.sock")
+            .path
+    }
 
     private static let timeoutNanoseconds: UInt64 = 2_000_000_000
     private static let worker = DispatchQueue(
@@ -166,16 +170,19 @@ enum GhostBrainClient {
             var gid: gid_t = 0
             guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { return false }
 #if DEBUG
-            if Bundle.main.bundleIdentifier != "bar.r3d.inputmethod.InlineGhost" {
+            if Bundle.main.bundleIdentifier != TildeProductProfile.current.inputMethodBundleIdentifier {
                 return ProcessInfo.processInfo.environment["TILDE_ALLOW_UNSIGNED_LOCAL_PEER"] == "1"
             }
 #else
-            guard Bundle.main.bundleIdentifier == "bar.r3d.inputmethod.InlineGhost" else { return false }
+            guard Bundle.main.bundleIdentifier == TildeProductProfile.current.inputMethodBundleIdentifier else {
+                return false
+            }
 #endif
             var pid: pid_t = 0
             var length = socklen_t(MemoryLayout<pid_t>.size)
             guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 else { return false }
-            guard let peer = Self.identity(pid: pid), peer.identifier == "bar.r3d.tilde",
+            guard let peer = Self.identity(pid: pid),
+                  peer.identifier == TildeProductProfile.current.appBundleIdentifier,
                   let own = Self.identity(pid: getpid()) else { return false }
 #if DEBUG
             if let ownTeam = own.team, let peerTeam = peer.team {
