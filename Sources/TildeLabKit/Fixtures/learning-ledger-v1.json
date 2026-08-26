@@ -1,0 +1,954 @@
+{
+  "schema": "tilde-lab.learning-ledger.v1",
+  "updatedAt": "2026-08-26T20:13:56Z",
+  "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
+  "privacy": {
+    "aggregateOnly": true,
+    "containsRawScenarioText": false,
+    "containsRawModelOutput": false,
+    "containsPersonalWriting": false,
+    "containsFilePaths": false
+  },
+  "operatingPrinciples": [
+    "Save the user's actual keystrokes without interrupting them with wrong suggestions.",
+    "Never average safety, privacy, temporal integrity, interaction integrity, or latency failures into a headline score.",
+    "Compare candidates only on the same corpus, split, prompt, scoring policy, model protocol, and controlled runtime.",
+    "Distinct situations measure behavioral coverage; repetitions measure stability and do not create new coverage.",
+    "Keep raw personal writing, screen text, prompts, model output, and private corpus material out of checked-in evidence.",
+    "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass."
+  ],
+  "entries": [
+    {
+      "id": "tilde-lab-platform-v1",
+      "recordedAt": "2026-08-24T18:00:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "Tilde Lab became a separate regression and autoresearch application",
+      "finding": "A separate Swift package app and CLI can run deterministic suites, fixed matrices, local model workers, checkpoints, aggregate reports, corpus audits, interaction fixtures, and keep-or-discard research without entering the production input method.",
+      "decision": "Keep Tilde Lab separate from the shipped input method and make it the owner-visible place for experimental evidence.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "pull-request", "id": "416" },
+        { "kind": "source-file", "id": "Sources/TildeLabRunner/TildeLabRunner.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabAutoresearch.swift" }
+      ],
+      "limitations": [
+        "The direct-model bench does not prove marked-text behavior in every foreground macOS application."
+      ],
+      "tags": ["architecture", "autoresearch", "local-only"]
+    },
+    {
+      "id": "lab-evidence-coverage-gap",
+      "recordedAt": "2026-08-26T20:13:56Z",
+      "area": "system",
+      "status": "boundary",
+      "title": "The Lab has deep Reply evidence but not yet full-system proof",
+      "finding": "The local archive contains 598 aggregate-only reports and 1,034,730 scored evaluations with 18 protocol errors, zero timeouts, and no privacy-contract violations. Those persisted runs cover only four Reply suites; there is no saved Interaction, Scene Memory, Personalization, Performance, semantic-shootout, or completed Learning Cycle report yet.",
+      "decision": "Treat the million-plus count as depth in one lane, not broad proof of the macOS product, and prioritize the missing evidence lanes before production promotion.",
+      "comparisonGroupID": null,
+      "evaluationCount": 1034730,
+      "metrics": [
+        { "subjectID": "local-report-archive", "key": "reports", "value": 598, "unit": "reports" },
+        { "subjectID": "local-report-archive", "key": "protocol-errors", "value": 18, "unit": "requests" },
+        { "subjectID": "local-report-archive", "key": "timeouts", "value": 0, "unit": "requests" },
+        { "subjectID": "local-report-archive", "key": "privacy-contract-violations", "value": 0, "unit": "reports" }
+      ],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabReportStore.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabReport.swift" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "The aggregate archive is local and many reports use superseded schemas or protocols."
+      ],
+      "tags": ["coverage", "reply-bench", "missing-evidence", "privacy"]
+    },
+    {
+      "id": "first-16-case-baseline",
+      "recordedAt": "2026-08-24T19:00:00Z",
+      "area": "historical-experiment",
+      "status": "superseded",
+      "title": "The first small baseline proved the harness, not the product",
+      "finding": "The original 16-case suite completed 320 evaluations with score 44, 25 percent useful output, 100 percent sensitive restraint, and 167 millisecond p95 latency.",
+      "decision": "Retain it as an engineering smoke test only; never use it as current quality evidence.",
+      "comparisonGroupID": "legacy-replying-v1",
+      "evaluationCount": 320,
+      "metrics": [
+        { "subjectID": "gemma-4-e2b-q4km", "key": "legacy-score", "value": 44, "unit": "score-0-100" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "useful", "value": 25, "unit": "percent" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "p95-latency", "value": 167, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "suite", "id": "replying-v1" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "Sixteen situations were far too narrow and the legacy score blended behaviors that later became separate gates."
+      ],
+      "tags": ["archived", "smoke-test", "legacy-score"]
+    },
+    {
+      "id": "campaign-one-five-arms",
+      "recordedAt": "2026-08-24T20:00:00Z",
+      "area": "historical-experiment",
+      "status": "superseded",
+      "title": "The first five-arm campaign showed that scene context mattered",
+      "finding": "Across 400 evaluations, removing scene context collapsed the legacy score from 59 to 30. Temperature 0.15 appeared to improve 59 to 61, while a 28-token budget and five-word cap were inert.",
+      "decision": "Preserve the scene-context lesson; discard the temperature conclusion because it did not remain stable on stronger protocols.",
+      "comparisonGroupID": "legacy-campaign-one",
+      "evaluationCount": 400,
+      "metrics": [
+        { "subjectID": "production-control", "key": "legacy-score", "value": 59, "unit": "score-0-100" },
+        { "subjectID": "no-scene", "key": "legacy-score", "value": 30, "unit": "score-0-100" },
+        { "subjectID": "temperature-0.15", "key": "legacy-score", "value": 61, "unit": "score-0-100" }
+      ],
+      "evidence": [
+        { "kind": "campaign", "id": "campaign-one" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "The suite and scoring policy predate Certified Corpus V2, and the apparent temperature win was not stable."
+      ],
+      "tags": ["archived", "scene-context", "temperature"]
+    },
+    {
+      "id": "broad-50-first-cap-signal",
+      "recordedAt": "2026-08-24T21:00:00Z",
+      "area": "historical-experiment",
+      "status": "superseded",
+      "title": "Broad 50 produced the first consistent three-word-cap signal",
+      "finding": "Across 2,400 evaluations, a three-word visible cap improved the legacy score from 59 to 63 without turning off safety. Disabling scene-echo protection reached 73 but was diagnostic and unsafe.",
+      "decision": "Carry the three-word cap forward as a hypothesis and reject echo-off as a deployable configuration.",
+      "comparisonGroupID": "legacy-broad-50",
+      "evaluationCount": 2400,
+      "metrics": [
+        { "subjectID": "production-control", "key": "legacy-score", "value": 59, "unit": "score-0-100" },
+        { "subjectID": "visible-words-3", "key": "legacy-score", "value": 63, "unit": "score-0-100" },
+        { "subjectID": "scene-echo-off", "key": "legacy-score", "value": 73, "unit": "score-0-100" }
+      ],
+      "evidence": [
+        { "kind": "campaign", "id": "broad-50" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabCampaignRecipe.swift" }
+      ],
+      "limitations": [
+        "The suite was too easy to game and the legacy score rewarded unsafe aggression."
+      ],
+      "tags": ["archived", "three-word-cap", "safety-confound"]
+    },
+    {
+      "id": "improved-quiz-128-arm-campaign",
+      "recordedAt": "2026-08-25T01:00:00Z",
+      "area": "historical-experiment",
+      "status": "superseded",
+      "title": "The 128-arm campaign found a directional sampler but no eligible winner",
+      "finding": "The improved quiz ran 102,400 evaluations. Typical-p 0.50 improved the legacy score from 2 to 14, usefulness from 8.3 to 11.0 percent, ordinary restraint from 0 to 24.2 percent, and counterfactual pairs from 15.0 to 20.8 percent, but factuality fell to 98.6 percent and p95 reached 922 milliseconds. Ninety-two arms tied the baseline.",
+      "decision": "Treat typical-p 0.50 as an archived lead, not a champion; require randomized ordering, control normalization, and stronger scoring.",
+      "comparisonGroupID": "replying-v2-develop-128",
+      "evaluationCount": 102400,
+      "metrics": [
+        { "subjectID": "typical-p-0.50", "key": "legacy-score", "value": 14, "unit": "score-0-100" },
+        { "subjectID": "typical-p-0.50", "key": "useful", "value": 11, "unit": "percent" },
+        { "subjectID": "typical-p-0.50", "key": "p95-latency", "value": 922, "unit": "milliseconds" },
+        { "subjectID": "campaign", "key": "arms-tied-baseline", "value": 92, "unit": "arms" }
+      ],
+      "evidence": [
+        { "kind": "suite", "id": "replying-v2" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabCampaignRecipe.swift" }
+      ],
+      "limitations": [
+        "No arm passed every gate, latency drifted with run order and heat, and this predates Certified Corpus V2."
+      ],
+      "tags": ["archived", "typical-p", "thermal-drift", "no-winner"]
+    },
+    {
+      "id": "autoresearch-protocol",
+      "recordedAt": "2026-08-25T02:00:00Z",
+      "area": "methodology",
+      "status": "adopted",
+      "title": "Karpathy-style keep-or-discard research became the default search protocol",
+      "finding": "A useful search loop establishes one baseline, changes one bounded knob, compares with gate-first ranking, keeps only a real improvement, reruns controls, checkpoints every arm, and confirms the final candidate with more repetitions.",
+      "decision": "Use this protocol for adaptive search and keep campaign checkpoints separate from the curated checked-in learning ledger.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabAutoresearch.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabRunner/TildeLabRunner.swift" }
+      ],
+      "limitations": [
+        "Automated ranking is only as trustworthy as the corpus, score contract, controls, and promotion gates it receives."
+      ],
+      "tags": ["autoresearch", "keep-discard", "checkpointing", "controls"]
+    },
+    {
+      "id": "overnight-old-quiz-autoresearch",
+      "recordedAt": "2026-08-25T10:08:12Z",
+      "area": "historical-experiment",
+      "status": "superseded",
+      "title": "The eight-hour old-quiz campaign improved behavior but still failed product gates",
+      "finding": "The run completed 436,800 evaluations across 38 changes, accepted 9, rejected 29, ran 38 stability controls, and finished a 24,000-evaluation confirmation with zero errors or timeouts. The package used a three-word cap, eight generated tokens, temperature 0.4, typical-p 0.5, top-k 80, frequency penalty 0.1, and minimum confidence 0.2; legacy score moved 2 to 12 and usefulness 5.6 to 10.5 percent.",
+      "decision": "Archive the component leads and do not promote the combined package because it predates Certified Corpus V2 and still failed required gates.",
+      "comparisonGroupID": "replying-v2-overnight-autoresearch",
+      "evaluationCount": 436800,
+      "metrics": [
+        { "subjectID": "campaign", "key": "accepted-mutations", "value": 9, "unit": "mutations" },
+        { "subjectID": "campaign", "key": "rejected-mutations", "value": 29, "unit": "mutations" },
+        { "subjectID": "final-package", "key": "legacy-score", "value": 12, "unit": "score-0-100" },
+        { "subjectID": "final-package", "key": "p95-latency", "value": 967, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "campaign", "id": "EA11D64F-C77D-4459-8808-D6664F0FE975" },
+        { "kind": "report", "id": "ADF20DE4-C784-4F70-9349-A406ADAB24BD" }
+      ],
+      "limitations": [
+        "The old synthetic quiz and legacy score are not comparable to current Certified Corpus V2 results."
+      ],
+      "tags": ["archived", "overnight", "combined-package", "failed-gates"]
+    },
+    {
+      "id": "when-to-speak-old-quiz",
+      "recordedAt": "2026-08-25T12:19:53Z",
+      "area": "historical-experiment",
+      "status": "superseded",
+      "title": "The one-hour when-to-speak search modestly improved restraint but not enough",
+      "finding": "Across 53,760 evaluations and 23 policies, seven changes were accepted. The final package used intent prior 0.75, two intent futures, two recent turns, six generated tokens, and a three-word cap. Legacy quality moved 12 to 13, restraint 18.1 to 22.3 percent, usefulness 10.4 to 10.5 percent, and p95 improved from 784 to 677 milliseconds. Confidence thresholds from 25 to 60 percent did not help.",
+      "decision": "Archive the package and separate when-to-speak from output-quality optimization in future work.",
+      "comparisonGroupID": "replying-v2-speak-autoresearch",
+      "evaluationCount": 53760,
+      "metrics": [
+        { "subjectID": "final-package", "key": "legacy-score", "value": 13, "unit": "score-0-100" },
+        { "subjectID": "final-package", "key": "ordinary-restraint", "value": 22.3, "unit": "percent" },
+        { "subjectID": "final-package", "key": "useful", "value": 10.5, "unit": "percent" },
+        { "subjectID": "final-package", "key": "p95-latency", "value": 677, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "campaign", "id": "4A82E17C-A63E-4F91-AE75-D618A676CFD8" },
+        { "kind": "report", "id": "9CAD3E8E-0ABA-47BE-BAB7-A4551A0574BC" }
+      ],
+      "limitations": [
+        "This was a combined package on the old quiz, so the effect of each accepted change is not independently established."
+      ],
+      "tags": ["archived", "when-to-speak", "confidence", "restraint"]
+    },
+    {
+      "id": "corpus-pilot-v1-rejected",
+      "recordedAt": "2026-08-25T18:00:00Z",
+      "area": "corpus",
+      "status": "rejected",
+      "title": "Corpus Pilot V1 was mechanically valid but not a trustworthy measuring stick",
+      "finding": "The 1,000-root pilot combined 600 public Taskmaster situations with 400 synthetic situations and showed context signal: 31.9 percent correct starts with correct context versus 17.4 percent wrong context and 11.6 percent typed-only. Review still found 100 impossible location cases, only about 70 percent fair answerability in the sample, and narrow domain/template coverage.",
+      "decision": "Keep Taskmaster as a diagnostic replay source, but replace the pilot as the decision-grade quiz.",
+      "comparisonGroupID": "corpus-pilot-v1-context-controls",
+      "evaluationCount": 3000,
+      "metrics": [
+        { "subjectID": "correct-context", "key": "exact-start", "value": 31.9, "unit": "percent" },
+        { "subjectID": "wrong-context", "key": "exact-start", "value": 17.4, "unit": "percent" },
+        { "subjectID": "typed-only", "key": "exact-start", "value": 11.6, "unit": "percent" }
+      ],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Suites/LabCorpusPilotSuiteFactory.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabCorpusQualityAuditor.swift" }
+      ],
+      "limitations": [
+        "Public conversations were not written for inline autocomplete and the synthetic half had limited variety."
+      ],
+      "tags": ["corpus", "rejected", "taskmaster", "answerability"]
+    },
+    {
+      "id": "certified-corpus-v2",
+      "recordedAt": "2026-08-25T20:31:55Z",
+      "area": "corpus",
+      "status": "adopted",
+      "title": "Certified Corpus V2 became the offline decision-grade evaluation set",
+      "finding": "The corpus contains 1,000 distinct project-owned situations: 600 reply opportunities, 400 correct-silence cases, 40 behavioral families, 500 fact-changing counterfactual pairs, seven app contexts, and a locked 600/200/200 development, validation, and holdout split. A 100-case structured review repaired two issues and the replacement sample passed 100 of 100.",
+      "decision": "Use development for search, validation for confirmation, and the sealed holdout only for a serious promotion candidate.",
+      "comparisonGroupID": "certified-corpus-v2",
+      "evaluationCount": 1000,
+      "metrics": [
+        { "subjectID": "corpus", "key": "speak-situations", "value": 600, "unit": "situations" },
+        { "subjectID": "corpus", "key": "silence-situations", "value": 400, "unit": "situations" },
+        { "subjectID": "corpus", "key": "counterfactual-pairs", "value": 500, "unit": "pairs" },
+        { "subjectID": "structured-review", "key": "final-pass", "value": 100, "unit": "percent" }
+      ],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Suites/LabReplyingV2SuiteFactory.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabCorpusCertification.swift" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "Offline certification proves a controlled measuring stick, not live usefulness or app compatibility. The structured review receipt was produced by Codex, not independent human ground truth."
+      ],
+      "tags": ["certified-corpus", "counterfactuals", "holdout", "synthetic"]
+    },
+    {
+      "id": "human-acceptable-answer-paths",
+      "recordedAt": "2026-08-25T20:31:55Z",
+      "area": "scoring",
+      "status": "adopted",
+      "title": "Reply quality now accepts intent-correct alternatives instead of exact wording only",
+      "finding": "Each speak situation records an explicit intent, one continuation path, and seven reviewed alternatives. On the first 360 development reply opportunities, 53 outputs were human-acceptable: 32 matched the recorded path and 21 matched an accepted alternative.",
+      "decision": "Report exact path and accepted alternative separately, and count either as human-acceptable when facts and intent remain correct.",
+      "comparisonGroupID": "certified-v2-development-speak-360-baseline",
+      "evaluationCount": 360,
+      "metrics": [
+        { "subjectID": "gemma-4-e2b-q4km", "key": "human-acceptable", "value": 53, "unit": "suggestions" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "recorded-path", "value": 32, "unit": "suggestions" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "accepted-alternative", "value": 21, "unit": "suggestions" }
+      ],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Scoring/LabOutputJudge.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabEvaluationContract.swift" }
+      ],
+      "limitations": [
+        "Eight reviewed paths are much fairer than exact matching but still cannot enumerate every reply a human might accept."
+      ],
+      "tags": ["semantic-acceptance", "intent", "exact-path", "alternatives"]
+    },
+    {
+      "id": "certified-context-falsification",
+      "recordedAt": "2026-08-25T20:31:55Z",
+      "area": "context",
+      "status": "adopted",
+      "title": "Certified controls proved that correct scene context carries real signal",
+      "finding": "Across 3,000 completions, correct context produced 33.3 percent exact starts versus 20.0 percent with deliberately wrong context and 14.5 percent with typed text alone. Correct context also had the least-negative net keystroke result and won separately on development, validation, and holdout with zero errors and timeouts.",
+      "decision": "Treat scene context as essential and preserve correct-versus-wrong-versus-typed-only falsification in corpus certification.",
+      "comparisonGroupID": "certified-v2-context-falsification",
+      "evaluationCount": 3000,
+      "metrics": [
+        { "subjectID": "correct-context", "key": "exact-start", "value": 33.3333, "unit": "percent" },
+        { "subjectID": "wrong-context", "key": "exact-start", "value": 20, "unit": "percent" },
+        { "subjectID": "typed-only", "key": "exact-start", "value": 14.5, "unit": "percent" },
+        { "subjectID": "correct-context", "key": "net-keystroke-savings", "value": -1.1126, "unit": "percent" }
+      ],
+      "evidence": [
+        { "kind": "corpus-certificate", "id": "353d3a87b543604075a09e7481b634f955f6b4804f40e018bceb9cee6f61756c" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabCorpusModelCertifier.swift" }
+      ],
+      "limitations": [
+        "The baseline still lost keystrokes overall, so context value did not imply that the model was already good enough."
+      ],
+      "tags": ["scene-context", "falsification", "certification"]
+    },
+    {
+      "id": "output-quality-50-v2",
+      "recordedAt": "2026-08-25T22:10:58Z",
+      "area": "configuration",
+      "status": "adopted",
+      "title": "The 90,000-evaluation campaign identified three words as the best safe display change",
+      "finding": "Fifty arms ran over 600 development situations with three repetitions each. The baseline was 14.5 percent human-acceptable with negative 1.0 percent net savings. The three-word cap reached 18.1 percent acceptable, positive 0.4 percent net savings, and 99.3 percent factuality. Temperature and sampling usually hurt; 12 to 36 generated tokens and larger context budgets were mostly inert; prompt examples were essential.",
+      "decision": "Adopt three words as the default experimental visible cap and move the next search toward output correctness rather than longer completions.",
+      "comparisonGroupID": "certified-v2-development-mixed-output-quality-50",
+      "evaluationCount": 90000,
+      "metrics": [
+        { "subjectID": "production-control", "key": "human-acceptable", "value": 14.5, "unit": "percent" },
+        { "subjectID": "visible-words-3", "key": "human-acceptable", "value": 18.1, "unit": "percent" },
+        { "subjectID": "visible-words-3", "key": "net-keystroke-savings", "value": 0.4, "unit": "percent" },
+        { "subjectID": "campaign", "key": "timeouts", "value": 0, "unit": "requests" },
+        { "subjectID": "campaign", "key": "request-errors", "value": 1, "unit": "requests" }
+      ],
+      "evidence": [
+        { "kind": "campaign", "id": "output-quality-50-v2" },
+        { "kind": "report", "id": "4047A8B0-8509-4D0C-A2EF-16DA0D1147D5" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabCampaignRecipe.swift" }
+      ],
+      "limitations": [
+        "Forty-nine arms still failed the bad-suggestion gate; the lone quiet prompt variant produced no useful replies and was not a product winner."
+      ],
+      "tags": ["three-word-cap", "output-quality", "large-campaign", "prompt-examples"]
+    },
+    {
+      "id": "score-protocol-separation",
+      "recordedAt": "2026-08-25T23:00:00Z",
+      "area": "scoring",
+      "status": "adopted",
+      "title": "One blended score was replaced by a scorecard and hard gates",
+      "finding": "Older scores hid whether Tilde was wrong, silent, unsafe, slow, or merely different from one recorded sentence. The current contract keeps Net Keystrokes Saved, human-acceptable output, exact path, accepted alternative, restraint, factuality, counterfactuals, and latency visible as separate evidence.",
+      "decision": "Never compare headline scores across different suites or scoring policies, and never let safety, privacy, temporal integrity, interaction integrity, or latency be averaged away.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Scoring/LabScorer.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabReport.swift" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "Automated semantic acceptance still needs human or independent-judge calibration before it becomes a release gate."
+      ],
+      "tags": ["metrics", "hard-gates", "protocol-specific"]
+    },
+    {
+      "id": "legacy-report-schema-boundary",
+      "recordedAt": "2026-08-26T20:13:56Z",
+      "area": "scoring",
+      "status": "boundary",
+      "title": "Legacy campaign reports cannot be promoted under the current gate contract",
+      "finding": "Older report schemas predate raw bad-suggestion rate, current hard gates, temporal-integrity evidence, and the locked Net Keystrokes Saved contract. Compatibility decoding supplies neutral defaults so the old files remain readable, but those defaults are not historical measurements.",
+      "decision": "Display legacy results as archived diagnostics and never resume, rank, or promote them as if they had passed the current v4 evidence contract.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabReport.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabAutoresearch.swift" }
+      ],
+      "limitations": [
+        "Compatibility defaults preserve decoding but cannot reconstruct metrics that were never recorded."
+      ],
+      "tags": ["legacy-schema", "promotion-boundary", "compatibility"]
+    },
+    {
+      "id": "local-model-tournament-v1",
+      "recordedAt": "2026-08-26T14:43:14Z",
+      "area": "model",
+      "status": "adopted",
+      "title": "Qwen 3.5 9B Q4_K_M led the directional local model catalog",
+      "finding": "Eleven local model and quantization candidates ran the same 360 speak-only Certified Corpus V2 development situations with the production prompt, greedy decoding, a three-word cap, one worker, and one slot. Qwen 9B scored 43 with 158 useful, 93 wrong, and 109 silent; Nemotron 9B scored 42; the best Gemma 26B variant scored 40; Gemma E2B scored 17. The historical runs used three helper builds and both 8-token and 20-token generation budgets.",
+      "decision": "Use Qwen 9B as the strongest observed quality lead, retain the table as directional model evidence, and rerun serious finalists under one exact helper and token protocol before promotion.",
+      "comparisonGroupID": "certified-v2-development-speak-360-local-models-v1",
+      "evaluationCount": 3960,
+      "metrics": [
+        { "subjectID": "qwen-3-5-9b-q4km", "key": "output-quality", "value": 43, "unit": "score-0-100" },
+        { "subjectID": "nemotron-nano-9b-v2-q4km", "key": "output-quality", "value": 42, "unit": "score-0-100" },
+        { "subjectID": "gemma-4-26b-a4b-q3ks", "key": "output-quality", "value": 40, "unit": "score-0-100" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "output-quality", "value": 17, "unit": "score-0-100" }
+      ],
+      "evidence": [
+        { "kind": "model-benchmark-entry", "id": "qwen-3-5-9b-q4km" },
+        { "kind": "model-benchmark-entry", "id": "nemotron-nano-9b-v2-q4km" },
+        { "kind": "model-benchmark-entry", "id": "gemma-4-26b-a4b-q3ks" },
+        { "kind": "model-benchmark-entry", "id": "gemma-4-e2b-q4km" }
+      ],
+      "limitations": [
+        "The shared cases, prompt, cap, worker, slot, and sampler do not erase the mixed helper hashes and token budgets. It also removes when-to-speak, sensitive-scene, and real interaction questions."
+      ],
+      "tags": ["model-tournament", "same-test", "qwen", "gemma", "nemotron"]
+    },
+    {
+      "id": "model-size-and-quantization",
+      "recordedAt": "2026-08-26T14:43:14Z",
+      "area": "model",
+      "status": "adopted",
+      "title": "Parameter count and more bits did not predict autocomplete quality",
+      "finding": "Gemma 26B Q3 scored 40, Q4 scored 39, Q8 scored 36, and Q2 collapsed to 6. Qwen 35B-A3B scored 30, below Qwen 9B at 43 and Qwen 4B at 37. The small Gemma E2B and Qwen 2B were fast but scored 17 and 14.",
+      "decision": "Benchmark every exact quantization on the exact autocomplete protocol; do not select models from parameter count, active parameters, or bit depth alone.",
+      "comparisonGroupID": "certified-v2-development-speak-360-local-models-v1",
+      "evaluationCount": 2880,
+      "metrics": [
+        { "subjectID": "gemma-4-26b-a4b-q3ks", "key": "output-quality", "value": 40, "unit": "score-0-100" },
+        { "subjectID": "gemma-4-26b-a4b-q2k", "key": "output-quality", "value": 6, "unit": "score-0-100" },
+        { "subjectID": "qwen-3-5-35b-a3b-q4km", "key": "output-quality", "value": 30, "unit": "score-0-100" },
+        { "subjectID": "qwen-3-5-4b-q4km", "key": "output-quality", "value": 37, "unit": "score-0-100" }
+      ],
+      "evidence": [
+        { "kind": "model-benchmark-entry", "id": "gemma-4-26b-a4b-q3ks" },
+        { "kind": "model-benchmark-entry", "id": "gemma-4-26b-a4b-q2k" },
+        { "kind": "model-benchmark-entry", "id": "qwen-3-5-35b-a3b-q4km" },
+        { "kind": "model-benchmark-entry", "id": "qwen-3-5-4b-q4km" }
+      ],
+      "limitations": [
+        "Single-run quality differences near one point need repetition before claiming a stable ordering."
+      ],
+      "tags": ["quantization", "moe", "model-size", "same-test"]
+    },
+    {
+      "id": "mlx-qwen4-runtime-comparison",
+      "recordedAt": "2026-08-26T14:43:14Z",
+      "area": "runtime",
+      "status": "rejected",
+      "title": "The tested MLX path did not beat llama.cpp for Qwen 4B autocomplete",
+      "finding": "Both Qwen 4B variants produced 134 useful suggestions. The MLX-labelled run produced 76 wrong versus 65, first-token p95 was 201 versus 130 milliseconds, and total p95 was 260 versus 216 milliseconds. No memory advantage was established.",
+      "decision": "Keep llama.cpp as the current runtime and treat MLX as research-only until a clean backend-specific rerun wins.",
+      "comparisonGroupID": "qwen-3-5-4b-runtime-v1",
+      "evaluationCount": 720,
+      "metrics": [
+        { "subjectID": "qwen-3-5-4b-q4km", "key": "total-p95", "value": 216, "unit": "milliseconds" },
+        { "subjectID": "qwen-3-5-4b-mlx4", "key": "total-p95", "value": 260, "unit": "milliseconds" },
+        { "subjectID": "qwen-3-5-4b-q4km", "key": "wrong", "value": 65, "unit": "suggestions" },
+        { "subjectID": "qwen-3-5-4b-mlx4", "key": "wrong", "value": 76, "unit": "suggestions" }
+      ],
+      "evidence": [
+        { "kind": "model-benchmark-entry", "id": "qwen-3-5-4b-q4km" },
+        { "kind": "model-benchmark-entry", "id": "qwen-3-5-4b-mlx4" },
+        { "kind": "report", "id": "17381B4E-1811-4C57-AA61-D5F62EA4192D" }
+      ],
+      "limitations": [
+        "The checked report identifies its inference backend as local-llama, so this result must not be generalized into a broad framework verdict without a cleaner backend audit."
+      ],
+      "tags": ["mlx", "llama-cpp", "runtime", "qwen-4b"]
+    },
+    {
+      "id": "nemotron-9b-latency-tradeoff",
+      "recordedAt": "2026-08-26T14:43:14Z",
+      "area": "model",
+      "status": "rejected",
+      "title": "Nemotron 9B was nearly as accurate as Qwen 9B but much slower",
+      "finding": "Nemotron scored 42 versus Qwen's 43 and produced slightly fewer wrong suggestions, but its first-token p95 was 593 milliseconds and total p95 was 906 milliseconds versus Qwen's 204 and 335 milliseconds.",
+      "decision": "Do not use Nemotron 9B as the interactive preview champion under the current runtime.",
+      "comparisonGroupID": "certified-v2-development-speak-360-local-models-v1",
+      "evaluationCount": 720,
+      "metrics": [
+        { "subjectID": "nemotron-nano-9b-v2-q4km", "key": "output-quality", "value": 42, "unit": "score-0-100" },
+        { "subjectID": "nemotron-nano-9b-v2-q4km", "key": "total-p95", "value": 906, "unit": "milliseconds" },
+        { "subjectID": "qwen-3-5-9b-q4km", "key": "total-p95", "value": 335, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "model-benchmark-entry", "id": "nemotron-nano-9b-v2-q4km" },
+        { "kind": "model-benchmark-entry", "id": "qwen-3-5-9b-q4km" }
+      ],
+      "limitations": [
+        "This is one controlled hardware snapshot and may change with a different helper or runtime tuning."
+      ],
+      "tags": ["nemotron", "latency", "tradeoff"]
+    },
+    {
+      "id": "frontier-sol-strict-ceiling",
+      "recordedAt": "2026-08-26T01:35:14Z",
+      "area": "model",
+      "status": "directional",
+      "title": "The subscription-backed Sol run established a separate frontier ceiling",
+      "finding": "On 50 project-owned synthetic speak situations, GPT-5.6 Sol scored 34 with 17 useful, 27 wrong, and 6 silent outputs under the strict automatic path judge.",
+      "decision": "Keep the frontier lane as a quality-ceiling diagnostic and never rank its 50-case network-backed result beside 360-case local runs.",
+      "comparisonGroupID": "certified-v2-development-speak-50-frontier-strict",
+      "evaluationCount": 50,
+      "metrics": [
+        { "subjectID": "gpt-5-6-sol-ceiling", "key": "output-quality", "value": 34, "unit": "score-0-100" },
+        { "subjectID": "gpt-5-6-sol-ceiling", "key": "useful", "value": 17, "unit": "suggestions" }
+      ],
+      "evidence": [
+        { "kind": "model-benchmark-entry", "id": "gpt-5-6-sol-ceiling" },
+        { "kind": "report", "id": "109D8754-BC24-442D-82A2-7582A864BE6D" }
+      ],
+      "limitations": [
+        "The sample is shorter, inference is network-backed, and strict results varied between runs."
+      ],
+      "tags": ["frontier-ceiling", "codex-subscription", "synthetic-only"]
+    },
+    {
+      "id": "semantic-e2b-vs-sol",
+      "recordedAt": "2026-08-26T02:00:00Z",
+      "area": "scoring",
+      "status": "directional",
+      "title": "Semantic judging revealed a larger quality ceiling than exact-path scoring",
+      "finding": "On the same 50 cases, Gemma E2B reached semantic overall 53 of 100 and 34 percent useful while Sol reached 84 and 72 percent. Their strict scores in that shootout were 12 and 38. Candidate labels alternated A and B and raw content stayed memory-only.",
+      "decision": "Keep strict and semantic results separate and calibrate the semantic judge with blinded humans or an independent referee before promotion use.",
+      "comparisonGroupID": "certified-v2-development-speak-50-semantic-v1",
+      "evaluationCount": 100,
+      "metrics": [
+        { "subjectID": "gemma-4-e2b-q4km", "key": "semantic-overall", "value": 53, "unit": "score-0-100" },
+        { "subjectID": "gpt-5-6-sol-ceiling", "key": "semantic-overall", "value": 84, "unit": "score-0-100" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "semantic-useful", "value": 34, "unit": "percent" },
+        { "subjectID": "gpt-5-6-sol-ceiling", "key": "semantic-useful", "value": 72, "unit": "percent" }
+      ],
+      "evidence": [
+        { "kind": "command", "id": "semantic-quality-shootout" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabSemanticShootoutRunner.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Scoring/LabSemanticJudge.swift" }
+      ],
+      "limitations": [
+        "Sol was both contestant and referee, and its strict score varied across snapshots, so this is directional rather than a promotion gate."
+      ],
+      "tags": ["semantic-judge", "blinded", "same-test", "directional"]
+    },
+    {
+      "id": "qwen-9b-god-v1",
+      "recordedAt": "2026-08-26T18:59:58Z",
+      "area": "configuration",
+      "status": "adopted",
+      "title": "Qwen 9B God v1 became the experimental preview configuration",
+      "finding": "A 50-arm, 18,000-evaluation Qwen search and clean single-worker confirmation selected temperature 0.10, 12 generated tokens, and a three-word visible cap with every factual, sensitive-scene, prompt-leak, repetition, and scene-echo protection enabled. Score improved 43 to 44, useful 158 to 161, wrong 93 to 88, bad suggestions 25.8 to 24.4 percent, and same-run total p95 545 to 515 milliseconds.",
+      "decision": "Apply this configuration only when the isolated experimental preview selects Qwen 9B; do not change production Gemma.",
+      "comparisonGroupID": "qwen-9b-configuration-50-arm-v1",
+      "evaluationCount": 18000,
+      "metrics": [
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "output-quality", "value": 44, "unit": "score-0-100" },
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "useful", "value": 161, "unit": "suggestions" },
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "wrong", "value": 88, "unit": "suggestions" },
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "total-p95", "value": 515, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "promoted-configuration", "id": "qwen-3-5-9b-god-v1" },
+        { "kind": "report", "id": "5AF0D1B9-AA38-467B-8DBF-6C0A2E793A50" },
+        { "kind": "report", "id": "DFFD98A1-D5DB-40FB-9ED6-DE7ECE81022F" }
+      ],
+      "limitations": [
+        "It has passed development speak-only confirmation, not protected validation, sealed holdout, full interaction, or meaningful live-use gates."
+      ],
+      "tags": ["qwen-9b", "god-v1", "preview-only", "three-word-cap"]
+    },
+    {
+      "id": "qwen-9b-scoring-confounds",
+      "recordedAt": "2026-08-26T18:59:58Z",
+      "area": "scoring",
+      "status": "rejected",
+      "title": "Apparent short-cap and repeat-penalty wins were measurement traps",
+      "finding": "One- and two-word candidates fell below the default three-word scene-echo threshold, making safety-rejected outputs appear better. Relaxing scene-echo protection created the same loophole. Repeat-penalty variants raised raw score by speaking more often while also raising wrong interruptions.",
+      "decision": "Reject these arms, add them to the permanent regression set, and require comparable safety filtering for every candidate.",
+      "comparisonGroupID": "qwen-9b-configuration-50-arm-v1",
+      "evaluationCount": 18000,
+      "metrics": [],
+      "evidence": [
+        { "kind": "promoted-configuration", "id": "qwen-3-5-9b-god-v1" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "The aggregate reports expose the confound but do not retain raw candidate text by design."
+      ],
+      "tags": ["scoring-loophole", "scene-echo", "repeat-penalty", "regression"]
+    },
+    {
+      "id": "qwen-9b-live-preview-small-sample",
+      "recordedAt": "2026-08-26T20:00:53Z",
+      "area": "live-dogfood",
+      "status": "directional",
+      "title": "The first Qwen 9B live preview felt viable but was below the verdict threshold",
+      "finding": "The latest recorded aggregate snapshot contained 148 model completions, 134 served suggestions, and 10 cleaner rejections. Model latency was 192 milliseconds p50, 366 milliseconds p95, 416 milliseconds p99, and 458 milliseconds maximum.",
+      "decision": "Continue dogfooding and withhold a quality or latency verdict until at least 200 model completions.",
+      "comparisonGroupID": "qwen-9b-live-preview-v1",
+      "evaluationCount": 148,
+      "metrics": [
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "model-calls", "value": 148, "unit": "completions" },
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "p50-latency", "value": 192, "unit": "milliseconds" },
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "p95-latency", "value": 366, "unit": "milliseconds" },
+        { "subjectID": "qwen-3-5-9b-god-v1", "key": "p99-latency", "value": 416, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "diagnostic-snapshot", "id": "qwen-9b-preview-initial-2026-08-26" },
+        { "kind": "promoted-configuration", "id": "qwen-3-5-9b-god-v1" }
+      ],
+      "limitations": [
+        "One hundred forty-eight model calls remain below the predefined 200-completion minimum; p99 currently exceeds the 400 millisecond budget and the snapshot does not measure semantic acceptance."
+      ],
+      "tags": ["dogfood", "small-sample", "latency"]
+    },
+    {
+      "id": "production-e2b-live-latency-1213",
+      "recordedAt": "2026-08-26T20:13:56Z",
+      "area": "live-dogfood",
+      "status": "operational",
+      "title": "Production Gemma E2B passed its model-latency budget at meaningful scale",
+      "finding": "Across 1,213 live model completions, 1,055 suggestions were served and 148 were cleaner-rejected. Model latency measured 91 milliseconds p50, 190 milliseconds p95, 339 milliseconds p99, and 816 milliseconds maximum, so the 400 millisecond p99 model budget passed. Display capture p99 was 917 milliseconds against a 900 millisecond budget, and diagnostics recorded 58 helper-unavailable plus 58 personal-history-write failures.",
+      "decision": "Keep 200 completions as the minimum latency verdict threshold, retain Gemma's speed as the production control, and investigate capture and availability failures separately from model latency.",
+      "comparisonGroupID": "production-e2b-live-latency-through-2026-08-26",
+      "evaluationCount": 1213,
+      "metrics": [
+        { "subjectID": "gemma-4-e2b-q4km", "key": "p50-latency", "value": 91, "unit": "milliseconds" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "p95-latency", "value": 190, "unit": "milliseconds" },
+        { "subjectID": "gemma-4-e2b-q4km", "key": "p99-latency", "value": 339, "unit": "milliseconds" },
+        { "subjectID": "screen-capture-display", "key": "p99-latency", "value": 917, "unit": "milliseconds" },
+        { "subjectID": "runtime", "key": "helper-unavailable", "value": 58, "unit": "events" }
+      ],
+      "evidence": [
+        { "kind": "command", "id": "script/latency_report.py --budget" },
+        { "kind": "model-benchmark-entry", "id": "gemma-4-e2b-q4km" }
+      ],
+      "limitations": [
+        "This validates aggregate operational latency, not semantic usefulness, and the log window spans more than one app/runtime episode."
+      ],
+      "tags": ["production", "latency", "meaningful-sample"]
+    },
+    {
+      "id": "gemma-26b-live-preview-latency",
+      "recordedAt": "2026-08-26T17:59:00Z",
+      "area": "live-dogfood",
+      "status": "rejected",
+      "title": "The fixed 26B preview missed live tail-latency budgets",
+      "finding": "The aggregate preview log contains 339 model completions, 314 served suggestions, and 22 cleaner rejections. Model latency was 121 milliseconds p50, 281 milliseconds p95, 1,061 milliseconds p99, and 1,334 milliseconds maximum; ghost-request and display capture p99 also missed their budgets.",
+      "decision": "Do not advance the fixed 26B preview as the interactive default under this runtime, despite acceptable median latency.",
+      "comparisonGroupID": "gemma-26b-live-preview-2026-08-26",
+      "evaluationCount": 339,
+      "metrics": [
+        { "subjectID": "gemma-26b-preview", "key": "p50-latency", "value": 121, "unit": "milliseconds" },
+        { "subjectID": "gemma-26b-preview", "key": "p95-latency", "value": 281, "unit": "milliseconds" },
+        { "subjectID": "gemma-26b-preview", "key": "p99-latency", "value": 1061, "unit": "milliseconds" },
+        { "subjectID": "gemma-26b-preview", "key": "served", "value": 314, "unit": "suggestions" }
+      ],
+      "evidence": [
+        { "kind": "diagnostic-snapshot", "id": "gemma-26b-preview-through-2026-08-26" },
+        { "kind": "source-file", "id": "script/latency_report.py" }
+      ],
+      "limitations": [
+        "The log proves operational tail latency and served counts, not user acceptance quality or one exact benchmark quantization."
+      ],
+      "tags": ["26b-preview", "tail-latency", "rejected"]
+    },
+    {
+      "id": "screen-memory-live-pipeline",
+      "recordedAt": "2026-08-26T15:00:00Z",
+      "area": "context",
+      "status": "directional",
+      "title": "Live Screen Memory was fast enough to feed the prompt and classified real scenes",
+      "finding": "A content-free 26B preview diagnostic snapshot recorded 111 successful captures, about 41 milliseconds average OCR work, about 67 milliseconds average full capture, and 63 classified scenes. Forty-six model completions measured 112 milliseconds p50 and 196 milliseconds p95.",
+      "decision": "Preserve the local capture-to-redaction-to-scene-to-prompt path and run a controlled scene-versus-no-scene quality comparison before claiming its live benefit.",
+      "comparisonGroupID": "screen-memory-live-preview-2026-08-26",
+      "evaluationCount": 46,
+      "metrics": [
+        { "subjectID": "screen-memory", "key": "successful-captures", "value": 111, "unit": "captures" },
+        { "subjectID": "screen-memory", "key": "average-ocr", "value": 41, "unit": "milliseconds" },
+        { "subjectID": "screen-memory", "key": "classified-scenes", "value": 63, "unit": "scenes" },
+        { "subjectID": "preview-model", "key": "p95-latency", "value": 196, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "diagnostic-snapshot", "id": "screen-memory-preview-2026-08-26" },
+        { "kind": "source-file", "id": "Sources/AutocompleteLabApp/ScreenMemory/ScreenCaptureService.swift" }
+      ],
+      "limitations": [
+        "The snapshot proves pipeline health and timing, not the causal quality lift from Screen Memory."
+      ],
+      "tags": ["screen-memory", "ocr", "scene-classification", "live"]
+    },
+    {
+      "id": "isolated-model-preview",
+      "recordedAt": "2026-08-26T19:50:00Z",
+      "area": "release-boundary",
+      "status": "boundary",
+      "title": "Alternate models and tuned controls remain isolated from production",
+      "finding": "The selectable Tilde Model Preview uses separate app, input-method, storage, socket, and diagnostics identities. Qwen-specific temperature, token budget, and visible cap apply only when that preview selects Qwen 9B.",
+      "decision": "Use the preview for dogfood and keep production pinned to Gemma 4 E2B until the full promotion path passes.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/AutocompleteLabApp/Runtime/PreviewModelSelection.swift" },
+        { "kind": "source-file", "id": "Sources/AutocompleteLabCore/Runtime/TildeProductProfile.swift" },
+        { "kind": "pull-request", "id": "416" }
+      ],
+      "limitations": [],
+      "tags": ["preview-only", "production-safety", "model-selection"]
+    },
+    {
+      "id": "protected-learning-cycle-stopped",
+      "recordedAt": "2026-08-25T16:58:40Z",
+      "area": "campaign",
+      "status": "incomplete",
+      "title": "The protected learning cycle stopped before validation and holdout",
+      "finding": "The stale checkpoint contains 75 reports and 180,000 evaluations: 4 kept mutations, 56 discarded mutations, 14 controls, and one baseline. It ended before confirmation with its campaign state still marked running after the Lab was rebuilt.",
+      "decision": "Do not name a champion or reuse its partial arm; require a fresh campaign ID, active model child, increasing progress, validation, and sealed holdout evidence.",
+      "comparisonGroupID": "protected-learning-cycle-old-run",
+      "evaluationCount": 180000,
+      "metrics": [
+        { "subjectID": "campaign", "key": "ledger-entries", "value": 75, "unit": "entries" },
+        { "subjectID": "campaign", "key": "kept", "value": 4, "unit": "mutations" },
+        { "subjectID": "campaign", "key": "discarded", "value": 56, "unit": "mutations" }
+      ],
+      "evidence": [
+        { "kind": "campaign", "id": "60F9B70D-B58B-4CC3-8CC4-43C4E8EAD169" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabLearningCycle.swift" }
+      ],
+      "limitations": [
+        "The checkpoint is local runtime state, validation never completed, and no holdout result exists."
+      ],
+      "tags": ["incomplete", "no-champion", "validation", "holdout"]
+    },
+    {
+      "id": "campaign-runtime-operations",
+      "recordedAt": "2026-08-26T20:00:00Z",
+      "area": "operations",
+      "status": "operational",
+      "title": "A process ID is not proof that a campaign is making progress",
+      "finding": "Long runs could leave stale campaign JSON or a live parent process while the helper never started. One restarted overnight attempt stopped at trial 7 after 43,200 evaluations. Reliable monitoring requires a fresh campaign ID, starting-workers, increasing running counts, and a live child model server. Launching the compiled runner directly and using a separate sleep-prevention job was the reliable Mac pattern.",
+      "decision": "Require progress evidence before reporting a campaign healthy, and never compare latency from concurrent models or uncontrolled thermal order.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabResearchCampaignStore.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabLlamaServerPool.swift" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "Power mode, heat, and background load can still move latency even when the process is healthy."
+      ],
+      "tags": ["launchctl", "campaign-health", "thermal-drift", "controls"]
+    },
+    {
+      "id": "report-provenance-gap",
+      "recordedAt": "2026-08-26T20:13:56Z",
+      "area": "methodology",
+      "status": "boundary",
+      "title": "Current reports are private but not fully reproducible",
+      "finding": "Run reports preserve model and helper hashes, suite digest, full arm controls, runtime controls, aggregate cases, and privacy flags. They do not yet preserve the Git commit, runner binary hash, macOS and hardware identity, power state, exact invocation, written hypothesis, conclusion, or human-review status. Most Lab code landed after the historical runs, so old reports cannot be tied to exact intermediate source revisions.",
+      "decision": "Add explicit experiment and environment provenance to the next report schema before treating new long campaigns as archival science.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabReport.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabExperimentManifest.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabReportStore.swift" }
+      ],
+      "limitations": [
+        "Hashes and aggregate metrics alone cannot reconstruct an unrecorded source tree or execution environment."
+      ],
+      "tags": ["provenance", "reproducibility", "report-schema"]
+    },
+    {
+      "id": "unverified-model-downloads",
+      "recordedAt": "2026-08-26T20:00:00Z",
+      "area": "model",
+      "status": "incomplete",
+      "title": "Announced or partial model downloads are not benchmark results",
+      "finding": "Nemotron 3 Nano 30B-A3B and Gemma 3 12B downloads were started but never completed and never entered the matched catalog. Qwen 9B lower-bit latency and quality were discussed but not tested.",
+      "decision": "Do not claim results for these models until exact bytes, revision, hash, complete 360-case output, and controlled latency are recorded.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "model-benchmark-catalog", "id": "tilde-lab.model-benchmarks.v1" },
+        { "kind": "documentation", "id": "docs/tilde-lab.md" }
+      ],
+      "limitations": [
+        "Download presence or a partial asset is not execution evidence."
+      ],
+      "tags": ["unverified", "pending-models", "no-result"]
+    }
+  ],
+  "researchQueue": [
+    {
+      "id": "qwen-live-meaningful-sample",
+      "priority": 1,
+      "status": "ready",
+      "question": "Does Qwen 9B God v1 remain fast and useful during meaningful live use?",
+      "hypothesis": "The three-word preview will feel responsive while reducing drift and wrong continuation tails.",
+      "nextExperiment": "Collect aggregate checkpoints at 200, 500, and 1,000 model completions with latency, served, rejected, accepted, dismissed, and typing-saved measures.",
+      "successCriteria": "At least 200 completions, stable p95 and p99, no privacy or interaction failures, and better acceptance or typing saved than the current production control.",
+      "dependencies": ["qwen-9b-god-v1", "isolated-model-preview"]
+    },
+    {
+      "id": "qwen-protected-validation",
+      "priority": 2,
+      "status": "ready",
+      "question": "Does God v1 generalize beyond the development speak slice?",
+      "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
+      "nextExperiment": "Freeze candidate bytes and configuration, run validation once against the same baseline, and open sealed holdout only if every hard gate passes.",
+      "successCriteria": "Candidate beats baseline on human-acceptable output and wrong interruptions, passes every hard gate, and does not materially regress latency or net typing saved.",
+      "dependencies": ["certified-corpus-v2", "qwen-9b-god-v1"]
+    },
+    {
+      "id": "sanitized-regression-library",
+      "priority": 3,
+      "status": "ready",
+      "question": "Can every discovered failure become a permanent test?",
+      "hypothesis": "A compact sanitized regression set will stop scoring loopholes and known interaction mistakes from returning.",
+      "nextExperiment": "Create synthetic cases for short-cap echo bypass, repeat-penalty aggression, wrong-scene facts, prompt-example removal, factual-filter weakening, and stale-target delivery.",
+      "successCriteria": "Every known failure has a stable case ID, current production passes, unsafe diagnostic arms fail, and no private content is stored.",
+      "dependencies": ["qwen-9b-scoring-confounds", "score-protocol-separation"]
+    },
+    {
+      "id": "when-to-speak-current-protocol",
+      "priority": 4,
+      "status": "blocked-on-quality-validation",
+      "question": "When should a quality-capable model speak rather than stay silent?",
+      "hypothesis": "After output quality is stabilized, a separate policy can reduce interruptions without hiding useful replies.",
+      "nextExperiment": "Run matched speak-and-silence cases with output generation frozen, changing only confidence, scene evidence, and activation policy.",
+      "successCriteria": "Higher ordinary restraint with no material loss of useful opportunities, sensitive restraint at 100 percent, and no score blending.",
+      "dependencies": ["qwen-protected-validation"]
+    },
+    {
+      "id": "qwen9-quant-sweep",
+      "priority": 5,
+      "status": "ready",
+      "question": "Can a smaller Qwen 9B quant preserve quality while improving memory and latency?",
+      "hypothesis": "A well-made Q3 or smaller Q4 variant may reduce memory without the severe collapse seen in Gemma 26B Q2.",
+      "nextExperiment": "Verify exact Qwen 9B quant assets and run the identical 360-case, one-worker, one-slot benchmark followed by controlled resident-memory measurement.",
+      "successCriteria": "No more than one quality point lost, wrong suggestions do not increase materially, and memory or latency improves enough to matter in live typing.",
+      "dependencies": ["local-model-tournament-v1"]
+    },
+    {
+      "id": "independent-semantic-calibration",
+      "priority": 6,
+      "status": "ready",
+      "question": "Can semantic usefulness become trustworthy enough for promotion decisions?",
+      "hypothesis": "Blinded human review or an independent judge will preserve the large semantic signal while exposing referee bias.",
+      "nextExperiment": "Freeze candidate outputs, obtain blinded independent labels, and compare agreement, false positives, and false negatives with the current semantic referee.",
+      "successCriteria": "Predefined inter-rater agreement and error bounds are met before semantic score affects promotion.",
+      "dependencies": ["semantic-e2b-vs-sol"]
+    },
+    {
+      "id": "scene-context-quality-ablation",
+      "priority": 7,
+      "status": "ready",
+      "question": "How much live-quality lift comes specifically from Screen Memory?",
+      "hypothesis": "Fresh correctly attributed scene context will improve factual reply usefulness over typed text alone without unacceptable latency.",
+      "nextExperiment": "Run the same frozen candidate outputs with correct scene, typed-only, wrong-scene, stale-scene, and excluded-app controls, then validate in the foreground interaction host.",
+      "successCriteria": "Correct scene wins on usefulness and factuality, wrong or stale context cannot win, exclusion and redaction fail closed, and latency stays inside budget.",
+      "dependencies": ["certified-context-falsification", "screen-memory-live-pipeline"]
+    },
+    {
+      "id": "interaction-app-matrix",
+      "priority": 8,
+      "status": "ready",
+      "question": "Does the chosen model and policy behave correctly through real IMKit interactions?",
+      "hypothesis": "The three-word, word-at-a-time design will remain stable across native, Chromium, Electron, and WebKit editors.",
+      "nextExperiment": "Exercise marked ranges, Tab progression, Escape, typing-through, cursor movement, focus changes, cancellation, and runtime restart in the interaction matrix.",
+      "successCriteria": "Zero stale insertion, duplicate text, focus leakage, or marked-text corruption across the supported host matrix.",
+      "dependencies": ["qwen-protected-validation", "sanitized-regression-library"]
+    },
+    {
+      "id": "report-provenance-v5",
+      "priority": 9,
+      "status": "ready",
+      "question": "Can every future result be reproduced from the checked-in record?",
+      "hypothesis": "Recording source, runner, environment, hypothesis, and review provenance will make campaign conclusions auditable months later.",
+      "nextExperiment": "Design a backward-compatible report schema that adds Git commit, dirty-state flag, runner hash, OS and hardware identity, power state, invocation digest, hypothesis, conclusion, and review status without storing private content.",
+      "successCriteria": "A clean machine can identify the exact source, assets, protocol, and environment for a report, while legacy files remain readable and clearly non-promotable.",
+      "dependencies": ["report-provenance-gap", "legacy-report-schema-boundary"]
+    },
+    {
+      "id": "campaign-state-reconciliation",
+      "priority": 10,
+      "status": "ready",
+      "question": "Can Tilde Lab tell the truth when a runner dies or a checkpoint goes stale?",
+      "hypothesis": "Explicit failed and aborted states plus process, log, and report reconciliation will eliminate phantom running campaigns.",
+      "nextExperiment": "Add failed and aborted campaign states, persist terminal errors, reconcile checkpoints at launch, and test helper-unavailable, killed-runner, stale-log, and resumable-arm cases.",
+      "successCriteria": "No campaign is shown as running without live progress; terminal failures are visible, resumable work is unambiguous, and no completed arm is repeated.",
+      "dependencies": ["campaign-runtime-operations"]
+    }
+  ],
+  "promotionPath": [
+    {
+      "id": "experiment",
+      "order": 1,
+      "title": "Experiment",
+      "requirement": "One bounded change beats a frozen baseline on the same development protocol without weakening a hard gate."
+    },
+    {
+      "id": "validation",
+      "order": 2,
+      "title": "Protected validation",
+      "requirement": "The frozen candidate generalizes to validation with the same assets, prompt, scorer, and runtime controls."
+    },
+    {
+      "id": "holdout",
+      "order": 3,
+      "title": "Sealed holdout",
+      "requirement": "A serious candidate receives one holdout evaluation and must beat the baseline without a hard-gate regression."
+    },
+    {
+      "id": "preview",
+      "order": 4,
+      "title": "Isolated preview",
+      "requirement": "A separately identified app and input method prove model lifecycle, memory, privacy, and rollback without changing production."
+    },
+    {
+      "id": "dogfood",
+      "order": 5,
+      "title": "Meaningful live dogfood",
+      "requirement": "At least 200 model completions establish latency; 500 and 1,000 checkpoints add acceptance, dismissal, interruption, and typing-saved confidence."
+    },
+    {
+      "id": "interaction",
+      "order": 6,
+      "title": "Interaction proof",
+      "requirement": "The foreground host matrix passes marked-text, Tab, Escape, cancellation, edit, focus, and restart integrity checks."
+    },
+    {
+      "id": "production",
+      "order": 7,
+      "title": "Production",
+      "requirement": "Only an explicitly approved, reproducible, rollback-ready candidate may replace the pinned production configuration."
+    }
+  ]
+}

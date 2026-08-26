@@ -11,6 +11,19 @@ struct TildeLabRunner {
                 print(Options.usage)
                 return
             }
+            if options.printsLearningLedger {
+                let snapshot = try LabLearningLedgerCatalog.loadBundled()
+                if options.json {
+                    let encoder = JSONEncoder()
+                    encoder.dateEncodingStrategy = .iso8601
+                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                    FileHandle.standardOutput.write(try encoder.encode(snapshot))
+                    FileHandle.standardOutput.write(Data("\n".utf8))
+                } else {
+                    print(LabLearningLedgerRenderer.humanSummary(snapshot))
+                }
+                return
+            }
             if options.printsModelBenchmarkLeaderboard {
                 let snapshot = try LabModelBenchmarkCatalog.loadBundled()
                 print("Tilde Lab model benchmark history")
@@ -19,7 +32,9 @@ struct TildeLabRunner {
                 for entry in snapshot.fullComparisons {
                     let first = entry.firstTokenP95Milliseconds.map { "\($0) ms" } ?? "n/a"
                     let total = entry.totalP95Milliseconds.map { "\($0) ms" } ?? "n/a"
-                    print("  \(entry.label): score \(entry.qualityScore); useful \(entry.useful); wrong \(entry.wrong); silent \(entry.silent); first p95 \(first); total p95 \(total)")
+                    let bad = (entry.badSuggestionRate * 100).formatted(.number.precision(.fractionLength(1)))
+                    let saved = (entry.netKeystrokeSavingsRate * 100).formatted(.number.precision(.fractionLength(1)))
+                    print("  \(entry.label): score \(entry.qualityScore); useful \(entry.useful); wrong \(entry.wrong); silent \(entry.silent); bad \(bad)%; net saved \(saved)%; first p95 \(first); total p95 \(total); protocol \(entry.comparisonGroupID)")
                 }
                 let ceilings = snapshot.entries.filter { $0.evaluations != 360 }
                 if !ceilings.isEmpty {
@@ -999,6 +1014,7 @@ private struct Options {
     var certifiesCertifiedCorpus = false
     var auditsPrivateHistory = false
     var printsModelBenchmarkLeaderboard = false
+    var printsLearningLedger = false
     var manifestPath: String?
     var campaign: LabBuiltInCampaign?
     var helperPath = "/Applications/Tilde.app/Contents/Helpers/llama-server"
@@ -1065,6 +1081,7 @@ private struct Options {
                 certifiesCertifiedCorpus = true
             case "--audit-private-history": auditsPrivateHistory = true
             case "--model-benchmark-leaderboard": printsModelBenchmarkLeaderboard = true
+            case "--learning-ledger": printsLearningLedger = true
             case "--built-in-suite":
                 guard let value = LabBuiltInSuite(rawValue: try nextValue()) else {
                     throw OptionsError.invalidValue(argument)
@@ -1220,6 +1237,8 @@ private struct Options {
       --audit-private-history      report aggregate-only local replay suitability
       --model-benchmark-leaderboard
                                    print the checked-in aggregate model leaderboard
+      --learning-ledger            print the checked-in findings, limitations,
+                                   promotion path, and prioritized research queue
       --built-in-suite NAME        slack-reply-gold-v1, replying-v2 (default), or replying-v1
       --manifest PATH              full exported experiment manifest; runs every arm
       --campaign NAME              built-in campaign recipe (quick-8, broad-50,

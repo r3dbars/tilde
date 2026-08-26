@@ -123,7 +123,9 @@ swift run tilde-lab-runner --manifest ./candidate-matrix.tilde-lab.json
 
 See the [Tilde Lab guide](docs/tilde-lab.md) for the complete knob manifest,
 score and privacy contracts, scenario format, matrix runner, and the boundary
-between high-throughput model evidence and foreground real-IME proof.
+between high-throughput model evidence and foreground real-IME proof. The
+[Tilde Learning Ledger](docs/learning-ledger.md) preserves what experiments
+taught us, why candidates were kept or rejected, and what should be tested next.
 
 Production code has three parts:
 
