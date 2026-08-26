@@ -1,4 +1,5 @@
 import AppKit
+import AutocompleteLabCore
 import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
@@ -53,6 +54,7 @@ final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var screenMemoryEnabled = true
     @Published private(set) var screenRecordingGranted = false
     @Published private(set) var personalizationEnabled = false
+    @Published private(set) var selectedPreviewModel: PreviewModelChoice?
     @Published private(set) var hasLocalOCREvaluationSamples = false
     @Published private(set) var localOCREvaluationData = "No samples"
     @Published private(set) var excludedApplications: [ExcludedApplication] = []
@@ -82,6 +84,10 @@ final class TildeSettingsViewModel: ObservableObject {
 
     var modelDescription: String {
         appDelegate?.modelDescription() ?? TildeModelPresentation.description
+    }
+
+    var showsPreviewModelPicker: Bool {
+        TildeProductProfile.current == .modelPreview
     }
 
     var simpleStatusText: String {
@@ -124,6 +130,7 @@ final class TildeSettingsViewModel: ObservableObject {
         screenMemoryEnabled = settings.screenMemoryEnabled
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
         personalizationEnabled = personalHistory.isEnabled
+        selectedPreviewModel = appDelegate?.selectedPreviewModel()
         Task { [weak self] in
             await self?.refreshLocalOCREvaluationSummary()
         }
@@ -179,6 +186,13 @@ final class TildeSettingsViewModel: ObservableObject {
         settings.suggestionsEnabled = enabled
         suggestionsEnabled = enabled
         statusText = appDelegate?.applicationState().statusText ?? statusText
+    }
+
+    func setPreviewModel(_ choice: PreviewModelChoice) {
+        guard showsPreviewModelPicker, choice != selectedPreviewModel else { return }
+        selectedPreviewModel = choice
+        message = "Switching to \(choice.shortName)…"
+        appDelegate?.selectPreviewModel(choice)
     }
 
     func setLaunchAtLoginEnabled(_ enabled: Bool) {
@@ -309,15 +323,17 @@ final class TildeSettingsViewModel: ObservableObject {
     func exportDiagnostics() {
         DiagnosticsLog.shared.flush()
         let source = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Tilde/diagnostics.log")
+            .appendingPathComponent("Library/Logs")
+            .appendingPathComponent(TildeProductProfile.current.supportDirectoryName)
+            .appendingPathComponent("diagnostics.log")
         guard FileManager.default.fileExists(atPath: source.path) else {
             message = "No diagnostics are available yet."
             return
         }
 
         let panel = NSSavePanel()
-        panel.title = "Export Tilde Diagnostics"
-        panel.nameFieldStringValue = "Tilde Diagnostics.log"
+        panel.title = "Export \(TildeProductProfile.current.displayName) Diagnostics"
+        panel.nameFieldStringValue = "\(TildeProductProfile.current.displayName) Diagnostics.log"
         panel.allowedContentTypes = [.plainText]
         guard panel.runModal() == .OK, let destination = panel.url else { return }
 

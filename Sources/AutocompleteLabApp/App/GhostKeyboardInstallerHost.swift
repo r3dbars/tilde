@@ -1,4 +1,5 @@
 import AppKit
+import AutocompleteLabCore
 import Carbon
 import Foundation
 import Security
@@ -25,11 +26,16 @@ final class GhostKeyboardInstallerHost {
     typealias TrustDecision = (URL) -> String?
 
     private static let bundledPathInApp = "Contents/Library/InlineGhostIME.app"
-    private static let bundleIdentifier = "bar.r3d.inputmethod.InlineGhost"
+    private static var bundleIdentifier: String {
+        TildeProductProfile.current.inputMethodBundleIdentifier
+    }
     private static let executableName = "InlineGhostIME"
-    private static let installedPath = NSString(
-        string: "~/Library/Input Methods/InlineGhostIME.app"
-    ).expandingTildeInPath
+    private static var installedPath: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Input Methods")
+            .appendingPathComponent(TildeProductProfile.current.inputMethodInstalledBundleName)
+            .path
+    }
 
     @discardableResult
     func installOrUpdateIfNeeded() -> KeyboardInstallResult {
@@ -154,7 +160,9 @@ final class GhostKeyboardInstallerHost {
 
         let parent = installed.deletingLastPathComponent()
         try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        let staging = parent.appendingPathComponent(".InlineGhostIME.install-\(UUID().uuidString)")
+        let staging = parent.appendingPathComponent(
+            ".\(TildeProductProfile.current.inputMethodInstalledBundleName).install-\(UUID().uuidString)"
+        )
         defer { try? fileManager.removeItem(at: staging) }
 
         try fileManager.copyItem(at: bundled, to: staging)
