@@ -31,18 +31,22 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     }
 
     private let baseURL: URL
-    private let cleaner = CompletionOutputCleaner()
+    private let cleaner: CompletionOutputCleaner
     private let diagnostics: DiagnosticsLog
+    private let productProfile: TildeProductProfile
     private let transport: any LlamaCompletionStreamingTransport
 
     init(
         baseURL: URL,
         diagnostics: DiagnosticsLog = .shared,
-        transport: any LlamaCompletionStreamingTransport = URLSessionLlamaCompletionTransport()
+        transport: any LlamaCompletionStreamingTransport = URLSessionLlamaCompletionTransport(),
+        productProfile: TildeProductProfile = .current
     ) {
         self.baseURL = baseURL
         self.diagnostics = diagnostics
         self.transport = transport
+        self.productProfile = productProfile
+        cleaner = CompletionOutputCleaner(maxVisibleWords: productProfile.maximumVisibleWords)
     }
 
     func suggestion(
@@ -96,8 +100,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         let body: [String: Any] = [
             "prompt": prompt,
-            "n_predict": register.generatedTokenBudget,
-            "temperature": 0,
+            "n_predict": productProfile == .production
+                ? register.generatedTokenBudget
+                : productProfile.generatedTokenBudget,
+            "temperature": productProfile.completionTemperature,
             "cache_prompt": true,
             "stop": ["\n"],
             "stream": true,

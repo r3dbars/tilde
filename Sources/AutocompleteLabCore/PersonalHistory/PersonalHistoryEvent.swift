@@ -1,7 +1,9 @@
 import Foundation
 
 public enum PersonalHistorySettingsContract {
-    public static let keyboardSuiteName = "bar.r3d.inputmethod.InlineGhost"
+    public static var keyboardSuiteName: String {
+        TildeProductProfile.current.inputMethodBundleIdentifier
+    }
     public static let enabledKey = "PersonalHistoryEnabled"
     public static let excludedAppsKey = "PersonalHistoryExcludedApps"
     public static let historyIdentifierKey = "PersonalHistoryIdentifier"

@@ -19,7 +19,7 @@ enum TildeLaunchMode: Equatable {
 
     var llamaServerPort: Int {
         switch self {
-        case .production: 17_872
+        case .production: TildeProductProfile.current.llamaServerPort
         case .releaseProof: 17_873
         }
     }
@@ -62,6 +62,7 @@ enum TildeInvocation: Equatable {
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let launchMode: TildeLaunchMode
+    private let activePreviewModel: PreviewModelChoice?
     private let modelManager: ModelManager
     private let llamaServerHost: LlamaServerProcessHost
     private lazy var personalHistoryController = PersonalHistoryController()
@@ -236,7 +237,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     init(launchMode: TildeLaunchMode = .production) {
         self.launchMode = launchMode
-        let modelManager = ModelManager()
+        let profile = TildeProductProfile.current
+        let activePreviewModel = PreviewModelSelection.choice(for: profile)
+        self.activePreviewModel = activePreviewModel
+        let modelManager = ModelManager(
+            descriptor: PreviewModelSelection.descriptor(for: profile)
+        )
         self.modelManager = modelManager
         self.llamaServerHost = LlamaServerProcessHost(
             port: launchMode.llamaServerPort,
@@ -321,7 +327,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         if launchMode.allowsDailyDriverMutation {
-            registerAsLoginItemIfNeeded()
+            // The preview is deliberately a manual test channel. It must not
+            // silently become a second login item beside the daily driver.
+            if TildeProductProfile.current == .production {
+                registerAsLoginItemIfNeeded()
+            }
             keyboardInstallResult = ghostKeyboardInstallerHost.installOrUpdateIfNeeded()
             // Any production launch means the brain is wanted again: lift the
             // keyboard watchdog's stay-quiet flag from a deliberate quit.
@@ -330,7 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DiagnosticsLog.shared.record(
             launchMode == .production ? "launch" : "release-proof-launch",
-            metadata: [:]
+            metadata: ["model": modelManager.descriptor.identifier]
         )
         if launchMode == .production { finishLaunchSetup() }
     }
@@ -591,7 +601,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func modelState() -> ModelState { modelManager.state }
 
-    func modelDescription() -> String { "Gemma 4 E2B · 3.43 GB" }
+    func modelDescription() -> String {
+        guard let activePreviewModel else { return "Gemma 4 E2B · 3.43 GB" }
+        return "\(activePreviewModel.displayName) · \(activePreviewModel.approximateSize)"
+    }
+
+    func selectedPreviewModel() -> PreviewModelChoice? { activePreviewModel }
+
+    func selectPreviewModel(_ choice: PreviewModelChoice) {
+        guard TildeProductProfile.current == .modelPreview,
+              choice != activePreviewModel else { return }
+        PreviewModelSelection.persist(choice)
+        DiagnosticsLog.shared.record(
+            "preview-model-selected",
+            metadata: ["model": choice.rawValue]
+        )
+        _ = relaunchAfterCurrentProcessExits(failureEvent: "preview-model-relaunch-failed")
+    }
 
     func deleteModel() {
         modelPreparationTask?.cancel()
@@ -608,6 +634,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     func relaunchAfterScreenRecordingGrant() -> Bool {
+        relaunchAfterCurrentProcessExits(failureEvent: "setup-relaunch-failed")
+    }
+
+    @discardableResult
+    private func relaunchAfterCurrentProcessExits(failureEvent: String) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [
@@ -624,7 +655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return true
         } catch {
-            DiagnosticsLog.shared.record("setup-relaunch-failed", metadata: [:])
+            DiagnosticsLog.shared.record(failureEvent, metadata: [:])
             return false
         }
     }
