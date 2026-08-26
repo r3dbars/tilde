@@ -6,6 +6,94 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+run_tilde_lab() {
+  local mode="${1:-run}"
+  local app_name="Tilde Lab"
+  local executable_name="TildeLab"
+  local bundle_id="bar.r3d.tilde.lab"
+  local app_bundle="$ROOT_DIR/dist/$app_name.app"
+  local contents="$app_bundle/Contents"
+  local macos="$contents/MacOS"
+  local resources="$contents/Resources"
+  local app_binary="$macos/$executable_name"
+  local info_plist="$contents/Info.plist"
+  local bin_path
+
+  case "$mode" in
+    run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
+    *)
+      echo "usage: $0 --tilde-lab [run|--debug|--logs|--telemetry|--verify]" >&2
+      return 2
+      ;;
+  esac
+
+  pkill -x "$executable_name" >/dev/null 2>&1 || true
+  swift build --product TildeLab
+  bin_path="$(swift build --show-bin-path)"
+
+  rm -rf "$app_bundle"
+  mkdir -p "$macos" "$resources"
+  cp "$bin_path/$executable_name" "$app_binary"
+  chmod +x "$app_binary"
+  cp "$ROOT_DIR/Sources/TildeLabKit/Fixtures/replying-v1.json" "$resources/replying-v1.json"
+
+  cat >"$info_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>$executable_name</string>
+  <key>CFBundleIdentifier</key>
+  <string>$bundle_id</string>
+  <key>CFBundleName</key>
+  <string>$app_name</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>26.0</string>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+</dict>
+</plist>
+PLIST
+
+  codesign --force --sign - "$app_bundle" >/dev/null
+
+  case "$mode" in
+    run)
+      /usr/bin/open -n "$app_bundle"
+      ;;
+    --debug|debug)
+      lldb -- "$app_binary"
+      ;;
+    --logs|logs)
+      /usr/bin/open -n "$app_bundle"
+      /usr/bin/log stream --info --style compact --predicate "process == \"$executable_name\""
+      ;;
+    --telemetry|telemetry)
+      /usr/bin/open -n "$app_bundle"
+      /usr/bin/log stream --info --style compact --predicate "subsystem == \"$bundle_id\""
+      ;;
+    --verify|verify)
+      /usr/bin/open -n "$app_bundle"
+      sleep 1
+      pgrep -x "$executable_name" >/dev/null
+      ;;
+  esac
+}
+
+if [[ "${1:-}" == "--tilde-lab" ]]; then
+  shift
+  [[ $# -le 1 ]] || {
+    echo "usage: $0 --tilde-lab [run|--debug|--logs|--telemetry|--verify]" >&2
+    exit 2
+  }
+  run_tilde_lab "${1:-run}"
+  exit $?
+fi
+
 source "$ROOT_DIR/script/signing_identity.sh"
 
 CONFIGURATION="debug"

@@ -15,6 +15,14 @@ let package = Package(
         .executable(
             name: "InlineGhostIME",
             targets: ["InlineGhostIME"]
+        ),
+        .executable(
+            name: "TildeLab",
+            targets: ["TildeLab"]
+        ),
+        .executable(
+            name: "tilde-lab-runner",
+            targets: ["TildeLabRunner"]
         )
     ],
     targets: [
@@ -33,6 +41,19 @@ let package = Package(
             name: "AutocompleteLabApp",
             dependencies: ["AutocompleteLabCore"]
         ),
+        .target(
+            name: "TildeLabKit",
+            dependencies: ["AutocompleteLabCore"],
+            resources: [.process("Fixtures")]
+        ),
+        .executableTarget(
+            name: "TildeLab",
+            dependencies: ["TildeLabKit"]
+        ),
+        .executableTarget(
+            name: "TildeLabRunner",
+            dependencies: ["TildeLabKit"]
+        ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
             dependencies: ["AutocompleteLabCore"]
@@ -40,6 +61,10 @@ let package = Package(
         .testTarget(
             name: "AutocompleteLabAppTests",
             dependencies: ["AutocompleteLabApp", "InlineGhostIME"]
+        ),
+        .testTarget(
+            name: "TildeLabKitTests",
+            dependencies: ["TildeLabKit", "AutocompleteLabCore"]
         )
     ]
 )

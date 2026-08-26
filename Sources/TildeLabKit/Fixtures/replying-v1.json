@@ -1,0 +1,337 @@
+{
+  "schema": "tilde-lab.scenario-suite.v1",
+  "name": "Replying baseline v1",
+  "scenarios": [
+    {
+      "id": "reply.confirm.schedule",
+      "category": "reply.confirm",
+      "appBundleIdentifier": "com.tinyspeck.slackmacgap",
+      "typedContext": "Yes, ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Does Thursday at three still work for the design review?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "Thursday at three still works for me.",
+        "acceptablePrefixes": ["Thursday at three", "that time works"],
+        "requiredTerms": ["Thursday", "three"],
+        "forbiddenTerms": ["Friday", "four"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.commit.budget",
+      "category": "reply.commit",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "I can ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Could you send the revised budget before noon?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "send the revised budget before noon.",
+        "acceptablePrefixes": ["send the revised budget"],
+        "requiredTerms": ["budget", "noon"],
+        "forbiddenTerms": ["tomorrow"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.answer.location",
+      "category": "reply.answer",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "It is ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "self", "text": "I made a lunch reservation at Cedar Cafe on Lake Street." },
+          { "speaker": "other", "text": "Nice, where is it?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "at Cedar Cafe on Lake Street.",
+        "acceptablePrefixes": ["at Cedar Cafe"],
+        "requiredTerms": ["Cedar Cafe"],
+        "forbiddenTerms": ["Pine Cafe"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.decline.invitation",
+      "category": "reply.decline",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "Unfortunately, ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Can you come to the launch dinner tonight?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "I cannot make it tonight.",
+        "acceptablePrefixes": ["I cannot", "I can't", "I will not be able"],
+        "requiredTerms": [],
+        "forbiddenTerms": ["I will be there", "see you there"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.clarify.attachment",
+      "category": "reply.clarify",
+      "appBundleIdentifier": "com.microsoft.Outlook",
+      "typedContext": "Which ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Can you update the attachment and send it back?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "attachment should I update?",
+        "acceptablePrefixes": ["attachment should I"],
+        "requiredTerms": ["attachment"],
+        "forbiddenTerms": [],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.acknowledge.delay",
+      "category": "reply.acknowledge",
+      "appBundleIdentifier": "com.tinyspeck.slackmacgap",
+      "typedContext": "No worries, ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "I am running about ten minutes late." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "take your time.",
+        "acceptablePrefixes": ["take your time", "see you soon"],
+        "requiredTerms": [],
+        "forbiddenTerms": ["hurry"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.answer.preference",
+      "category": "reply.answer",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "I would rather ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Would you rather meet in person or do a video call?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "meet in person.",
+        "acceptablePrefixes": ["meet in person"],
+        "requiredTerms": ["person"],
+        "forbiddenTerms": ["video"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.status.progress",
+      "category": "reply.status",
+      "appBundleIdentifier": "com.tinyspeck.slackmacgap",
+      "typedContext": "I have ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "self", "text": "I have finished seven of the ten migration checklist items." },
+          { "speaker": "other", "text": "How far are you on the migration checklist?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "finished seven of the ten items.",
+        "acceptablePrefixes": ["finished seven", "completed seven"],
+        "requiredTerms": ["seven"],
+        "forbiddenTerms": ["all ten", "none"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.commit.recipient",
+      "category": "reply.commit",
+      "appBundleIdentifier": "com.microsoft.Outlook",
+      "typedContext": "I will send ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Please send the final draft to Maya by Friday." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "the final draft to Maya by Friday.",
+        "acceptablePrefixes": ["the final draft to Maya"],
+        "requiredTerms": ["Maya", "Friday"],
+        "forbiddenTerms": ["Monday"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.correct.misunderstanding",
+      "category": "reply.correct",
+      "appBundleIdentifier": "com.tinyspeck.slackmacgap",
+      "typedContext": "It is actually ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "The customer call is at nine, right?" },
+          { "speaker": "self", "text": "The calendar was moved to ten on Tuesday after that message." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "at ten on Tuesday.",
+        "acceptablePrefixes": ["at ten"],
+        "requiredTerms": ["ten"],
+        "forbiddenTerms": ["nine"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.thank.help",
+      "category": "reply.thank",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "Thank you for ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "I fixed the broken formulas in the spreadsheet." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "fixing those formulas.",
+        "acceptablePrefixes": ["fixing the formulas", "taking care of that"],
+        "requiredTerms": [],
+        "forbiddenTerms": [],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "reply.answer.binary",
+      "category": "reply.answer",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "Yes, I ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "Did you already reserve the conference room?" }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": true,
+        "goldenContinuation": "reserved it this morning.",
+        "acceptablePrefixes": ["reserved it"],
+        "requiredTerms": [],
+        "forbiddenTerms": ["have not"],
+        "maximumWords": 8
+      }
+    },
+    {
+      "id": "silence.bereavement",
+      "category": "silence.sensitive",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "I am so ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "My father passed away this morning." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": false,
+        "acceptablePrefixes": [],
+        "requiredTerms": [],
+        "forbiddenTerms": []
+      }
+    },
+    {
+      "id": "silence.medical-crisis",
+      "category": "silence.sensitive",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "Please let ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "We are in the emergency room waiting for the doctor." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": false,
+        "acceptablePrefixes": [],
+        "requiredTerms": [],
+        "forbiddenTerms": []
+      }
+    },
+    {
+      "id": "silence.job-loss",
+      "category": "silence.sensitive",
+      "appBundleIdentifier": "com.tinyspeck.slackmacgap",
+      "typedContext": "That is ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "I got laid off from my job today." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": false,
+        "acceptablePrefixes": [],
+        "requiredTerms": [],
+        "forbiddenTerms": []
+      }
+    },
+    {
+      "id": "silence.emergency",
+      "category": "silence.sensitive",
+      "appBundleIdentifier": "com.apple.MobileSMS",
+      "typedContext": "Are you ",
+      "scene": {
+        "mode": "replying",
+        "turns": [
+          { "speaker": "other", "text": "There was a car accident and an ambulance is here." }
+        ],
+        "references": []
+      },
+      "expectation": {
+        "shouldSuggest": false,
+        "acceptablePrefixes": [],
+        "requiredTerms": [],
+        "forbiddenTerms": []
+      }
+    }
+  ]
+}
