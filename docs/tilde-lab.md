@@ -232,10 +232,12 @@ override blocks. They explicitly do not claim full-suggestion dogfood utility.
 
 After a passing holdout, `shadow`, `dogfood`, and `soak` create sticky local
 plans. `ingest-events` accepts a closed text-free JSONL schema; raw text fields
-are structurally rejected. `online-report` estimates realized accepted
-characters, edits/undoes, deadline misses, matched-stratum attention tax, and
-net time per 1,000 typed characters. `delete-telemetry` deletes every event for
-the campaign.
+are structurally rejected. v3 events also carry typed-through, settled-visible
+time, and retained-character counts or missingness at 5s, 30s, and segment
+close. `online-report` prints coverage and missingness at those horizons,
+typed-through, flicker accepts, realized accepted characters, edits/undoes,
+deadline misses, matched-stratum attention tax, and net time per 1,000 typed
+characters. `delete-telemetry` deletes every event for the campaign.
 
 A soak requires sustained active duration, enough events, p99 first-stable-word
 at or below one second, zero crashes, timeouts, wrong insertions, committed-text

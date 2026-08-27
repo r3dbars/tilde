@@ -28,6 +28,21 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-27 — Start F03 as the first deep-research object
+
+- **Try:** Explain the ruler in plain language, then implement the v3
+  text-free event, XOR horizons, typed-through, flicker floor, and
+  coverage report with fixtures.
+- **Learn:** Nothing durable about live writing yet. The schema can now
+  tell keep from rewrite-after-Tab, and missing from zero, without
+  storing words.
+- **Fail:** Live IME ingest on a Mac is not done. F03 is not supported.
+  Suggestion behavior is unchanged.
+- **Where:** [`docs/experiments/F03-retained-outcome-ledger.md`](../experiments/F03-retained-outcome-ledger.md);
+  `Sources/TildeCore/Policy/RetainedCharacterObservation.swift`.
+- **Next:** Wire a Mac-side producer that writes only counts, then see
+  whether fixtures plus live ingest satisfy the promotion rule.
+
 ## 2026-08-27 — Save the lab so tries and failures persist
 
 - **Try:** Make the colleague working agreement durable: a public lab log,
