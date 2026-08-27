@@ -106,6 +106,19 @@ struct LabExperimentEngineTests {
                 ),
                 expectation: .init(shouldSuggest: false)
             ),
+            LabScenario(
+                id: "silence.irrelevant",
+                category: "silence.ordinary.irrelevant-scene",
+                typedContext: "The ",
+                scene: .init(
+                    mode: .replying,
+                    turns: [.init(
+                        speaker: .other,
+                        text: "The weather near the atrium was pleasant during lunch."
+                    )]
+                ),
+                expectation: .init(shouldSuggest: false)
+            ),
         ]
         let client = CountingClient()
         let output = try await LabExperimentEngine.execute(
@@ -123,6 +136,7 @@ struct LabExperimentEngineTests {
         })
         #expect(Set(output.results.map(\.decisionReason)) == Set([
             .promptInjectionScene, .noIncomingTurn, .resolvedConversation, .ambiguousChoice,
+            .nonActionableScene,
         ]))
     }
 

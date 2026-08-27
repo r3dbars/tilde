@@ -83,7 +83,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = ProcessInfo.processInfo.systemUptime
-        if let reason = SceneSuggestionPolicy.suppressionReason(scene: scene) {
+        if let reason = SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: textBeforeCursor
+        ) {
             diagnostics.record(
                 "suggestion-suppressed",
                 metadata: ["reason": reason.rawValue]

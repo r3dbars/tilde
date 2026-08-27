@@ -18,6 +18,7 @@ public enum LabDecisionReason: String, Codable, CaseIterable, Sendable {
     case noIncomingTurn = "no-incoming-turn"
     case resolvedConversation = "resolved-conversation"
     case ambiguousChoice = "ambiguous-choice"
+    case nonActionableScene = "non-actionable-scene"
     case lowConfidence = "low-confidence"
     case timeout
     case protocolError = "protocol-error"
@@ -30,6 +31,7 @@ extension LabDecisionReason {
         case .noIncomingTurn: .noIncomingTurn
         case .resolvedConversation: .resolvedConversation
         case .ambiguousChoice: .ambiguousChoice
+        case .nonActionableScene: .nonActionableScene
         }
     }
 }
