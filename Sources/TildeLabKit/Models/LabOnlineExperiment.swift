@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import TildeCore
 
 public enum LabOnlineVariant: String, Codable, Sendable {
     case champion
@@ -10,6 +11,7 @@ public enum LabOnlineVariant: String, Codable, Sendable {
 public enum LabOnlineInteractionOutcome: String, Codable, CaseIterable, Sendable {
     case acceptedAll = "accepted-all"
     case acceptedWord = "accepted-word"
+    case typedThrough = "typed-through"
     case ignored
     case dismissed
     case corrected
@@ -175,7 +177,8 @@ public struct LabOnlineExperimentPlan: Codable, Equatable, Sendable {
 /// no prompt, screen text, document text, candidate, bundle ID, or filename is
 /// representable by the schema.
 public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendable {
-    public static let currentSchema = "tilde-lab.online-event.v2"
+    public static let currentSchema = "tilde-lab.online-event.v3"
+    public static let legacySchemaV2 = "tilde-lab.online-event.v2"
 
     public let schema: String
     public let id: UUID
@@ -188,16 +191,22 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
     public let boundary: LabOnlineBoundary
     public let typingSpeedBucket: LabTypingSpeedBucket
     public let safeOpportunity: Bool
+    public let generated: Bool
     public let displayed: Bool
+    public let policyHidden: Bool
     public let outcome: LabOnlineInteractionOutcome
     public let acceptedCharacters: Int
     public let replacedCharactersWithin5Seconds: Int
     public let nextActionMilliseconds: Int?
     public let generatorMilliseconds: Int?
     public let firstStableWordMilliseconds: Int?
+    public let settledVisibleMilliseconds: Int?
+    public let recentInterventionCount: Int?
     public let deadlineMissed: Bool
     public let confidence: Double?
     public let candidateCharacters: Int
+    public let candidateSourceBucket: LabCandidateSourceBucket
+    public let candidateLengthBucket: LabCandidateLengthBucket
     public let championDisagreed: Bool
     public let guardReason: LabDecisionReason?
     public let crashed: Bool
@@ -215,6 +224,9 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
     public let appSwitchObserved: Bool?
     public let cacheHit: Bool?
     public let confidenceFeatures: LabConfidenceFeaturesV1?
+    public let retentionAt5Seconds: RetainedCharacterObservation
+    public let retentionAt30Seconds: RetainedCharacterObservation
+    public let retentionAtSegmentClose: RetainedCharacterObservation
 
     public init(
         id: UUID = UUID(),
@@ -253,9 +265,19 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         sleepWakeObserved: Bool? = nil,
         appSwitchObserved: Bool? = nil,
         cacheHit: Bool? = nil,
-        confidenceFeatures: LabConfidenceFeaturesV1? = nil
+        confidenceFeatures: LabConfidenceFeaturesV1? = nil,
+        generated: Bool? = nil,
+        policyHidden: Bool? = nil,
+        candidateSourceBucket: LabCandidateSourceBucket = .unknown,
+        candidateLengthBucket: LabCandidateLengthBucket? = nil,
+        settledVisibleMilliseconds: Int? = nil,
+        recentInterventionCount: Int? = nil,
+        retentionAt5Seconds: RetainedCharacterObservation? = nil,
+        retentionAt30Seconds: RetainedCharacterObservation? = nil,
+        retentionAtSegmentClose: RetainedCharacterObservation? = nil,
+        schema: String = LabOnlineExperimentEvent.currentSchema
     ) {
-        schema = Self.currentSchema
+        self.schema = schema
         self.id = id
         self.campaignID = campaignID
         self.occurredAt = occurredAt
@@ -266,16 +288,23 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         self.boundary = boundary
         self.typingSpeedBucket = typingSpeedBucket
         self.safeOpportunity = safeOpportunity
+        self.generated = generated ?? (displayed || candidateCharacters > 0)
         self.displayed = displayed
+        self.policyHidden = policyHidden ?? (outcome == .hidden && !displayed)
         self.outcome = outcome
         self.acceptedCharacters = acceptedCharacters
         self.replacedCharactersWithin5Seconds = replacedCharactersWithin5Seconds
         self.nextActionMilliseconds = nextActionMilliseconds
         self.generatorMilliseconds = generatorMilliseconds
         self.firstStableWordMilliseconds = firstStableWordMilliseconds
+        self.settledVisibleMilliseconds = settledVisibleMilliseconds
+        self.recentInterventionCount = recentInterventionCount
         self.deadlineMissed = deadlineMissed
         self.confidence = confidence
         self.candidateCharacters = candidateCharacters
+        self.candidateSourceBucket = candidateSourceBucket
+        self.candidateLengthBucket = candidateLengthBucket
+            ?? LabCandidateLengthBucket.from(wordCount: confidenceFeatures?.suggestionWords)
         self.championDisagreed = championDisagreed
         self.guardReason = guardReason
         self.crashed = crashed
@@ -293,12 +322,23 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         self.appSwitchObserved = appSwitchObserved
         self.cacheHit = cacheHit
         self.confidenceFeatures = confidenceFeatures
+        self.retentionAt5Seconds = retentionAt5Seconds ?? (
+            try? LabRetentionAccounting.observation(
+                acceptedCharacters: acceptedCharacters,
+                replacedCharacters: replacedCharactersWithin5Seconds
+            )
+        ) ?? RetainedCharacterObservation(missingness: .notYetObserved)
+        self.retentionAt30Seconds = retentionAt30Seconds
+            ?? RetainedCharacterObservation(missingness: .notYetObserved)
+        self.retentionAtSegmentClose = retentionAtSegmentClose
+            ?? RetainedCharacterObservation(missingness: .notYetObserved)
     }
 
     @discardableResult
     public func validated(for plan: LabOnlineExperimentPlan) throws -> LabOnlineExperimentEvent {
         try plan.validated()
-        guard schema == Self.currentSchema, campaignID == plan.campaignID,
+        guard schema == Self.currentSchema || schema == Self.legacySchemaV2,
+              campaignID == plan.campaignID,
               occurredAt >= plan.startsAt, occurredAt <= plan.endsAt,
               sessionDigestSHA256.range(
                   of: "^[a-f0-9]{64}$", options: .regularExpression
@@ -311,15 +351,48 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
               nextActionMilliseconds.map({ $0 >= 0 && $0 <= 300_000 }) ?? true,
               generatorMilliseconds.map({ $0 >= 0 && $0 <= 300_000 }) ?? true,
               firstStableWordMilliseconds.map({ $0 >= 0 && $0 <= 300_000 }) ?? true,
+              settledVisibleMilliseconds.map({ $0 >= 0 && $0 <= 300_000 }) ?? true,
+              recentInterventionCount.map({ $0 >= 0 && $0 <= 10_000 }) ?? true,
               confidence.map({ (0...1).contains($0) }) ?? true,
               acceptedCharacters <= candidateCharacters,
               replacedCharactersWithin5Seconds <= acceptedCharacters else {
+            throw LabOnlineExperimentError.invalidEvent
+        }
+        do {
+            _ = try retentionAt5Seconds.validated()
+            _ = try retentionAt30Seconds.validated()
+            _ = try retentionAtSegmentClose.validated()
+        } catch RetainedCharacterObservationError.ambiguous {
+            throw LabOnlineExperimentError.ambiguousRetention
+        } catch {
+            throw LabOnlineExperimentError.invalidEvent
+        }
+        if let five = retentionAt5Seconds.retainedCharacters,
+           five > acceptedCharacters {
+            throw LabOnlineExperimentError.invalidEvent
+        }
+        if let five = retentionAt5Seconds.retainedCharacters,
+           let thirty = retentionAt30Seconds.retainedCharacters,
+           thirty > five {
+            throw LabOnlineExperimentError.invalidEvent
+        }
+        if let thirty = retentionAt30Seconds.retainedCharacters,
+           let segment = retentionAtSegmentClose.retainedCharacters,
+           segment > thirty {
+            throw LabOnlineExperimentError.invalidEvent
+        }
+        if let five = retentionAt5Seconds.retainedCharacters,
+           retentionAt30Seconds.retainedCharacters == nil,
+           let segment = retentionAtSegmentClose.retainedCharacters,
+           segment > five {
             throw LabOnlineExperimentError.invalidEvent
         }
         if let confidenceFeatures { try confidenceFeatures.validated() }
         if displayed && (!safeOpportunity || variant == .hidden || candidateCharacters == 0) {
             throw LabOnlineExperimentError.invalidEvent
         }
+        if displayed && !generated { throw LabOnlineExperimentError.invalidEvent }
+        if policyHidden && displayed { throw LabOnlineExperimentError.invalidEvent }
         if plan.phase == .shadow, variant == .challenger, displayed {
             throw LabOnlineExperimentError.shadowMayNotDisplay
         }
@@ -329,12 +402,200 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         if (outcome == .acceptedAll || outcome == .acceptedWord), acceptedCharacters == 0 {
             throw LabOnlineExperimentError.invalidEvent
         }
-        if (outcome == .ignored || outcome == .dismissed
+        if (outcome == .ignored || outcome == .dismissed || outcome == .typedThrough
             || outcome == .hidden || outcome == .unavailable),
            acceptedCharacters != 0 || replacedCharactersWithin5Seconds != 0 {
             throw LabOnlineExperimentError.invalidEvent
         }
+        if outcome == .typedThrough,
+           !TypedThroughRule.isEligible(
+               displayed: displayed,
+               settledVisibleMilliseconds: settledVisibleMilliseconds
+           ) {
+            throw LabOnlineExperimentError.invalidEvent
+        }
         return self
+    }
+}
+
+extension LabOnlineExperimentEvent {
+    enum CodingKeys: String, CodingKey {
+        case schema, id, campaignID, occurredAt, sessionDigestSHA256, variant
+        case appCategory, register, boundary, typingSpeedBucket, safeOpportunity
+        case generated, displayed, policyHidden, outcome
+        case acceptedCharacters, replacedCharactersWithin5Seconds
+        case nextActionMilliseconds, generatorMilliseconds, firstStableWordMilliseconds
+        case settledVisibleMilliseconds, recentInterventionCount
+        case deadlineMissed, confidence, candidateCharacters
+        case candidateSourceBucket, candidateLengthBucket
+        case championDisagreed, guardReason, crashed, timedOut, opportunityCharacters
+        case wrongInsertionCount, insertionCorruptionCount, networkEgressDetected
+        case networkDenied, residentMemoryMegabytes, memoryPressureObserved
+        case thermalLevel, runtimeRestarted, sleepWakeObserved, appSwitchObserved
+        case cacheHit, confidenceFeatures
+        case retentionAt5Seconds, retentionAt30Seconds, retentionAtSegmentClose
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let schema = try container.decode(String.self, forKey: .schema)
+        guard schema == Self.currentSchema || schema == Self.legacySchemaV2 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schema,
+                in: container,
+                debugDescription: "Unsupported online event schema."
+            )
+        }
+        let acceptedCharacters = try container.decode(Int.self, forKey: .acceptedCharacters)
+        let replacedCharacters = try container.decode(Int.self, forKey: .replacedCharactersWithin5Seconds)
+        let displayed = try container.decode(Bool.self, forKey: .displayed)
+        let candidateCharacters = try container.decode(Int.self, forKey: .candidateCharacters)
+        let outcome = try container.decode(LabOnlineInteractionOutcome.self, forKey: .outcome)
+        let confidenceFeatures = try container.decodeIfPresent(
+            LabConfidenceFeaturesV1.self,
+            forKey: .confidenceFeatures
+        )
+        let isLegacy = schema == Self.legacySchemaV2
+        let retention5: RetainedCharacterObservation
+        let retention30: RetainedCharacterObservation
+        let retentionSegment: RetainedCharacterObservation
+        if isLegacy {
+            retention5 = try container.decodeIfPresent(
+                RetainedCharacterObservation.self,
+                forKey: .retentionAt5Seconds
+            ) ?? (try LabRetentionAccounting.observation(
+                acceptedCharacters: acceptedCharacters,
+                replacedCharacters: replacedCharacters
+            ))
+            retention30 = try container.decodeIfPresent(
+                RetainedCharacterObservation.self,
+                forKey: .retentionAt30Seconds
+            ) ?? RetainedCharacterObservation(missingness: .legacySchema)
+            retentionSegment = try container.decodeIfPresent(
+                RetainedCharacterObservation.self,
+                forKey: .retentionAtSegmentClose
+            ) ?? RetainedCharacterObservation(missingness: .legacySchema)
+        } else {
+            retention5 = try container.decode(RetainedCharacterObservation.self, forKey: .retentionAt5Seconds)
+            retention30 = try container.decode(RetainedCharacterObservation.self, forKey: .retentionAt30Seconds)
+            retentionSegment = try container.decode(
+                RetainedCharacterObservation.self,
+                forKey: .retentionAtSegmentClose
+            )
+        }
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            campaignID: try container.decode(UUID.self, forKey: .campaignID),
+            occurredAt: try container.decode(Date.self, forKey: .occurredAt),
+            sessionDigestSHA256: try container.decode(String.self, forKey: .sessionDigestSHA256),
+            variant: try container.decode(LabOnlineVariant.self, forKey: .variant),
+            appCategory: try container.decode(LabOnlineAppCategory.self, forKey: .appCategory),
+            register: try container.decode(LabOnlineRegister.self, forKey: .register),
+            boundary: try container.decode(LabOnlineBoundary.self, forKey: .boundary),
+            typingSpeedBucket: try container.decode(LabTypingSpeedBucket.self, forKey: .typingSpeedBucket),
+            safeOpportunity: try container.decode(Bool.self, forKey: .safeOpportunity),
+            displayed: displayed,
+            outcome: outcome,
+            acceptedCharacters: acceptedCharacters,
+            replacedCharactersWithin5Seconds: replacedCharacters,
+            nextActionMilliseconds: try container.decodeIfPresent(Int.self, forKey: .nextActionMilliseconds),
+            generatorMilliseconds: try container.decodeIfPresent(Int.self, forKey: .generatorMilliseconds),
+            firstStableWordMilliseconds: try container.decodeIfPresent(
+                Int.self,
+                forKey: .firstStableWordMilliseconds
+            ),
+            deadlineMissed: try container.decodeIfPresent(Bool.self, forKey: .deadlineMissed) ?? false,
+            confidence: try container.decodeIfPresent(Double.self, forKey: .confidence),
+            candidateCharacters: candidateCharacters,
+            championDisagreed: try container.decodeIfPresent(Bool.self, forKey: .championDisagreed) ?? false,
+            guardReason: try container.decodeIfPresent(LabDecisionReason.self, forKey: .guardReason),
+            crashed: try container.decodeIfPresent(Bool.self, forKey: .crashed) ?? false,
+            timedOut: try container.decodeIfPresent(Bool.self, forKey: .timedOut) ?? false,
+            opportunityCharacters: try container.decodeIfPresent(Int.self, forKey: .opportunityCharacters) ?? 1,
+            wrongInsertionCount: try container.decodeIfPresent(Int.self, forKey: .wrongInsertionCount),
+            insertionCorruptionCount: try container.decodeIfPresent(Int.self, forKey: .insertionCorruptionCount),
+            networkEgressDetected: try container.decodeIfPresent(Bool.self, forKey: .networkEgressDetected),
+            networkDenied: try container.decodeIfPresent(Bool.self, forKey: .networkDenied),
+            residentMemoryMegabytes: try container.decodeIfPresent(Int.self, forKey: .residentMemoryMegabytes),
+            memoryPressureObserved: try container.decodeIfPresent(Bool.self, forKey: .memoryPressureObserved),
+            thermalLevel: try container.decodeIfPresent(LabResearchThermalLevel.self, forKey: .thermalLevel),
+            runtimeRestarted: try container.decodeIfPresent(Bool.self, forKey: .runtimeRestarted),
+            sleepWakeObserved: try container.decodeIfPresent(Bool.self, forKey: .sleepWakeObserved),
+            appSwitchObserved: try container.decodeIfPresent(Bool.self, forKey: .appSwitchObserved),
+            cacheHit: try container.decodeIfPresent(Bool.self, forKey: .cacheHit),
+            confidenceFeatures: confidenceFeatures,
+            generated: try container.decodeIfPresent(Bool.self, forKey: .generated),
+            policyHidden: try container.decodeIfPresent(Bool.self, forKey: .policyHidden),
+            candidateSourceBucket: try container.decodeIfPresent(
+                LabCandidateSourceBucket.self,
+                forKey: .candidateSourceBucket
+            ) ?? .unknown,
+            candidateLengthBucket: try container.decodeIfPresent(
+                LabCandidateLengthBucket.self,
+                forKey: .candidateLengthBucket
+            ),
+            settledVisibleMilliseconds: try container.decodeIfPresent(
+                Int.self,
+                forKey: .settledVisibleMilliseconds
+            ),
+            recentInterventionCount: try container.decodeIfPresent(Int.self, forKey: .recentInterventionCount),
+            retentionAt5Seconds: retention5,
+            retentionAt30Seconds: retention30,
+            retentionAtSegmentClose: retentionSegment,
+            schema: schema
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schema, forKey: .schema)
+        try container.encode(id, forKey: .id)
+        try container.encode(campaignID, forKey: .campaignID)
+        try container.encode(occurredAt, forKey: .occurredAt)
+        try container.encode(sessionDigestSHA256, forKey: .sessionDigestSHA256)
+        try container.encode(variant, forKey: .variant)
+        try container.encode(appCategory, forKey: .appCategory)
+        try container.encode(register, forKey: .register)
+        try container.encode(boundary, forKey: .boundary)
+        try container.encode(typingSpeedBucket, forKey: .typingSpeedBucket)
+        try container.encode(safeOpportunity, forKey: .safeOpportunity)
+        try container.encode(displayed, forKey: .displayed)
+        try container.encode(outcome, forKey: .outcome)
+        try container.encode(acceptedCharacters, forKey: .acceptedCharacters)
+        try container.encode(replacedCharactersWithin5Seconds, forKey: .replacedCharactersWithin5Seconds)
+        try container.encodeIfPresent(nextActionMilliseconds, forKey: .nextActionMilliseconds)
+        try container.encodeIfPresent(generatorMilliseconds, forKey: .generatorMilliseconds)
+        try container.encodeIfPresent(firstStableWordMilliseconds, forKey: .firstStableWordMilliseconds)
+        try container.encode(deadlineMissed, forKey: .deadlineMissed)
+        try container.encodeIfPresent(confidence, forKey: .confidence)
+        try container.encode(candidateCharacters, forKey: .candidateCharacters)
+        try container.encode(championDisagreed, forKey: .championDisagreed)
+        try container.encodeIfPresent(guardReason, forKey: .guardReason)
+        try container.encode(crashed, forKey: .crashed)
+        try container.encode(timedOut, forKey: .timedOut)
+        try container.encode(opportunityCharacters, forKey: .opportunityCharacters)
+        try container.encodeIfPresent(wrongInsertionCount, forKey: .wrongInsertionCount)
+        try container.encodeIfPresent(insertionCorruptionCount, forKey: .insertionCorruptionCount)
+        try container.encodeIfPresent(networkEgressDetected, forKey: .networkEgressDetected)
+        try container.encodeIfPresent(networkDenied, forKey: .networkDenied)
+        try container.encodeIfPresent(residentMemoryMegabytes, forKey: .residentMemoryMegabytes)
+        try container.encodeIfPresent(memoryPressureObserved, forKey: .memoryPressureObserved)
+        try container.encodeIfPresent(thermalLevel, forKey: .thermalLevel)
+        try container.encodeIfPresent(runtimeRestarted, forKey: .runtimeRestarted)
+        try container.encodeIfPresent(sleepWakeObserved, forKey: .sleepWakeObserved)
+        try container.encodeIfPresent(appSwitchObserved, forKey: .appSwitchObserved)
+        try container.encodeIfPresent(cacheHit, forKey: .cacheHit)
+        try container.encodeIfPresent(confidenceFeatures, forKey: .confidenceFeatures)
+        guard schema != Self.legacySchemaV2 else { return }
+        try container.encode(generated, forKey: .generated)
+        try container.encode(policyHidden, forKey: .policyHidden)
+        try container.encode(candidateSourceBucket, forKey: .candidateSourceBucket)
+        try container.encode(candidateLengthBucket, forKey: .candidateLengthBucket)
+        try container.encodeIfPresent(settledVisibleMilliseconds, forKey: .settledVisibleMilliseconds)
+        try container.encodeIfPresent(recentInterventionCount, forKey: .recentInterventionCount)
+        try container.encode(retentionAt5Seconds, forKey: .retentionAt5Seconds)
+        try container.encode(retentionAt30Seconds, forKey: .retentionAt30Seconds)
+        try container.encode(retentionAtSegmentClose, forKey: .retentionAtSegmentClose)
     }
 }
 
@@ -346,7 +607,7 @@ public struct LabAttentionTaxEstimate: Codable, Equatable, Sendable {
 }
 
 public struct LabOnlineExperimentReport: Codable, Equatable, Sendable {
-    public static let currentSchema = "tilde-lab.online-report.v2"
+    public static let currentSchema = "tilde-lab.online-report.v3"
 
     public let schema: String
     public let campaignID: UUID
@@ -383,6 +644,14 @@ public struct LabOnlineExperimentReport: Codable, Equatable, Sendable {
     public let cacheHits: Int
     public let cacheMisses: Int
     public let confidenceCalibration: LabConfidenceCalibrationReport?
+    public let typedThrough: Int
+    public let ignored: Int
+    public let policyHidden: Int
+    public let flickerAccepts: Int
+    public let settledReads: Int
+    public let retentionAt5Seconds: LabRetentionHorizonReport
+    public let retentionAt30Seconds: LabRetentionHorizonReport
+    public let retentionAtSegmentClose: LabRetentionHorizonReport
 }
 
 public struct LabSoakReport: Codable, Equatable, Sendable {
@@ -409,6 +678,8 @@ public enum LabOnlineExperimentError: Error, LocalizedError, Equatable, Sendable
     case rampRequiresSafetyEvidence
     case invalidSoakRequirements
     case invalidEvent
+    case ambiguousRetention
+    case forbiddenKey(String)
     case mixedCampaign
 
     public var errorDescription: String? {
@@ -424,6 +695,9 @@ public enum LabOnlineExperimentError: Error, LocalizedError, Equatable, Sendable
         case .invalidSoakRequirements:
             "Soak requires one frozen candidate, a safety digest, full allocation, and bounded duration/event requirements."
         case .invalidEvent: "The online event is invalid or contains an unsupported value."
+        case .ambiguousRetention:
+            "Each retention horizon must be either a kept-character count or a missingness reason, never both and never neither."
+        case .forbiddenKey(let key): "Online events cannot store raw key \(key)."
         case .mixedCampaign: "Online analysis cannot mix campaign identifiers."
         }
     }
@@ -511,7 +785,28 @@ public enum LabOnlineExperimentAnalyzer {
             appSwitches: safe.count { $0.appSwitchObserved == true },
             cacheHits: safe.count { $0.cacheHit == true },
             cacheMisses: safe.count { $0.cacheHit == false },
-            confidenceCalibration: try? LabConfidenceCalibrator.calibrate(events)
+            confidenceCalibration: try? LabConfidenceCalibrator.calibrate(events),
+            typedThrough: shown.count { $0.outcome == .typedThrough },
+            ignored: shown.count { $0.outcome == .ignored },
+            policyHidden: safe.count(where: \.policyHidden),
+            flickerAccepts: shown.count {
+                ($0.outcome == .acceptedAll || $0.outcome == .acceptedWord)
+                    && !SettledVisibility.countsAsRead($0.settledVisibleMilliseconds)
+            },
+            settledReads: shown.count { SettledVisibility.countsAsRead($0.settledVisibleMilliseconds) },
+            retentionAt5Seconds: LabRetentionAccounting.report(
+                safe,
+                horizon: \.retentionAt5Seconds,
+                replacedAtHorizon: { $0.replacedCharactersWithin5Seconds }
+            ),
+            retentionAt30Seconds: LabRetentionAccounting.report(
+                safe,
+                horizon: \.retentionAt30Seconds
+            ),
+            retentionAtSegmentClose: LabRetentionAccounting.report(
+                safe,
+                horizon: \.retentionAtSegmentClose
+            )
         )
     }
 

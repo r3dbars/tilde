@@ -232,10 +232,12 @@ override blocks. They explicitly do not claim full-suggestion dogfood utility.
 
 After a passing holdout, `shadow`, `dogfood`, and `soak` create sticky local
 plans. `ingest-events` accepts a closed text-free JSONL schema; raw text fields
-are structurally rejected. `online-report` estimates realized accepted
-characters, edits/undoes, deadline misses, matched-stratum attention tax, and
-net time per 1,000 typed characters. `delete-telemetry` deletes every event for
-the campaign.
+are structurally rejected. v3 events also carry typed-through, settled-visible
+time, and retained-character counts or missingness at 5s, 30s, and segment
+close. `online-report` prints coverage and missingness at those horizons,
+typed-through, flicker accepts, realized accepted characters, edits/undoes,
+deadline misses, matched-stratum attention tax, and net time per 1,000 typed
+characters. `delete-telemetry` deletes every event for the campaign.
 
 A soak requires sustained active duration, enough events, p99 first-stable-word
 at or below one second, zero crashes, timeouts, wrong insertions, committed-text
@@ -482,7 +484,14 @@ swift run tilde-lab-runner --learning-ledger
 ```
 
 See [Tilde Learning Ledger](learning-ledger.md) for the current synthesis and
-update contract.
+update contract. How the owner and agent work as colleagues is
+[the lab partnership](research/lab-partnership.md). Every try, learn, and
+fail — including rejected work — goes in [the lab log](research/lab-log.md).
+Live F03 ingest is a Mac thread; start from
+[the on-device briefing](research/next-on-device.md).
+External papers that can change a queued experiment are indexed in
+[the reading list](reading-list.md), with Tilde-specific digests in
+[`docs/research/`](research/).
 
 The owner-visible **Model Results** screen and this command read the same
 aggregate-only checked-in catalog:

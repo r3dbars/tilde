@@ -343,7 +343,7 @@ public enum LabConfidenceCalibrator {
             switch event.outcome {
             case .acceptedAll, .acceptedWord:
                 accepted = 1
-            case .ignored, .dismissed, .corrected, .undone:
+            case .ignored, .dismissed, .corrected, .undone, .typedThrough:
                 accepted = 0
             case .hidden, .unavailable:
                 return nil

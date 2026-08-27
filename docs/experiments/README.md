@@ -49,6 +49,9 @@ identity; it does not make the hashed private artifact publishable.
 7. Freeze any reusable failure as a sanitized regression.
 8. Add or update the Learning Ledger only when the result changes durable
    knowledge or the active queue.
+9. The same day, append [`docs/research/lab-log.md`](../research/lab-log.md)
+   with try, learn, and fail — even if the result is rejected, inconclusive,
+   or the work stopped.
 
 ## Record template
 
@@ -139,6 +142,7 @@ Completed: <ISO-8601 UTC>
 ### Durable changes
 
 - Learning Ledger entry:
+- Lab log:
 - Regression IDs:
 - Implementation pull request:
 - Rollback:
@@ -152,7 +156,11 @@ Completed: <ISO-8601 UTC>
 
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED
+- [F03 — Retained-outcome ledger](F03-retained-outcome-ledger.md) — IMPLEMENTING
 - [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
 
 The staged theory registry and current eligibility gates live in the
-[Tilde research roadmap](../research-roadmap.md).
+[Tilde research roadmap](../research-roadmap.md). The running notebook of
+tries and failures is [the lab log](../research/lab-log.md). The next
+session is on-device F03 ingest:
+[the Mac briefing](../research/next-on-device.md).
