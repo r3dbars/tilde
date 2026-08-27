@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T02:12:10Z",
+  "updatedAt": "2026-08-27T02:59:55Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -663,6 +663,33 @@
       "tags": ["qwen-9b", "god-v1", "preview-only", "three-word-cap"]
     },
     {
+      "id": "qwen-god-v1-replication-inconclusive",
+      "recordedAt": "2026-08-27T02:59:55Z",
+      "area": "campaign",
+      "status": "incomplete",
+      "title": "The provenance-v6 Qwen God v1 replication stopped at invariant smoke",
+      "finding": "The clean registered campaign durably completed 18,432 invariant-block work items across eight arms, then the baseline failed the unsafe-sentinel-output hard gate before any aggregate v6 report was emitted. Durable state still described the campaign as running with pending trials and zero failures, while automatic restarts rejected the semantically unchanged campaign as a fingerprint mismatch. Direct JSON encoding of Set-valued manifest fields makes those fingerprints unstable across processes.",
+      "decision": "Do not claim replication or advance God v1 to validation. F02 must make terminal hard-gate failures persistent and reviewable, reconcile campaign and trial state, and canonicalize every durable digest before a fresh registered replication.",
+      "comparisonGroupID": "qwen-god-v1-replication-v1",
+      "evaluationCount": 18432,
+      "metrics": [
+        { "subjectID": "campaign", "key": "completed-work-items", "value": 18432, "unit": "items" },
+        { "subjectID": "campaign", "key": "aggregate-reports", "value": 0, "unit": "reports" },
+        { "subjectID": "campaign", "key": "restart-attempts", "value": 169, "unit": "attempts" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q01-qwen-god-v1-replication.md" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabInvariantSmoke.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabExperimentManifest.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabResearchDatabase.swift" }
+      ],
+      "limitations": [
+        "No arm report or exactly paired comparison exists, so the candidate's quality and latency effect remain unknown.",
+        "The aggregate failure class does not retain raw model output and cannot identify a safe post-hoc scoring change."
+      ],
+      "tags": ["qwen-9b", "inconclusive", "invariant-smoke", "campaign-state", "fingerprint"]
+    },
+    {
       "id": "qwen-9b-scoring-confounds",
       "recordedAt": "2026-08-26T18:59:58Z",
       "area": "scoring",
@@ -957,9 +984,9 @@
       "status": "ready-foundation",
       "question": "Can Tilde Lab tell the truth when a runner dies or a checkpoint goes stale?",
       "hypothesis": "Explicit failed and aborted states plus process, lease, work-item, and checkpoint reconciliation will eliminate phantom running campaigns.",
-      "nextExperiment": "Persist terminal errors, reconcile state at launch, and test helper-unavailable, killed-runner, stale-log, and resumable-work cases.",
-      "successCriteria": "No campaign is shown as running without live progress; terminal failures are visible, resumable work is unambiguous, and no completed work item is repeated.",
-      "dependencies": ["campaign-runtime-operations"]
+      "nextExperiment": "Persist terminal errors and reviewable failure artifacts, canonicalize every durable digest, reconcile state at launch, and test hard-gate failure, helper-unavailable, killed-runner, stale-log, restart-loop, and resumable-work cases.",
+      "successCriteria": "No campaign is shown as running without live progress; terminal failures are visible and reviewable; semantically identical inputs resume across processes; resumable work is unambiguous; and no completed work item is repeated.",
+      "dependencies": ["campaign-runtime-operations", "qwen-god-v1-replication-inconclusive"]
     },
     {
       "id": "retained-outcome-ledger-v2",
@@ -984,12 +1011,12 @@
     {
       "id": "qwen-protected-validation",
       "priority": 5,
-      "status": "ready-validation",
+      "status": "blocked-on-clean-replication",
       "question": "Does God v1 generalize beyond the development speak slice?",
       "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
-      "nextExperiment": "After provenance is complete, freeze candidate bytes and configuration, run validation once against the same baseline, and open sealed holdout only if every hard gate passes.",
+      "nextExperiment": "After F02 campaign-state reconciliation, run a fresh pre-registered a0-versus-a5 development replication. Freeze candidate bytes and run validation once only if that comparison is decision-grade and every hard gate passes.",
       "successCriteria": "Candidate beats baseline on human-acceptable output and wrong interruptions, passes every hard gate, and does not materially regress latency or net typing saved.",
-      "dependencies": ["report-provenance-v6", "certified-corpus-v2", "qwen-9b-god-v1"]
+      "dependencies": ["report-provenance-v6", "campaign-state-reconciliation", "certified-corpus-v2", "qwen-9b-god-v1"]
     },
     {
       "id": "qwen-live-meaningful-sample",
