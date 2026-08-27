@@ -913,7 +913,7 @@
   ],
   "researchQueue": [
     {
-      "id": "report-provenance-v5",
+      "id": "report-provenance-v6",
       "priority": 1,
       "status": "ready-foundation",
       "question": "Can every future result be reproduced from the checked-in record?",
@@ -960,7 +960,7 @@
       "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
       "nextExperiment": "After provenance is complete, freeze candidate bytes and configuration, run validation once against the same baseline, and open sealed holdout only if every hard gate passes.",
       "successCriteria": "Candidate beats baseline on human-acceptable output and wrong interruptions, passes every hard gate, and does not materially regress latency or net typing saved.",
-      "dependencies": ["report-provenance-v5", "certified-corpus-v2", "qwen-9b-god-v1"]
+      "dependencies": ["report-provenance-v6", "certified-corpus-v2", "qwen-9b-god-v1"]
     },
     {
       "id": "qwen-live-meaningful-sample",
@@ -1020,7 +1020,7 @@
       "hypothesis": "Blinded human review or an independent judge will preserve the large semantic signal while exposing referee bias.",
       "nextExperiment": "Freeze candidate outputs, obtain blinded independent labels, and compare agreement, false positives, and false negatives with the current semantic referee.",
       "successCriteria": "Predefined inter-rater agreement and error bounds are met before semantic score affects promotion.",
-      "dependencies": ["report-provenance-v5", "semantic-e2b-vs-sol"]
+      "dependencies": ["report-provenance-v6", "semantic-e2b-vs-sol"]
     },
     {
       "id": "interaction-app-matrix",

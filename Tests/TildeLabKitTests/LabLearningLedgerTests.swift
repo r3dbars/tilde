@@ -27,7 +27,7 @@ struct LabLearningLedgerTests {
         )
         #expect(snapshot.researchQueue.count == 12)
         #expect(snapshot.promotionPath.map(\.order).sorted() == Array(1...7))
-        #expect(snapshot.researchQueue.min(by: { $0.priority < $1.priority })?.id == "report-provenance-v5")
+        #expect(snapshot.researchQueue.min(by: { $0.priority < $1.priority })?.id == "report-provenance-v6")
         #expect(snapshot.entries.contains { $0.id == "qwen-9b-god-v1" && $0.status == .adopted })
         #expect(snapshot.entries.contains { $0.id == "staged-research-program-v1" && $0.status == .adopted })
         #expect(snapshot.entries.contains { $0.id == "protected-learning-cycle-stopped" && $0.status == .incomplete })
