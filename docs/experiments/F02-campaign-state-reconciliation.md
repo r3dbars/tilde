@@ -184,7 +184,7 @@ until durable work and reconciled terminal state agree.
 - Regression IDs: `LabCampaignReconciliationTests`,
   `campaign-completion-requires-finished-work`,
   `dead-owner-cannot-reclaim-work`, `fixed-failure-classification`
-- Implementation pull request: pending
+- Implementation pull request: [#422](https://github.com/r3dbars/tilde/pull/422)
 - Rollback: revert the F02 implementation while retaining the public result
   record
 

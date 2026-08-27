@@ -941,6 +941,7 @@
         { "subjectID": "production-boundary", "key": "shipped-swift-net-lines", "value": 0, "unit": "lines" }
       ],
       "evidence": [
+        { "kind": "pull-request", "id": "422" },
         { "kind": "documentation", "id": "docs/experiments/F02-campaign-state-reconciliation.md" },
         { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabResearchRunState.swift" },
         { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabResearchDatabase.swift" },
