@@ -28,7 +28,8 @@ public enum DiagnosticsMetadataRedactor {
         // `SensitiveScenePolicy`'s suppression reason, logged by the
         // `suggestion-suppressed` diagnostic (`GhostBrainServerHost`) —
         // count-only, never the matched category or any scene text.
-        "sensitive-scene",
+        "sensitive-scene", "prompt-injection-scene", "no-incoming-turn",
+        "resolved-conversation", "ambiguous-choice",
         // `PersonalSuggestionSource`'s fixed vocabulary, logged as the
         // `source` field on `suggestion-served` only when the "Personal
         // suggestions (experimental)" toggle is on

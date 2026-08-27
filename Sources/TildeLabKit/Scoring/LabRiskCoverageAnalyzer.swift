@@ -70,6 +70,19 @@ public enum LabRiskCoverageAnalyzer {
                         scenario: scenario,
                         configuration: report.arm.prompt
                     )
+                    if let reason = SceneSuggestionPolicy.suppressionReason(
+                        scene: prepared.scene
+                    ) {
+                        observations.append(ReplayObservation(
+                            scenario: scenario,
+                            repetition: repetition,
+                            seed: seed,
+                            preparedPrompt: nil,
+                            response: nil,
+                            fixedReason: .sceneSuppression(reason)
+                        ))
+                        continue
+                    }
                     if report.arm.suppressesSensitiveScenes,
                        SensitiveScenePolicy.isSensitive(scene: prepared.scene) {
                         observations.append(ReplayObservation(
@@ -181,7 +194,8 @@ public enum LabRiskCoverageAnalyzer {
                 repetition: observation.repetition,
                 generationSeed: observation.seed,
                 suggestion: nil,
-                policySuppressed: observation.fixedReason == .sensitiveScene,
+                policySuppressed: observation.fixedReason != nil
+                    && observation.fixedReason != .emptyPrompt,
                 decisionReason: observation.fixedReason ?? .emptyPrompt,
                 candidateCacheHit: true
             )
