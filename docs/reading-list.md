@@ -8,7 +8,9 @@ once measured, the result graduates to `docs/model-lessons.md` as fact.
 Most high-leverage entries have an original-words digest in `docs/research/` —
 method, numbers, what applies to Tilde, and what does not. The digest index is
 `docs/research/README.md`. Read the digest first; fetch the source only when
-the digest is not enough.
+the digest is not enough. Every attempt this lab makes from those papers is
+written in `docs/research/lab-log.md`; reusable lessons graduate to the
+Learning Ledger.
 
 This file is the durable catalog. A 2026-08-27 sweep walked HCI word
 prediction, AAC, email ghost-text, code completion, interruption science,
