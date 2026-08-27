@@ -150,7 +150,7 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
-- [F01 — Report provenance v6](F01-report-provenance-v6.md) — PROPOSED
+- [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 
 The staged theory registry and current eligibility gates live in the
 [Tilde research roadmap](../research-roadmap.md).

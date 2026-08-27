@@ -1,6 +1,6 @@
 # F01 — Report provenance v6
 
-Status: PROPOSED
+Status: SUPPORTED
 Experiment class: runtime
 Owner: Tilde research program
 Pre-registered: 2026-08-27T01:48:10Z
@@ -134,29 +134,68 @@ running further decision-grade experiments.
 
 ## Result
 
-Status: PENDING
-Completed: pending
+Status: SUPPORTED
+Completed: 2026-08-27T02:12:10Z
 
 ### Aggregate evidence
 
-Pending implementation and proof.
+- Every `LabRunReport` constructor now emits schema v6 with a validated
+  provenance envelope, explicit review state, and persisted eligibility
+  decision. Diagnostic producers use an explicit unavailable envelope instead
+  of pretending that missing source or runner identity is complete.
+- Durable CLI execution captures one immutable envelope before it creates run
+  artifact directories, so a run cannot dirty its own source-state evidence.
+  The envelope is reused by every arm report and binds the campaign ID,
+  manifest digest, public hypothesis ID and statement, resolved runner SHA-256,
+  Git revision and tree state, OS/build, anonymous hardware class, power and
+  thermal state, and versioned canonical-invocation digest.
+- Eligibility is recomputed from the report and checked against the stored
+  decision on save and load. Missing or forged decisions fail closed. Fixed
+  reasons cover legacy schema, missing or malformed provenance, dirty source,
+  missing runner/environment/invocation, unregistered hypothesis, unsafe
+  privacy, incomplete execution, and pending or invalid review.
+- The comparison control plane now refuses non-decision-grade reports before
+  it creates paired comparison artifacts, freezes validation or regression,
+  consumes holdout evidence, or starts online promotion. Exploration and old
+  reports remain inspectable.
+- Deterministic tests decode report schemas v1 through v6, preserve owner-only
+  storage, distinguish clean/dirty/unregistered/unreviewed states, reject
+  local paths, prove invocation-digest determinism, and reject omitted or
+  forged eligibility decisions.
+- The complete Swift suite passed with 732 tests in 92 suites. The final
+  structural fast proof remains a blocking merge check for pull request 420.
 
 ### Failures and limitations
 
-Pending implementation and proof.
+- A packaged or copied runner that cannot see its source Git checkout records
+  source revision as unavailable. The report remains readable but cannot
+  become decision-grade; no revision is inferred from a guessed build path.
+- Human review remains an accountable interpretation step. Marking a result
+  supported, rejected, or inconclusive cannot erase metric failures, missing
+  provenance, dirty state, or privacy violations.
+- The invocation digest proves equality under
+  `tilde-lab.canonical-invocation.v1`; it intentionally cannot reconstruct raw
+  arguments and therefore cannot expose local paths.
+- F01 proves the evidence boundary, not model quality, campaign crash recovery,
+  retained live utility, or macOS editor compatibility.
 
 ### Decision
 
-Pending implementation and proof.
+Adopt report v6 and require complete, clean, registered, reviewed evidence for
+durable comparisons and protected-phase transitions. Preserve v1-v5 decoding
+for historical inspection only. Keep run provenance immutable when a reviewer
+adds the conclusion.
 
 ### Durable changes
 
-- Learning Ledger entry: pending
-- Regression IDs: pending
-- Implementation pull request: pending
+- Learning Ledger entry: `report-provenance-v6`
+- Regression IDs: `LabReportProvenanceTests`, `LabReportStoreTests`, and fixed
+  `LabEvidenceIneligibilityReason` codes
+- Implementation pull request: 420
 - Rollback: revert the v6 implementation while retaining v1-v5 decoding
 
 ### Follow-up
 
-If supported, proceed to F02 campaign-state reconciliation. Do not unlock Stage
-1 until every Stage 0 exit condition passes.
+Proceed to F02 campaign-state reconciliation as the next foundation item. The
+separately queued Qwen protected-validation run may now use v6 evidence, but do
+not unlock Stage 1 until every Stage 0 exit condition passes.

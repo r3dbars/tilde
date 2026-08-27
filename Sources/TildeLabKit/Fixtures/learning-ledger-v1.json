@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T01:22:54Z",
+  "updatedAt": "2026-08-27T02:12:10Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -127,7 +127,7 @@
       "id": "lab-evidence-coverage-gap",
       "recordedAt": "2026-08-26T20:13:56Z",
       "area": "system",
-      "status": "boundary",
+      "status": "superseded",
       "title": "The Lab has deep Reply evidence but not yet full-system proof",
       "finding": "The local archive contains 598 aggregate-only reports and 1,034,730 scored evaluations with 18 protocol errors, zero timeouts, and no privacy-contract violations. Those persisted runs cover only four Reply suites; there is no saved Interaction, Scene Memory, Personalization, Performance, semantic-shootout, or completed Learning Cycle report yet.",
       "decision": "Treat the million-plus count as depth in one lane, not broad proof of the macOS product, and prioritize the missing evidence lanes before production promotion.",
@@ -869,6 +869,35 @@
       "tags": ["provenance", "reproducibility", "report-schema"]
     },
     {
+      "id": "report-provenance-v6",
+      "recordedAt": "2026-08-27T02:12:10Z",
+      "area": "methodology",
+      "status": "adopted",
+      "title": "Report v6 separates readable history from decision-grade evidence",
+      "finding": "A single privacy-safe run-start envelope can bind source revision and clean state, resolved runner bytes, OS and anonymous hardware class, power and thermal state, a versioned invocation digest, campaign manifest, and registered hypothesis without retaining raw arguments or private content. Persisting and recomputing fixed eligibility reasons keeps v1-v5, dirty, incomplete, unregistered, and unreviewed reports readable while preventing them from creating comparisons or advancing protected phases.",
+      "decision": "Require complete clean reviewed v6 reports for every durable comparison and protected-phase transition. Capture provenance before creating run artifacts, preserve run evidence during later review, and treat unavailable Git or runner identity as honest diagnostic evidence rather than fabricated completeness.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [
+        { "subjectID": "report-schema", "key": "legacy-schemas-decoded", "value": 5, "unit": "schemas" },
+        { "subjectID": "report-schema", "key": "current-schema", "value": 6, "unit": "version" },
+        { "subjectID": "repository-proof", "key": "swift-tests", "value": 732, "unit": "tests" },
+        { "subjectID": "repository-proof", "key": "swift-test-suites", "value": 92, "unit": "suites" }
+      ],
+      "evidence": [
+        { "kind": "pull-request", "id": "420" },
+        { "kind": "documentation", "id": "docs/experiments/F01-report-provenance-v6.md" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabReportProvenance.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabCLI/ResearchCoordinatorSupport.swift" },
+        { "kind": "test", "id": "Tests/TildeLabKitTests/LabReportProvenanceTests.swift" }
+      ],
+      "limitations": [
+        "A packaged or copied runner without an available Git checkout remains readable but cannot claim a verified source revision.",
+        "The review status records accountable human interpretation; it does not make weak metrics or a failed hard gate promotable."
+      ],
+      "tags": ["provenance", "report-schema-v6", "evidence-eligibility", "privacy", "promotion-gate"]
+    },
+    {
       "id": "unverified-model-downloads",
       "recordedAt": "2026-08-26T20:00:00Z",
       "area": "model",
@@ -915,7 +944,7 @@
     {
       "id": "report-provenance-v6",
       "priority": 1,
-      "status": "ready-foundation",
+      "status": "completed-foundation",
       "question": "Can every future result be reproduced from the checked-in record?",
       "hypothesis": "Recording source, runner, environment, hypothesis, and review provenance will make campaign conclusions auditable months later.",
       "nextExperiment": "Add backward-compatible report provenance for Git commit, dirty state, runner hash, OS and hardware class, power state, invocation digest, hypothesis, conclusion, and review status without storing private content.",
@@ -955,7 +984,7 @@
     {
       "id": "qwen-protected-validation",
       "priority": 5,
-      "status": "blocked-on-foundation",
+      "status": "ready-validation",
       "question": "Does God v1 generalize beyond the development speak slice?",
       "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
       "nextExperiment": "After provenance is complete, freeze candidate bytes and configuration, run validation once against the same baseline, and open sealed holdout only if every hard gate passes.",
