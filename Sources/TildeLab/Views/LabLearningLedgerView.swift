@@ -10,6 +10,7 @@ struct LabLearningLedgerView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         header(snapshot)
+                        stagedResearchProgram(snapshot)
                         currentEvidence(snapshot)
                         researchQueue(snapshot)
                         promotionPath(snapshot)
@@ -34,7 +35,7 @@ struct LabLearningLedgerView: View {
                 .font(.largeTitle.bold())
             Text(snapshot.mission)
                 .font(.title3)
-            Text("\(snapshot.currentLearnings.count) current learnings · \(snapshot.archivedLearnings.count) archived · \(snapshot.researchQueue.count) queued experiments")
+            Text("\(snapshot.researchProgram.count) research stages · \(registeredHypothesisCount(snapshot)) hypotheses · \(snapshot.researchQueue.count) executable next steps")
                 .foregroundStyle(.secondary)
             Label(
                 snapshot.privacy.safeToCheckIn
@@ -44,6 +45,54 @@ struct LabLearningLedgerView: View {
             )
             .font(.caption)
             .foregroundStyle(snapshot.privacy.safeToCheckIn ? .green : .red)
+        }
+    }
+
+    private func stagedResearchProgram(_ snapshot: LabLearningLedgerSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(
+                "Research roadmap",
+                subtitle: "One active stage at a time; later bets stay locked until the current exit gate passes"
+            )
+            ForEach(snapshot.researchProgram.sorted(by: { $0.order < $1.order })) { stage in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("STAGE \(stage.order)")
+                            .font(.caption2.bold().monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Text(stage.status.title.uppercased())
+                            .font(.caption2.bold())
+                            .foregroundStyle(researchStageColor(stage.status))
+                        Spacer()
+                        Image(systemName: researchStageSymbol(stage.status))
+                            .foregroundStyle(researchStageColor(stage.status))
+                    }
+                    Text(stage.title)
+                        .font(.headline)
+                    Text(stage.objective)
+                        .font(.callout)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(stage.hypotheses) { hypothesis in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(hypothesis.id)
+                                    .font(.caption.bold().monospaced())
+                                    .foregroundStyle(researchStageColor(stage.status))
+                                    .frame(width: 30, alignment: .leading)
+                                Text(hypothesis.title)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+
+                    Label("Exit gate: \(stage.exitGate)", systemImage: "flag.checkered")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(14)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                .opacity(stage.status == .locked ? 0.72 : 1)
+            }
         }
     }
 
@@ -159,5 +208,28 @@ struct LabLearningLedgerView: View {
         case .operational: .purple
         case .boundary: .indigo
         }
+    }
+
+    private func researchStageColor(_ status: LabResearchProgramStageStatus) -> Color {
+        switch status {
+        case .active: .orange
+        case .locked: .secondary
+        case .completed: .green
+        }
+    }
+
+    private func researchStageSymbol(_ status: LabResearchProgramStageStatus) -> String {
+        switch status {
+        case .active: "arrow.right.circle.fill"
+        case .locked: "lock.fill"
+        case .completed: "checkmark.circle.fill"
+        }
+    }
+
+    private func registeredHypothesisCount(_ snapshot: LabLearningLedgerSnapshot) -> Int {
+        snapshot.researchProgram
+            .flatMap(\.hypotheses)
+            .filter { $0.id.hasPrefix("H") }
+            .count
     }
 }

@@ -10,13 +10,26 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 33)
-        #expect(snapshot.currentLearnings.count == 27)
+        #expect(snapshot.entries.count == 34)
+        #expect(snapshot.currentLearnings.count == 28)
         #expect(snapshot.archivedLearnings.count == 6)
-        #expect(snapshot.researchQueue.count == 10)
+        #expect(snapshot.researchProgram.count == 6)
+        #expect(snapshot.researchProgram.map(\.order).sorted() == Array(0...5))
+        #expect(snapshot.researchProgram.first?.status == .active)
+        #expect(snapshot.researchProgram.dropFirst().allSatisfy { $0.status == .locked })
+        #expect(
+            snapshot.researchProgram
+                .flatMap(\.hypotheses)
+                .map(\.id)
+                .filter { $0.hasPrefix("H") }
+                .sorted()
+                == (1...18).map { String(format: "H%02d", $0) }
+        )
+        #expect(snapshot.researchQueue.count == 12)
         #expect(snapshot.promotionPath.map(\.order).sorted() == Array(1...7))
-        #expect(snapshot.researchQueue.min(by: { $0.priority < $1.priority })?.id == "qwen-live-meaningful-sample")
+        #expect(snapshot.researchQueue.min(by: { $0.priority < $1.priority })?.id == "report-provenance-v5")
         #expect(snapshot.entries.contains { $0.id == "qwen-9b-god-v1" && $0.status == .adopted })
+        #expect(snapshot.entries.contains { $0.id == "staged-research-program-v1" && $0.status == .adopted })
         #expect(snapshot.entries.contains { $0.id == "protected-learning-cycle-stopped" && $0.status == .incomplete })
         #expect(snapshot.entries.contains { $0.id == "qwen-9b-scoring-confounds" && $0.status == .rejected })
     }
@@ -31,7 +44,35 @@ struct LabLearningLedgerTests {
         #expect(output.contains("finding:"))
         #expect(output.contains("decision:"))
         #expect(output.contains("limitations:"))
-        #expect(output.contains("Does Qwen 9B God v1 remain fast and useful"))
+        #expect(output.contains("[Active] Stage 0: Make the evidence loop trustworthy"))
+        #expect(output.contains("hypotheses: H16, H17, H18"))
+        #expect(output.contains("Can every future result be reproduced"))
+    }
+
+    @Test("Research stages cannot overlap or repeat hypothesis IDs")
+    func rejectsInvalidResearchProgram() throws {
+        let data = try bundledData()
+        var overlappingObject = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var overlappingProgram = try #require(overlappingObject["researchProgram"] as? [[String: Any]])
+        overlappingProgram[1]["status"] = "active"
+        overlappingObject["researchProgram"] = overlappingProgram
+        let overlapping = try JSONSerialization.data(withJSONObject: overlappingObject)
+        #expect(throws: LabLearningLedgerError.invalidResearchProgram) {
+            try LabLearningLedgerCatalog.decodeAndValidate(overlapping)
+        }
+
+        var duplicateObject = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var duplicateProgram = try #require(duplicateObject["researchProgram"] as? [[String: Any]])
+        var secondStage = duplicateProgram[1]
+        var secondStageHypotheses = try #require(secondStage["hypotheses"] as? [[String: Any]])
+        secondStageHypotheses[0]["id"] = "F01"
+        secondStage["hypotheses"] = secondStageHypotheses
+        duplicateProgram[1] = secondStage
+        duplicateObject["researchProgram"] = duplicateProgram
+        let duplicate = try JSONSerialization.data(withJSONObject: duplicateObject)
+        #expect(throws: LabLearningLedgerError.duplicateResearchHypothesisID("F01")) {
+            try LabLearningLedgerCatalog.decodeAndValidate(duplicate)
+        }
     }
 
     @Test("Raw-data keys are rejected even when Codable would ignore them")

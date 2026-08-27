@@ -77,6 +77,35 @@ public struct LabLearningResearchQuestion: Codable, Equatable, Identifiable, Sen
     public let dependencies: [String]
 }
 
+public enum LabResearchProgramStageStatus: String, Codable, CaseIterable, Sendable {
+    case active
+    case locked
+    case completed
+
+    public var title: String {
+        switch self {
+        case .active: "Active"
+        case .locked: "Locked"
+        case .completed: "Completed"
+        }
+    }
+}
+
+public struct LabResearchProgramHypothesis: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let title: String
+}
+
+public struct LabResearchProgramStage: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let order: Int
+    public let status: LabResearchProgramStageStatus
+    public let title: String
+    public let objective: String
+    public let exitGate: String
+    public let hypotheses: [LabResearchProgramHypothesis]
+}
+
 public struct LabLearningPromotionStage: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let order: Int
@@ -90,6 +119,7 @@ public struct LabLearningLedgerSnapshot: Codable, Equatable, Sendable {
     public let mission: String
     public let privacy: LabLearningLedgerPrivacy
     public let operatingPrinciples: [String]
+    public let researchProgram: [LabResearchProgramStage]
     public let entries: [LabLearningLedgerEntry]
     public let researchQueue: [LabLearningResearchQuestion]
     public let promotionPath: [LabLearningPromotionStage]
@@ -108,8 +138,10 @@ public enum LabLearningLedgerError: Error, Equatable, LocalizedError {
     case unsafePrivacyBoundary
     case duplicateEntryID(String)
     case duplicateResearchQuestionID(String)
+    case duplicateResearchHypothesisID(String)
     case invalidEntry(String)
     case invalidResearchQuestion(String)
+    case invalidResearchProgram
     case invalidPromotionPath
     case unresolvedBenchmarkReference(String)
     case forbiddenKey(String)
@@ -121,8 +153,10 @@ public enum LabLearningLedgerError: Error, Equatable, LocalizedError {
         case .unsafePrivacyBoundary: "The learning ledger is not aggregate-only."
         case let .duplicateEntryID(id): "The learning ledger repeats entry ID \(id)."
         case let .duplicateResearchQuestionID(id): "The learning ledger repeats research question ID \(id)."
+        case let .duplicateResearchHypothesisID(id): "The learning ledger repeats research hypothesis ID \(id)."
         case let .invalidEntry(id): "Learning ledger entry \(id) is incomplete."
         case let .invalidResearchQuestion(id): "Learning question \(id) is incomplete."
+        case .invalidResearchProgram: "The staged research program is invalid."
         case .invalidPromotionPath: "The learning ledger promotion path is invalid."
         case let .unresolvedBenchmarkReference(id): "Learning ledger benchmark reference \(id) does not resolve."
         case let .forbiddenKey(key): "The learning ledger contains forbidden raw-data key \(key)."
@@ -174,6 +208,44 @@ public enum LabLearningLedgerCatalog {
               !snapshot.operatingPrinciples.isEmpty,
               snapshot.operatingPrinciples.allSatisfy({ !$0.trimmed.isEmpty }) else {
             throw LabLearningLedgerError.invalidEntry("mission")
+        }
+
+        let researchStages = snapshot.researchProgram.sorted { $0.order < $1.order }
+        guard !researchStages.isEmpty,
+              Set(researchStages.map(\.id)).count == researchStages.count,
+              researchStages.map(\.order) == Array(0..<researchStages.count),
+              researchStages.filter({ $0.status == .active }).count <= 1 else {
+            throw LabLearningLedgerError.invalidResearchProgram
+        }
+        var hypothesisIDs = Set<String>()
+        for stage in researchStages {
+            guard !stage.id.trimmed.isEmpty,
+                  !stage.title.trimmed.isEmpty,
+                  !stage.objective.trimmed.isEmpty,
+                  !stage.exitGate.trimmed.isEmpty,
+                  !stage.hypotheses.isEmpty else {
+                throw LabLearningLedgerError.invalidResearchProgram
+            }
+            for hypothesis in stage.hypotheses {
+                guard hypothesisIDs.insert(hypothesis.id).inserted else {
+                    throw LabLearningLedgerError.duplicateResearchHypothesisID(hypothesis.id)
+                }
+                guard !hypothesis.id.trimmed.isEmpty, !hypothesis.title.trimmed.isEmpty else {
+                    throw LabLearningLedgerError.invalidResearchProgram
+                }
+            }
+        }
+        let stageStatuses = researchStages.map(\.status)
+        if let activeIndex = stageStatuses.firstIndex(of: .active) {
+            for (index, status) in stageStatuses.enumerated() {
+                guard index == activeIndex
+                    || (index < activeIndex && status == .completed)
+                    || (index > activeIndex && status == .locked) else {
+                    throw LabLearningLedgerError.invalidResearchProgram
+                }
+            }
+        } else if !stageStatuses.allSatisfy({ $0 == .completed }) {
+            throw LabLearningLedgerError.invalidResearchProgram
         }
 
         var entryIDs = Set<String>()
@@ -272,8 +344,14 @@ public enum LabLearningLedgerRenderer {
             "  mission: \(snapshot.mission)",
             "  updated: \(snapshot.updatedAt.formatted(.iso8601))",
             "  evidence: \(snapshot.currentLearnings.count) current, \(snapshot.archivedLearnings.count) archived",
-            "  current learnings:",
+            "  staged research program:",
         ]
+        for stage in snapshot.researchProgram.sorted(by: { $0.order < $1.order }) {
+            lines.append("    [\(stage.status.title)] Stage \(stage.order): \(stage.title)")
+            lines.append("      objective: \(stage.objective)")
+            lines.append("      hypotheses: \(stage.hypotheses.map(\.id).joined(separator: ", "))")
+        }
+        lines.append("  current learnings:")
         for entry in snapshot.currentLearnings.sorted(by: newestFirst) {
             lines.append("    [\(entry.status.title)] \(entry.title)")
             lines.append("      finding: \(entry.finding)")

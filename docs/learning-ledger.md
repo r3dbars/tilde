@@ -16,11 +16,15 @@ swift run tilde-lab-runner --learning-ledger
 swift run tilde-lab-runner --learning-ledger --json
 ```
 
-The ledger contains aggregate findings, decisions, limitations, evidence IDs,
-the promotion path, and the prioritized research queue. It contains no scenario
-text, prompt text, model output, personal writing, private corpus material, or
-local file paths. Validation rejects those raw-data keys and paths even though
-Swift's normal decoder would ignore unknown JSON fields.
+The ledger contains the staged research program, aggregate findings, decisions,
+limitations, evidence IDs, the promotion path, and the prioritized research
+queue. Tilde Lab shows the active stage and every locked future hypothesis with
+its exit gate before the executable queue. It contains no scenario text, prompt
+text, model output, personal writing, private corpus material, or local file
+paths. Validation rejects those raw-data keys and paths even though Swift's
+normal decoder would ignore unknown JSON fields. It also rejects overlapping
+active stages and duplicate hypothesis IDs so the visible roadmap cannot drift
+into several simultaneous programs.
 
 ## What the recent work established
 
@@ -136,16 +140,26 @@ Every proposed change moves through:
 7. explicit, reproducible, rollback-ready production approval.
 
 The prioritized next experiments live in the JSON ledger rather than in a
-second drifting checklist. The current first three are meaningful Qwen live
-evidence, protected Qwen validation, and a permanent sanitized regression
-library for every scoring loophole and observed failure.
+second drifting checklist. The [research roadmap](research-roadmap.md) explains
+the longer dependency graph and stage gates, but it does not make a later theory
+eligible to run. The active JSON queue begins with evidence provenance,
+truthful campaign state, retained-outcome instrumentation, and permanent
+regressions. Only after those foundations close does it finish the bounded Qwen
+question and start the first live policy experiments.
+
+Each decision-grade experiment also gets a privacy-safe, pre-registered public
+record using the format in [`docs/experiments`](experiments/README.md). Local
+campaign databases, candidate caches, Personal History, online events, prompts,
+outputs, and paths never enter those records.
 
 ## Updating the ledger
 
 Add a ledger entry only when there is a decision or reusable lesson. Include the
 protocol, aggregate metrics, evidence IDs, limitations, and what changed as a
 result. Do not copy local report dumps into Git. Update the research queue and
-promotion path only when the evidence changes the order or requirement.
+promotion path only when the evidence changes the order or requirement. Mark a
+research stage complete and unlock its successor only when the documented exit
+gate has passed; the bundled validator permits at most one active stage.
 
 Then run:
 
