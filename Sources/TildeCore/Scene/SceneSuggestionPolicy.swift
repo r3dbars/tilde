@@ -12,10 +12,12 @@ public enum SceneSuggestionPolicy {
         case noIncomingTurn = "no-incoming-turn"
         case resolvedConversation = "resolved-conversation"
         case ambiguousChoice = "ambiguous-choice"
+        case nonActionableScene = "non-actionable-scene"
     }
 
     public static func suppressionReason(
-        scene: ScreenScene.Scene?
+        scene: ScreenScene.Scene?,
+        textBeforeCursor: String? = nil
     ) -> SuppressionReason? {
         guard let scene else { return nil }
         let visibleText = scene.conversationTurns.map(\.text) + scene.referenceSnippets
@@ -40,6 +42,12 @@ public enum SceneSuggestionPolicy {
         }
         if !hasEarlierSelfTurn, isAmbiguousChoice(incoming) {
             return .ambiguousChoice
+        }
+        if !hasEarlierSelfTurn,
+           let textBeforeCursor,
+           isNonActionableDeclarative(incoming),
+           !hasReplyCue(textBeforeCursor) {
+            return .nonActionableScene
         }
         return nil
     }
@@ -68,6 +76,17 @@ public enum SceneSuggestionPolicy {
 
     private static func normalizedWords(_ text: String) -> [String] {
         text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+    }
+
+    private static func isNonActionableDeclarative(_ text: String) -> Bool {
+        guard !text.contains("?") else { return false }
+        let words = Set(normalizedWords(text))
+        return words.isDisjoint(with: requestWords)
+    }
+
+    private static func hasReplyCue(_ text: String) -> Bool {
+        let phrase = normalizedWords(text).joined(separator: " ")
+        return replyPrefixes.contains { phrase == $0 || phrase.hasPrefix($0 + " ") }
     }
 
     private static let instructionPhrases = [
@@ -99,5 +118,15 @@ public enum SceneSuggestionPolicy {
 
     private static let preferenceWords: Set<String> = [
         "better", "choose", "pick", "prefer", "which",
+    ]
+
+    private static let requestWords: Set<String> = [
+        "ask", "call", "confirm", "could", "need", "please", "remember",
+        "review", "send", "share", "tell", "update", "would",
+    ]
+
+    private static let replyPrefixes = [
+        "got it", "i can", "i will", "no problem", "no worries", "okay",
+        "sorry", "sounds good", "thank you", "thanks", "unfortunately", "yes",
     ]
 }
