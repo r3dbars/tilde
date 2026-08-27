@@ -144,11 +144,12 @@ final class TildeSettingsViewModel: ObservableObject {
             guard let self else { return }
             let summary = await personalHistory.summary()
             guard !Task.isCancelled else { return }
-            if let summary, summary.approximateBytes > 0 {
+            let bytes = (summary?.approximateBytes ?? 0) + TildeLocalOutcomeStores.approximateBytes()
+            if bytes > 0 {
                 let formatter = ByteCountFormatter()
                 formatter.allowedUnits = [.useKB, .useMB, .useGB]
                 formatter.countStyle = .file
-                self.learningDataSize = formatter.string(fromByteCount: summary.approximateBytes)
+                self.learningDataSize = formatter.string(fromByteCount: bytes)
             } else {
                 self.learningDataSize = "No learning data"
             }
@@ -296,6 +297,7 @@ final class TildeSettingsViewModel: ObservableObject {
             guard let self else { return }
             do {
                 try await personalHistory.deleteAll()
+                TildeLocalOutcomeStores.deleteAll()
                 self.learningDataSize = "No learning data"
                 self.personalizationEnabled = false
                 self.message = "Learning data was deleted."

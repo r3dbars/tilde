@@ -1,3 +1,5 @@
+import Foundation
+
 /// A text-free count of how many accepted suggestion characters were still
 /// present at one horizon, or an explicit reason that count was not observed.
 ///
@@ -68,14 +70,85 @@ public enum SettledVisibility {
     }
 }
 
-/// Typed-through is a local, text-free judgment: the ghost settled, the writer
-/// kept typing, and they did not Tab or Escape. The event stores only that
-/// outcome. It must not store the ghost, the keys, or a string match.
+/// Typed-through is a local, text-free judgment at opportunity close:
+/// the ghost settled long enough to be a read, the writer typed at least
+/// one key, and they did not Tab or Escape.
+///
+/// Matching the ghost is not required and must not be stored. A flicker
+/// shorter than `SettledVisibility.minimumReadMilliseconds` that is then
+/// typed through is ignored, not typed-through.
 public enum TypedThroughRule {
     public static func isEligible(
         displayed: Bool,
         settledVisibleMilliseconds: Int?
     ) -> Bool {
         displayed && SettledVisibility.countsAsRead(settledVisibleMilliseconds)
+    }
+
+    /// Close-time classification. Accept and dismiss win over type-through.
+    public static func isTypedThrough(
+        displayed: Bool,
+        settledVisibleMilliseconds: Int?,
+        typedAfterShow: Bool,
+        accepted: Bool,
+        dismissed: Bool
+    ) -> Bool {
+        !accepted && !dismissed && typedAfterShow
+            && isEligible(
+                displayed: displayed,
+                settledVisibleMilliseconds: settledVisibleMilliseconds
+            )
+    }
+}
+
+/// In-memory count of how much of an accepted span is still in the field.
+///
+/// `accepted` and `window` stay in RAM for the watch only. They are never
+/// part of the event. A missing window is a missingness reason, never zero.
+public enum RetainedSpanWatch {
+    public static let fiveSecondHorizon: TimeInterval = 5
+    public static let thirtySecondHorizon: TimeInterval = 30
+    /// Privacy-safe idle close: the writer stopped, so the segment ended.
+    public static let idleSegmentSeconds: TimeInterval = 60
+    public static let maximumPendingWatches = 32
+
+    /// Longest prefix of `accepted` that still occurs as a contiguous
+    /// substring in `window`. Edits that break the prefix count as replacement
+    /// from that point. The window is typically context-before-caret.
+    public static func retainedCharacters(accepted: String, window: String) -> Int {
+        guard !accepted.isEmpty else { return 0 }
+        var kept = 0
+        var prefix = ""
+        prefix.reserveCapacity(accepted.count)
+        for character in accepted {
+            prefix.append(character)
+            if window.contains(prefix) {
+                kept += 1
+            } else {
+                break
+            }
+        }
+        return kept
+    }
+
+    public static func observation(
+        accepted: String,
+        window: String?
+    ) throws -> RetainedCharacterObservation {
+        guard let window else {
+            return RetainedCharacterObservation(missingness: .observerStopped)
+        }
+        return try RetainedCharacterObservation(
+            retainedCharacters: retainedCharacters(accepted: accepted, window: window)
+        ).validated()
+    }
+
+    public static func closedEarlyIfStillWaiting(
+        _ observation: RetainedCharacterObservation
+    ) -> RetainedCharacterObservation {
+        if observation.missingness == .notYetObserved {
+            return RetainedCharacterObservation(missingness: .segmentClosedEarly)
+        }
+        return observation
     }
 }

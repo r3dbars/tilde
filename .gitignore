@@ -14,6 +14,10 @@ __pycache__/
 # Local model/data files stay off git.
 /Models/
 /Data/
+Outcome Ledger/
+Word Diary/
+**/events.jsonl
+**/diary.v1.jsonl
 *.gguf
 *.sqlite
 *.sqlite-shm

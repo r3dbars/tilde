@@ -128,7 +128,7 @@ struct LocalDataView: View {
             Button("Delete", role: .destructive) { model.deleteLearningData() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes your encrypted writing history and learning signals. Tilde and its model are preserved.")
+            Text("This removes your encrypted writing history, the local word diary, and learning signals. Tilde and its model are preserved.")
         }
         .confirmationDialog(
             "Delete all evaluation data?",

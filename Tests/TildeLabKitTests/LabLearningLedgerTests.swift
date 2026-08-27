@@ -10,8 +10,8 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 39)
-        #expect(snapshot.currentLearnings.count == 32)
+        #expect(snapshot.entries.count == 40)
+        #expect(snapshot.currentLearnings.count == 33)
         #expect(snapshot.archivedLearnings.count == 7)
         #expect(snapshot.researchProgram.count == 6)
         #expect(snapshot.researchProgram.map(\.order).sorted() == Array(0...5))
@@ -53,6 +53,11 @@ struct LabLearningLedgerTests {
         #expect(
             snapshot.entries.contains {
                 $0.id == "cloud-protocol-mac-live-split" && $0.status == .adopted
+            }
+        )
+        #expect(
+            snapshot.entries.contains {
+                $0.id == "score-counts-diary-words" && $0.status == .adopted
             }
         )
     }

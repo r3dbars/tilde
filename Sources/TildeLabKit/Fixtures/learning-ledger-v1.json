@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T22:22:00Z",
+  "updatedAt": "2026-08-27T23:00:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -104,6 +104,26 @@
     }
   ],
   "entries": [
+    {
+      "id": "score-counts-diary-words",
+      "recordedAt": "2026-08-27T23:00:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "Lab scores counts; words stay in a local diary",
+      "finding": "A public instrument can tell Tab-and-keep from Tab-and-rewrite from retained-character counts. The accepted span the owner wants to reread cannot live on that event, or Lab ingest becomes a writing store.",
+      "decision": "F03 and Tilde Lab store text-free counts only. A second owner-only diary on this Mac may hold the accepted span and keep-versus-edit. Delete Personalization Data wipes both. Lab ingest must reject acceptedText. Do not add a second Lab telemetry format.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" },
+        { "kind": "documentation", "id": "docs/research/lab-log.md" }
+      ],
+      "limitations": [
+        "The diary is local owner-only JSONL, not the encrypted Personal History store. Ordinary typing has not yet produced a live count file on this Mac."
+      ],
+      "tags": ["process", "f03", "privacy", "diary"]
+    },
     {
       "id": "cloud-protocol-mac-live-split",
       "recordedAt": "2026-08-27T22:22:00Z",

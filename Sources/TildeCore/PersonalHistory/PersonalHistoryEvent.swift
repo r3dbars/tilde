@@ -8,6 +8,9 @@ public enum PersonalHistorySettingsContract {
     public static let excludedAppsKey = "PersonalHistoryExcludedApps"
     public static let historyIdentifierKey = "PersonalHistoryIdentifier"
     public static let consentIdentifierKey = "PersonalHistoryConsentIdentifier"
+    /// Bumped by Delete Personalization Data so the IME drops in-flight watches
+    /// and will not recreate the count file or diary after a wipe.
+    public static let outcomeLedgerGenerationKey = "OutcomeLedgerGeneration"
 }
 
 public enum PersonalHistoryEventSource: String, Codable, Equatable, Sendable {

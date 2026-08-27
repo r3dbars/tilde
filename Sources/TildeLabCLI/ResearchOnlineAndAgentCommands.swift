@@ -93,27 +93,39 @@ extension ResearchCoordinator {
     }
 
     static func ingestEvents(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "input", "database"])
+        try arguments.assertAllowed(
+            options: ["campaign", "input", "database"],
+            flags: ["instrument"]
+        )
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "ingest-events"))
         }
-        let campaign = try campaignFromOption(arguments)
-        let input = URL(fileURLWithPath: try arguments.requiredValue("input")
-            .expandedResearchPath).standardizedFileURL
+        let database = try researchDatabase(arguments)
+        let input: URL
+        if arguments.hasFlag("instrument") {
+            if arguments.value("campaign") != nil {
+                throw ResearchCLIError.usage(help(for: "ingest-events"))
+            }
+            if let path = arguments.value("input") {
+                input = URL(fileURLWithPath: path.expandedResearchPath).standardizedFileURL
+            } else {
+                input = LabInstrumentCampaign.defaultEventURL()
+            }
+        } else {
+            _ = try campaignFromOption(arguments)
+            input = URL(fileURLWithPath: try arguments.requiredValue("input")
+                .expandedResearchPath).standardizedFileURL
+        }
         let values = try input.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         guard values.isRegularFile == true, (values.fileSize ?? 0) <= 64 * 1_024 * 1_024 else {
             throw ResearchCLIError.invalidValue("--input")
-        }
-        let database = try researchDatabase(arguments)
-        guard let plan = try await database.onlinePlan(campaignID: campaign.id) else {
-            throw ResearchCLIError.missingArtifact("online plan")
         }
         let bytes = try Data(contentsOf: input, options: [.mappedIfSafe])
         let lines = bytes.split(separator: 0x0A, omittingEmptySubsequences: true)
         guard lines.count <= 1_000_000 else { throw ResearchCLIError.invalidValue("--input") }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        var accepted = 0
+        var decoded: [LabOnlineExperimentEvent] = []
         for line in lines {
             guard line.count <= 64 * 1_024 else { throw ResearchCLIError.invalidValue("event line") }
             let data = Data(line)
@@ -122,7 +134,23 @@ extension ResearchCoordinator {
             } catch LabOnlineExperimentError.forbiddenKey(let key) {
                 throw ResearchCLIError.rawTelemetryKey(key)
             }
-            let event = try decoder.decode(LabOnlineExperimentEvent.self, from: data)
+            decoded.append(try decoder.decode(LabOnlineExperimentEvent.self, from: data))
+        }
+        let plan: LabOnlineExperimentPlan
+        if arguments.hasFlag("instrument") {
+            plan = try await LabInstrumentCampaign.ensureReady(
+                database: database,
+                covering: decoded.map(\.occurredAt)
+            )
+        } else {
+            let campaign = try campaignFromOption(arguments)
+            guard let existing = try await database.onlinePlan(campaignID: campaign.id) else {
+                throw ResearchCLIError.missingArtifact("online plan")
+            }
+            plan = existing
+        }
+        var accepted = 0
+        for event in decoded {
             try await database.recordOnlineEvent(event, plan: plan)
             accepted += 1
         }
@@ -130,12 +158,12 @@ extension ResearchCoordinator {
     }
 
     static func onlineReport(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "database"], flags: ["json"])
+        try arguments.assertAllowed(options: ["campaign", "database"], flags: ["json", "instrument"])
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "online-report"))
         }
-        let campaign = try campaignFromOption(arguments)
-        let events = try await researchDatabase(arguments).onlineEvents(campaignID: campaign.id)
+        let campaignID = try onlineCampaignID(arguments)
+        let events = try await researchDatabase(arguments).onlineEvents(campaignID: campaignID)
         guard !events.isEmpty else { throw ResearchCLIError.missingArtifact("online events") }
         let report = try LabOnlineExperimentAnalyzer.analyze(events)
         if arguments.hasFlag("json") {
@@ -242,15 +270,30 @@ extension ResearchCoordinator {
     }
 
     static func deleteTelemetry(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "database"])
+        try arguments.assertAllowed(options: ["campaign", "database"], flags: ["instrument"])
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "delete-telemetry"))
         }
-        let campaign = try campaignFromOption(arguments)
+        let campaignID = try onlineCampaignID(arguments)
         let database = try researchDatabase(arguments)
-        let count = try await database.onlineEvents(campaignID: campaign.id).count
-        try await database.deleteOnlineEvents(campaignID: campaign.id)
+        let count = try await database.onlineEvents(campaignID: campaignID).count
+        try await database.deleteOnlineEvents(campaignID: campaignID)
+        if arguments.hasFlag("instrument") {
+            // Count file only. The word diary is owner data; Delete
+            // Personalization Data is the covenant wipe for that file.
+            try? FileManager.default.removeItem(at: LabInstrumentCampaign.defaultEventURL())
+        }
         ResearchConsole.line("Deleted \(count) online events. This deletion is not recoverable from Tilde Lab.")
+    }
+
+    private static func onlineCampaignID(_ arguments: CLIArguments) throws -> UUID {
+        if arguments.hasFlag("instrument") {
+            if arguments.value("campaign") != nil {
+                throw ResearchCLIError.usage("Use --instrument or --campaign, not both.")
+            }
+            return LabInstrumentCampaign.id
+        }
+        return try campaignFromOption(arguments).id
     }
 
     static func clearCache(_ arguments: CLIArguments) async throws {
