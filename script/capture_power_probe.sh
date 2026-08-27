@@ -53,7 +53,7 @@ RELEASE_PROOF_PORT=17873
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/Tilde/diagnostics.log}"
 # NOT the app's own bundle id: TildeSettings reads/writes ScreenMemoryEnabled
 # through the app-group suite shared with the keyboard extension
-# (PersonalHistorySettingsContract.keyboardSuiteName in AutocompleteLabCore),
+# (PersonalHistorySettingsContract.keyboardSuiteName in TildeCore),
 # so that has to be the domain this script mutates too.
 DEFAULTS_DOMAIN="bar.r3d.inputmethod.InlineGhost"
 DEFAULTS_KEY="ScreenMemoryEnabled"

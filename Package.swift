@@ -8,14 +8,17 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
+        // Tilde: the shipped product.
         .executable(
             name: "Tilde",
-            targets: ["AutocompleteLabApp"]
+            targets: ["TildeApp"]
         ),
         .executable(
             name: "InlineGhostIME",
             targets: ["InlineGhostIME"]
         ),
+        // Tilde Lab: development-only experiment tools. None of these targets
+        // are dependencies of TildeApp or InlineGhostIME.
         .executable(
             name: "TildeLab",
             targets: ["TildeLab"]
@@ -25,30 +28,33 @@ let package = Package(
             targets: ["TildeLabRunner"]
         ),
         .executable(
-            name: "tilde-research",
-            targets: ["TildeResearchCLI"]
+            name: "tilde-lab",
+            targets: ["TildeLabCLI"]
         )
     ],
     targets: [
-        .systemLibrary(name: "CSQLite"),
+        // Shared production policy. Tilde Lab may test it, but production
+        // targets never depend on a Tilde Lab target.
         .target(
-            name: "AutocompleteLabCore"
+            name: "TildeCore"
         ),
+        // Tilde Lab's SQLite adapter is development-only.
+        .systemLibrary(name: "CSQLite"),
         .executableTarget(
             name: "InlineGhostIME",
-            dependencies: ["AutocompleteLabCore"],
+            dependencies: ["TildeCore"],
             exclude: ["Info.plist"],
             // IMKit's un-annotated types fight Swift 6 strict concurrency; the IME
             // stays in Swift 5 mode until the controller is modernized.
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "AutocompleteLabApp",
-            dependencies: ["AutocompleteLabCore"]
+            name: "TildeApp",
+            dependencies: ["TildeCore"]
         ),
         .target(
             name: "TildeLabKit",
-            dependencies: ["AutocompleteLabCore", "CSQLite"],
+            dependencies: ["TildeCore", "CSQLite"],
             resources: [.process("Fixtures")]
         ),
         .executableTarget(
@@ -60,20 +66,20 @@ let package = Package(
             dependencies: ["TildeLabKit"]
         ),
         .executableTarget(
-            name: "TildeResearchCLI",
+            name: "TildeLabCLI",
             dependencies: ["TildeLabKit"]
         ),
         .testTarget(
-            name: "AutocompleteLabCoreTests",
-            dependencies: ["AutocompleteLabCore"]
+            name: "TildeCoreTests",
+            dependencies: ["TildeCore"]
         ),
         .testTarget(
-            name: "AutocompleteLabAppTests",
-            dependencies: ["AutocompleteLabApp", "InlineGhostIME"]
+            name: "TildeAppTests",
+            dependencies: ["TildeApp", "InlineGhostIME"]
         ),
         .testTarget(
             name: "TildeLabKitTests",
-            dependencies: ["TildeLabKit", "AutocompleteLabCore"]
+            dependencies: ["TildeLabKit", "TildeCore"]
         )
     ]
 )

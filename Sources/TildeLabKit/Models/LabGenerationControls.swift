@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import Foundation
 
 public protocol LabNamedOption: RawRepresentable, Codable, CaseIterable, Hashable, Identifiable, Sendable

@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import Foundation
 
 public enum LabRiskCoverageError: Error, LocalizedError, Equatable, Sendable {

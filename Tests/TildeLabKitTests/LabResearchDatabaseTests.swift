@@ -219,7 +219,7 @@ private final class Fixture: @unchecked Sendable {
 
     init() async throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tilde-research-db-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("tilde-lab-db-\(UUID().uuidString)", isDirectory: true)
         url = root.appendingPathComponent("research.sqlite3")
         database = try LabResearchDatabase(fileURL: url)
         campaign = LabResearchCampaignRecord(

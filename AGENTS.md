@@ -62,16 +62,23 @@ resolve URL; it must never include user text or screen content.
 
 ## Architecture
 
-- `Sources/AutocompleteLabCore` is pure deterministic Swift. Suggestion
+- The repository has two product concepts only: Tilde is the shipped input
+  method; Tilde Lab is the development-only system used to test and improve it.
+  Do not introduce a third Tilde testing brand. Internal Lab executables and
+  libraries remain Tilde Lab components.
+- `Sources/TildeCore` is pure deterministic Swift. Suggestion
   decisions belong here with focused tests. It has no AppKit, IMKit, process,
   socket, or file-system work.
 - `Sources/InlineGhostIME` owns keystrokes, bounded document context, marked
   text, and acceptance. Keep it responsive and thin.
-- `Sources/AutocompleteLabApp` owns the local Unix socket, signed llama helper,
+- `Sources/TildeApp` owns the local Unix socket, signed llama helper,
   external model download/verification/lifecycle, input-method installation,
   menu, and redacted diagnostics. It is the only owner of persistent Personal
   History; ordinary completion requests and unaccepted model responses remain
   memory-only.
+- `Sources/TildeLabKit`, `Sources/TildeLab`, `Sources/TildeLabCLI`, and
+  `Sources/TildeLabRunner` are development-only. They may depend on
+  `TildeCore`; `TildeApp` and `InlineGhostIME` must never depend on them.
 - Prefer deleting or merging policy over adding another gate. Independent
   thresholds compound into a silent product.
 - Add or update tests with every behavior change.
