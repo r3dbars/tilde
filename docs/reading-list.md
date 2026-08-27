@@ -49,6 +49,44 @@ the digest isn't enough.
   AAC") — decades of measurement of exactly our metric; key finding: reading
   a suggestion has a cognitive cost that can exceed the typing it saves. The
   research ancestor of "suggestions must help more than they interrupt."
+- [Are Word Suggestions Beneficial?](https://doi.org/10.1145/3772716)
+  (TOCHI 2025) — suggestions help speed only when they are highly accurate,
+  and fast typists mostly ignore them. Inline ghosts save a bit more than a
+  suggestion bar and also distract more. Use this when designing H01 length
+  and H04 cooldown; do not assume any ghost is a gift.
+- [Predictive Text Encourages Predictable Writing](https://www.eecs.harvard.edu/~kgajos/papers/2020/arnold20predictcive.shtml)
+  (Arnold, Chauncey & Gajos) — stronger prediction makes writing more
+  generic. A Tilde win that flattens the owner's voice is a product failure
+  even if keystrokes fall. Keep authorial-agency checks beside RNKS.
+
+## Intervention and display policy
+
+These are the papers the staged roadmap already depends on. They argue that
+generation is cheap compared with the decision to show, hide, or wait.
+
+- [When to Show a Suggestion?](https://arxiv.org/abs/2306.04930)
+  (Mozannar et al., AAAI 2024) — Copilot telemetry from 535 programmers:
+  hide likely rejects, skip some generation entirely, and do not train the
+  generator on Tab presses. This is the template for H06/H07 after F03
+  exists. Digest: `docs/research/when-to-show-suggestion-2023.md`.
+- [Sequential Decision-Making for Inline Text Autocomplete](https://arxiv.org/abs/2403.15502)
+  (Chitnis, Yang & Geramifard, 2024) — a wrong glance costs ~50 ms, a right
+  one ~10 ms, and length is not the reading cost. RL did not beat a simple
+  threshold on speed. Start with deterministic quiet rules, not a learned
+  agent. Digest: `docs/research/sequential-autocomplete-2024.md`.
+- [The road to better completions](https://github.blog/ai-and-ml/github-copilot/the-road-to-better-completions-building-a-faster-smarter-github-copilot-with-a-new-custom-model/)
+  (GitHub, 2025) — Copilot stopped optimizing acceptance after it rewarded
+  short suggestions people deleted. Retained characters became the headline.
+  This is why F03 and RNKS exist. Digest:
+  `docs/research/copilot-retained-completions-2025.md`.
+- [A Cost-Benefit Study of Text Entry Suggestion Interaction](https://doi.org/10.1145/2858036.2858305)
+  (Quinn & Zhai, CHI 2016) — always-on suggestions cut keystrokes and still
+  slow people down because looking is not free. The ancestor of Tilde's
+  attention-tax estimate.
+- [Multi-line AI-assisted Code Authoring](https://arxiv.org/abs/2402.04141)
+  — longer suggestions can save more input and also cost latency and visual
+  stability. Read before H08 dynamic length; do not jump to whole-sentence
+  ghosts because a long completion looks impressive offline.
 
 ## Engine techniques
 
@@ -63,6 +101,11 @@ the digest isn't enough.
   — draft-and-verify decoding; the prompt-lookup n-gram variant is a config
   flag on the bundled server and doubles as a personalization win because the
   user's own context self-repeats.
+- [Improving Neural Language Models with a Continuous Cache](https://arxiv.org/abs/1612.04426)
+  (Grave, Joulin & Usunier) — a cheap decaying pointer over recent tokens
+  beats waiting for neural retraining. This is the prior for H10 (decayed
+  recent cache) after personal experts are unlocked. Do not start it before
+  Stage 3.
 
 ## Contributing an entry
 

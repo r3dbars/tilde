@@ -423,7 +423,9 @@ The publication workflow is defined in
 
 The roadmap uses primary sources as directional evidence, not as proof that the
 same effect will transfer from mobile typing, email, or code to system-wide
-macOS prose:
+macOS prose. One-line notes live in [`docs/reading-list.md`](reading-list.md);
+longer Tilde-specific digests live in [`docs/research/`](research/). Read the
+digest before fetching a paper:
 
 - [Gmail Smart Compose](https://arxiv.org/abs/1906.00080) supports fast neural
   generation combined with a lightweight personal n-gram model.
