@@ -153,7 +153,7 @@ Completed: <ISO-8601 UTC>
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED
 - [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
-- [Q02 — Qwen 9B factorial replication v2](Q02-qwen-factorial-replication-v2.md) — PROPOSED
+- [Q02 — Qwen 9B factorial replication v2](Q02-qwen-factorial-replication-v2.md) — INCONCLUSIVE
 
 The staged theory registry and current eligibility gates live in the
 [Tilde research roadmap](../research-roadmap.md).
