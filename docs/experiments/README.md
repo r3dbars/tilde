@@ -151,6 +151,7 @@ Completed: <ISO-8601 UTC>
 ## Index
 
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
+- [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
 
 The staged theory registry and current eligibility gates live in the
 [Tilde research roadmap](../research-roadmap.md).
