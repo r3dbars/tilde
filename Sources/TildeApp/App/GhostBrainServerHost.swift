@@ -316,7 +316,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 DiagnosticsLog.shared.record("suggestion-suppressed", metadata: ["reason": "sensitive-scene"])
                 return
             }
-            if let reason = SceneSuggestionPolicy.suppressionReason(scene: scene) {
+            if let reason = SceneSuggestionPolicy.suppressionReason(
+                scene: scene,
+                textBeforeCursor: completionRequest.context
+            ) {
                 _ = Self.write(.silence, to: connection)
                 DiagnosticsLog.shared.record(
                     "suggestion-suppressed",

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TildeCore
 @testable import TildeLabKit
 
 @Suite("Tilde Lab certified corpus")
@@ -32,6 +33,33 @@ struct LabCorpusCertificationTests {
         #expect(report.passesStaticGate)
         #expect(report.checks.allSatisfy { $0.status == .pass })
         #expect(LabCorpusQualityAuditor.reviewSampleRootIDs(suite: suite).count == 100)
+    }
+
+    @Test("Scene gates cover hard negatives without hiding ordinary positive replies")
+    func sceneGateCoverage() throws {
+        let suite = try LabReplyingV2SuiteFactory.makeCertifiedCorpusV2()
+        let suppressed = suite.scenarios.compactMap { scenario -> (LabScenario, SceneSuggestionPolicy.SuppressionReason)? in
+            guard let reason = SceneSuggestionPolicy.suppressionReason(
+                scene: scenario.scene?.productionScene(),
+                textBeforeCursor: scenario.typedContext
+            ) else { return nil }
+            return (scenario, reason)
+        }
+        let suppressedPositiveCategories = Set(
+            suppressed.filter { $0.0.expectation.shouldSuggest }.map { $0.0.category }
+        )
+        let irrelevant = suite.scenarios.filter {
+            $0.category == "silence.ordinary.irrelevant-scene"
+        }
+
+        #expect(suppressedPositiveCategories == ["stress.prompt-injection.real-request"])
+        #expect(!irrelevant.isEmpty)
+        #expect(irrelevant.allSatisfy { scenario in
+            SceneSuggestionPolicy.suppressionReason(
+                scene: scenario.scene?.productionScene(),
+                textBeforeCursor: scenario.typedContext
+            ) == .nonActionableScene
+        })
     }
 
     @Test("Any corpus edit invalidates the frozen review")

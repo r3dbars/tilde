@@ -57,6 +57,25 @@ struct SceneSuggestionPolicyTests {
         #expect(SceneSuggestionPolicy.suppressionReason(scene: nil) == nil)
     }
 
+    @Test("Irrelevant declarative scenes suppress unless the writer has begun a reply")
+    func nonActionableDeclarativeSuppresses() {
+        let irrelevant = reply([
+            turn(.other, "The weather near the atrium was pleasant during lunch."),
+        ])
+        let acknowledgement = reply([
+            turn(.other, "I am running ten minutes late."),
+        ])
+
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: irrelevant,
+            textBeforeCursor: "The "
+        ) == .nonActionableScene)
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: acknowledgement,
+            textBeforeCursor: "No worries, "
+        ) == nil)
+    }
+
     private func reply(_ turns: [ScreenScene.ConversationTurn]) -> ScreenScene.Scene {
         ScreenScene.Scene(mode: .replying, conversationTurns: turns, referenceSnippets: [])
     }

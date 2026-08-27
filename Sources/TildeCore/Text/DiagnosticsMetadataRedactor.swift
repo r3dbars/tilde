@@ -29,7 +29,7 @@ public enum DiagnosticsMetadataRedactor {
         // `suggestion-suppressed` diagnostic (`GhostBrainServerHost`) —
         // count-only, never the matched category or any scene text.
         "sensitive-scene", "prompt-injection-scene", "no-incoming-turn",
-        "resolved-conversation", "ambiguous-choice",
+        "resolved-conversation", "ambiguous-choice", "non-actionable-scene",
         // `PersonalSuggestionSource`'s fixed vocabulary, logged as the
         // `source` field on `suggestion-served` only when the "Personal
         // suggestions (experimental)" toggle is on
