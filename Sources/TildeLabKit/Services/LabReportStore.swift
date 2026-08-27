@@ -18,6 +18,7 @@ public actor LabReportStore {
     }
 
     public func save(_ report: LabRunReport) throws {
+        try report.validatedForPersistence()
         try ensureDirectory()
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -43,13 +44,7 @@ public actor LabReportStore {
             .filter { $0.pathExtension == "json" }
             .compactMap { try? Data(contentsOf: $0) }
             .compactMap { try? decoder.decode(LabRunReport.self, from: $0) }
-            .filter {
-                LabRunReport.supportedSchemas.contains($0.schema)
-                    && $0.privacy.aggregateOnly
-                    && !$0.privacy.rawScenarioText
-                    && !$0.privacy.rawModelOutput
-                    && !$0.privacy.filePaths
-            }
+            .filter { (try? $0.validatedForPersistence()) != nil }
             .sorted { $0.finishedAt > $1.finishedAt }
     }
 
