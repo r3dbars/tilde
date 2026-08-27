@@ -6,3 +6,13 @@ signed helper and input method but no GGUF; first-run asset setup downloads only
 the pinned Gemma 4 E2B file into external app-owned storage. Release proof uses
 an explicitly named `--proof-model` preseed and keeps the post-download runtime
 egress check loopback-only.
+
+For Tilde Lab or autocomplete research work, also read
+[the staged research roadmap](docs/research-roadmap.md),
+[the Learning Ledger contract](docs/learning-ledger.md), and
+[the experiment record template](docs/experiments/README.md). The bundled
+Learning Ledger JSON is authoritative for the active stage and ordered work
+queue. Run one causal experiment at a time, use the exact same test for control
+and treatment, do not start locked stages early, and capture every reusable
+supported, rejected, or inconclusive result without checking in private text or
+raw model output.

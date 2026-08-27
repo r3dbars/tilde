@@ -154,6 +154,9 @@ score and privacy contracts, scenario format, matrix runner, and the boundary
 between high-throughput model evidence and foreground real-IME proof. The
 [Tilde Learning Ledger](docs/learning-ledger.md) preserves what experiments
 taught us, why candidates were kept or rejected, and what should be tested next.
+The [research roadmap](docs/research-roadmap.md) sequences the longer-term
+hypotheses behind that queue, while [experiment records](docs/experiments/README.md)
+define the public pre-registration and result format.
 
 The code follows the same two-part boundary:
 

@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-26T20:13:56Z",
+  "updatedAt": "2026-08-27T01:22:54Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -16,6 +16,90 @@
     "Distinct situations measure behavioral coverage; repetitions measure stability and do not create new coverage.",
     "Keep raw personal writing, screen text, prompts, model output, and private corpus material out of checked-in evidence.",
     "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass."
+  ],
+  "researchProgram": [
+    {
+      "id": "evidence-foundation",
+      "order": 0,
+      "status": "active",
+      "title": "Make the evidence loop trustworthy",
+      "objective": "Make future results reproducible, truthful after failure, retention-aware, and permanently protected against known regressions before changing user-visible behavior.",
+      "exitGate": "Complete provenance, truthful campaign recovery, visible retained-outcome coverage at every horizon, and a privacy-safe permanent regression suite.",
+      "hypotheses": [
+        { "id": "F01", "title": "Complete report provenance" },
+        { "id": "F02", "title": "Reconcile campaign state" },
+        { "id": "F03", "title": "Extend the text-free Outcome Ledger" },
+        { "id": "F04", "title": "Freeze permanent regressions" }
+      ]
+    },
+    {
+      "id": "cheap-product-bets",
+      "order": 1,
+      "status": "locked",
+      "title": "Test cheap, isolated product bets",
+      "objective": "Hold the generator fixed and test one display, stopping, context, or timing policy at a time in the order of expected value.",
+      "exitGate": "Promote only effects that survive retained live utility, protected slices, latency budgets, and every privacy and interaction gate.",
+      "hypotheses": [
+        { "id": "H01", "title": "Three visible words beat eight" },
+        { "id": "H02", "title": "Stop generation at the display-safe span" },
+        { "id": "H03", "title": "Context-quality routing beats equal trust" },
+        { "id": "H04", "title": "Flow-aware cooldowns reduce interruption" }
+      ]
+    },
+    {
+      "id": "control-brain",
+      "order": 2,
+      "status": "locked",
+      "title": "Build the Control Brain",
+      "objective": "Learn whether, when, and how much Tilde should reveal from privacy-safe retained outcomes rather than raw acceptance alone.",
+      "exitGate": "A calibrated controller must beat the best fixed policy on retained utility and risk coverage without creating a silent product.",
+      "hypotheses": [
+        { "id": "H05", "title": "Retention trains a better policy than Tab presses" },
+        { "id": "H06", "title": "A learned quiet gate beats fixed thresholds" },
+        { "id": "H07", "title": "A pre-inference gate skips work safely" },
+        { "id": "H08", "title": "Dynamic visible length beats fixed caps" }
+      ]
+    },
+    {
+      "id": "personal-history-experts",
+      "order": 3,
+      "status": "locked",
+      "title": "Turn Personal History into small experts",
+      "objective": "Use explicit local history as several bounded candidate sources instead of one global next-word table.",
+      "exitGate": "Each personal expert must add retained value beyond the frozen global policy while remaining local, deletable, and user-controlled.",
+      "hypotheses": [
+        { "id": "H09", "title": "Hierarchical memory beats one global or per-app model" },
+        { "id": "H10", "title": "A decayed recent cache adds value" },
+        { "id": "H11", "title": "An exact phrase expert beats next-word-only memory" },
+        { "id": "H12", "title": "Strong personal memory may speak when Gemma is silent" }
+      ]
+    },
+    {
+      "id": "agreement-future-lattice",
+      "order": 4,
+      "status": "locked",
+      "title": "Test agreement and the Future Lattice",
+      "objective": "Use agreement across independent futures to estimate stability and precompute likely branches without changing the writer's intent.",
+      "exitGate": "Agreement or cached futures must improve retained value or latency beyond the Control Brain without unstable rewrites or excess compute.",
+      "hypotheses": [
+        { "id": "H13", "title": "Independent candidate agreement predicts retention" },
+        { "id": "H14", "title": "Consensus Prefix beats truncated top-one output" },
+        { "id": "H15", "title": "A Future Lattice hides latency and fits intent" }
+      ]
+    },
+    {
+      "id": "isolated-moonshots",
+      "order": 5,
+      "status": "locked",
+      "title": "Run moonshots in isolated previews",
+      "objective": "Attempt higher-cost model, editing, and learned-compression ideas only after the intervention system has a trustworthy baseline.",
+      "exitGate": "Each moonshot needs a separate preview identity, explicit rollback, full privacy proof, and a material win over the mature production stack.",
+      "hypotheses": [
+        { "id": "H16", "title": "A Tilde-native objective beats a generic base model" },
+        { "id": "H17", "title": "A selection-only Edit Brain saves revision time" },
+        { "id": "H18", "title": "Personal shorthand can become learned compression" }
+      ]
+    }
   ],
   "entries": [
     {
@@ -803,108 +887,150 @@
         "Download presence or a partial asset is not execution evidence."
       ],
       "tags": ["unverified", "pending-models", "no-result"]
+    },
+    {
+      "id": "staged-research-program-v1",
+      "recordedAt": "2026-08-27T01:22:54Z",
+      "area": "methodology",
+      "status": "adopted",
+      "title": "The next autocomplete bets became a staged public research program",
+      "finding": "A synthesis of the autocomplete research and current repository found that Tilde Lab already provides the protected phase firewall, durable campaigns, synthetic candidate replay, risk-coverage analysis, chronological personalization, text-free online events, confidence calibration, interaction evidence, and soak gates proposed by the research. The unclosed bottleneck is a trustworthy retained-outcome loop followed by one causal product experiment at a time.",
+      "decision": "Complete provenance, campaign truth, retained-outcome instrumentation, and permanent regressions first; close the current Qwen question next; then test fixed display, generation-stop, context, and timing policies before learned gating, personal experts, Future Lattice, model training, editing, or shorthand.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/research-roadmap.md" },
+        { "kind": "documentation", "id": "docs/experiments/README.md" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabOnlineExperiment.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabSyntheticCandidateCache.swift" }
+      ],
+      "limitations": [
+        "The stage order is an evidence-backed research decision, not proof that the later hypotheses will improve Tilde."
+      ],
+      "tags": ["roadmap", "pre-registration", "retention", "sequential-research"]
     }
   ],
   "researchQueue": [
     {
-      "id": "qwen-live-meaningful-sample",
-      "priority": 1,
-      "status": "ready",
-      "question": "Does Qwen 9B God v1 remain fast and useful during meaningful live use?",
-      "hypothesis": "The three-word preview will feel responsive while reducing drift and wrong continuation tails.",
-      "nextExperiment": "Collect aggregate checkpoints at 200, 500, and 1,000 model completions with latency, served, rejected, accepted, dismissed, and typing-saved measures.",
-      "successCriteria": "At least 200 completions, stable p95 and p99, no privacy or interaction failures, and better acceptance or typing saved than the current production control.",
-      "dependencies": ["qwen-9b-god-v1", "isolated-model-preview"]
-    },
-    {
-      "id": "qwen-protected-validation",
-      "priority": 2,
-      "status": "ready",
-      "question": "Does God v1 generalize beyond the development speak slice?",
-      "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
-      "nextExperiment": "Freeze candidate bytes and configuration, run validation once against the same baseline, and open sealed holdout only if every hard gate passes.",
-      "successCriteria": "Candidate beats baseline on human-acceptable output and wrong interruptions, passes every hard gate, and does not materially regress latency or net typing saved.",
-      "dependencies": ["certified-corpus-v2", "qwen-9b-god-v1"]
-    },
-    {
-      "id": "sanitized-regression-library",
-      "priority": 3,
-      "status": "ready",
-      "question": "Can every discovered failure become a permanent test?",
-      "hypothesis": "A compact sanitized regression set will stop scoring loopholes and known interaction mistakes from returning.",
-      "nextExperiment": "Create synthetic cases for short-cap echo bypass, repeat-penalty aggression, wrong-scene facts, prompt-example removal, factual-filter weakening, and stale-target delivery.",
-      "successCriteria": "Every known failure has a stable case ID, current production passes, unsafe diagnostic arms fail, and no private content is stored.",
-      "dependencies": ["qwen-9b-scoring-confounds", "score-protocol-separation"]
-    },
-    {
-      "id": "when-to-speak-current-protocol",
-      "priority": 4,
-      "status": "blocked-on-quality-validation",
-      "question": "When should a quality-capable model speak rather than stay silent?",
-      "hypothesis": "After output quality is stabilized, a separate policy can reduce interruptions without hiding useful replies.",
-      "nextExperiment": "Run matched speak-and-silence cases with output generation frozen, changing only confidence, scene evidence, and activation policy.",
-      "successCriteria": "Higher ordinary restraint with no material loss of useful opportunities, sensitive restraint at 100 percent, and no score blending.",
-      "dependencies": ["qwen-protected-validation"]
-    },
-    {
-      "id": "qwen9-quant-sweep",
-      "priority": 5,
-      "status": "ready",
-      "question": "Can a smaller Qwen 9B quant preserve quality while improving memory and latency?",
-      "hypothesis": "A well-made Q3 or smaller Q4 variant may reduce memory without the severe collapse seen in Gemma 26B Q2.",
-      "nextExperiment": "Verify exact Qwen 9B quant assets and run the identical 360-case, one-worker, one-slot benchmark followed by controlled resident-memory measurement.",
-      "successCriteria": "No more than one quality point lost, wrong suggestions do not increase materially, and memory or latency improves enough to matter in live typing.",
-      "dependencies": ["local-model-tournament-v1"]
-    },
-    {
-      "id": "independent-semantic-calibration",
-      "priority": 6,
-      "status": "ready",
-      "question": "Can semantic usefulness become trustworthy enough for promotion decisions?",
-      "hypothesis": "Blinded human review or an independent judge will preserve the large semantic signal while exposing referee bias.",
-      "nextExperiment": "Freeze candidate outputs, obtain blinded independent labels, and compare agreement, false positives, and false negatives with the current semantic referee.",
-      "successCriteria": "Predefined inter-rater agreement and error bounds are met before semantic score affects promotion.",
-      "dependencies": ["semantic-e2b-vs-sol"]
-    },
-    {
-      "id": "scene-context-quality-ablation",
-      "priority": 7,
-      "status": "ready",
-      "question": "How much live-quality lift comes specifically from Screen Memory?",
-      "hypothesis": "Fresh correctly attributed scene context will improve factual reply usefulness over typed text alone without unacceptable latency.",
-      "nextExperiment": "Run the same frozen candidate outputs with correct scene, typed-only, wrong-scene, stale-scene, and excluded-app controls, then validate in the foreground interaction host.",
-      "successCriteria": "Correct scene wins on usefulness and factuality, wrong or stale context cannot win, exclusion and redaction fail closed, and latency stays inside budget.",
-      "dependencies": ["certified-context-falsification", "screen-memory-live-pipeline"]
-    },
-    {
-      "id": "interaction-app-matrix",
-      "priority": 8,
-      "status": "ready",
-      "question": "Does the chosen model and policy behave correctly through real IMKit interactions?",
-      "hypothesis": "The three-word, word-at-a-time design will remain stable across native, Chromium, Electron, and WebKit editors.",
-      "nextExperiment": "Exercise marked ranges, Tab progression, Escape, typing-through, cursor movement, focus changes, cancellation, and runtime restart in the interaction matrix.",
-      "successCriteria": "Zero stale insertion, duplicate text, focus leakage, or marked-text corruption across the supported host matrix.",
-      "dependencies": ["qwen-protected-validation", "sanitized-regression-library"]
-    },
-    {
       "id": "report-provenance-v5",
-      "priority": 9,
-      "status": "ready",
+      "priority": 1,
+      "status": "ready-foundation",
       "question": "Can every future result be reproduced from the checked-in record?",
       "hypothesis": "Recording source, runner, environment, hypothesis, and review provenance will make campaign conclusions auditable months later.",
-      "nextExperiment": "Design a backward-compatible report schema that adds Git commit, dirty-state flag, runner hash, OS and hardware identity, power state, invocation digest, hypothesis, conclusion, and review status without storing private content.",
+      "nextExperiment": "Add backward-compatible report provenance for Git commit, dirty state, runner hash, OS and hardware class, power state, invocation digest, hypothesis, conclusion, and review status without storing private content.",
       "successCriteria": "A clean machine can identify the exact source, assets, protocol, and environment for a report, while legacy files remain readable and clearly non-promotable.",
       "dependencies": ["report-provenance-gap", "legacy-report-schema-boundary"]
     },
     {
       "id": "campaign-state-reconciliation",
-      "priority": 10,
-      "status": "ready",
+      "priority": 2,
+      "status": "ready-foundation",
       "question": "Can Tilde Lab tell the truth when a runner dies or a checkpoint goes stale?",
-      "hypothesis": "Explicit failed and aborted states plus process, log, and report reconciliation will eliminate phantom running campaigns.",
-      "nextExperiment": "Add failed and aborted campaign states, persist terminal errors, reconcile checkpoints at launch, and test helper-unavailable, killed-runner, stale-log, and resumable-arm cases.",
-      "successCriteria": "No campaign is shown as running without live progress; terminal failures are visible, resumable work is unambiguous, and no completed arm is repeated.",
+      "hypothesis": "Explicit failed and aborted states plus process, lease, work-item, and checkpoint reconciliation will eliminate phantom running campaigns.",
+      "nextExperiment": "Persist terminal errors, reconcile state at launch, and test helper-unavailable, killed-runner, stale-log, and resumable-work cases.",
+      "successCriteria": "No campaign is shown as running without live progress; terminal failures are visible, resumable work is unambiguous, and no completed work item is repeated.",
       "dependencies": ["campaign-runtime-operations"]
+    },
+    {
+      "id": "retained-outcome-ledger-v2",
+      "priority": 3,
+      "status": "ready-foundation",
+      "question": "Can Tilde measure whether accepted text remains useful without retaining the text itself?",
+      "hypothesis": "Five-second, 30-second, and segment-close retained-character outcomes will distinguish durable value from temporary Tab presses while preserving the aggregate-only boundary.",
+      "nextExperiment": "Extend the existing text-free online event and analyzer with retention horizons, typed-through outcomes, policy-hidden state, missing-retention reasons, recent intervention count, and aggregate coverage reporting.",
+      "successCriteria": "Every eligible live outcome is representable without text, retention missingness is explicit, deletion remains complete, privacy validation rejects raw-data keys, and RNKS can be reported at all three horizons.",
+      "dependencies": ["staged-research-program-v1"]
+    },
+    {
+      "id": "sanitized-regression-library",
+      "priority": 4,
+      "status": "ready-foundation",
+      "question": "Can every discovered failure become a permanent test?",
+      "hypothesis": "A compact sanitized regression set will stop scoring loopholes and known interaction mistakes from returning.",
+      "nextExperiment": "Create stable cases for short-cap echo bypass, repeat-penalty aggression, wrong-scene facts, stale-target delivery, prompt-example removal, factual-filter weakening, duplicate insertion, focus change, restart, and marked-text damage.",
+      "successCriteria": "Every known failure has a stable case ID, current production passes, unsafe diagnostic arms fail, and no private content is stored.",
+      "dependencies": ["qwen-9b-scoring-confounds", "score-protocol-separation"]
+    },
+    {
+      "id": "qwen-protected-validation",
+      "priority": 5,
+      "status": "blocked-on-foundation",
+      "question": "Does God v1 generalize beyond the development speak slice?",
+      "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
+      "nextExperiment": "After provenance is complete, freeze candidate bytes and configuration, run validation once against the same baseline, and open sealed holdout only if every hard gate passes.",
+      "successCriteria": "Candidate beats baseline on human-acceptable output and wrong interruptions, passes every hard gate, and does not materially regress latency or net typing saved.",
+      "dependencies": ["report-provenance-v5", "certified-corpus-v2", "qwen-9b-god-v1"]
+    },
+    {
+      "id": "qwen-live-meaningful-sample",
+      "priority": 6,
+      "status": "blocked-on-validation-and-retention",
+      "question": "Does Qwen 9B God v1 remain fast and useful during meaningful live use?",
+      "hypothesis": "The three-word preview will preserve its quality signal and create positive retained utility during live writing.",
+      "nextExperiment": "After passing protected validation and retained-outcome instrumentation, collect registered 200, 500, and 1,000-completion checkpoints with latency, RNKS, wrong displays, dismissals, and interaction failures.",
+      "successCriteria": "Stable p95 and p99, positive retained utility against the frozen control, no privacy or interaction failure, and no protected app/register regression.",
+      "dependencies": ["qwen-protected-validation", "retained-outcome-ledger-v2", "isolated-model-preview"]
+    },
+    {
+      "id": "three-word-production-live",
+      "priority": 7,
+      "status": "blocked-on-stage-0",
+      "question": "Do three visible words beat production's eight-word cap in retained live value?",
+      "hypothesis": "The offline three-word win will reduce wrong continuation tails and improve retained utility with the production Gemma generator held fixed.",
+      "nextExperiment": "Run block-randomized dogfood with identical production model, prompt, cleaner, streaming, and timing; change only the visible cap from eight to three words.",
+      "successCriteria": "RNKS-30s or RNKS-segment improves, wrong displays fall, useful-opportunity recall does not materially regress, and every hard gate passes.",
+      "dependencies": ["retained-outcome-ledger-v2", "sanitized-regression-library", "output-quality-50-v2"]
+    },
+    {
+      "id": "early-stop-visible-span",
+      "priority": 8,
+      "status": "blocked-on-three-word-result",
+      "question": "Can generation stop when the display-safe span is complete?",
+      "hypothesis": "Generating beyond a proven three-word visible span adds tail latency without changing the safe visible suggestion.",
+      "nextExperiment": "Compare the 20-token production budget with a stop rule at the third complete safe word or earlier natural boundary, holding the visible cap and all other controls fixed.",
+      "successCriteria": "At least 99.5 percent visible-output equivalence, no fragment or safety regression, lower p99 latency, and no RNKS loss.",
+      "dependencies": ["three-word-production-live"]
+    },
+    {
+      "id": "scene-context-quality-ablation",
+      "priority": 9,
+      "status": "blocked-on-stage-0",
+      "question": "Which fresh context source improves replies without stale or wrong-scene harm?",
+      "hypothesis": "Routing exact Accessibility text, redacted OCR, typed-only context, and metadata by source quality will beat treating every scene as equally trustworthy.",
+      "nextExperiment": "Compare fresh exact text, fresh redacted OCR, typed-only, stale-scene, wrong-scene, and excluded-app controls with generation frozen wherever replay permits.",
+      "successCriteria": "Fresh correctly attributed context wins on usefulness and factuality; stale or wrong context cannot win; exclusions and redaction fail closed; latency remains inside budget.",
+      "dependencies": ["retained-outcome-ledger-v2", "certified-context-falsification", "screen-memory-live-pipeline"]
+    },
+    {
+      "id": "flow-aware-refractory",
+      "priority": 10,
+      "status": "blocked-on-live-baseline",
+      "question": "Do flow-aware cooldowns reduce interruption without hiding useful suggestions?",
+      "hypothesis": "Temporary silence during fast typing and after dismissal or typing-through will reduce attention cost with little retained-value loss.",
+      "nextExperiment": "Compare the frozen activation policy with one deterministic cooldown rule at a time, while shadow generation measures missed useful opportunities.",
+      "successCriteria": "Fewer wrong displays and lower attention tax with no material RNKS loss or protected-slice regression.",
+      "dependencies": ["three-word-production-live", "retained-outcome-ledger-v2"]
+    },
+    {
+      "id": "independent-semantic-calibration",
+      "priority": 11,
+      "status": "blocked-on-provenance",
+      "question": "Can semantic usefulness become trustworthy enough for promotion decisions?",
+      "hypothesis": "Blinded human review or an independent judge will preserve the large semantic signal while exposing referee bias.",
+      "nextExperiment": "Freeze candidate outputs, obtain blinded independent labels, and compare agreement, false positives, and false negatives with the current semantic referee.",
+      "successCriteria": "Predefined inter-rater agreement and error bounds are met before semantic score affects promotion.",
+      "dependencies": ["report-provenance-v5", "semantic-e2b-vs-sol"]
+    },
+    {
+      "id": "interaction-app-matrix",
+      "priority": 12,
+      "status": "continuous-promotion-gate",
+      "question": "Does each selected model and policy behave correctly through real IMKit interactions?",
+      "hypothesis": "A frozen word-at-a-time candidate can remain stable across native, Chromium, Electron, and WebKit editors.",
+      "nextExperiment": "For every candidate that reaches preview, exercise marked ranges, Tab progression, Escape, typing-through, cursor movement, focus changes, cancellation, and runtime restart in the host matrix.",
+      "successCriteria": "Zero stale insertion, duplicate text, focus leakage, suffix damage, or marked-text corruption across the supported host matrix.",
+      "dependencies": ["sanitized-regression-library"]
     }
   ],
   "promotionPath": [
