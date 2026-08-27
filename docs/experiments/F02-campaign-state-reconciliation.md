@@ -1,6 +1,6 @@
 # F02 — Campaign state reconciliation
 
-Status: PROPOSED
+Status: SUPPORTED
 Experiment class: runtime
 Owner: Tilde research program
 Pre-registered: 2026-08-27T10:09:35Z
@@ -130,29 +130,65 @@ meaning of ordered arrays.
 
 ## Result
 
-Status: PENDING
+Status: SUPPORTED
+Completed: 2026-08-27T10:27:04Z
 
 ### Aggregate evidence
 
-Pending implementation and deterministic proof.
+- Seven deterministic reconciliation tests pass across canonical set encoding,
+  ordered-array sensitivity, ready/running/completed transitions, incomplete
+  completion refusal, killed and stale runners, explicit resume, live-owner
+  collision, reportless failure review, and fixed infrastructure failure codes.
+- Reopening the SQLite database preserves the canonical campaign identity and
+  terminal state. Dead owners release only unfinished leases; completed
+  observations remain durable and cannot be claimed again.
+- Campaign completion now requires non-empty durable work with zero pending,
+  running, or failed items. Paired comparison creation requires the reconciled
+  campaign to be completed and free of terminal failure evidence.
+- Worker launch failures, invariant failures, active-budget expiry,
+  cancellation, protocol failures, and dead/stale sessions resolve to bounded
+  aggregate categories and reason codes. A reportless artifact accepts a
+  separate supported/rejected/inconclusive review without retaining raw text,
+  output, arguments, or local paths.
+- Text and JSON CLI status on a new temporary campaign reported `not-started`
+  with zero work instead of inventing progress.
+- `swift test` passed 739 tests in 93 suites. The required structural fast
+  proof passed with zero shipped-product Swift line growth and the repository
+  dependency boundary intact.
 
 ### Failures and limitations
 
-Pending.
+- Pre-F02 campaign fingerprints are not rewritten or backfilled. Q01 remains
+  historical evidence and its failed campaign ID must not be reused.
+- PID reuse is mitigated by an owner nonce, heartbeat freshness, expiry, and
+  lease ownership; it is not a cryptographic process identity.
+- A process killed without cleanup cannot write its own artifact. The next
+  status or launch performs the truthful aborted-state reconciliation.
+- Asset validation that fails before a durable session begins remains an
+  immediate CLI error. Worker launch failures after session registration are
+  persisted as `helper-unavailable` evidence.
+- Aggregate failure evidence intentionally cannot reconstruct the unsafe model
+  output that caused a gate to fail.
+- These fixtures establish control-plane truth, not Qwen quality or stability.
 
 ### Decision
 
-Pending.
+Adopt F02 as the durable campaign-state contract. Start a new campaign without
+`--resume`; use `--resume` only for a reconciled `aborted` campaign; use a new
+campaign ID after `failed` or `completed`; and never create a paired comparison
+until durable work and reconciled terminal state agree.
 
 ### Durable changes
 
-- Learning Ledger entry: pending reusable result
-- Regression IDs: pending
+- Learning Ledger entry: `campaign-state-reconciliation`
+- Regression IDs: `LabCampaignReconciliationTests`,
+  `campaign-completion-requires-finished-work`,
+  `dead-owner-cannot-reclaim-work`, `fixed-failure-classification`
 - Implementation pull request: pending
 - Rollback: revert the F02 implementation while retaining the public result
   record
 
 ### Follow-up
 
-If supported, pre-register a fresh Qwen a0-versus-a5 replication from clean
-`main`; do not reuse or edit the failed Q01 campaign.
+Pre-register a fresh Qwen a0-versus-a5 replication from clean `main`; do not
+reuse or edit the failed Q01 campaign.

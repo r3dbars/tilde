@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T02:59:55Z",
+  "updatedAt": "2026-08-27T10:27:04Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -925,6 +925,36 @@
       "tags": ["provenance", "report-schema-v6", "evidence-eligibility", "privacy", "promotion-gate"]
     },
     {
+      "id": "campaign-state-reconciliation",
+      "recordedAt": "2026-08-27T10:27:04Z",
+      "area": "campaign",
+      "status": "adopted",
+      "title": "Durable campaigns now reconcile liveness and terminal state",
+      "finding": "Canonical encoding stabilizes set-valued durable inputs without changing ordered arrays. Owner-scoped sessions, heartbeats, process liveness, lease ownership, explicit resume, completion guards, and aggregate terminal artifacts now distinguish ready, running, completed, failed, and aborted campaigns across process restarts while preserving completed observations.",
+      "decision": "Start new campaigns without --resume, resume only a reconciled aborted campaign, require a new ID after failure or completion, and create paired comparisons only from reconciled completed campaigns. Persist fixed aggregate failure categories and accountable review without raw text, model output, arguments, or local paths.",
+      "comparisonGroupID": "f02-campaign-state-reconciliation-v1",
+      "evaluationCount": 7,
+      "metrics": [
+        { "subjectID": "deterministic-fixtures", "key": "campaign-state-tests", "value": 7, "unit": "tests" },
+        { "subjectID": "repository-proof", "key": "swift-tests", "value": 739, "unit": "tests" },
+        { "subjectID": "repository-proof", "key": "swift-test-suites", "value": 93, "unit": "suites" },
+        { "subjectID": "production-boundary", "key": "shipped-swift-net-lines", "value": 0, "unit": "lines" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/F02-campaign-state-reconciliation.md" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabResearchRunState.swift" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Services/LabResearchDatabase.swift" },
+        { "kind": "test", "id": "Tests/TildeLabKitTests/LabCampaignReconciliationTests.swift" }
+      ],
+      "limitations": [
+        "Pre-F02 fingerprints are not backfilled, so historical failed campaign IDs must not be reused.",
+        "A hard-killed process is reconciled by the next status or launch because it cannot write its own terminal artifact.",
+        "PID reuse is mitigated by nonce, heartbeat, expiry, and lease ownership rather than cryptographic process identity.",
+        "The deterministic fixtures prove control-plane truth, not model quality or runtime stability."
+      ],
+      "tags": ["campaign-state", "resume", "terminal-failure", "canonical-digest", "privacy", "reconciliation"]
+    },
+    {
       "id": "unverified-model-downloads",
       "recordedAt": "2026-08-26T20:00:00Z",
       "area": "model",
@@ -981,7 +1011,7 @@
     {
       "id": "campaign-state-reconciliation",
       "priority": 2,
-      "status": "ready-foundation",
+      "status": "completed-foundation",
       "question": "Can Tilde Lab tell the truth when a runner dies or a checkpoint goes stale?",
       "hypothesis": "Explicit failed and aborted states plus process, lease, work-item, and checkpoint reconciliation will eliminate phantom running campaigns.",
       "nextExperiment": "Persist terminal errors and reviewable failure artifacts, canonicalize every durable digest, reconcile state at launch, and test hard-gate failure, helper-unavailable, killed-runner, stale-log, restart-loop, and resumable-work cases.",
