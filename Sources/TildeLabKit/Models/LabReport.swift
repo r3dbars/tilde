@@ -20,12 +20,13 @@ public enum LabAnswerMatchKind: String, Codable, CaseIterable, Sendable {
 }
 
 public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
-    public var id: String { "\(scenarioID)#\(repetition)" }
+    public var id: String { "\(scenarioID)#seed-\(generationSeed)#\(repetition)" }
 
     public let scenarioID: String
     public let category: String
     public let counterfactualPairID: String?
     public let repetition: Int
+    public let generationSeed: Int
     public let outcome: LabCaseOutcome
     public let expectedSuggestion: Bool
     public let hasGoldenContinuation: Bool
@@ -63,12 +64,14 @@ public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
     public let visibleWordCount: Int
     public let visibleCharacterCount: Int
     public let workerIndex: Int?
+    public let candidateCacheHit: Bool?
 
     public init(
         scenarioID: String,
         category: String,
         counterfactualPairID: String? = nil,
         repetition: Int,
+        generationSeed: Int = 0,
         outcome: LabCaseOutcome,
         expectedSuggestion: Bool,
         hasGoldenContinuation: Bool,
@@ -105,12 +108,14 @@ public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
         decisionReason: LabDecisionReason = .shown,
         visibleWordCount: Int = 0,
         visibleCharacterCount: Int = 0,
-        workerIndex: Int? = nil
+        workerIndex: Int? = nil,
+        candidateCacheHit: Bool? = nil
     ) {
         self.scenarioID = scenarioID
         self.category = category
         self.counterfactualPairID = counterfactualPairID
         self.repetition = repetition
+        self.generationSeed = generationSeed
         self.outcome = outcome
         self.expectedSuggestion = expectedSuggestion
         self.hasGoldenContinuation = hasGoldenContinuation
@@ -148,10 +153,12 @@ public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
         self.visibleWordCount = visibleWordCount
         self.visibleCharacterCount = visibleCharacterCount
         self.workerIndex = workerIndex
+        self.candidateCacheHit = candidateCacheHit
     }
 
     private enum CodingKeys: String, CodingKey {
-        case scenarioID, category, counterfactualPairID, repetition, outcome, expectedSuggestion
+        case scenarioID, category, counterfactualPairID, repetition, generationSeed
+        case outcome, expectedSuggestion
         case hasGoldenContinuation, offered, modelRequested, policySuppressed
         case exactMatchAt1, exactMatchAt2, exactMatchAt3, exactContinuationMatched
         case acceptablePrefixMatched, acceptableContinuationMatched, answerMatchKind
@@ -162,6 +169,7 @@ public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
         case correctionKeystrokes, dismissalKeystrokes, netKeystrokesSaved, failureCategory
         case keystrokesSaved, latencyMilliseconds, firstTokenMilliseconds, meanTokenProbability
         case decisionReason, visibleWordCount, visibleCharacterCount, workerIndex
+        case candidateCacheHit
     }
 
     public init(from decoder: Decoder) throws {
@@ -170,6 +178,7 @@ public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
         category = try values.decode(String.self, forKey: .category)
         counterfactualPairID = try values.decodeIfPresent(String.self, forKey: .counterfactualPairID)
         repetition = try values.decode(Int.self, forKey: .repetition)
+        generationSeed = try values.decodeIfPresent(Int.self, forKey: .generationSeed) ?? 0
         outcome = try values.decode(LabCaseOutcome.self, forKey: .outcome)
         expectedSuggestion = try values.decode(Bool.self, forKey: .expectedSuggestion)
         hasGoldenContinuation = try values.decode(Bool.self, forKey: .hasGoldenContinuation)
@@ -239,6 +248,7 @@ public struct LabCaseResult: Codable, Equatable, Identifiable, Sendable {
         visibleWordCount = try values.decodeIfPresent(Int.self, forKey: .visibleWordCount) ?? 0
         visibleCharacterCount = try values.decodeIfPresent(Int.self, forKey: .visibleCharacterCount) ?? 0
         workerIndex = try values.decodeIfPresent(Int.self, forKey: .workerIndex)
+        candidateCacheHit = try values.decodeIfPresent(Bool.self, forKey: .candidateCacheHit)
         modelRequested = try values.decodeIfPresent(Bool.self, forKey: .modelRequested)
             ?? (latencyMilliseconds != nil || outcome == .timeout || outcome == .error)
     }
@@ -617,12 +627,37 @@ public struct LabPrivacyContract: Codable, Equatable, Sendable {
     }
 }
 
+public struct LabRuntimeStartupSummary: Codable, Equatable, Sendable {
+    public let samples: Int
+    public let p50Milliseconds: Int?
+    public let p95Milliseconds: Int?
+    public let p99Milliseconds: Int?
+
+    public init(milliseconds: [Int]) {
+        let sorted = milliseconds.sorted()
+        samples = sorted.count
+        p50Milliseconds = Self.percentile(sorted, fraction: 0.50)
+        p95Milliseconds = Self.percentile(sorted, fraction: 0.95)
+        p99Milliseconds = Self.percentile(sorted, fraction: 0.99)
+    }
+
+    private static func percentile(_ sorted: [Int], fraction: Double) -> Int? {
+        guard !sorted.isEmpty else { return nil }
+        let index = min(
+            sorted.count - 1,
+            Int((Double(sorted.count - 1) * fraction).rounded())
+        )
+        return sorted[index]
+    }
+}
+
 public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
-    public static let currentSchema = "tilde-lab.reply-bench-report.v4"
+    public static let currentSchema = "tilde-lab.reply-bench-report.v5"
     public static let supportedSchemas = [
         "tilde-lab.reply-bench-report.v1",
         "tilde-lab.reply-bench-report.v2",
         "tilde-lab.reply-bench-report.v3",
+        "tilde-lab.reply-bench-report.v4",
         currentSchema,
     ]
 
@@ -635,6 +670,7 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
     public let scenarioCount: Int
     public let arm: LabArmConfiguration
     public let execution: LabExecutionSnapshot
+    public let runtimeStartup: LabRuntimeStartupSummary?
     public let assets: LabAssetSnapshot
     public let privacy: LabPrivacyContract
     public let metrics: LabAggregateMetrics
@@ -649,6 +685,7 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
         scenarioCount: Int,
         arm: LabArmConfiguration,
         execution: LabExecutionSnapshot,
+        runtimeStartup: LabRuntimeStartupSummary? = nil,
         assets: LabAssetSnapshot,
         privacy: LabPrivacyContract = LabPrivacyContract(),
         metrics: LabAggregateMetrics,
@@ -663,6 +700,7 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
         self.scenarioCount = scenarioCount
         self.arm = arm
         self.execution = execution
+        self.runtimeStartup = runtimeStartup
         self.assets = assets
         self.privacy = privacy
         self.metrics = metrics

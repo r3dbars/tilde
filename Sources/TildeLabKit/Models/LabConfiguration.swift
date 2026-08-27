@@ -182,6 +182,9 @@ public struct LabArmConfiguration: Codable, Equatable, Sendable {
         guard (1...100).contains(personalization.minimumSupport),
               (0...1).contains(personalization.minimumConfidence),
               (1...20).contains(personalization.maximumTailWords),
+              (0...1).contains(personalization.recencyWeight),
+              (0...1).contains(personalization.frequencyWeight),
+              personalization.recencyWeight + personalization.frequencyWeight > 0,
               (1...10_000).contains(personalization.lookupDeadlineMilliseconds) else {
             throw LabConfigurationError.invalidPersonalization
         }

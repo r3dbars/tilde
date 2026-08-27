@@ -125,7 +125,76 @@ public struct LabRuntimeConfiguration: Codable, Equatable, Sendable {
         )
     }
 
+    public init(_ snapshot: LabExecutionSnapshot) {
+        self.init(
+            workerCount: snapshot.workerCount,
+            slotsPerWorker: snapshot.slotsPerWorker,
+            repetitions: snapshot.repetitions,
+            contextSizePerSlot: snapshot.contextSizePerSlot,
+            cacheReuseTokens: snapshot.cacheReuseTokens,
+            timeoutSeconds: snapshot.timeoutSeconds,
+            seed: snapshot.seed,
+            generationThreads: snapshot.generationThreads,
+            batchThreads: snapshot.batchThreads,
+            HTTPThreads: snapshot.HTTPThreads,
+            batchSize: snapshot.batchSize,
+            microBatchSize: snapshot.microBatchSize,
+            flashAttention: snapshot.flashAttention,
+            keyCacheType: snapshot.keyCacheType,
+            valueCacheType: snapshot.valueCacheType,
+            KVOffload: snapshot.KVOffload,
+            GPUlayers: snapshot.GPUlayers,
+            continuousBatching: snapshot.continuousBatching,
+            fullSWA: snapshot.fullSWA,
+            warmup: snapshot.warmup,
+            loadMode: snapshot.loadMode,
+            promptCaching: snapshot.promptCaching,
+            slotPromptSimilarity: snapshot.slotPromptSimilarity
+        )
+    }
+
     public var concurrency: Int { workerCount * slotsPerWorker }
+
+    /// Validates the serializable runtime controls without requiring the local
+    /// helper or model files to exist. Asset existence and hashes remain an
+    /// execution-time concern.
+    @discardableResult
+    public func validated() throws -> LabRuntimeConfiguration {
+        guard (1...60).contains(workerCount) else {
+            throw LabConfigurationError.invalidWorkerCount
+        }
+        guard (1...16).contains(slotsPerWorker) else {
+            throw LabConfigurationError.invalidSlotCount
+        }
+        guard (1...1_000).contains(repetitions) else {
+            throw LabConfigurationError.invalidRepetitions
+        }
+        guard (1_024...32_768).contains(contextSizePerSlot),
+              contextSizePerSlot.multipliedReportingOverflow(by: slotsPerWorker).overflow == false else {
+            throw LabConfigurationError.invalidContextSize
+        }
+        guard (1...120).contains(timeoutSeconds) else {
+            throw LabConfigurationError.invalidTimeout
+        }
+        guard (0...4_096).contains(cacheReuseTokens) else {
+            throw LabConfigurationError.invalidCacheReuse
+        }
+        let validThreadCounts = [-1, 0] + Array(1...256)
+        guard validThreadCounts.contains(generationThreads),
+              validThreadCounts.contains(batchThreads),
+              validThreadCounts.contains(HTTPThreads),
+              (32...8_192).contains(batchSize),
+              (32...8_192).contains(microBatchSize),
+              microBatchSize <= batchSize,
+              GPUlayers.range(
+                  of: #"^(auto|all|none|[0-9]{1,4})$"#,
+                  options: .regularExpression
+              ) != nil,
+              (0...1).contains(slotPromptSimilarity) else {
+            throw LabConfigurationError.invalidRuntime
+        }
+        return self
+    }
 
     public func materialize(
         serverExecutable: URL,
@@ -164,43 +233,65 @@ public struct LabRuntimeConfiguration: Codable, Equatable, Sendable {
 }
 
 public struct LabExperimentManifest: Codable, Equatable, Sendable {
-    public static let currentSchema = "tilde-lab.experiment-manifest.v1"
+    public static let currentSchema = "tilde-lab.experiment-manifest.v2"
+    public static let supportedSchemas = [
+        "tilde-lab.experiment-manifest.v1",
+        currentSchema,
+    ]
 
     public var schema: String
     public var name: String
     public var enabledBenches: Set<LabBenchKind>
     public var arms: [LabArmConfiguration]
     public var runtime: LabRuntimeConfiguration
+    /// Nil means a fixed development diagnostic. Validation and holdout still
+    /// require an explicit protocol and can never be reached through this
+    /// compatibility path.
+    public var research: LabResearchProtocol?
 
     public init(
         schema: String = Self.currentSchema,
         name: String = "Tilde experiment",
         enabledBenches: Set<LabBenchKind> = Set(LabBenchKind.allCases),
         arms: [LabArmConfiguration] = [LabArmConfiguration()],
-        runtime: LabRuntimeConfiguration = .init()
+        runtime: LabRuntimeConfiguration = .init(),
+        research: LabResearchProtocol? = nil
     ) {
         self.schema = schema
         self.name = name
         self.enabledBenches = enabledBenches
         self.arms = arms
         self.runtime = runtime
+        self.research = research
     }
 
     @discardableResult
     public func validated() throws -> LabExperimentManifest {
-        guard schema == Self.currentSchema else { throw LabManifestError.unsupportedSchema }
+        guard Self.supportedSchemas.contains(schema) else { throw LabManifestError.unsupportedSchema }
         guard name.range(
             of: #"^[A-Za-z0-9][A-Za-z0-9 ._:+-]{0,99}$"#,
             options: .regularExpression
         ) != nil else { throw LabManifestError.invalidName }
         guard !arms.isEmpty else { throw LabManifestError.noArms }
         guard arms.count <= 128 else { throw LabManifestError.tooManyArms }
+        try runtime.validated()
         var identifiers = Set<String>()
         for arm in arms {
             try arm.validated()
             guard identifiers.insert(arm.id).inserted else { throw LabManifestError.duplicateArmID }
         }
         try Self.validateScoringLock(arms)
+        if let research {
+            try LabResearchProtocolValidator.validate(research, arms: arms)
+            if research.experimentClass == .runtime,
+               research.runtimeByArm?[research.baselineArmID] != runtime {
+                throw LabResearchProtocolError.runtimeConfigurationRequired
+            }
+        } else if arms.contains(where: {
+            $0.scenarios.partition == .validation || $0.scenarios.partition == .holdout
+        }) {
+            throw LabResearchProtocolError.protectedPartitionRequiresRegistration
+        }
         return self
     }
 
@@ -220,5 +311,20 @@ public struct LabExperimentManifest: Codable, Equatable, Sendable {
         encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(self)
         return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schema, name, enabledBenches, arms, runtime, research
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try values.decodeIfPresent(String.self, forKey: .schema)
+            ?? "tilde-lab.experiment-manifest.v1"
+        name = try values.decode(String.self, forKey: .name)
+        enabledBenches = try values.decode(Set<LabBenchKind>.self, forKey: .enabledBenches)
+        arms = try values.decode([LabArmConfiguration].self, forKey: .arms)
+        runtime = try values.decode(LabRuntimeConfiguration.self, forKey: .runtime)
+        research = try values.decodeIfPresent(LabResearchProtocol.self, forKey: .research)
     }
 }

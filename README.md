@@ -109,13 +109,22 @@ pinned loopback-only Gemma runtime, includes deterministic policy audits and an
 instrumented AppKit Scene Host, and persists aggregate-only reports for
 baseline/candidate comparison. Its locked headline is **Net Keystrokes Saved**,
 with safety, bad-suggestion, temporal-integrity, privacy, interaction, and
-latency gates outside the number. It includes a 300-case protected curated
+latency gates outside the number. The `tilde-research` CLI adds durable
+work-item resume, interleaved paired blocks, a hard development/validation/
+holdout firewall, root-clustered uncertainty, risk–coverage, chronological
+personalization, local dogfood/attention-tax and confidence calibration,
+real-host evidence, soak gates, and immutable permanent regressions. It
+includes a 300-case protected curated
 Slack pack with prefix replay/context ablations, the 400-case synthetic quiz,
 and a read-only development-only importer for private accepted/typed-instead
 history:
 
 ```bash
 ./script/build_and_run.sh --tilde-lab
+swift build --product tilde-research
+.build/debug/tilde-research init --name qwen-factorial --class generator --suite certified-v2 --output campaign.json
+.build/debug/tilde-research run campaign.json --resume
+.build/debug/tilde-research compare --campaign campaign.json
 swift run tilde-lab-runner --workers 1 --slots 8 --repetitions 10
 swift run tilde-lab-runner --built-in-suite slack-reply-gold-v1
 swift run tilde-lab-runner --manifest ./candidate-matrix.tilde-lab.json
