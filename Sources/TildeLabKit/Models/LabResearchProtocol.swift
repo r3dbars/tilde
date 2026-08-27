@@ -581,9 +581,6 @@ public extension LabRuntimeConfiguration {
 
 private enum LabResearchDigest {
     static func sha256<T: Encodable>(_ value: T) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let bytes = try encoder.encode(value)
-        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        try LabCanonicalDigest.sha256(value)
     }
 }

@@ -163,6 +163,9 @@ public struct LabDurableRunConfiguration: Sendable {
     public let reportProvenance: LabReportProvenance
     public let leaseOwner: String
     public let leaseDuration: TimeInterval
+    public let processIdentifier: Int32
+    public let resumeRequested: Bool
+    public let sessionStaleAfter: TimeInterval
 
     public init(
         database: LabResearchDatabase,
@@ -171,8 +174,11 @@ public struct LabDurableRunConfiguration: Sendable {
         manifestDigestSHA256: String,
         gitCommit: String,
         reportProvenance: LabReportProvenance = .unavailable(),
-        leaseOwner: String = "tilde-lab-\(ProcessInfo.processInfo.processIdentifier)",
-        leaseDuration: TimeInterval = 300
+        leaseOwner: String? = nil,
+        leaseDuration: TimeInterval = 300,
+        processIdentifier: Int32 = ProcessInfo.processInfo.processIdentifier,
+        resumeRequested: Bool = false,
+        sessionStaleAfter: TimeInterval = 600
     ) {
         self.database = database
         self.campaignID = campaignID
@@ -180,8 +186,15 @@ public struct LabDurableRunConfiguration: Sendable {
         self.manifestDigestSHA256 = manifestDigestSHA256
         self.gitCommit = gitCommit
         self.reportProvenance = reportProvenance
-        self.leaseOwner = leaseOwner
+        self.leaseOwner = leaseOwner ?? [
+            "tilde-lab",
+            String(processIdentifier),
+            UUID().uuidString.lowercased(),
+        ].joined(separator: "-")
         self.leaseDuration = max(30, leaseDuration)
+        self.processIdentifier = processIdentifier
+        self.resumeRequested = resumeRequested
+        self.sessionStaleAfter = max(self.leaseDuration * 2, sessionStaleAfter)
     }
 }
 
@@ -193,6 +206,11 @@ public enum LabResearchDatabaseError: Error, LocalizedError, Equatable, Sendable
     case decodeFailed
     case leaseConflict
     case campaignFingerprintMismatch
+    case campaignAlreadyActive
+    case campaignResumeRequired
+    case campaignTerminal(LabResearchRunState)
+    case invalidResume
+    case sessionNotActive
     case holdoutAlreadyConsumed
     case durableProtocolRequired
 
@@ -212,6 +230,16 @@ public enum LabResearchDatabaseError: Error, LocalizedError, Equatable, Sendable
             "The work item lease belongs to another worker."
         case .campaignFingerprintMismatch:
             "Resume was blocked because the campaign code, suite, model, helper, or protocol fingerprint changed."
+        case .campaignAlreadyActive:
+            "This campaign already has a live Tilde Lab runner."
+        case .campaignResumeRequired:
+            "This interrupted campaign requires an explicit --resume."
+        case let .campaignTerminal(state):
+            "A \(state.rawValue) campaign cannot resume under the same campaign ID."
+        case .invalidResume:
+            "--resume is valid only for an interrupted campaign with recoverable work."
+        case .sessionNotActive:
+            "The durable run session is not active."
         case .holdoutAlreadyConsumed:
             "This suite digest has already consumed its one protected holdout evaluation."
         case .durableProtocolRequired:
@@ -296,7 +324,7 @@ public actor LabResearchDatabase {
             INSERT INTO campaign(
               id, name, manifest_digest, suite_digest, model_sha, helper_sha,
               git_commit, protocol_json, fingerprint, status, created_at, updated_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?)
             """
         ) { statement in
             let now = Date().timeIntervalSince1970
@@ -315,6 +343,338 @@ public actor LabResearchDatabase {
         }
     }
 
+    /// Starts one owner-scoped execution session. New work starts from `ready`;
+    /// interrupted work can transition from `aborted` only with explicit
+    /// resume authorization. Failed and completed evidence remains terminal.
+    public func beginRunSession(
+        campaignID: UUID,
+        owner: String,
+        processIdentifier: Int32,
+        resume: Bool,
+        staleAfter: TimeInterval = 600,
+        now: Date = Date(),
+        isProcessAlive: @Sendable (Int32) -> Bool = LabResearchProcessLiveness.isAlive
+    ) throws {
+        guard owner.range(
+            of: #"^[a-z0-9][a-z0-9-]{0,127}$"#,
+            options: .regularExpression
+        ) == owner.startIndex..<owner.endIndex,
+        processIdentifier > 0 else {
+            throw LabResearchDatabaseError.sessionNotActive
+        }
+        _ = try reconcileCampaign(
+            campaignID: campaignID,
+            now: now,
+            isProcessAlive: isProcessAlive
+        )
+        guard try activeSessionCount(campaignID: campaignID) == 0 else {
+            throw LabResearchDatabaseError.campaignAlreadyActive
+        }
+        guard let state = try campaignState(campaignID: campaignID) else {
+            throw LabResearchDatabaseError.decodeFailed
+        }
+        switch (state, resume) {
+        case (.ready, false):
+            break
+        case (.aborted, true):
+            break
+        case (.aborted, false):
+            throw LabResearchDatabaseError.campaignResumeRequired
+        case (.ready, true), (.running, _):
+            throw LabResearchDatabaseError.invalidResume
+        case (.failed, _), (.completed, _):
+            throw LabResearchDatabaseError.campaignTerminal(state)
+        }
+
+        try transaction {
+            try withStatement(
+                """
+                INSERT INTO campaign_session(
+                  campaign_id, owner, process_id, state, started_at,
+                  heartbeat_at, expires_at, ended_at
+                ) VALUES(?, ?, ?, 'running', ?, ?, ?, NULL)
+                ON CONFLICT(campaign_id, owner) DO UPDATE SET
+                  process_id=excluded.process_id,
+                  state='running',
+                  started_at=excluded.started_at,
+                  heartbeat_at=excluded.heartbeat_at,
+                  expires_at=excluded.expires_at,
+                  ended_at=NULL
+                """
+            ) { statement in
+                try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+                try bind(owner, at: 2, in: statement)
+                sqlite3_bind_int64(statement, 3, sqlite3_int64(processIdentifier))
+                sqlite3_bind_double(statement, 4, now.timeIntervalSince1970)
+                sqlite3_bind_double(statement, 5, now.timeIntervalSince1970)
+                sqlite3_bind_double(
+                    statement,
+                    6,
+                    now.addingTimeInterval(max(60, staleAfter)).timeIntervalSince1970
+                )
+                try stepDone(statement)
+            }
+            try withStatement(
+                "UPDATE campaign SET status='running', updated_at=? WHERE id=?"
+            ) { statement in
+                sqlite3_bind_double(statement, 1, now.timeIntervalSince1970)
+                try bind(campaignID.uuidString.lowercased(), at: 2, in: statement)
+                try stepDone(statement)
+            }
+            if resume {
+                try withStatement(
+                    "UPDATE trial SET status='pending' WHERE campaign_id=? AND status='aborted'"
+                ) { statement in
+                    try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+                    try stepDone(statement)
+                }
+            }
+        }
+    }
+
+    @discardableResult
+    public func heartbeatRunSession(
+        campaignID: UUID,
+        owner: String,
+        staleAfter: TimeInterval = 600,
+        now: Date = Date()
+    ) throws -> Bool {
+        try withStatementReturningChanges(
+            """
+            UPDATE campaign_session
+            SET heartbeat_at=?, expires_at=?
+            WHERE campaign_id=? AND owner=? AND state='running'
+            """
+        ) { statement in
+            sqlite3_bind_double(statement, 1, now.timeIntervalSince1970)
+            sqlite3_bind_double(
+                statement,
+                2,
+                now.addingTimeInterval(max(60, staleAfter)).timeIntervalSince1970
+            )
+            try bind(campaignID.uuidString.lowercased(), at: 3, in: statement)
+            try bind(owner, at: 4, in: statement)
+        } == 1
+    }
+
+    public func completeCampaign(
+        campaignID: UUID,
+        owner: String,
+        completedAt: Date = Date()
+    ) throws {
+        guard try sessionIsActive(campaignID: campaignID, owner: owner) else {
+            throw LabResearchDatabaseError.sessionNotActive
+        }
+        try transaction {
+            try finishSession(
+                campaignID: campaignID,
+                owner: owner,
+                state: .completed,
+                at: completedAt
+            )
+            try updateCampaignAndTrials(
+                campaignID: campaignID,
+                state: .completed,
+                at: completedAt
+            )
+        }
+    }
+
+    public func finishCampaign(
+        campaignID: UUID,
+        owner: String,
+        classification: LabResearchFailureClassification,
+        occurredAt: Date = Date()
+    ) throws {
+        guard classification.state == .failed || classification.state == .aborted else {
+            throw LabResearchTerminalFailureError.invalidArtifact
+        }
+        guard try sessionIsActive(campaignID: campaignID, owner: owner) else { return }
+        try transaction {
+            try finishSession(
+                campaignID: campaignID,
+                owner: owner,
+                state: classification.state,
+                at: occurredAt
+            )
+            try releaseLeases(campaignID: campaignID, owner: owner, at: occurredAt)
+            try updateCampaignAndTrials(
+                campaignID: campaignID,
+                state: classification.state,
+                at: occurredAt
+            )
+            try saveTerminalFailure(LabResearchTerminalFailure(
+                campaignID: campaignID,
+                state: classification.state,
+                category: classification.category,
+                reasons: classification.reasons,
+                work: try summary(campaignID: campaignID),
+                occurredAt: occurredAt
+            ).validated())
+        }
+    }
+
+    /// Reconciles owner sessions before status or launch. Dead/stale owners
+    /// lose only their unfinished leases. If no live session remains, the
+    /// campaign becomes explicitly aborted and can resume only by request.
+    @discardableResult
+    public func reconcileCampaign(
+        campaignID: UUID,
+        now: Date = Date(),
+        isProcessAlive: @Sendable (Int32) -> Bool = LabResearchProcessLiveness.isAlive
+    ) throws -> Int {
+        guard let state = try campaignState(campaignID: campaignID), state == .running else {
+            return 0
+        }
+        let sessions = try runningSessions(campaignID: campaignID)
+        if sessions.isEmpty {
+            let work = try summary(campaignID: campaignID)
+            if work.total == 0 {
+                try setCampaignState(campaignID: campaignID, state: .ready, at: now)
+                return 0
+            }
+            try abortOrphanedCampaign(
+                campaignID: campaignID,
+                category: .runnerTerminated,
+                reasons: [.legacyOrphanedRun],
+                at: now
+            )
+            return 1
+        }
+
+        var reconciled: [(owner: String, reason: LabResearchFailureReason)] = []
+        for session in sessions {
+            if session.expiresAt <= now {
+                reconciled.append((session.owner, .heartbeatExpired))
+            } else if !isProcessAlive(session.processIdentifier) {
+                reconciled.append((session.owner, .processNotAlive))
+            }
+        }
+        guard !reconciled.isEmpty else { return 0 }
+
+        try transaction {
+            for entry in reconciled {
+                try finishSession(
+                    campaignID: campaignID,
+                    owner: entry.owner,
+                    state: .aborted,
+                    at: now
+                )
+                try releaseLeases(campaignID: campaignID, owner: entry.owner, at: now)
+            }
+            if try activeSessionCount(campaignID: campaignID) == 0 {
+                let reasons = Array(Set(reconciled.map(\.reason))).sorted {
+                    $0.rawValue < $1.rawValue
+                }
+                let category: LabResearchFailureCategory = reasons.contains(.heartbeatExpired)
+                    ? .stalledSession : .runnerTerminated
+                try updateCampaignAndTrials(
+                    campaignID: campaignID,
+                    state: .aborted,
+                    at: now
+                )
+                try saveTerminalFailure(LabResearchTerminalFailure(
+                    campaignID: campaignID,
+                    state: .aborted,
+                    category: category,
+                    reasons: reasons,
+                    work: try summary(campaignID: campaignID),
+                    occurredAt: now
+                ).validated())
+            }
+        }
+        return reconciled.count
+    }
+
+    public func reconciledSnapshot(
+        campaignID: UUID,
+        now: Date = Date(),
+        isProcessAlive: @Sendable (Int32) -> Bool = LabResearchProcessLiveness.isAlive
+    ) throws -> LabResearchCampaignSnapshot {
+        _ = try reconcileCampaign(
+            campaignID: campaignID,
+            now: now,
+            isProcessAlive: isProcessAlive
+        )
+        let state = try campaignState(campaignID: campaignID)
+        return LabResearchCampaignSnapshot(
+            campaignID: campaignID,
+            state: state,
+            activeSessions: try activeSessionCount(campaignID: campaignID),
+            work: try summary(campaignID: campaignID),
+            terminalFailure: state == .failed || state == .aborted
+                ? try terminalFailure(campaignID: campaignID)
+                : nil
+        )
+    }
+
+    public func terminalFailure(campaignID: UUID) throws -> LabResearchTerminalFailure? {
+        var result: LabResearchTerminalFailure?
+        try withStatement(
+            """
+            SELECT aggregate_json FROM event_log
+            WHERE campaign_id=? AND kind='terminal-failure-v1'
+            ORDER BY id DESC LIMIT 1
+            """
+        ) { statement in
+            try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+            guard sqlite3_step(statement) == SQLITE_ROW,
+                  let bytes = blobColumn(statement, 0) else { return }
+            guard let value = try? decoder.decode(
+                LabResearchTerminalFailure.self,
+                from: bytes
+            ), (try? value.validated()) != nil else {
+                throw LabResearchDatabaseError.decodeFailed
+            }
+            result = value
+        }
+        return result
+    }
+
+    public func reviewTerminalFailure(
+        campaignID: UUID,
+        status: LabReportReviewStatus,
+        conclusion: String,
+        reviewedAt: Date = Date()
+    ) throws -> LabResearchTerminalFailure {
+        var eventID: Int64?
+        var artifact: LabResearchTerminalFailure?
+        try withStatement(
+            """
+            SELECT id, aggregate_json FROM event_log
+            WHERE campaign_id=? AND kind='terminal-failure-v1'
+            ORDER BY id DESC LIMIT 1
+            """
+        ) { statement in
+            try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+            guard sqlite3_step(statement) == SQLITE_ROW,
+                  let bytes = blobColumn(statement, 1),
+                  let decoded = try? decoder.decode(
+                    LabResearchTerminalFailure.self,
+                    from: bytes
+                  ) else { return }
+            eventID = sqlite3_column_int64(statement, 0)
+            artifact = decoded
+        }
+        guard let eventID, let artifact else {
+            throw LabResearchDatabaseError.decodeFailed
+        }
+        let reviewed = try artifact.reviewed(
+            status: status,
+            conclusion: conclusion,
+            at: reviewedAt
+        )
+        let bytes = try encoder.encode(reviewed)
+        try withStatement(
+            "UPDATE event_log SET aggregate_json=? WHERE id=?"
+        ) { statement in
+            try bind(bytes, at: 1, in: statement)
+            sqlite3_bind_int64(statement, 2, eventID)
+            try stepDone(statement)
+        }
+        return reviewed
+    }
+
     public func registerTrial(
         campaignID: UUID,
         trialID: String,
@@ -326,11 +686,15 @@ public actor LabResearchDatabase {
         try withStatement(
             """
             INSERT INTO trial(id, campaign_id, arm_id, arm_hash, stage, root_budget, status, created_at)
-            VALUES(?, ?, ?, ?, ?, ?, 'pending', ?)
+            VALUES(?, ?, ?, ?, ?, ?, 'running', ?)
             ON CONFLICT(campaign_id, id) DO UPDATE SET
               arm_hash=excluded.arm_hash,
               stage=excluded.stage,
-              root_budget=MAX(trial.root_budget, excluded.root_budget)
+              root_budget=MAX(trial.root_budget, excluded.root_budget),
+              status=CASE
+                WHEN trial.status='completed' THEN 'completed'
+                ELSE 'running'
+              END
             """
         ) { statement in
             try bind(trialID, at: 1, in: statement)
@@ -884,6 +1248,199 @@ public actor LabResearchDatabase {
         return value
     }
 
+    private struct RunningSession {
+        let owner: String
+        let processIdentifier: Int32
+        let expiresAt: Date
+    }
+
+    private func campaignState(campaignID: UUID) throws -> LabResearchRunState? {
+        var result: LabResearchRunState?
+        try withStatement("SELECT status FROM campaign WHERE id=?") { statement in
+            try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+            guard sqlite3_step(statement) == SQLITE_ROW,
+                  let raw = textColumn(statement, 0),
+                  let state = LabResearchRunState(rawValue: raw) else { return }
+            result = state
+        }
+        return result
+    }
+
+    private func activeSessionCount(campaignID: UUID) throws -> Int {
+        var result = 0
+        try withStatement(
+            "SELECT COUNT(*) FROM campaign_session WHERE campaign_id=? AND state='running'"
+        ) { statement in
+            try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+            if sqlite3_step(statement) == SQLITE_ROW {
+                result = Int(sqlite3_column_int64(statement, 0))
+            }
+        }
+        return result
+    }
+
+    private func runningSessions(campaignID: UUID) throws -> [RunningSession] {
+        var result: [RunningSession] = []
+        try withStatement(
+            """
+            SELECT owner, process_id, expires_at FROM campaign_session
+            WHERE campaign_id=? AND state='running' ORDER BY owner
+            """
+        ) { statement in
+            try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let owner = textColumn(statement, 0) else {
+                    throw LabResearchDatabaseError.decodeFailed
+                }
+                result.append(RunningSession(
+                    owner: owner,
+                    processIdentifier: Int32(sqlite3_column_int64(statement, 1)),
+                    expiresAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 2))
+                ))
+            }
+        }
+        return result
+    }
+
+    private func sessionIsActive(campaignID: UUID, owner: String) throws -> Bool {
+        var result = false
+        try withStatement(
+            """
+            SELECT 1 FROM campaign_session
+            WHERE campaign_id=? AND owner=? AND state='running' LIMIT 1
+            """
+        ) { statement in
+            try bind(campaignID.uuidString.lowercased(), at: 1, in: statement)
+            try bind(owner, at: 2, in: statement)
+            result = sqlite3_step(statement) == SQLITE_ROW
+        }
+        return result
+    }
+
+    private func finishSession(
+        campaignID: UUID,
+        owner: String,
+        state: LabResearchRunState,
+        at date: Date
+    ) throws {
+        try withStatement(
+            """
+            UPDATE campaign_session
+            SET state=?, heartbeat_at=?, expires_at=?, ended_at=?
+            WHERE campaign_id=? AND owner=? AND state='running'
+            """
+        ) { statement in
+            try bind(state.rawValue, at: 1, in: statement)
+            sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
+            sqlite3_bind_double(statement, 3, date.timeIntervalSince1970)
+            sqlite3_bind_double(statement, 4, date.timeIntervalSince1970)
+            try bind(campaignID.uuidString.lowercased(), at: 5, in: statement)
+            try bind(owner, at: 6, in: statement)
+            try stepDone(statement)
+        }
+    }
+
+    private func releaseLeases(
+        campaignID: UUID,
+        owner: String,
+        at date: Date
+    ) throws {
+        try withStatement(
+            """
+            UPDATE work_item SET status='pending', lease_owner=NULL,
+              lease_expires_at=NULL, updated_at=?
+            WHERE campaign_id=? AND status='running' AND lease_owner=?
+            """
+        ) { statement in
+            sqlite3_bind_double(statement, 1, date.timeIntervalSince1970)
+            try bind(campaignID.uuidString.lowercased(), at: 2, in: statement)
+            try bind(owner, at: 3, in: statement)
+            try stepDone(statement)
+        }
+    }
+
+    private func updateCampaignAndTrials(
+        campaignID: UUID,
+        state: LabResearchRunState,
+        at date: Date
+    ) throws {
+        try withStatement(
+            "UPDATE campaign SET status=?, updated_at=? WHERE id=?"
+        ) { statement in
+            try bind(state.rawValue, at: 1, in: statement)
+            sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
+            try bind(campaignID.uuidString.lowercased(), at: 3, in: statement)
+            try stepDone(statement)
+        }
+        try withStatement(
+            "UPDATE trial SET status=? WHERE campaign_id=? AND status!='completed'"
+        ) { statement in
+            try bind(state.rawValue, at: 1, in: statement)
+            try bind(campaignID.uuidString.lowercased(), at: 2, in: statement)
+            try stepDone(statement)
+        }
+    }
+
+    private func setCampaignState(
+        campaignID: UUID,
+        state: LabResearchRunState,
+        at date: Date
+    ) throws {
+        try withStatement(
+            "UPDATE campaign SET status=?, updated_at=? WHERE id=?"
+        ) { statement in
+            try bind(state.rawValue, at: 1, in: statement)
+            sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
+            try bind(campaignID.uuidString.lowercased(), at: 3, in: statement)
+            try stepDone(statement)
+        }
+    }
+
+    private func abortOrphanedCampaign(
+        campaignID: UUID,
+        category: LabResearchFailureCategory,
+        reasons: [LabResearchFailureReason],
+        at date: Date
+    ) throws {
+        try transaction {
+            try withStatement(
+                """
+                UPDATE work_item SET status='pending', lease_owner=NULL,
+                  lease_expires_at=NULL, updated_at=?
+                WHERE campaign_id=? AND status='running'
+                """
+            ) { statement in
+                sqlite3_bind_double(statement, 1, date.timeIntervalSince1970)
+                try bind(campaignID.uuidString.lowercased(), at: 2, in: statement)
+                try stepDone(statement)
+            }
+            try updateCampaignAndTrials(campaignID: campaignID, state: .aborted, at: date)
+            try saveTerminalFailure(LabResearchTerminalFailure(
+                campaignID: campaignID,
+                state: .aborted,
+                category: category,
+                reasons: reasons,
+                work: try summary(campaignID: campaignID),
+                occurredAt: date
+            ).validated())
+        }
+    }
+
+    private func saveTerminalFailure(_ artifact: LabResearchTerminalFailure) throws {
+        let bytes = try encoder.encode(artifact.validated())
+        try withStatement(
+            """
+            INSERT INTO event_log(campaign_id, kind, aggregate_json, created_at)
+            VALUES(?, 'terminal-failure-v1', ?, ?)
+            """
+        ) { statement in
+            try bind(artifact.campaignID.uuidString.lowercased(), at: 1, in: statement)
+            try bind(bytes, at: 2, in: statement)
+            sqlite3_bind_double(statement, 3, artifact.occurredAt.timeIntervalSince1970)
+            try stepDone(statement)
+        }
+    }
+
     private func createSchema() throws {
         try execute(Self.schemaSQL)
     }
@@ -915,6 +1472,19 @@ public actor LabResearchDatabase {
               created_at REAL NOT NULL,
               PRIMARY KEY(campaign_id, id)
             );
+            CREATE TABLE IF NOT EXISTS campaign_session(
+              campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+              owner TEXT NOT NULL,
+              process_id INTEGER NOT NULL,
+              state TEXT NOT NULL,
+              started_at REAL NOT NULL,
+              heartbeat_at REAL NOT NULL,
+              expires_at REAL NOT NULL,
+              ended_at REAL,
+              PRIMARY KEY(campaign_id, owner)
+            );
+            CREATE INDEX IF NOT EXISTS campaign_session_state
+              ON campaign_session(campaign_id, state, expires_at);
             CREATE TABLE IF NOT EXISTS work_item(
               id TEXT PRIMARY KEY,
               campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
@@ -1128,10 +1698,6 @@ private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self
 
 private enum LabResearchDigestProxy {
     static func digest<T: Encodable>(_ value: T) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return SHA256.hash(data: try encoder.encode(value))
-            .map { String(format: "%02x", $0) }
-            .joined()
+        try LabCanonicalDigest.sha256(value)
     }
 }

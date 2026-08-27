@@ -208,7 +208,8 @@ extension ResearchCoordinator {
         hypothesis: String?,
         database: LabResearchDatabase,
         allowBattery: Bool,
-        usesCandidateCache: Bool
+        usesCandidateCache: Bool,
+        resumeRequested: Bool = false
     ) async throws -> [LabRunReport] {
         guard let research = manifest.research else {
             throw LabResearchDatabaseError.durableProtocolRequired
@@ -282,7 +283,8 @@ extension ResearchCoordinator {
             campaignName: campaignName,
             manifestDigestSHA256: manifestDigestSHA256,
             gitCommit: gitCommit(),
-            reportProvenance: provenance
+            reportProvenance: provenance,
+            resumeRequested: resumeRequested
         )
         let started = ContinuousClock.now
         do {
@@ -336,6 +338,17 @@ extension ResearchCoordinator {
                     try await Task.sleep(nanoseconds: nanoseconds)
                     throw ResearchCLIError.budgetExpired
                 }
+                group.addTask {
+                    while !Task.isCancelled {
+                        try await Task.sleep(for: .seconds(30))
+                        _ = try await database.heartbeatRunSession(
+                            campaignID: campaignID,
+                            owner: durable.leaseOwner,
+                            staleAfter: durable.sessionStaleAfter
+                        )
+                    }
+                    throw CancellationError()
+                }
                 guard let first = try await group.next() else {
                     throw ResearchCLIError.noComparableReports
                 }
@@ -347,12 +360,31 @@ extension ResearchCoordinator {
                 campaignID: campaignID,
                 seconds: elapsed.secondsValue
             )
+            try await database.completeCampaign(
+                campaignID: campaignID,
+                owner: durable.leaseOwner
+            )
             return reports
         } catch {
             let elapsed = started.duration(to: .now)
             try? await database.recordActiveDuration(
                 campaignID: campaignID,
                 seconds: elapsed.secondsValue
+            )
+            let classification: LabResearchFailureClassification
+            if case ResearchCLIError.budgetExpired = error {
+                classification = LabResearchFailureClassification(
+                    state: .aborted,
+                    category: .budgetExpired,
+                    reasons: [.activeBudgetExhausted]
+                )
+            } else {
+                classification = LabResearchFailureClassifier.classify(error)
+            }
+            try await database.finishCampaign(
+                campaignID: campaignID,
+                owner: durable.leaseOwner,
+                classification: classification
             )
             throw error
         }
