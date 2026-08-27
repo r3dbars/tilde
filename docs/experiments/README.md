@@ -159,6 +159,7 @@ Completed: <ISO-8601 UTC>
 - [F03 — Retained-outcome ledger](F03-retained-outcome-ledger.md) — IMPLEMENTING
 - [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
 - [Q05 — Qwen confidence capture and small filtering pilot](Q05-confidence-filter-pilot.md) — REJECTED (selected policy; capture passed)
+- [Q06 — Fixed confidence filter on additional development roots](Q06-confidence-filter-followup.md) — PROPOSED
 
 The staged theory registry and current eligibility gates live in the
 [Tilde research roadmap](../research-roadmap.md). The running notebook of
