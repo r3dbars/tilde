@@ -99,6 +99,12 @@ private struct LabRunSidebarRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            Spacer(minLength: 2)
+            Image(systemName: report.effectiveEvidenceEligibility.eligible
+                  ? "checkmark.shield.fill" : "exclamationmark.shield")
+                .foregroundStyle(report.effectiveEvidenceEligibility.eligible ? .green : .secondary)
+                .help(report.effectiveEvidenceEligibility.eligible
+                      ? "Decision-grade evidence" : "Not decision-grade evidence")
         }
     }
 

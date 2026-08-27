@@ -55,6 +55,8 @@ swift build --product tilde-lab
 # Development-only discovery. Resume is automatic at the work-item boundary.
 .build/debug/tilde-lab init \
   --name qwen-factorial \
+  --hypothesis-id QWEN-GEN-01 \
+  --hypothesis "The registered treatment improves expected utility without increasing harm." \
   --class generator \
   --suite certified-v2 \
   --seeds 17,41,73 \
@@ -63,6 +65,10 @@ swift build --product tilde-lab
 .build/debug/tilde-lab validate qwen-factorial.json
 caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json --resume
 .build/debug/tilde-lab status qwen-factorial.json
+.build/debug/tilde-lab review \
+  --campaign qwen-factorial.json \
+  --status supported \
+  --conclusion "The preregistered criteria passed; see the experiment record."
 .build/debug/tilde-lab compare --campaign qwen-factorial.json
 
 # Freeze at most three passing candidates. No optimizer runs beyond this point.
@@ -73,6 +79,11 @@ caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json --resume
 .build/debug/tilde-lab validate-candidates \
   validation-plan.json \
   --campaign qwen-factorial.json
+.build/debug/tilde-lab review \
+  --campaign validation-plan.json \
+  --status supported \
+  --conclusion "The frozen validation criteria passed."
+.build/debug/tilde-lab compare --campaign validation-plan.json
 
 # Consume one frozen candidate against one baseline once per exact evidence set.
 .build/debug/tilde-lab holdout \
@@ -81,6 +92,11 @@ caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json --resume
   --candidate CANDIDATE_ID \
   --confirm-consume \
   --output holdout-plan.json
+.build/debug/tilde-lab review \
+  --campaign holdout-plan.json \
+  --status supported \
+  --conclusion "The one-time holdout criteria passed."
+.build/debug/tilde-lab compare --campaign holdout-plan.json
 ```
 
 Campaign JSON is owner-only (`0700` directories and `0600` files). It may hold
@@ -89,6 +105,16 @@ evidence, never those paths, prompts, fixture text, screen text, or raw model
 output. Synthetic raw candidates can be cached locally to replay display
 policy; `cache-clear` irreversibly deletes that explicit cache. Private-history
 and hand-curated inputs can never enter it.
+
+Every newly saved aggregate report uses schema v6 and stores a privacy-safe
+eligibility decision alongside the source commit and clean/dirty state, runner
+hash, OS/build and anonymous hardware class, power/thermal state, versioned
+invocation digest, registered hypothesis, and review state. It does not store
+raw command arguments. Reports from v1-v5 and reports with missing, dirty,
+unregistered, incomplete, or unreviewed evidence remain readable, but the CLI
+will not create a comparison or advance a protected phase from them. Run
+`status`, resolve every named blocker, attach the honest supported/rejected/
+inconclusive conclusion with `review`, and only then run `compare`.
 
 ### Phase firewall
 

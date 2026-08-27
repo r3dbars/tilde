@@ -141,8 +141,9 @@ history:
 ```bash
 ./script/build_and_run.sh --tilde-lab
 swift build --product tilde-lab
-.build/debug/tilde-lab init --name qwen-factorial --class generator --suite certified-v2 --output campaign.json
+.build/debug/tilde-lab init --name qwen-factorial --hypothesis-id QWEN-GEN-01 --hypothesis "The registered treatment improves expected utility without increasing harm." --class generator --suite certified-v2 --output campaign.json
 .build/debug/tilde-lab run campaign.json --resume
+.build/debug/tilde-lab review --campaign campaign.json --status supported --conclusion "The preregistered criteria passed; see the experiment record."
 .build/debug/tilde-lab compare --campaign campaign.json
 swift run tilde-lab-runner --workers 1 --slots 8 --repetitions 10
 swift run tilde-lab-runner --built-in-suite slack-reply-gold-v1
