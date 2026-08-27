@@ -11,3 +11,7 @@ does not. Ideas here are hypotheses. A measured result graduates to
 the Learning Ledger.
 
 Do not check in PDFs, prompts, personal writing, screen text, or local paths.
+
+The hole in the literature — why the best personal-keyboard papers are from
+2018–2020, and what Tilde can uniquely measure — is
+[`where-the-field-stopped.md`](where-the-field-stopped.md).
