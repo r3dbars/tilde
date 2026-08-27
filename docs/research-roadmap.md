@@ -22,7 +22,9 @@ are from 2018–2020. Recent work is HCI on generic suggestions or Copilot on
 code. Tilde's unique shot is the combination those papers never published —
 on-device personal memory, screen context, and retained characters without
 stored writing, for a fast desktop typist. See
-[`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md).
+[`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md)
+and the scientific stance in
+[`docs/research/scientific-program.md`](research/scientific-program.md).
 That does not unlock later stages early. Tilde must still become an
 intervention system that decides:
 
