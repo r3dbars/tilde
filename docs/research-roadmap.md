@@ -5,7 +5,10 @@ program. The machine-readable priority queue in
 `Sources/TildeLabKit/Fixtures/learning-ledger-v1.json` remains the source of
 truth for what is eligible to run next. This roadmap preserves the longer-term
 hypotheses, their dependencies, and the conditions that must be met before they
-enter that queue.
+enter that queue. Every attempt, including failures, is appended to
+[`docs/research/lab-log.md`](research/lab-log.md). Live F03 ingest is a
+Mac thread; start from
+[`docs/research/next-on-device.md`](research/next-on-device.md).
 
 The goal is not the highest next-token accuracy. It is:
 
@@ -16,8 +19,17 @@ The goal is not the highest next-token accuracy. It is:
 
 The strongest conclusion across predictive keyboards, Smart Compose, code
 completion, accessibility input, cache language models, and Tilde's own Lab
-results is that candidate generation is only one part of autocomplete. Tilde
-must become an intervention system that decides:
+results is that candidate generation is only one part of autocomplete. The
+same sweep showed a second fact: the last shipped *personal* keyboard papers
+are from 2018–2020. Recent work is HCI on generic suggestions or Copilot on
+code. Tilde's unique shot is the combination those papers never published —
+on-device personal memory, screen context, and retained characters without
+stored writing, for a fast desktop typist. See
+[`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md)
+and the scientific stance in
+[`docs/research/scientific-program.md`](research/scientific-program.md).
+That does not unlock later stages early. Tilde must still become an
+intervention system that decides:
 
 1. whether inference is worth running;
 2. which source has the best candidate;
@@ -423,7 +435,14 @@ The publication workflow is defined in
 
 The roadmap uses primary sources as directional evidence, not as proof that the
 same effect will transfer from mobile typing, email, or code to system-wide
-macOS prose:
+macOS prose. The full catalog — including runnable-now versus parked flags — is
+[`docs/reading-list.md`](reading-list.md). Longer Tilde-specific digests live in
+[`docs/research/`](research/). Read the digest before fetching a paper.
+
+A 2026-08-27 sweep added the HCI, AAC, interruption, Copilot-metric, and
+writing-agency papers that the first digest set had only named. The claims
+that survived that sweep, and the experiments they unlock, are listed at the
+top of the reading list. Headline pointers:
 
 - [Gmail Smart Compose](https://arxiv.org/abs/1906.00080) supports fast neural
   generation combined with a lightweight personal n-gram model.
@@ -435,10 +454,16 @@ macOS prose:
   language-model confidence threshold alone.
 - [GitHub's accepted-and-retained completion metric](https://github.blog/ai-and-ml/github-copilot/the-road-to-better-completions-building-a-faster-smarter-github-copilot-with-a-new-custom-model/)
   supports measuring whether accepted text survives later editing.
+- [Ziegler et al., MAPS 2022](https://doi.org/10.1145/3520312.3534864) is the
+  matching warning: acceptance predicts how productive people *feel*, which is
+  why Tab cannot be the promotion target.
 - [Are Word Suggestions Beneficial?](https://doi.org/10.1145/3772716) reports
-  that suggestion usefulness depends on both prediction accuracy and the
-  writer's unaided typing efficiency.
-- [Predictive Text Encourages Predictable Writing](https://www.eecs.harvard.edu/~kgajos/papers/2020/arnold20predictcive.shtml)
+  that desktop fast typists mostly skip, and that speed only rises when
+  suggestions are both highly accurate and the unaided typist is slow.
+- [Quinn and Zhai, CHI 2016](https://doi.org/10.1145/2858036.2858305) is the
+  ancestor cost-benefit result: always-on suggestions save taps and still lose
+  on time.
+- [Predictive Text Encourages Predictable Writing](https://www.eecs.harvard.edu/~kgajos/papers/2020/arnold20predictive.pdf)
   motivates explicit authorial-agency and voice checks.
 - [Multi-line AI-assisted Code Authoring](https://arxiv.org/abs/2402.04141)
   shows that longer suggestions can save disproportionate input while creating
