@@ -753,6 +753,18 @@ public enum LabExperimentEngine {
     ) async throws -> LabCaseResult {
         let scenario = item.scenario
         let prepared = LabPromptComposer.prepare(scenario: scenario, configuration: arm.prompt)
+        if let reason = SceneSuggestionPolicy.suppressionReason(scene: prepared.scene) {
+            await candidateObserved(LabCandidateObservation(scenarioID: scenario.id, suggestion: nil))
+            return LabScorer.score(
+                scenario: scenario,
+                repetition: item.repetition,
+                generationSeed: item.generationSeed,
+                suggestion: nil,
+                policySuppressed: true,
+                decisionReason: .sceneSuppression(reason),
+                workerIndex: client.workerIndex
+            )
+        }
         if arm.suppressesSensitiveScenes, SensitiveScenePolicy.isSensitive(scene: prepared.scene) {
             await candidateObserved(LabCandidateObservation(scenarioID: scenario.id, suggestion: nil))
             return LabScorer.score(

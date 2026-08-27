@@ -83,6 +83,13 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = ProcessInfo.processInfo.systemUptime
+        if let reason = SceneSuggestionPolicy.suppressionReason(scene: scene) {
+            diagnostics.record(
+                "suggestion-suppressed",
+                metadata: ["reason": reason.rawValue]
+            )
+            return nil
+        }
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,

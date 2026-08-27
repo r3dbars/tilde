@@ -14,9 +14,24 @@ public enum LabDecisionReason: String, Codable, CaseIterable, Sendable {
     case selfRepetition = "self-repetition"
     case sceneEcho = "scene-echo"
     case unsupportedFact = "unsupported-fact"
+    case promptInjectionScene = "prompt-injection-scene"
+    case noIncomingTurn = "no-incoming-turn"
+    case resolvedConversation = "resolved-conversation"
+    case ambiguousChoice = "ambiguous-choice"
     case lowConfidence = "low-confidence"
     case timeout
     case protocolError = "protocol-error"
+}
+
+extension LabDecisionReason {
+    static func sceneSuppression(_ reason: SceneSuggestionPolicy.SuppressionReason) -> Self {
+        switch reason {
+        case .promptInjection: .promptInjectionScene
+        case .noIncomingTurn: .noIncomingTurn
+        case .resolvedConversation: .resolvedConversation
+        case .ambiguousChoice: .ambiguousChoice
+        }
+    }
 }
 
 public struct LabSuggestionDecision: Sendable {
