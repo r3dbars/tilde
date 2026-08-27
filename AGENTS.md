@@ -108,6 +108,10 @@ resolve URL; it must never include user text or screen content.
   registered hypothesis and an explicit supported/rejected/inconclusive
   review. Legacy, dirty, incomplete, unregistered, and unreviewed reports stay
   readable but must never advance a protected phase.
+- Start a new durable campaign without `--resume`. Use `--resume` only after
+  reconciled status reports `aborted`; completed and failed campaigns require a
+  new campaign ID. Treat an aggregate terminal-failure artifact as accountable
+  failure evidence, never as a substitute comparison.
 - A Lab result is evidence, not authorization to alter production. Production
   changes still require protected validation, sealed holdout, isolated preview,
   meaningful live dogfood, real IMKit interaction proof, and explicit owner

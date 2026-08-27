@@ -21,3 +21,8 @@ Decision-grade comparisons require clean, complete v6 reports with a
 registered hypothesis and an explicit supported/rejected/inconclusive review.
 Legacy, dirty, incomplete, unregistered, and unreviewed reports stay readable
 but must never advance a protected phase.
+
+Start a new durable campaign without `--resume`. Use `--resume` only when
+reconciled status reports `aborted`; failed and completed campaigns require a
+new campaign ID. Reportless terminal failures may be reviewed as aggregate
+failure artifacts but cannot create a comparison.

@@ -9,6 +9,10 @@ struct LabResearchDatabaseTests {
         let fixture = try await Fixture()
         defer { fixture.remove() }
         let item = fixture.workItem(repetition: 0)
+        try await fixture.beginSession(
+            owner: "first",
+            now: Date(timeIntervalSince1970: 1)
+        )
 
         try await fixture.database.enqueue([item])
         #expect(try await fixture.database.claim(
@@ -39,11 +43,16 @@ struct LabResearchDatabaseTests {
         defer { fixture.remove() }
         let expired = fixture.workItem(repetition: 0)
         let released = fixture.workItem(repetition: 1)
+        let owner = "lease-test"
+        try await fixture.beginSession(
+            owner: owner,
+            now: Date(timeIntervalSince1970: 1)
+        )
         try await fixture.database.enqueue([expired, released])
 
         #expect(try await fixture.database.claim(
             workItemID: expired.id,
-            owner: "crashed",
+            owner: owner,
             leaseDuration: 5,
             now: Date(timeIntervalSince1970: 10)
         ))
@@ -52,19 +61,19 @@ struct LabResearchDatabaseTests {
         ) == 1)
         #expect(try await fixture.database.claim(
             workItemID: expired.id,
-            owner: "resumed",
+            owner: owner,
             now: Date(timeIntervalSince1970: 16)
         ))
 
         #expect(try await fixture.database.claim(
             workItemID: released.id,
-            owner: "cancelled",
+            owner: owner,
             now: Date(timeIntervalSince1970: 20)
         ))
-        try await fixture.database.release(workItemID: released.id, owner: "cancelled")
+        try await fixture.database.release(workItemID: released.id, owner: owner)
         #expect(try await fixture.database.claim(
             workItemID: released.id,
-            owner: "replacement",
+            owner: owner,
             now: Date(timeIntervalSince1970: 21)
         ))
     }
@@ -75,6 +84,7 @@ struct LabResearchDatabaseTests {
         defer { fixture.remove() }
         let item = fixture.workItem(repetition: 0)
         let result = fixture.result(repetition: 0)
+        try await fixture.beginSession(owner: "worker")
         try await fixture.database.enqueue([item])
         #expect(try await fixture.database.claim(workItemID: item.id, owner: "worker"))
         try await fixture.database.complete(workItemID: item.id, owner: "worker", result: result)
@@ -164,6 +174,7 @@ struct LabResearchDatabaseTests {
             blockIndex: 0,
             leaseOwner: "engine-test"
         )
+        try await fixture.beginSession(owner: context.leaseOwner)
         let suite = LabScenarioSuite(name: "durable-engine", scenarios: [fixture.scenario])
         let arm = LabArmConfiguration(id: fixture.trialID)
 
@@ -255,6 +266,21 @@ private final class Fixture: @unchecked Sendable {
             generationSeed: 0,
             repetition: repetition,
             blockIndex: 0
+        )
+    }
+
+    func beginSession(
+        owner: String,
+        now: Date = Date()
+    ) async throws {
+        try await database.beginRunSession(
+            campaignID: campaign.id,
+            owner: owner,
+            processIdentifier: ProcessInfo.processInfo.processIdentifier,
+            resume: false,
+            staleAfter: 3_600,
+            now: now,
+            isProcessAlive: { _ in true }
         )
     }
 

@@ -69,11 +69,7 @@ public struct LabResearchPlan: Codable, Equatable, Sendable {
     }
 
     public func digestSHA256() throws -> String {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
-        return SHA256.hash(data: try encoder.encode(self))
-            .map { String(format: "%02x", $0) }.joined()
+        try LabCanonicalDigest.sha256(self, dateEncodingStrategy: .iso8601)
     }
 
     private static func isSHA256(_ value: String) -> Bool {
@@ -232,9 +228,6 @@ public enum LabResearchPlanBuilder {
     }
 
     public static func comparisonDigest(_ report: LabPairedComparisonReport) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return SHA256.hash(data: try encoder.encode(report))
-            .map { String(format: "%02x", $0) }.joined()
+        try LabCanonicalDigest.sha256(report)
     }
 }
