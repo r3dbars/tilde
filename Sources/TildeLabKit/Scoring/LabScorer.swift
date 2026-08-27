@@ -16,6 +16,7 @@ public enum LabScorer {
     public static func score(
         scenario: LabScenario,
         repetition: Int,
+        generationSeed: Int = 0,
         suggestion: String?,
         policySuppressed: Bool = false,
         modelRequested: Bool = false,
@@ -23,7 +24,8 @@ public enum LabScorer {
         firstTokenMilliseconds: Int? = nil,
         meanTokenProbability: Double? = nil,
         decisionReason: LabDecisionReason = .shown,
-        workerIndex: Int? = nil
+        workerIndex: Int? = nil,
+        candidateCacheHit: Bool? = nil
     ) -> LabCaseResult {
         let expectation = scenario.expectation
         let offeredWords = words(in: suggestion ?? "")
@@ -115,6 +117,7 @@ public enum LabScorer {
             category: scenario.category,
             counterfactualPairID: scenario.tags.first(where: { $0.hasPrefix("pair-") }),
             repetition: repetition,
+            generationSeed: generationSeed,
             outcome: outcome,
             expectedSuggestion: expectation.shouldSuggest,
             hasGoldenContinuation: expectation.goldenContinuation?.isEmpty == false,
@@ -151,16 +154,19 @@ public enum LabScorer {
             decisionReason: decisionReason,
             visibleWordCount: offeredWords.count,
             visibleCharacterCount: suggestion?.count ?? 0,
-            workerIndex: workerIndex
+            workerIndex: workerIndex,
+            candidateCacheHit: candidateCacheHit
         )
     }
 
     public static func failure(
         scenario: LabScenario,
         repetition: Int,
+        generationSeed: Int = 0,
         outcome: LabCaseOutcome,
         workerIndex: Int?,
-        decisionReason: LabDecisionReason? = nil
+        decisionReason: LabDecisionReason? = nil,
+        candidateCacheHit: Bool? = nil
     ) -> LabCaseResult {
         precondition(outcome == .timeout || outcome == .error)
         return LabCaseResult(
@@ -168,6 +174,7 @@ public enum LabScorer {
             category: scenario.category,
             counterfactualPairID: scenario.tags.first(where: { $0.hasPrefix("pair-") }),
             repetition: repetition,
+            generationSeed: generationSeed,
             outcome: outcome,
             expectedSuggestion: scenario.expectation.shouldSuggest,
             hasGoldenContinuation: scenario.expectation.goldenContinuation?.isEmpty == false,
@@ -183,7 +190,8 @@ public enum LabScorer {
             baselineKeystrokes: scenario.expectation.goldenContinuation?.count ?? 0,
             failureCategory: .timing,
             decisionReason: decisionReason ?? (outcome == .timeout ? .timeout : .protocolError),
-            workerIndex: workerIndex
+            workerIndex: workerIndex,
+            candidateCacheHit: candidateCacheHit
         )
     }
 
@@ -234,7 +242,7 @@ public enum LabScorer {
             grouping: completed.compactMap { result -> LabCaseResult? in
                 result.counterfactualPairID == nil ? nil : result
             },
-            by: { "\($0.counterfactualPairID!)#\($0.repetition)" }
+            by: { "\($0.counterfactualPairID!)#seed-\($0.generationSeed)#\($0.repetition)" }
         ).values.filter { $0.count >= 2 }
         let counterfactualPairPassRate = pairGroups.isEmpty
             ? nil

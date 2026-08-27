@@ -626,18 +626,27 @@ public enum LabAutoresearchPlanner {
         controlP95Milliseconds: Int?,
         minimumImprovement: Double
     ) -> LabResearchDecision {
-        let candidateRank = LabResearchRank(
-            report: candidate,
-            controlP95Milliseconds: controlP95Milliseconds,
-            complexity: 1
+        _ = controlP95Milliseconds // retained for decoding and older callers
+        let rule = LabPromotionRule(
+            bootstrapIterations: 2_000,
+            minimumProbabilityPositive: 0.80,
+            minimumPrimaryEffect: minimumImprovement,
+            maximumBadWhenShownIncrease: 0,
+            latencyNoninferiorityMilliseconds: 25,
+            maximumProtectedSliceRegression: 0
         )
-        let championRank = LabResearchRank(
-            report: champion,
-            controlP95Milliseconds: controlP95Milliseconds
-        )
-        return candidateRank.isBetter(than: championRank, minimumImprovement: minimumImprovement)
-            ? .keep
-            : .discard
+        guard let comparison = try? LabPairedComparison.compare(
+            baseline: champion,
+            candidate: candidate,
+            phase: .discovery,
+            primaryMetric: .oracleNetKeystrokeSavings,
+            promotionRule: rule
+        ) else {
+            // An unmatched or otherwise unpaired result is not evidence for a
+            // promotion. The caller may rerun it, but point estimates never win.
+            return .discard
+        }
+        return comparison.decision == .advance ? .keep : .discard
     }
 }
 

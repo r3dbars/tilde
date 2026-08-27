@@ -71,8 +71,7 @@ struct TildeLabRunner {
                options.certifiesCertifiedCorpus
                 || (options.campaign != nil && options.campaign != .modelQuality50)
                 || options.autoresearchHours != nil
-                || options.speakAutoresearchHours != nil
-                || options.learningLoopHours != nil {
+                || options.speakAutoresearchHours != nil {
                 throw NSError(
                     domain: "TildeLab",
                     code: 5,
@@ -139,7 +138,7 @@ struct TildeLabRunner {
                 : options.certifiedCorpus
                     ? .development
                 : options.suitePath == nil
-                    ? options.builtInSuite.recommendedPartition
+                    ? .development
                     : .all
             if options.productionFidelity {
                 commandLineArm.generation.requestMode = .productionStreaming
@@ -163,6 +162,8 @@ struct TildeLabRunner {
             var arms = manifest?.arms
                 ?? options.campaign.map(LabCampaignFactory.arms(for:))
                 ?? [commandLineArm]
+            let research = manifest?.research
+                ?? options.campaign.map(LabCampaignFactory.researchProtocol(for:))
             if options.certifiedCorpus, options.campaign != nil {
                 for index in arms.indices {
                     arms[index].scenarios.partition = .development
@@ -258,7 +259,7 @@ struct TildeLabRunner {
             if options.certifiedCorpus,
                (options.campaign != nil && options.campaign != .modelQuality50)
                     || options.autoresearchHours != nil
-                    || options.speakAutoresearchHours != nil || options.learningLoopHours != nil {
+                    || options.speakAutoresearchHours != nil {
                 let quality = try LabCorpusQualityAuditor.auditCertifiedV2(suite: suite)
                 guard let certificate = await LabCorpusCertificateStore().load(
                     corpusDigestSHA256: quality.corpusDigestSHA256
@@ -331,20 +332,6 @@ struct TildeLabRunner {
                 )
                 return
             }
-            if let researchHours = options.learningLoopHours {
-                try await runAutoresearch(
-                    runner: runner,
-                    suite: suite,
-                    baseline: commandLineArm,
-                    runtime: runtime,
-                    helperPath: options.helperPath,
-                    modelPath: options.modelPath,
-                    seed: options.seed,
-                    hours: researchHours,
-                    focus: .learningLoop
-                )
-                return
-            }
             let execution = runtime.materialize(
                 serverExecutable: URL(fileURLWithPath: options.helperPath),
                 modelFile: URL(fileURLWithPath: options.modelPath),
@@ -356,6 +343,7 @@ struct TildeLabRunner {
                 suite: suite,
                 arms: arms,
                 execution: execution,
+                research: research,
                 progress: { update in writeProgress(update) },
                 reportCompleted: { report in
                     if savesReport { try await reportStore.save(report) }
@@ -392,32 +380,16 @@ struct TildeLabRunner {
         focus: LabAutoresearchFocus
     ) async throws {
         var baseline = baseline
-        let learningStore = LabLearningCycleStore()
-        let fullSuiteDigest = try suite.digestSHA256()
-        if focus == .learningLoop,
-           await learningStore.hasConsumedHoldout(forSuiteDigest: fullSuiteDigest) {
-            throw NSError(
-                domain: "TildeLab",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "This protected holdout has already been consumed. Version and review a new protected suite before another learning loop."]
-            )
-        }
-        if focus == .learningLoop,
-           let accepted = await learningStore.loadAll().first(where: { $0.outcome == .accepted })?.acceptedArm {
-            baseline = accepted
-        }
         switch focus {
         case .broad:
             baseline.id = "overnight-baseline"
         case .speakPolicy:
             baseline.id = "speak-policy-baseline"
-        case .learningLoop:
-            baseline.id = "learning-baseline"
         }
         baseline.scenarios.partition = .development
         baseline.generation.requestMode = .productionStreaming
         baseline.prompt.includesIntentFutures = true
-        if focus == .speakPolicy || focus == .learningLoop {
+        if focus == .speakPolicy {
             // Start from the repeatedly confirmed champion of the broad
             // campaign, then alter only evidence and display-policy controls.
             baseline.generation.preset = .custom
@@ -430,23 +402,18 @@ struct TildeLabRunner {
             baseline.generation.minimumMeanTokenProbability = 0.20
             baseline.judgment.maximumVisibleWords = 3
         }
-        if focus == .learningLoop {
-            // Carry the confirmed speak-policy winner forward. Development
-            // may mutate it, while validation and holdout remain unseen.
-            baseline.generation.predictionTokens = 6
-            baseline.prompt.intentPriorWeight = 0.75
-            baseline.prompt.maximumIntentFutures = 2
-            baseline.prompt.conversationTurnLimit = 2
-        }
-
         let selectedSuite = LabScenarioSelector.select(from: suite, configuration: baseline.scenarios)
         let digest = try selectedSuite.digestSHA256()
         let mutations = focus.mutations
         let subsystem: LabResearchSubsystem
+        let experimentClass: LabExperimentClass
         switch focus {
-        case .broad: subsystem = .generation
-        case .speakPolicy: subsystem = .display
-        case .learningLoop: subsystem = .context
+        case .broad:
+            subsystem = .generation
+            experimentClass = .generator
+        case .speakPolicy:
+            subsystem = .display
+            experimentClass = .displayPolicy
         }
         let configuration = LabAutoresearchConfiguration(
             screeningRepetitions: focus.screeningRepetitions,
@@ -486,10 +453,18 @@ struct TildeLabRunner {
             var trialRuntime = runtime
             trialRuntime.repetitions = repetitions
             let execution = trialRuntime.materialize(serverExecutable: helper, modelFile: model)
+            let protocolDefinition = LabResearchProtocol(
+                phase: .discovery,
+                experimentClass: experimentClass,
+                searchStrategy: .fixed,
+                baselineArmID: arm.id,
+                fixedGenerationSeeds: [arm.generation.seed]
+            )
             return try await runner.run(
                 suite: suite,
                 arm: arm,
                 execution: execution,
+                research: protocolDefinition,
                 protocolRetryCount: configuration.protocolRetryCount,
                 restartWorkers: restartWorkers,
                 stopWorkersAfterRun: restartWorkers,
@@ -626,7 +601,7 @@ struct TildeLabRunner {
         let confirmation = try await runArm(
             confirmationArm,
             repetitions: configuration.confirmationRepetitions,
-            restartWorkers: focus != .learningLoop
+            restartWorkers: true
         )
         campaign.ledger.append(LabResearchLedgerEntry(
             trial: campaign.ledger.count,
@@ -641,169 +616,10 @@ struct TildeLabRunner {
         try await checkpoint(campaign)
         printResearchCheckpoint(campaign.ledger.last!, report: confirmation)
 
-        if focus == .learningLoop {
-            let validationBaseline = try await runPartitionComparisonArm(
-                baseline,
-                id: "learning-validation-baseline",
-                partition: .validation,
-                repetitions: configuration.confirmationRepetitions,
-                runArm: runArm
-            )
-            appendComparisonCheckpoint(
-                report: validationBaseline,
-                parentArmID: baseline.id,
-                decision: .control,
-                campaign: &campaign
-            )
-            try await checkpoint(campaign)
-
-            let validationCandidate = try await runPartitionComparisonArm(
-                campaign.championArm,
-                id: "learning-validation-candidate",
-                partition: .validation,
-                repetitions: configuration.confirmationRepetitions,
-                runArm: runArm
-            )
-            appendComparisonCheckpoint(
-                report: validationCandidate,
-                parentArmID: campaign.championArm.id,
-                decision: .confirmation,
-                campaign: &campaign
-            )
-            try await checkpoint(campaign)
-
-            let validationDecision = LabAutoresearchPlanner.decision(
-                candidate: validationCandidate,
-                champion: validationBaseline,
-                controlP95Milliseconds: validationBaseline.metrics.latency.p95Milliseconds,
-                minimumImprovement: configuration.minimumBehavioralImprovement
-            )
-
-            var outcome: LabLearningCycleOutcome = .rejectedOnValidation
-            var acceptedArm: LabArmConfiguration?
-            var holdoutBaselineSnapshot: LabLearningScoreSnapshot?
-            var holdoutCandidateSnapshot: LabLearningScoreSnapshot?
-
-            if validationDecision == .keep {
-                let holdoutRepetitions = max(20, configuration.confirmationRepetitions * 2)
-                let holdoutBaseline = try await runPartitionComparisonArm(
-                    baseline,
-                    id: "learning-holdout-baseline",
-                    partition: .holdout,
-                    repetitions: holdoutRepetitions,
-                    runArm: runArm
-                )
-                appendComparisonCheckpoint(
-                    report: holdoutBaseline,
-                    parentArmID: baseline.id,
-                    decision: .control,
-                    campaign: &campaign
-                )
-                try await checkpoint(campaign)
-
-                let holdoutCandidate = try await runPartitionComparisonArm(
-                    campaign.championArm,
-                    id: "learning-holdout-candidate",
-                    partition: .holdout,
-                    repetitions: holdoutRepetitions,
-                    runArm: runArm,
-                    restartWorkers: true
-                )
-                appendComparisonCheckpoint(
-                    report: holdoutCandidate,
-                    parentArmID: campaign.championArm.id,
-                    decision: .confirmation,
-                    campaign: &campaign
-                )
-                try await checkpoint(campaign)
-
-                holdoutBaselineSnapshot = LabLearningScoreSnapshot(
-                    partition: .holdout,
-                    report: holdoutBaseline
-                )
-                holdoutCandidateSnapshot = LabLearningScoreSnapshot(
-                    partition: .holdout,
-                    report: holdoutCandidate
-                )
-                let holdoutDecision = LabAutoresearchPlanner.decision(
-                    candidate: holdoutCandidate,
-                    champion: holdoutBaseline,
-                    controlP95Milliseconds: holdoutBaseline.metrics.latency.p95Milliseconds,
-                    minimumImprovement: 0
-                )
-                if holdoutDecision == .keep {
-                    outcome = .accepted
-                    acceptedArm = campaign.championArm
-                } else {
-                    outcome = .rejectedOnHoldout
-                }
-            } else {
-                LabChildProcessRegistry.shared.terminateAll()
-            }
-
-            let summary = LabLearningCycleSummary(
-                campaignID: campaign.id,
-                suiteDigestSHA256: fullSuiteDigest,
-                outcome: outcome,
-                acceptedArm: acceptedArm,
-                developmentCandidate: LabLearningScoreSnapshot(
-                    partition: .development,
-                    report: confirmation
-                ),
-                validationBaseline: LabLearningScoreSnapshot(
-                    partition: .validation,
-                    report: validationBaseline
-                ),
-                validationCandidate: LabLearningScoreSnapshot(
-                    partition: .validation,
-                    report: validationCandidate
-                ),
-                holdoutBaseline: holdoutBaselineSnapshot,
-                holdoutCandidate: holdoutCandidateSnapshot,
-                startedAt: campaign.createdAt
-            )
-            try await learningStore.save(summary)
-            let finalSavings = summary.finalNetKeystrokeSavingsRate.map(percent) ?? "none"
-            writeError("tilde-lab-runner: learning-cycle summary=\(summary.id.uuidString) outcome=\(outcome.rawValue) net-keystroke-savings=\(finalSavings)\n")
-        }
-
         campaign.state = .completed
         campaign.updatedAt = Date()
         try await checkpoint(campaign)
         writeError("tilde-lab-runner: autoresearch complete campaign=\(campaign.id.uuidString)\n")
-    }
-
-    private static func runPartitionComparisonArm(
-        _ source: LabArmConfiguration,
-        id: String,
-        partition: LabScenarioPartition,
-        repetitions: Int,
-        runArm: (LabArmConfiguration, Int, Bool) async throws -> LabRunReport,
-        restartWorkers: Bool = false
-    ) async throws -> LabRunReport {
-        var arm = source
-        arm.id = id
-        arm.scenarios.partition = partition
-        return try await runArm(arm, repetitions, restartWorkers)
-    }
-
-    private static func appendComparisonCheckpoint(
-        report: LabRunReport,
-        parentArmID: String,
-        decision: LabResearchDecision,
-        campaign: inout LabResearchCampaign
-    ) {
-        campaign.ledger.append(LabResearchLedgerEntry(
-            trial: campaign.ledger.count,
-            parentArmID: parentArmID,
-            armID: report.arm.id,
-            mutation: nil,
-            reportID: report.id,
-            decision: decision,
-            verdict: report.verdict
-        ))
-        campaign.updatedAt = Date()
-        printResearchCheckpoint(campaign.ledger.last!, report: report)
     }
 
     private static func printResearchCheckpoint(
@@ -953,11 +769,10 @@ struct TildeLabRunner {
 private enum LabAutoresearchFocus: String {
     case broad
     case speakPolicy = "speak-policy"
-    case learningLoop = "learning-loop"
 
     var mutations: [LabResearchMutation] {
         switch self {
-        case .broad, .learningLoop: LabResearchMutation.allCases
+        case .broad: LabResearchMutation.allCases
         case .speakPolicy: LabResearchMutation.speakPolicyCases
         }
     }
@@ -966,7 +781,6 @@ private enum LabAutoresearchFocus: String {
         switch self {
         case .broad: "overnight"
         case .speakPolicy: "speak"
-        case .learningLoop: "learning"
         }
     }
 
@@ -974,7 +788,6 @@ private enum LabAutoresearchFocus: String {
         switch self {
         case .broad: 20
         case .speakPolicy: 6
-        case .learningLoop: 10
         }
     }
 
@@ -982,7 +795,6 @@ private enum LabAutoresearchFocus: String {
         switch self {
         case .broad: 100
         case .speakPolicy: 20
-        case .learningLoop: 50
         }
     }
 
@@ -990,7 +802,6 @@ private enum LabAutoresearchFocus: String {
         switch self {
         case .broad: 30
         case .speakPolicy: 10
-        case .learningLoop: 45
         }
     }
 
@@ -998,7 +809,6 @@ private enum LabAutoresearchFocus: String {
         switch self {
         case .broad: "\(hours)-hour overnight autoresearch"
         case .speakPolicy: "\(hours)-hour speak-or-silence autoresearch"
-        case .learningLoop: "\(hours)-hour protected learning cycle"
         }
     }
 }
@@ -1052,7 +862,6 @@ private struct Options {
     var showsHelp = false
     var autoresearchHours: Int?
     var speakAutoresearchHours: Int?
-    var learningLoopHours: Int?
 
     init(arguments: [String]) throws {
         var index = 0
@@ -1175,9 +984,7 @@ private struct Options {
                 guard (1...24).contains(hours) else { throw OptionsError.invalidValue(argument) }
                 speakAutoresearchHours = hours
             case "--learning-loop-hours":
-                let hours = try Self.integer(nextValue(), label: argument)
-                guard (2...24).contains(hours) else { throw OptionsError.invalidValue(argument) }
-                learningLoopHours = hours
+                throw OptionsError.retiredLearningLoop
             case "-h", "--help": showsHelp = true
             default: throw OptionsError.unknownArgument(argument)
             }
@@ -1193,7 +1000,7 @@ private struct Options {
            suitePath != nil || corpusPilot || certifiedCorpus || manifestPath != nil || campaign != nil {
             throw OptionsError.conflictingInputs
         }
-        let adaptiveModes = [autoresearchHours, speakAutoresearchHours, learningLoopHours]
+        let adaptiveModes = [autoresearchHours, speakAutoresearchHours]
             .compactMap { $0 }
         if adaptiveModes.count > 1 {
             throw OptionsError.conflictingInputs
@@ -1246,7 +1053,6 @@ private struct Options {
       --autoresearch-six-hours     adaptive six-hour keep/discard campaign
       --autoresearch-hours N       adaptive keep/discard campaign, 1...24 hours
       --autoresearch-speak-hours N optimize when to show a suggestion, 1...24 hours
-      --learning-loop-hours N      protected dev/validation/holdout cycle, 2...24 hours
       --helper PATH                llama-server executable
       --model PATH                 local GGUF path (production pin by default)
       --experimental-model        explicitly allow a Lab-only alternate GGUF
@@ -1287,6 +1093,7 @@ private enum OptionsError: Error, LocalizedError {
     case invalidValue(String)
     case unknownArgument(String)
     case conflictingInputs
+    case retiredLearningLoop
 
     var errorDescription: String? {
         switch self {
@@ -1294,6 +1101,8 @@ private enum OptionsError: Error, LocalizedError {
         case let .invalidValue(flag): "Invalid value for \(flag)."
         case let .unknownArgument(flag): "Unknown argument \(flag)."
         case .conflictingInputs: "Choose either --manifest or --campaign, not both."
+        case .retiredLearningLoop:
+            "--learning-loop-hours was retired because it automatically opened protected partitions. Use tilde-research nominate, validate-candidates, and holdout with frozen plans."
         }
     }
 }

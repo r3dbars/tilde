@@ -34,9 +34,215 @@ the model. A synthetic audit is not a substitute for a live model run, and the
 instrumented Scene Host is not a substitute for driving the real Tilde input
 source in each target application.
 
+## Tilde Research CLI v2
+
+`tilde-research` is the promotion-authority workflow for long experiments. The
+macOS studio and `tilde-lab-runner` remain useful for interactive diagnostics,
+but their point estimates do not nominate a production candidate. The v2 CLI
+binds one causal question to one experiment class, runs durable paired work,
+and makes the protected phases structurally unreachable from an optimizer.
+
+Build it once, then inspect its complete command map:
+
+```bash
+swift build --product tilde-research
+.build/debug/tilde-research --help
+```
+
+### End-to-end campaign
+
+```bash
+# Development-only discovery. Resume is automatic at the work-item boundary.
+.build/debug/tilde-research init \
+  --name qwen-factorial \
+  --class generator \
+  --suite certified-v2 \
+  --seeds 17,41,73 \
+  --repetitions 1 \
+  --output qwen-factorial.json
+.build/debug/tilde-research validate qwen-factorial.json
+caffeinate -dimsu .build/debug/tilde-research run qwen-factorial.json --resume
+.build/debug/tilde-research status qwen-factorial.json
+.build/debug/tilde-research compare --campaign qwen-factorial.json
+
+# Freeze at most three passing candidates. No optimizer runs beyond this point.
+.build/debug/tilde-research nominate \
+  --campaign qwen-factorial.json \
+  --top 3 \
+  --output validation-plan.json
+.build/debug/tilde-research validate-candidates \
+  validation-plan.json \
+  --campaign qwen-factorial.json
+
+# Consume one frozen candidate against one baseline once per exact evidence set.
+.build/debug/tilde-research holdout \
+  --campaign qwen-factorial.json \
+  --validation-plan validation-plan.json \
+  --candidate CANDIDATE_ID \
+  --confirm-consume \
+  --output holdout-plan.json
+```
+
+Campaign JSON is owner-only (`0700` directories and `0600` files). It may hold
+local model/helper paths. Shareable reports contain hashes and aggregate case
+evidence, never those paths, prompts, fixture text, screen text, or raw model
+output. Synthetic raw candidates can be cached locally to replay display
+policy; `cache-clear` irreversibly deletes that explicit cache. Private-history
+and hand-curated inputs can never enter it.
+
+### Phase firewall
+
+| Phase | Data | Candidates | Adaptive search |
+| --- | --- | ---: | --- |
+| Discovery | development only | bounded by campaign budget | allowed |
+| Development confirmation | frozen development | baseline + at most 10 | no |
+| Validation | untouched validation | baseline + at most 3 | no |
+| Holdout | one-time holdout | baseline + exactly 1 | no |
+| Regression | immutable regression/adversarial suite | baseline + exactly 1 | no |
+| Shadow / dogfood / soak | local text-free product events | one frozen challenger | no |
+
+Every protected plan freezes the selected-suite digest, scorecard, model bytes,
+helper bytes, arm manifests, and—when relevant—each per-arm runtime. A changed
+byte or control fails before inference. Holdout consumption is idempotently
+recorded in SQLite and cannot be repurposed as another search round.
+
+Research selection also injects same-partition prompt-leak, sensitive,
+stale-context, echo/replay, and unsupported-fact sentinels. They run in block
+zero. A timeout, protocol error, unsafe suggestion, forbidden fact, or temporal
+violation stops the campaign before the expensive blocks.
+
+### Execution and statistics
+
+The durable coordinator uses SQLite WAL tables for campaigns, leases, work
+items, observations, comparisons, promotions, agent proposals, online events,
+holdout receipts, and cumulative active-time budget. Each work identity binds
+campaign, arm hash, scenario, context variant, generation seed, repetition, and
+block. A crash, SIGINT, or reboot resumes missing work without allowing a
+duplicate observation to change the result. A PID alone is not progress;
+`status` reports pending/running/completed/failed work and active budget.
+
+Root situations are the independent units. Blocks are deterministically
+stratified by category, register, and typing boundary; arm order rotates and
+reverses between blocks. AC power, Low Power Mode, thermal state, arm order,
+workers, slots, and cache state are recorded without scenario data. Unstable
+machines pause between blocks. `--allow-battery` is development-only.
+
+Comparisons report paired root win/tie/loss counts, root-clustered bootstrap
+intervals, probability of positive effect, shown/safe-opportunity denominators,
+per-seed results and the worst seed, protected slice deltas, and Wilson upper
+bounds for rare harm. A diagnostic cleaner can explain a failure but can never
+promote. Rank alone is never a promotion rule.
+
+The default generator recipe is the exact 4 × 2 temperature/token-budget
+factorial (0, 0.05, 0.10, 0.15 × 20 or 12 tokens). `qmc`, balanced successive
+halving, constrained Pareto selection, and adaptive local search are available
+only in discovery. Generation seed is paired measurement control, never an
+optimizer dimension.
+
+### Separate causal classes
+
+`init` creates useful starting matrices rather than mixing unrelated knobs:
+
+- `generator`: sampler and raw-generation controls; the default is the 8-arm
+  Qwen factorial;
+- `context`: typed-only, Intent Futures, turn/budget, scene placement, and
+  recognition ablations with generator and policy frozen;
+- `display-policy`: confidence floors, visible caps, cleaner, grounding, and
+  dynamic length, replayable from the synthetic candidate cache;
+- `runtime`: identical behavior arms with explicit workers, slots, context,
+  Flash Attention, Q8 KV, prompt-cache, and reuse variants; each block restarts
+  the arm's helper configuration and reports request latency plus cold-start
+  p50/p95/p99;
+- `personalization`: use `personalization-replay`; ordinary model fixtures are
+  rejected because they do not apply chronological history; and
+- `interaction`: use real-host evidence; ordinary model fixtures are rejected
+  because they cannot exercise IMKit.
+
+Runtime research keeps the exact model bytes fixed. Quantization or base versus
+post-trained model comparisons are separate model-identity campaigns, not a
+runtime-arm shortcut and never a production model change.
+
+### Confidence, personalization, and real use
+
+`risk-coverage` replays every cached synthetic raw candidate across confidence
+thresholds without inference. It reports coverage, precision and harm when
+shown, expected utility, length, Wilson harm bounds, and category/register/
+boundary/context slices. The trusted frontier uses the harm upper bound, not a
+small-sample point estimate.
+
+`TildeConfidenceV1` is a text-free feature contract for chosen-token sequence
+likelihood, first/minimum token probability, probability margin, token entropy,
+length and stop shape, context quality, scene freshness, personal support,
+first-token latency, and perturbation agreement. Missing helper capabilities
+remain missing rather than fabricated. `confidence-report` fits an isotonic
+acceptance calibrator on the chronological first 70% of displayed dogfood
+events and reports only out-of-sample ECE/Brier metrics on the last 30%, plus
+app/register/boundary/length/personal slices. It never trains on holdout.
+
+`personalization-replay` reads one owner-selected regular JSONL file in memory,
+rejects symlinks, unknown keys, duplicates, oversized lines, mixed consent or
+history epochs, and future leakage. Frequency/recency weighted global and
+app-specific n-grams are scored before each event is learned. Reports contain
+only aggregate lift, harm, coverage, precision, stress slices, and stale
+override blocks. They explicitly do not claim full-suggestion dogfood utility.
+
+After a passing holdout, `shadow`, `dogfood`, and `soak` create sticky local
+plans. `ingest-events` accepts a closed text-free JSONL schema; raw text fields
+are structurally rejected. `online-report` estimates realized accepted
+characters, edits/undoes, deadline misses, matched-stratum attention tax, and
+net time per 1,000 typed characters. `delete-telemetry` deletes every event for
+the campaign.
+
+A soak requires sustained active duration, enough events, p99 first-stable-word
+at or below one second, zero crashes, timeouts, wrong insertions, committed-text
+corruption, or network egress, and explicit exercise of network denial, memory
+pressure, runtime restart, app switching, cache hits and misses, plus sleep/wake
+for an eight-hour or longer run.
+
+### Interaction and permanent failures
+
+`interaction-report` accepts only text-free aggregate records from an
+owner-triggered real-host harness. It requires every marked-text, acceptance,
+dismissal, typing-through, cancellation/edit/focus/app/conversation-switch,
+runtime-restart, and committed-text-integrity check across the Scene Host,
+TextEdit, WebKit, Chromium, and Electron. It is bound to the candidate arm hash
+and passing holdout digest. Missing evidence is a failure, not an inferred pass.
+The CLI intentionally does not seize focus or switch the owner's input source;
+use an isolated macOS account, VM, or test Mac for unattended host driving.
+
+When a real failure is found, put its reviewed synthetic reproduction in a
+`regression` or `adversarial` suite, hash the source evidence, then freeze and
+run it:
+
+```bash
+.build/debug/tilde-research freeze-regression \
+  --campaign qwen-factorial.json \
+  --candidate CANDIDATE_ID \
+  --suite /absolute/path/permanent-regressions.json \
+  --evidence-digest FAILURE_EVIDENCE_SHA256 \
+  --output regression-plan.json
+.build/debug/tilde-research regression \
+  regression-plan.json \
+  --campaign qwen-factorial.json
+```
+
+The plan freezes the failure digest, exact suite digest, candidate, scorecard,
+assets, seeds, and runtime. The candidate must make every regression case
+`useful` or `correct-silence`, with no temporal, forbidden-fact, or hard-gate
+failure.
+
+### Agent boundary
+
+An agent receives only aggregate comparisons, failure counts, slice red bars,
+tested arm hashes, and remaining budget. Its snake-case proposal names one
+hypothesis, parent, class, bounded changes, affected slices, success rule,
+budget, and stop conditions. The deterministic validator rejects phase, seed,
+scorecard, corpus, safety, and out-of-class mutations. The agent can propose;
+it cannot score, promote, inspect protected examples, or rewrite the exam.
+
 ## Autoresearch campaigns
 
-The **Autoresearch** screen adapts the experiment loop from
+The legacy **Autoresearch** screen adapts the experiment loop from
 [Andrej Karpathy's autoresearch](https://github.com/karpathy/autoresearch) to
 Tilde's native Swift/macOS constraints. It does not import the original
 NVIDIA/Python trainer. It preserves the useful protocol:
@@ -47,6 +253,10 @@ NVIDIA/Python trainer. It preserves the useful protocol:
 4. keep the candidate only when gate-first ranking beats the current champion;
 5. discard regressions, periodically rerun the control, and confirm the final
    champion with more repetitions.
+
+This UI is an exploratory aid. Use `tilde-research` for uncertainty-aware
+promotion, protected validation, one-time holdout, online evidence, and durable
+long-run resume.
 
 Each campaign selects one subsystem—generation, context, display, or safety.
 Gate-first ranking prevents unsafe or totally silent arms from winning. Among
@@ -111,7 +321,7 @@ When scoring is locked, every arm must use the identical goal contract or
 validation refuses to run the matrix. Campaigns cannot weaken their own exam.
 
 **Export experiment manifest** writes schema
-`tilde-lab.experiment-manifest.v1`. It contains every experiment and runtime
+`tilde-lab.experiment-manifest.v2`. It contains every experiment and runtime
 knob but never model/helper paths. The CLI accepts the same file:
 
 ```bash
@@ -134,9 +344,9 @@ its identity and exact hash are recorded in the aggregate report.
 The build stages `dist/Tilde Lab.app`; it does not stop, replace, or re-sign
 the daily-driver Tilde app.
 
-The app opens on Certified Corpus V2's development partition. For a one-arm
-unattended CLI run without a manifest, the improved V2 quiz and its 80-case
-validation partition remain the compatibility default:
+The app opens on Certified Corpus V2's development partition. A one-arm
+unattended CLI run without a manifest also defaults to development; protected
+partitions require a registered research protocol:
 
 ```bash
 swift run tilde-lab-runner --workers 1 --slots 8 --repetitions 10
@@ -498,7 +708,7 @@ one name, date, time, item, quantity, or location and the expected answer change
 with it, which exposes models that memorize a reply shape while ignoring the
 actual facts. The corpus is split deterministically into 240 development, 80
 validation, and 80 holdout cases. The app and built-in campaigns default to
-validation. **Quiz** in the app can switch back to the explicit 16-case
+development. **Quiz** in the app can switch back to the explicit 16-case
 `replying-v1` legacy baseline.
 
 Scenario suites use schema `tilde-lab.scenario-suite.v1`. The original fields
@@ -595,7 +805,7 @@ holdout.
 ## Reports and privacy
 
 Reports live in `~/Library/Application Support/Tilde Lab/Runs`, with owner-only
-directory and file permissions. Version 4 reports contain:
+directory and file permissions. Version 5 reports contain:
 
 - suite identity and the complete arm/runtime manifest;
 - model/helper hashes;

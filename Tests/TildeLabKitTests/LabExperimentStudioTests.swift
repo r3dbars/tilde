@@ -15,7 +15,7 @@ struct LabExperimentStudioTests {
         arm.sceneBench.captureSource = .ocr
         arm.personalization.enabled = true
         arm.interaction.hosts = [.sceneHost, .textEdit]
-        arm.scenarios.partition = .validation
+        arm.scenarios.partition = .development
 
         let manifest = LabExperimentManifest(
             name: "Full matrix",
@@ -92,8 +92,13 @@ struct LabExperimentStudioTests {
         #expect(Set(arms.map(\.id)).count == 50)
         #expect(arms.allSatisfy { $0.judgment.suppressesSensitiveScenes })
         #expect(arms.allSatisfy { $0.generation.requestMode == .productionStreaming })
-        #expect(arms.first?.id == "s2-00-production")
-        _ = try LabExperimentManifest(name: "Broad 50", arms: arms).validated()
+        #expect(arms.first?.id == "s2-control-start")
+        #expect(arms.last?.id == "s2-control-end")
+        _ = try LabExperimentManifest(
+            name: "Broad 50",
+            arms: arms,
+            research: LabCampaignFactory.researchProtocol(for: .broadSweep50)
+        ).validated()
     }
 
     @Test("The model-quality campaign is exactly 18,000 comparable evaluations")
@@ -107,8 +112,13 @@ struct LabExperimentStudioTests {
         #expect(arms.allSatisfy { $0.scenarios.maximumDistinctSituations == 360 })
         #expect(arms.allSatisfy { $0.scoring.usesModelOutputQuality })
         #expect(arms.allSatisfy { $0.judgment.suppressesSensitiveScenes })
-        #expect(arms.filter { $0.id.hasPrefix("mq50-visible-") }.map(\.judgment.maximumVisibleWords).sorted() == [1, 2, 3])
-        _ = try LabExperimentManifest(name: "Model quality 50", arms: arms).validated()
+        #expect(arms.allSatisfy { $0.judgment.maximumVisibleWords == 3 })
+        #expect(arms.allSatisfy { $0.judgment.maximumVisibleCharacters == 42 })
+        _ = try LabExperimentManifest(
+            name: "Model quality 50",
+            arms: arms,
+            research: LabCampaignFactory.researchProtocol(for: .modelQuality50)
+        ).validated()
     }
 
     @Test("The quick campaign is a safe development-only 4,800-completion sweep")
@@ -120,9 +130,22 @@ struct LabExperimentStudioTests {
         #expect(arms.allSatisfy { $0.scenarios.partition == .development })
         #expect(arms.allSatisfy { $0.judgment.suppressesSensitiveScenes })
         #expect(arms.allSatisfy { $0.generation.requestMode == .productionStreaming })
-        #expect(arms.first?.id == "q8-control-start")
-        #expect(arms.last?.id == "q8-control-end")
-        _ = try LabExperimentManifest(name: "Quick 8", arms: arms).validated()
+        #expect(arms.first?.id == "qwen-factorial-a0")
+        #expect(arms.last?.id == "qwen-factorial-a7")
+        let cells = Set(arms.map {
+            "\($0.generation.temperature):\($0.generation.predictionTokens)"
+        })
+        #expect(cells == Set([
+            "0.0:20", "0.0:12", "0.05:20", "0.05:12",
+            "0.1:20", "0.1:12", "0.15:20", "0.15:12",
+        ]))
+        #expect(arms.allSatisfy { $0.judgment.maximumVisibleWords == 3 })
+        #expect(arms.allSatisfy { $0.judgment.maximumVisibleCharacters == 42 })
+        _ = try LabExperimentManifest(
+            name: "Quick 8",
+            arms: arms,
+            research: LabCampaignFactory.researchProtocol(for: .quickSweep8)
+        ).validated()
     }
 
     @Test("The deep campaign fills the safe matrix with protected production-fidelity arms")
@@ -135,8 +158,12 @@ struct LabExperimentStudioTests {
         #expect(arms.allSatisfy { $0.generation.requestMode == .productionStreaming })
         #expect(arms.first?.id == "s3-control-start")
         #expect(arms.last?.id == "s3-control-end")
-        #expect(arms.filter { $0.id.contains("control") }.count == 3)
-        _ = try LabExperimentManifest(name: "Deep 128", arms: arms).validated()
+        #expect(arms.filter { $0.id.contains("control") }.count == 2)
+        _ = try LabExperimentManifest(
+            name: "Deep 128",
+            arms: arms,
+            research: LabCampaignFactory.researchProtocol(for: .deepSweep128)
+        ).validated()
     }
 
     @Test("Intent futures match production by staying out of chat prompts")
