@@ -83,6 +83,32 @@ resolve URL; it must never include user text or screen content.
   thresholds compound into a silent product.
 - Add or update tests with every behavior change.
 
+## Research program
+
+- The Learning Ledger is Tilde Lab's durable research brain. Its bundled JSON at
+  `Sources/TildeLabKit/Fixtures/learning-ledger-v1.json` is the source of truth
+  for the active stage, the ordered executable queue, accumulated decisions,
+  and promotion gates. Tilde Lab and the runner must render that same record.
+- `docs/research-roadmap.md` explains the longer hypothesis graph and exit
+  gates. `docs/experiments/README.md` defines the public pre-registration and
+  result format. Read both before planning or running decision-grade research.
+- Work one causal question at a time. Do not implement a locked stage merely
+  because it appears in the roadmap. Move it into the executable queue only
+  when dependencies and the preceding exit gate are satisfied, or when the
+  owner explicitly changes the program.
+- Freeze the control, treatment, corpus and split, model and helper hashes,
+  prompt, scoring policy, runtime controls, primary metric, hard gates,
+  promotion rule, and kill rule before the result is known. Compare candidates
+  on the exact same test.
+- Record supported, rejected, inconclusive, and superseded findings with equal
+  care. Add a ledger entry only for a reusable lesson or decision, and keep raw
+  personal writing, screen text, prompts, candidates, model output, local
+  paths, and private corpus material out of Git.
+- A Lab result is evidence, not authorization to alter production. Production
+  changes still require protected validation, sealed holdout, isolated preview,
+  meaningful live dogfood, real IMKit interaction proof, and explicit owner
+  approval.
+
 ## Proof
 
 - Pre-merge: `./script/proof.sh fast`
