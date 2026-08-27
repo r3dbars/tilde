@@ -1,6 +1,6 @@
 # Q03 — Qwen 9B factorial replication v3
 
-Status: PROPOSED
+Status: INCONCLUSIVE
 Experiment class: generator
 Owner: Tilde research program
 Pre-registered: 2026-08-27T12:15:00Z
@@ -101,29 +101,51 @@ paired comparison. Start this fresh campaign without `--resume`; use
 
 ## Result
 
-Status: PENDING
+Status: INCONCLUSIVE
+Stopped: 2026-08-27T12:20:00Z
 
 ### Aggregate evidence
 
-Pending execution.
+- The fresh owner-only campaign started from the clean merged source, launched
+  one local Qwen 9B worker with eight slots, and completed all 18,432 invariant
+  work items with no infrastructure failures.
+- The deterministic scene policy eliminated every earlier prompt-injection,
+  self-only, resolved-request, and unsupported-choice interruption. Arms a0
+  and a1 recorded 2,304 correct silences each.
+- Invariant smoke still found 98 unwanted suggestions, all in the synthetic
+  `silence.ordinary.irrelevant-scene` category: one each in a2 and a3 and 24
+  each in a4 through a7. No other category produced a wrong or unwanted result.
+- F02 persisted the terminal invariant failure and accepted an explicit
+  inconclusive review. This failed campaign is not resumable and will not be
+  reused.
 
 ### Failures and limitations
 
-Pending execution.
+- No aggregate v6 arm report or a0-versus-a5 comparison exists because the
+  sentinel correctly stopped before expensive trial blocks.
+- The remaining failure is stochastic: the greedy arms stayed silent, while
+  sampled arms occasionally completed generic typed text from irrelevant
+  declarative scene context. This is a scene-relevance failure, not evidence
+  about configuration quality.
+- Synthetic development evidence cannot establish live retained usefulness.
 
 ### Decision
 
-Pending execution.
+Q03 is inconclusive for model configuration and supports a narrower product
+finding: irrelevant declarative screen context must be rejected before sampled
+generation, not merely left to the model. Keep the sentinel, add a deterministic
+non-actionable-scene gate, and use another fresh campaign ID for any retry.
 
 ### Durable changes
 
 - Learning Ledger entry: pending reusable result
 - Regression IDs: scene-instruction gate covered by PR #425
-- Results pull request: pending
+- Results pull request: #426
 - Rollback: retain the public result even if the treatment is rejected or the
   campaign is inconclusive
 
 ### Follow-up
 
-If and only if a5 passes the pre-registered rule, freeze it for a separately
-authorized protected validation run. Otherwise close the bounded Qwen question.
+Prove the deterministic non-actionable-scene gate, then register a fresh
+campaign. Do not consume protected validation until a complete reviewed
+comparison passes.
