@@ -51,6 +51,9 @@ it stays.
 
 How to push that without lying: digest
 [`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md).
+The scientific stance (wrong objective, learn the controller, identify the
+Roy interaction) is
+[`docs/research/scientific-program.md`](research/scientific-program.md).
 The executable queue does not move because the hole is exciting. Finish the
 ruler, then ask that question on the Mac.
 

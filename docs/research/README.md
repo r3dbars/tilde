@@ -14,4 +14,6 @@ Do not check in PDFs, prompts, personal writing, screen text, or local paths.
 
 The hole in the literature — why the best personal-keyboard papers are from
 2018–2020, and what Tilde can uniquely measure — is
-[`where-the-field-stopped.md`](where-the-field-stopped.md).
+[`where-the-field-stopped.md`](where-the-field-stopped.md). How to think about
+that hole as an AI research program (objective, controller vs generator,
+identification) is [`scientific-program.md`](scientific-program.md).
