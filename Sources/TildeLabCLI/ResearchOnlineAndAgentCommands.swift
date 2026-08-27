@@ -117,7 +117,11 @@ extension ResearchCoordinator {
         for line in lines {
             guard line.count <= 64 * 1_024 else { throw ResearchCLIError.invalidValue("event line") }
             let data = Data(line)
-            try validateOnlineEventKeys(data)
+            do {
+                try LabOnlineEventPrivacy.validateJSON(data)
+            } catch LabOnlineExperimentError.forbiddenKey(let key) {
+                throw ResearchCLIError.rawTelemetryKey(key)
+            }
             let event = try decoder.decode(LabOnlineExperimentEvent.self, from: data)
             try await database.recordOnlineEvent(event, plan: plan)
             accepted += 1
@@ -144,6 +148,17 @@ extension ResearchCoordinator {
             ResearchConsole.line("  undo/correction when shown: \(report.undoOrCorrectionRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
             ResearchConsole.line("  deadline miss rate: \(report.deadlineMissRate.formatted(.percent.precision(.fractionLength(1))))")
             ResearchConsole.line("  attention tax: \(report.attentionTax.attentionTaxMilliseconds.map { $0.formatted(.number.precision(.fractionLength(1))) + " ms" } ?? "not estimable")")
+            ResearchConsole.line("  typed-through: \(report.typedThrough)")
+            ResearchConsole.line("  flicker accepts (not counted as reads): \(report.flickerAccepts)")
+            ResearchConsole.line(
+                "  retention 5s: \(report.retentionAt5Seconds.observedEvents) observed / \(report.retentionAt5Seconds.missingEvents) missing, net \(report.retentionAt5Seconds.netRetainedCharacters)"
+            )
+            ResearchConsole.line(
+                "  retention 30s: \(report.retentionAt30Seconds.observedEvents) observed / \(report.retentionAt30Seconds.missingEvents) missing, net \(report.retentionAt30Seconds.netRetainedCharacters)"
+            )
+            ResearchConsole.line(
+                "  retention segment: \(report.retentionAtSegmentClose.observedEvents) observed / \(report.retentionAtSegmentClose.missingEvents) missing, net \(report.retentionAtSegmentClose.netRetainedCharacters)"
+            )
             ResearchConsole.line("  net time saved / 1,000 chars: \(report.netTimeSavedPer1000Characters.formatted(.number.precision(.fractionLength(1)))) ms")
             if let calibration = report.confidenceCalibration {
                 ResearchConsole.line(
@@ -463,36 +478,4 @@ extension ResearchCoordinator {
         ))
     }
 
-    private static func validateOnlineEventKeys(_ data: Data) throws {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ResearchCLIError.invalidValue("online event JSON")
-        }
-        let allowed: Set<String> = [
-            "schema", "id", "campaignID", "occurredAt", "sessionDigestSHA256", "variant",
-            "appCategory", "register", "boundary", "typingSpeedBucket", "safeOpportunity",
-            "displayed", "outcome", "acceptedCharacters", "replacedCharactersWithin5Seconds",
-            "nextActionMilliseconds", "generatorMilliseconds", "firstStableWordMilliseconds",
-            "deadlineMissed", "confidence", "candidateCharacters", "championDisagreed",
-            "guardReason", "crashed", "timedOut", "opportunityCharacters",
-            "wrongInsertionCount", "insertionCorruptionCount", "networkEgressDetected",
-            "networkDenied", "residentMemoryMegabytes", "memoryPressureObserved",
-            "thermalLevel", "runtimeRestarted",
-            "sleepWakeObserved", "appSwitchObserved", "cacheHit", "confidenceFeatures",
-        ]
-        if let key = Set(object.keys).subtracting(allowed).sorted().first {
-            throw ResearchCLIError.rawTelemetryKey(key)
-        }
-        if let features = object["confidenceFeatures"] as? [String: Any] {
-            let allowedFeatures: Set<String> = [
-                "schema", "firstTokenProbability", "meanSequenceLogProbability",
-                "minimumTokenProbability", "meanProbabilityMargin", "meanTokenEntropy",
-                "suggestionCharacters", "suggestionWords", "punctuationStop",
-                "contextSourceQuality", "sceneFreshnessSeconds", "personalSupport",
-                "personalConfidence", "firstTokenMilliseconds", "perturbationAgreement",
-            ]
-            if let key = Set(features.keys).subtracting(allowedFeatures).sorted().first {
-                throw ResearchCLIError.rawTelemetryKey("confidenceFeatures.\(key)")
-            }
-        }
-    }
 }

@@ -1,6 +1,6 @@
 # F03 — Extend the text-free Outcome Ledger
 
-Status: PROPOSED
+Status: IMPLEMENTING
 Experiment class: runtime
 Owner: Tilde research program
 Pre-registered: 2026-08-27T12:30:00Z
@@ -135,8 +135,9 @@ zero. Redesign the event before any decision-grade live campaign.
 
 ### Frozen provenance
 
-- Git commit: pin at implementation start; this record timestamps the
-  hypothesis before that commit exists
+- Git commit: implementation started from
+  `3c34990a657acf391a566b7d983997865ae58b11` (lab-log save; this record
+  timestamps the hypothesis before that work)
 - Dirty state: this branch may be dirty relative to `main` until F03 lands
 - Model revision and SHA-256: not applicable; instrument test
 - Helper SHA-256: not applicable
@@ -150,7 +151,11 @@ zero. Redesign the event before any decision-grade live campaign.
 
 ## Result
 
-Status: not yet run
+Status: not yet supported
+
+The v3 event, XOR horizons, typed-through, flicker floor, privacy allowlist,
+v2 decode, and aggregate coverage fields are implemented with fixtures. Live
+IME ingest on a Mac is still missing, so the promotion rule is not met.
 
 ### Follow-up
 
