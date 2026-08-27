@@ -104,6 +104,10 @@ resolve URL; it must never include user text or screen content.
   care. Add a ledger entry only for a reusable lesson or decision, and keep raw
   personal writing, screen text, prompts, candidates, model output, local
   paths, and private corpus material out of Git.
+- Decision-grade comparisons require clean, complete v6 reports with a
+  registered hypothesis and an explicit supported/rejected/inconclusive
+  review. Legacy, dirty, incomplete, unregistered, and unreviewed reports stay
+  readable but must never advance a protected phase.
 - A Lab result is evidence, not authorization to alter production. Production
   changes still require protected validation, sealed holdout, isolated preview,
   meaningful live dogfood, real IMKit interaction proof, and explicit owner

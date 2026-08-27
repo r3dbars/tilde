@@ -652,12 +652,13 @@ public struct LabRuntimeStartupSummary: Codable, Equatable, Sendable {
 }
 
 public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
-    public static let currentSchema = "tilde-lab.reply-bench-report.v5"
+    public static let currentSchema = "tilde-lab.reply-bench-report.v6"
     public static let supportedSchemas = [
         "tilde-lab.reply-bench-report.v1",
         "tilde-lab.reply-bench-report.v2",
         "tilde-lab.reply-bench-report.v3",
         "tilde-lab.reply-bench-report.v4",
+        "tilde-lab.reply-bench-report.v5",
         currentSchema,
     ]
 
@@ -672,6 +673,9 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
     public let execution: LabExecutionSnapshot
     public let runtimeStartup: LabRuntimeStartupSummary?
     public let assets: LabAssetSnapshot
+    public let provenance: LabReportProvenance?
+    public let review: LabReportReview?
+    public let evidenceEligibility: LabEvidenceEligibility?
     public let privacy: LabPrivacyContract
     public let metrics: LabAggregateMetrics
     public let cases: [LabCaseResult]
@@ -687,6 +691,8 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
         execution: LabExecutionSnapshot,
         runtimeStartup: LabRuntimeStartupSummary? = nil,
         assets: LabAssetSnapshot,
+        provenance: LabReportProvenance? = nil,
+        review: LabReportReview? = .unreviewed,
         privacy: LabPrivacyContract = LabPrivacyContract(),
         metrics: LabAggregateMetrics,
         cases: [LabCaseResult]
@@ -702,9 +708,20 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
         self.execution = execution
         self.runtimeStartup = runtimeStartup
         self.assets = assets
+        let resolvedProvenance = provenance ?? .unavailable(capturedAt: startedAt)
+        self.provenance = resolvedProvenance
+        self.review = review
         self.privacy = privacy
         self.metrics = metrics
         self.cases = cases
+        evidenceEligibility = Self.evaluateEvidenceEligibility(
+            schema: Self.currentSchema,
+            provenance: resolvedProvenance,
+            review: review,
+            privacy: privacy,
+            metrics: metrics,
+            evidenceDecisionPresent: true
+        )
     }
 
     public var displayScore: String {
@@ -713,6 +730,38 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
             return "\(metrics.qualityScore ?? 0)/100 quality"
         }
         return "\(Int((metrics.netKeystrokeSavingsRate * 100).rounded()))% NKS"
+    }
+
+    public func reviewed(
+        conclusion: String,
+        status: LabReportReviewStatus,
+        at reviewedAt: Date = Date()
+    ) throws -> LabRunReport {
+        guard schema == Self.currentSchema, provenance != nil, status != .unreviewed else {
+            throw LabReportProvenanceError.invalidReview
+        }
+        let review = try LabReportReview(
+            status: status,
+            conclusion: conclusion,
+            reviewedAt: reviewedAt
+        ).validated()
+        return LabRunReport(
+            id: id,
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            suiteName: suiteName,
+            suiteDigestSHA256: suiteDigestSHA256,
+            scenarioCount: scenarioCount,
+            arm: arm,
+            execution: execution,
+            runtimeStartup: runtimeStartup,
+            assets: assets,
+            provenance: provenance,
+            review: review,
+            privacy: privacy,
+            metrics: metrics,
+            cases: cases
+        )
     }
 }
 

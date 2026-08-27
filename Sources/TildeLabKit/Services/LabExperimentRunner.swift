@@ -345,6 +345,7 @@ public actor LabExperimentRunner {
                     arm: entry.arm,
                     execution: LabExecutionSnapshot(execution),
                     assets: assets,
+                    provenance: durable?.reportProvenance ?? .unavailable(),
                     metrics: metrics,
                     cases: output.results
                 )
@@ -558,6 +559,7 @@ public actor LabExperimentRunner {
                     ? nil
                     : LabRuntimeStartupSummary(milliseconds: startupMilliseconds[index]),
                 assets: assets,
+                provenance: durable?.reportProvenance ?? .unavailable(),
                 metrics: metrics,
                 cases: cases
             )

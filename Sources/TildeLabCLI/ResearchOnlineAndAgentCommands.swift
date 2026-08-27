@@ -30,7 +30,7 @@ extension ResearchCoordinator {
         }
         let holdoutURL = URL(fileURLWithPath: try arguments.requiredValue("holdout-plan")
             .expandedResearchPath).standardizedFileURL
-        let evidenceDigest = try passingHoldoutEvidence(
+        let evidenceDigest = try await passingHoldoutEvidence(
             planURL: holdoutURL,
             sourceCampaignID: campaign.id,
             championID: championID,
@@ -364,6 +364,8 @@ extension ResearchCoordinator {
         let childName = "\(campaign.name) agent proposal"
         let child = LabResearchCampaignFile(
             name: childName,
+            hypothesisID: campaign.hypothesisID,
+            hypothesis: campaign.hypothesis,
             parentCampaignID: campaign.id,
             suite: campaign.suite,
             manifest: LabExperimentManifest(
@@ -399,7 +401,7 @@ extension ResearchCoordinator {
         sourceCampaignID: UUID,
         championID: String,
         challengerID: String
-    ) throws -> String {
+    ) async throws -> String {
         let plan = try LabResearchArtifactIO.load(LabResearchPlan.self, from: planURL).validated()
         guard plan.sourceCampaignID == sourceCampaignID,
               plan.manifest.research?.phase == .holdout,
@@ -416,6 +418,14 @@ extension ResearchCoordinator {
                 && $0.comparison.phase == .holdout
                 && $0.comparison.decision == .advance
         }) else { throw ResearchCLIError.protectedEvidenceRequired }
+        let reports = try await latestReports(
+            manifest: plan.manifest,
+            layout: LabResearchArtifactLayout(documentURL: planURL)
+        )
+        guard reports[championID]?.effectiveEvidenceEligibility.eligible == true,
+              reports[challengerID]?.effectiveEvidenceEligibility.eligible == true else {
+            throw ResearchCLIError.decisionGradeEvidenceRequired
+        }
         return try LabResearchPlanBuilder.comparisonDigest(passing.comparison)
     }
 

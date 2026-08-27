@@ -7,6 +7,7 @@ enum ResearchCoordinator {
         case "init": try await initialize(arguments)
         case "validate": try await validate(arguments)
         case "run": try await run(arguments)
+        case "review": try await review(arguments)
         case "status": try await status(arguments)
         case "compare": try await compare(arguments)
         case "risk-coverage": try await riskCoverage(arguments)
@@ -40,7 +41,7 @@ enum ResearchCoordinator {
 
     private static let commandHelp: [String: String] = [
         "init": """
-        Usage: tilde-lab init --name NAME [options]
+        Usage: tilde-lab init --name NAME --hypothesis-id ID --hypothesis TEXT [options]
           --suite certified-v2|replying-v2|replying-v1|slack-reply-gold-v1|/absolute/suite.json
           --recipe qwen-factorial|qmc|context-matrix|display-matrix|runtime-matrix|baseline-only
           --class generator|context|display-policy|personalization|runtime|interaction
@@ -52,8 +53,9 @@ enum ResearchCoordinator {
         """,
         "validate": "Usage: tilde-lab validate CAMPAIGN.json",
         "run": "Usage: tilde-lab run CAMPAIGN.json [--resume] [--no-cache] [--database PATH] [--allow-battery]",
+        "review": "Usage: tilde-lab review --campaign CAMPAIGN_OR_PLAN.json --status supported|rejected|inconclusive --conclusion TEXT",
         "status": "Usage: tilde-lab status CAMPAIGN.json [--database PATH] [--json]",
-        "compare": "Usage: tilde-lab compare --campaign CAMPAIGN.json [--paired-bootstrap 10000] [--database PATH]",
+        "compare": "Usage: tilde-lab compare --campaign CAMPAIGN_OR_PLAN.json [--paired-bootstrap 10000] [--database PATH]",
         "risk-coverage": "Usage: tilde-lab risk-coverage --campaign CAMPAIGN.json --arm ID [--trust-limit 0.01] [--output report.json] [--json]",
         "personalization-replay": "Usage: tilde-lab personalization-replay --input events.jsonl [--scope app-specific|global|app-then-global] [--evaluation-start-ms UNIX_MS] [--output report.json] [--json]",
         "advance-search": "Usage: tilde-lab advance-search --campaign CAMPAIGN.json --stage halving|adaptive [--candidates 8] [--output CHILD.json]",
@@ -83,7 +85,7 @@ enum ResearchCoordinator {
                 "model-revision", "model-file", "helper", "budget-hours", "output",
                 "recipe", "search", "candidates", "seeds", "workers", "slots",
                 "repetitions", "maximum-model-requests", "maximum-roots-per-trial",
-                "block-size",
+                "block-size", "hypothesis-id", "hypothesis",
             ],
             flags: ["experimental-model"]
         )
@@ -91,6 +93,8 @@ enum ResearchCoordinator {
             throw ResearchCLIError.usage(help(for: "init"))
         }
         let name = try arguments.requiredValue("name")
+        let hypothesisID = try arguments.requiredValue("hypothesis-id")
+        let hypothesis = try arguments.requiredValue("hypothesis")
         let phase = LabCampaignPhase(rawValue: arguments.value("phase") ?? "discovery")
         guard phase == .discovery else {
             throw ResearchCLIError.usage(
@@ -220,6 +224,8 @@ enum ResearchCoordinator {
         let model = try modelConfiguration(arguments)
         let campaign = LabResearchCampaignFile(
             name: name,
+            hypothesisID: hypothesisID,
+            hypothesis: hypothesis,
             suite: suiteReference,
             manifest: manifest,
             budget: budget,
@@ -236,6 +242,7 @@ enum ResearchCoordinator {
         try LabResearchCampaignFileIO.save(campaign, to: output)
         ResearchConsole.line("Created discovery campaign \(campaign.name)")
         ResearchConsole.line("  id: \(campaign.id.uuidString.lowercased())")
+        ResearchConsole.line("  hypothesis: \(hypothesisID)")
         ResearchConsole.line("  arms: \(campaign.manifest.arms.count)")
         ResearchConsole.line("  fixed seeds: \(seeds.map(String.init).joined(separator: ","))")
         ResearchConsole.line("  planned model requests: \(campaign.plannedModelRequests ?? 0)")
@@ -358,6 +365,13 @@ enum ResearchCoordinator {
         let summary = try await database.summary(campaignID: campaign.id)
         let activeSeconds = try await database.activeDurationSeconds(campaignID: campaign.id)
         let reports = await LabReportStore(directory: layout.reportsDirectory).loadAll()
+        let decisionGradeReports = reports.filter {
+            $0.effectiveEvidenceEligibility.eligible
+        }.count
+        let evidenceBlockers = Dictionary(
+            grouping: reports.flatMap { $0.effectiveEvidenceEligibility.reasons },
+            by: \.rawValue
+        ).mapValues(\.count)
         let cacheCount: Int
         if FileManager.default.fileExists(atPath: layout.candidateCacheURL.path) {
             cacheCount = try await LabSyntheticCandidateCache(
@@ -374,6 +388,8 @@ enum ResearchCoordinator {
                 completed: summary.completed,
                 failed: summary.failed,
                 reports: reports.count,
+                decisionGradeReports: decisionGradeReports,
+                evidenceBlockers: evidenceBlockers,
                 cachedSyntheticCandidates: cacheCount,
                 activeSeconds: activeSeconds,
                 budgetSeconds: campaign.budget.maximumHours * 3_600
@@ -383,6 +399,12 @@ enum ResearchCoordinator {
             ResearchConsole.line("Campaign \(campaign.name)")
             ResearchConsole.line("  work: \(summary.completed)/\(summary.total) completed; \(summary.running) running; \(summary.failed) failed")
             ResearchConsole.line("  reports: \(reports.count)/\(campaign.manifest.arms.count)")
+            ResearchConsole.line("  decision-grade reports: \(decisionGradeReports)/\(reports.count)")
+            if !evidenceBlockers.isEmpty {
+                ResearchConsole.line(
+                    "  evidence blockers: \(evidenceBlockers.keys.sorted().map { "\($0)=\(evidenceBlockers[$0]!)" }.joined(separator: ", "))"
+                )
+            }
             ResearchConsole.line("  synthetic cache entries: \(cacheCount)")
             ResearchConsole.line("  active budget: \(formatHours(activeSeconds))/\(campaign.budget.maximumHours.formatted()) hours")
         }
@@ -396,6 +418,8 @@ private struct ResearchStatusOutput: Codable {
     let completed: Int
     let failed: Int
     let reports: Int
+    let decisionGradeReports: Int
+    let evidenceBlockers: [String: Int]
     let cachedSyntheticCandidates: Int
     let activeSeconds: Double
     let budgetSeconds: Double
