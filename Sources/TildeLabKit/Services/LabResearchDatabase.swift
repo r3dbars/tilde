@@ -160,6 +160,7 @@ public struct LabDurableRunConfiguration: Sendable {
     public let campaignName: String
     public let manifestDigestSHA256: String
     public let gitCommit: String
+    public let reportProvenance: LabReportProvenance
     public let leaseOwner: String
     public let leaseDuration: TimeInterval
 
@@ -169,6 +170,7 @@ public struct LabDurableRunConfiguration: Sendable {
         campaignName: String,
         manifestDigestSHA256: String,
         gitCommit: String,
+        reportProvenance: LabReportProvenance = .unavailable(),
         leaseOwner: String = "tilde-lab-\(ProcessInfo.processInfo.processIdentifier)",
         leaseDuration: TimeInterval = 300
     ) {
@@ -177,6 +179,7 @@ public struct LabDurableRunConfiguration: Sendable {
         self.campaignName = campaignName
         self.manifestDigestSHA256 = manifestDigestSHA256
         self.gitCommit = gitCommit
+        self.reportProvenance = reportProvenance
         self.leaseOwner = leaseOwner
         self.leaseDuration = max(30, leaseDuration)
     }

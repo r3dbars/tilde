@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum LabSourceTreeState: String, Codable, CaseIterable, Sendable {
@@ -53,6 +54,19 @@ public struct LabReportInvocationProvenance: Codable, Equatable, Sendable {
     ) {
         self.schema = schema
         self.digestSHA256 = digestSHA256
+    }
+
+    public static func canonicalDigest(arguments: [String]) -> String {
+        var bytes = Data("\(currentSchema)\u{0}".utf8)
+        for argument in arguments {
+            let argumentBytes = Data(argument.utf8)
+            bytes.append(Data("\(argumentBytes.count):".utf8))
+            bytes.append(argumentBytes)
+            bytes.append(0)
+        }
+        return SHA256.hash(data: bytes)
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }
 
@@ -179,12 +193,15 @@ public enum LabEvidenceIneligibilityReason: String, Codable, CaseIterable, Senda
     case incompleteRun = "incomplete-run"
     case reviewPending = "review-pending"
     case reviewInvalid = "review-invalid"
+    case evidenceDecisionMissing = "evidence-decision-missing"
 }
 
 public enum LabRunReportValidationError: Error, LocalizedError, Equatable, Sendable {
     case unsupportedSchema
     case missingProvenance
     case missingReview
+    case missingEvidenceDecision
+    case evidenceDecisionMismatch
     case unsafePrivacyContract
 
     public var errorDescription: String? {
@@ -192,6 +209,10 @@ public enum LabRunReportValidationError: Error, LocalizedError, Equatable, Senda
         case .unsupportedSchema: "The report schema is unsupported."
         case .missingProvenance: "A v6 report must contain a provenance envelope."
         case .missingReview: "A v6 report must contain an explicit review state."
+        case .missingEvidenceDecision:
+            "A v6 report must contain an explicit evidence-eligibility decision."
+        case .evidenceDecisionMismatch:
+            "The stored evidence-eligibility decision does not match the report."
         case .unsafePrivacyContract:
             "The report violates Tilde Lab's aggregate-only privacy contract."
         }
@@ -351,7 +372,10 @@ private extension String {
     }
 
     var containsUnsafePath: Bool {
-        contains("/Users/") || contains("file://") || contains("~/")
+        let normalized = lowercased()
+        return normalized.contains("/users/")
+            || normalized.contains("file://")
+            || contains("~/")
     }
 }
 
@@ -359,9 +383,31 @@ public extension LabRunReport {
     /// Evidence eligibility means the report is complete enough to support a
     /// research decision. It does not, by itself, promote an arm or authorize
     /// a production change.
-    var evidenceEligibility: LabEvidenceEligibility {
+    var effectiveEvidenceEligibility: LabEvidenceEligibility {
+        Self.evaluateEvidenceEligibility(
+            schema: schema,
+            provenance: provenance,
+            review: review,
+            privacy: privacy,
+            metrics: metrics,
+            evidenceDecisionPresent: evidenceEligibility != nil
+        )
+    }
+
+    static func evaluateEvidenceEligibility(
+        schema: String,
+        provenance: LabReportProvenance?,
+        review: LabReportReview?,
+        privacy: LabPrivacyContract,
+        metrics: LabAggregateMetrics,
+        evidenceDecisionPresent: Bool
+    ) -> LabEvidenceEligibility {
         var reasons: [LabEvidenceIneligibilityReason] = []
-        if schema != Self.currentSchema { reasons.append(.legacyReportSchema) }
+        if schema != Self.currentSchema {
+            reasons.append(.legacyReportSchema)
+        } else if !evidenceDecisionPresent {
+            reasons.append(.evidenceDecisionMissing)
+        }
         if let provenance {
             reasons.append(contentsOf: provenance.ineligibilityReasons)
         } else {
@@ -409,9 +455,36 @@ public extension LabRunReport {
             }
             try provenance.validated()
             try review.validated()
+            guard let evidenceEligibility else {
+                throw LabRunReportValidationError.missingEvidenceDecision
+            }
+            let expected = Self.evaluateEvidenceEligibility(
+                schema: schema,
+                provenance: provenance,
+                review: review,
+                privacy: privacy,
+                metrics: metrics,
+                evidenceDecisionPresent: true
+            )
+            guard evidenceEligibility == expected else {
+                throw LabRunReportValidationError.evidenceDecisionMismatch
+            }
         } else {
             if let provenance { try provenance.validated() }
             if let review { try review.validated() }
+            if let evidenceEligibility {
+                let expected = Self.evaluateEvidenceEligibility(
+                    schema: schema,
+                    provenance: provenance,
+                    review: review,
+                    privacy: privacy,
+                    metrics: metrics,
+                    evidenceDecisionPresent: true
+                )
+                guard evidenceEligibility == expected else {
+                    throw LabRunReportValidationError.evidenceDecisionMismatch
+                }
+            }
         }
         return self
     }

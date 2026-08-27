@@ -666,6 +666,11 @@ struct TildeLabRunner {
         print("  throughput: \(format(report.metrics.throughputModelRequestsPerSecond)) model requests/s\(diagnostic)")
         print("  p95: \(report.metrics.latency.p95Milliseconds.map { "\($0) ms" } ?? "none")\(diagnostic)")
         print("  errors: \(report.metrics.errors); timeouts: \(report.metrics.timeouts)")
+        let evidence = report.effectiveEvidenceEligibility
+        print("  research evidence: \(evidence.eligible ? "decision-grade" : "not decision-grade")")
+        if !evidence.reasons.isEmpty {
+            print("  evidence blockers: \(evidence.reasons.map(\.rawValue).joined(separator: ", "))")
+        }
         if saved { print("  aggregate report saved: \(report.id.uuidString)") }
     }
 

@@ -675,6 +675,7 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
     public let assets: LabAssetSnapshot
     public let provenance: LabReportProvenance?
     public let review: LabReportReview?
+    public let evidenceEligibility: LabEvidenceEligibility?
     public let privacy: LabPrivacyContract
     public let metrics: LabAggregateMetrics
     public let cases: [LabCaseResult]
@@ -707,11 +708,20 @@ public struct LabRunReport: Codable, Equatable, Identifiable, Sendable {
         self.execution = execution
         self.runtimeStartup = runtimeStartup
         self.assets = assets
-        self.provenance = provenance ?? .unavailable(capturedAt: startedAt)
+        let resolvedProvenance = provenance ?? .unavailable(capturedAt: startedAt)
+        self.provenance = resolvedProvenance
         self.review = review
         self.privacy = privacy
         self.metrics = metrics
         self.cases = cases
+        evidenceEligibility = Self.evaluateEvidenceEligibility(
+            schema: Self.currentSchema,
+            provenance: resolvedProvenance,
+            review: review,
+            privacy: privacy,
+            metrics: metrics,
+            evidenceDecisionPresent: true
+        )
     }
 
     public var displayScore: String {

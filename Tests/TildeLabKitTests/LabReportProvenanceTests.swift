@@ -9,17 +9,25 @@ struct LabReportProvenanceTests {
         let campaignID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
         let report = makeReport(provenance: completeProvenance(campaignID: campaignID))
 
-        #expect(!report.evidenceEligibility.eligible)
-        #expect(report.evidenceEligibility.reasons == [.reviewPending])
+        #expect(!report.effectiveEvidenceEligibility.eligible)
+        #expect(report.effectiveEvidenceEligibility.reasons == [.reviewPending])
+        #expect(report.evidenceEligibility == report.effectiveEvidenceEligibility)
 
         let reviewed = try report.reviewed(
             conclusion: "F01 supports requiring complete provenance for decision-grade reports.",
             status: .supported,
             at: Date(timeIntervalSince1970: 3)
         )
-        #expect(reviewed.evidenceEligibility.eligible)
+        #expect(reviewed.effectiveEvidenceEligibility.eligible)
+        #expect(reviewed.evidenceEligibility?.eligible == true)
         #expect(reviewed.provenance == report.provenance)
         #expect(reviewed.review?.status == .supported)
+
+        let encoded = String(decoding: try JSONEncoder().encode(reviewed), as: UTF8.self)
+        #expect(encoded.contains("\"evidenceEligibility\""))
+        #expect(encoded.contains("\"eligible\":true"))
+        #expect(!encoded.contains("CommandLine.arguments"))
+        #expect(!encoded.contains("/Users/"))
     }
 
     @Test("Dirty, incomplete, and unregistered reports explain why they are ineligible")
@@ -43,9 +51,9 @@ struct LabReportProvenanceTests {
             at: Date(timeIntervalSince1970: 3)
         )
 
-        #expect(!reviewed.evidenceEligibility.eligible)
-        #expect(reviewed.evidenceEligibility.reasons.contains(.dirtySourceTree))
-        #expect(reviewed.evidenceEligibility.reasons.contains(.hypothesisUnregistered))
+        #expect(!reviewed.effectiveEvidenceEligibility.eligible)
+        #expect(reviewed.effectiveEvidenceEligibility.reasons.contains(.dirtySourceTree))
+        #expect(reviewed.effectiveEvidenceEligibility.reasons.contains(.hypothesisUnregistered))
     }
 
     @Test("Legacy reports remain readable but cannot become decision-grade")
@@ -56,24 +64,60 @@ struct LabReportProvenanceTests {
         var object = try #require(
             JSONSerialization.jsonObject(with: encoder.encode(current)) as? [String: Any]
         )
-        object["schema"] = "tilde-lab.reply-bench-report.v5"
         object.removeValue(forKey: "provenance")
         object.removeValue(forKey: "review")
+        object.removeValue(forKey: "evidenceEligibility")
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let legacy = try decoder.decode(
+        for schema in LabRunReport.supportedSchemas where schema != LabRunReport.currentSchema {
+            object["schema"] = schema
+            let legacy = try decoder.decode(
+                LabRunReport.self,
+                from: JSONSerialization.data(withJSONObject: object)
+            )
+
+            #expect(try legacy.validatedForPersistence() == legacy)
+            #expect(!legacy.effectiveEvidenceEligibility.eligible)
+            #expect(legacy.effectiveEvidenceEligibility.reasons.contains(.legacyReportSchema))
+            #expect(legacy.effectiveEvidenceEligibility.reasons.contains(.missingProvenance))
+            #expect(legacy.effectiveEvidenceEligibility.reasons.contains(.reviewPending))
+            #expect(throws: LabReportProvenanceError.invalidReview) {
+                try legacy.reviewed(
+                    conclusion: "Do not upgrade legacy evidence.",
+                    status: .supported
+                )
+            }
+        }
+    }
+
+    @Test("A v6 report cannot omit or forge its persisted eligibility decision")
+    func evidenceDecisionIntegrity() throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let report = makeReport(provenance: completeProvenance(campaignID: UUID()))
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoder.encode(report)) as? [String: Any]
+        )
+        object.removeValue(forKey: "evidenceEligibility")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let missing = try decoder.decode(
             LabRunReport.self,
             from: JSONSerialization.data(withJSONObject: object)
         )
+        #expect(missing.effectiveEvidenceEligibility.reasons.contains(.evidenceDecisionMissing))
+        #expect(throws: LabRunReportValidationError.missingEvidenceDecision) {
+            try missing.validatedForPersistence()
+        }
 
-        #expect(try legacy.validatedForPersistence() == legacy)
-        #expect(!legacy.evidenceEligibility.eligible)
-        #expect(legacy.evidenceEligibility.reasons.contains(.legacyReportSchema))
-        #expect(legacy.evidenceEligibility.reasons.contains(.missingProvenance))
-        #expect(legacy.evidenceEligibility.reasons.contains(.reviewPending))
-        #expect(throws: LabReportProvenanceError.invalidReview) {
-            try legacy.reviewed(conclusion: "Do not upgrade legacy evidence.", status: .supported)
+        object["evidenceEligibility"] = ["eligible": true, "reasons": []]
+        let forged = try decoder.decode(
+            LabRunReport.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        #expect(throws: LabRunReportValidationError.evidenceDecisionMismatch) {
+            try forged.validatedForPersistence()
         }
     }
 
@@ -96,6 +140,24 @@ struct LabReportProvenanceTests {
         #expect(throws: LabReportProvenanceError.invalidExperiment) {
             try malformed.validated()
         }
+    }
+
+    @Test("Canonical invocation digests are deterministic and argument-sensitive")
+    func canonicalInvocationDigest() {
+        let first = LabReportInvocationProvenance.canonicalDigest(
+            arguments: ["tilde-lab", "run", "campaign.json", "--resume"]
+        )
+        let repeated = LabReportInvocationProvenance.canonicalDigest(
+            arguments: ["tilde-lab", "run", "campaign.json", "--resume"]
+        )
+        let changed = LabReportInvocationProvenance.canonicalDigest(
+            arguments: ["tilde-lab", "run", "campaign.json"]
+        )
+
+        #expect(first.count == 64)
+        #expect(first == repeated)
+        #expect(first != changed)
+        #expect(!first.contains("campaign"))
     }
 
     @Test("Campaign hypothesis registration is optional only for legacy files")

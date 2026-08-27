@@ -22,7 +22,7 @@ extension ResearchCoordinator {
         }
         let holdoutURL = URL(fileURLWithPath: try arguments.requiredValue("holdout-plan")
             .expandedResearchPath).standardizedFileURL
-        let holdoutDigest = try passingHoldoutEvidence(
+        let holdoutDigest = try await passingHoldoutEvidence(
             planURL: holdoutURL,
             sourceCampaignID: campaign.id,
             championID: research.baselineArmID,

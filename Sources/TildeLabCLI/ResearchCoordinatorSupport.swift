@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import TildeLabKit
 
@@ -100,23 +101,99 @@ extension ResearchCoordinator {
     }
 
     static func gitCommit() -> String {
+        commandOutput("/usr/bin/git", ["rev-parse", "HEAD"]) ?? "unknown"
+    }
+
+    static func reportProvenance(
+        campaignID: UUID,
+        manifestDigestSHA256: String,
+        hypothesisID: String?,
+        hypothesis: String?
+    ) -> LabReportProvenance {
+        let executable = Bundle.main.executableURL?.resolvingSymlinksInPath()
+            ?? URL(
+                fileURLWithPath: CommandLine.arguments[0],
+                relativeTo: URL(
+                    fileURLWithPath: FileManager.default.currentDirectoryPath,
+                    isDirectory: true
+                )
+            ).standardizedFileURL.resolvingSymlinksInPath()
+        let hardware = commandOutput("/usr/sbin/sysctl", ["-n", "hw.model"])
+        let commit = commandOutput("/usr/bin/git", ["rev-parse", "HEAD"])
+        let status = commandOutput(
+            "/usr/bin/git",
+            ["status", "--porcelain", "--untracked-files=normal"]
+        )
+        let usableCommit = commit?.isLowercaseHex(count: 40) == true ? commit : nil
+        let treeState: LabSourceTreeState
+        if usableCommit == nil || status == nil {
+            treeState = .unavailable
+        } else {
+            treeState = status!.isEmpty ? .clean : .dirty
+        }
+        let experiment: LabExperimentRegistration?
+        if let hypothesisID, let hypothesis {
+            experiment = LabExperimentRegistration(
+                id: hypothesisID,
+                campaignID: campaignID,
+                manifestDigestSHA256: manifestDigestSHA256,
+                hypothesis: hypothesis
+            )
+        } else {
+            experiment = nil
+        }
+        let provenance = LabReportProvenance(
+            source: LabReportSourceProvenance(
+                gitCommitSHA: treeState == .unavailable ? nil : usableCommit,
+                treeState: treeState,
+                runnerSHA256: try? digestFile(executable)
+            ),
+            environment: LabReportEnvironmentProvenance(
+                operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+                operatingSystemBuild: commandOutput("/usr/bin/sw_vers", ["-buildVersion"]),
+                hardwareClass: hardware,
+                machine: LabResearchMachinePreflight.inspect()
+            ),
+            invocation: LabReportInvocationProvenance(
+                digestSHA256: LabReportInvocationProvenance.canonicalDigest(
+                    arguments: CommandLine.arguments
+                )
+            ),
+            experiment: experiment
+        )
+        return (try? provenance.validated()) ?? .unavailable()
+    }
+
+    private static func commandOutput(_ executable: String, _ arguments: [String]) -> String? {
         let process = Process()
         let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["rev-parse", "HEAD"]
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
         process.currentDirectoryURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
             process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return "unknown" }
+            guard process.terminationStatus == 0 else { return nil }
             return String(
                 decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self
             ).trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
-            return "unknown"
+            return nil
         }
+    }
+
+    private static func digestFile(_ url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let data = try handle.read(upToCount: 1_048_576) ?? Data()
+            if data.isEmpty { break }
+            hasher.update(data: data)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     static func runManifest(
@@ -127,6 +204,8 @@ extension ResearchCoordinator {
         suite: LabScenarioSuite,
         model: LabResearchModelConfiguration,
         budget: LabResearchBudget,
+        hypothesisID: String?,
+        hypothesis: String?,
         database: LabResearchDatabase,
         allowBattery: Bool,
         usesCandidateCache: Bool
@@ -139,6 +218,15 @@ extension ResearchCoordinator {
         }
         try manifest.validated()
         try suite.validated()
+        let manifestDigestSHA256 = try manifest.digestSHA256()
+        // Capture before preparing report/checkpoint directories so the run's
+        // own artifacts cannot make an otherwise clean source tree look dirty.
+        let provenance = reportProvenance(
+            campaignID: campaignID,
+            manifestDigestSHA256: manifestDigestSHA256,
+            hypothesisID: hypothesisID,
+            hypothesis: hypothesis
+        )
         let selected = try manifest.arms.map {
             try LabResearchScenarioSelection.select(
                 from: suite,
@@ -192,8 +280,9 @@ extension ResearchCoordinator {
             database: database,
             campaignID: campaignID,
             campaignName: campaignName,
-            manifestDigestSHA256: try manifest.digestSHA256(),
-            gitCommit: gitCommit()
+            manifestDigestSHA256: manifestDigestSHA256,
+            gitCommit: gitCommit(),
+            reportProvenance: provenance
         )
         let started = ContinuousClock.now
         do {
@@ -308,6 +397,9 @@ extension ResearchCoordinator {
         }
         try research.promotionRule.validated()
         let reports = try await latestReports(manifest: manifest, layout: layout)
+        guard reports.values.allSatisfy({ $0.effectiveEvidenceEligibility.eligible }) else {
+            throw ResearchCLIError.decisionGradeEvidenceRequired
+        }
         guard let baseline = reports[research.baselineArmID] else {
             throw ResearchCLIError.noComparableReports
         }
@@ -364,6 +456,14 @@ extension ResearchCoordinator {
             )
             return try value.validated()
         }
+    }
+}
+
+private extension String {
+    func isLowercaseHex(count: Int) -> Bool {
+        self.count == count
+            && range(of: "^[a-f0-9]{\(count)}$", options: .regularExpression)
+                == startIndex..<endIndex
     }
 }
 
