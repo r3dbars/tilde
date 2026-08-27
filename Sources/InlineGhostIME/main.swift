@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import Cocoa
 import InputMethodKit
 

@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import CryptoKit
 import Foundation
 
