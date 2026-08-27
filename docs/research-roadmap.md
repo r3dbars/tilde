@@ -16,8 +16,15 @@ The goal is not the highest next-token accuracy. It is:
 
 The strongest conclusion across predictive keyboards, Smart Compose, code
 completion, accessibility input, cache language models, and Tilde's own Lab
-results is that candidate generation is only one part of autocomplete. Tilde
-must become an intervention system that decides:
+results is that candidate generation is only one part of autocomplete. The
+same sweep showed a second fact: the last shipped *personal* keyboard papers
+are from 2018–2020. Recent work is HCI on generic suggestions or Copilot on
+code. Tilde's unique shot is the combination those papers never published —
+on-device personal memory, screen context, and retained characters without
+stored writing, for a fast desktop typist. See
+[`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md).
+That does not unlock later stages early. Tilde must still become an
+intervention system that decides:
 
 1. whether inference is worth running;
 2. which source has the best candidate;

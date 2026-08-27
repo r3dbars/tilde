@@ -35,6 +35,25 @@ They are priors for Tilde, not proof that the same number will appear in Mail.
    multi-word ghosts are read as *what to say*. A Tilde win that flattens the
    owner's voice is a failure even if keystrokes fall.
 
+## Where the field actually stopped
+
+The last *shipped personal keyboard or mail-ghost* papers are Gboard (2018),
+Smart Compose (2019), and interpolation (2020). Google did not publish the
+sequel. Recent work is either generic HCI (Roy 2025, Li & Feit 2025) or Copilot
+metrics on code. Commercial local Mac ghosts exist; none published a ruler.
+
+That is the hole. No paper has a system-wide desktop IME, on-device personal
+memory, on-screen context, and retained characters counted without storing the
+writing — for a fast typist. Roy's "desktop typists skip" was measured on
+generic transcription ghosts. The unasked question is whether they still skip
+when the ghost is their phrasing, grounded in the screen, and scored by whether
+it stays.
+
+How to push that without lying: digest
+[`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md).
+The executable queue does not move because the hole is exciting. Finish the
+ruler, then ask that question on the Mac.
+
 ## How to read a row
 
 - **Digest** — Tilde note in `docs/research/`, or `—` if indexed only.
