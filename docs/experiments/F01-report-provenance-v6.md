@@ -131,6 +131,12 @@ running further decision-grade experiments.
 - 2026-08-27: Tilde Lab already records exact suite, arm, runtime, model, and
   helper evidence. F01 should extend that record rather than introduce a second
   report or telemetry system.
+- 2026-08-27: The optional `PROOF_STRUCTURAL_CHANGE=1` lane reports every added
+  Swift line under `Sources`, including development-only Tilde Lab, as
+  production growth and therefore rejected this additive evidence feature at
+  +875 net lines. Its separate repository-boundary check passed. The normal
+  blocking fast proof remains the applicable pre-merge gate; this mismatch is
+  recorded rather than hidden or bypassed in the script.
 
 ## Result
 
@@ -162,8 +168,8 @@ Completed: 2026-08-27T02:12:10Z
   storage, distinguish clean/dirty/unregistered/unreviewed states, reject
   local paths, prove invocation-digest determinism, and reject omitted or
   forged eligibility decisions.
-- The complete Swift suite passed with 732 tests in 92 suites. The final
-  structural fast proof remains a blocking merge check for pull request 420.
+- The complete Swift suite passed with 732 tests in 92 suites. The required
+  pre-merge fast proof remains a blocking merge check for pull request 420.
 
 ### Failures and limitations
 
@@ -178,6 +184,11 @@ Completed: 2026-08-27T02:12:10Z
   arguments and therefore cannot expose local paths.
 - F01 proves the evidence boundary, not model quality, campaign crash recovery,
   retained live utility, or macOS editor compatibility.
+- The repository's optional structural-LOC lane is not suitable for additive
+  Lab infrastructure because it classifies development-only Lab Swift as
+  production growth. Its failure is preserved in the pull-request record; the
+  ordinary blocking proof still runs every safety, privacy, boundary, and test
+  lane.
 
 ### Decision
 
