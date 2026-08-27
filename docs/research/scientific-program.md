@@ -178,3 +178,8 @@ What I will not do: stand up another bake-off, treat Tab as ground
 truth, or call a reading-list sweep a scientific result. The sweep
 found the hole. The science starts when a pre-registered campaign
 fills it or fails to.
+
+How we work as colleagues — teaching, session shape, what "push the
+field" means — is [`lab-partnership.md`](lab-partnership.md). The first
+timestamped instrument question is
+[`docs/experiments/F03-retained-outcome-ledger.md`](../experiments/F03-retained-outcome-ledger.md).
