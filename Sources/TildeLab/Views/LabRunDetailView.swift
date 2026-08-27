@@ -24,6 +24,7 @@ struct LabRunDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 summary
+                provenanceCard
                 qualityMetrics
                 breakdownCard
                 promotionCard
@@ -132,6 +133,76 @@ struct LabRunDetailView: View {
 
     private var distinctRootCount: Int {
         Set(report.cases.map { $0.rootScenarioID ?? $0.scenarioID }).count
+    }
+
+    private var provenanceCard: some View {
+        let eligibility = report.effectiveEvidenceEligibility
+        return GroupBox("Research evidence") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(
+                    eligibility.eligible
+                        ? "Decision-grade evidence"
+                        : "Readable, but not decision-grade evidence",
+                    systemImage: eligibility.eligible
+                        ? "checkmark.shield.fill"
+                        : "exclamationmark.shield.fill"
+                )
+                .font(.headline)
+                .foregroundStyle(eligibility.eligible ? .green : .orange)
+
+                if !eligibility.reasons.isEmpty {
+                    Text(eligibility.reasons.map(\.rawValue).joined(separator: " · "))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+                    ManifestRow("Report", report.schema)
+                    ManifestRow("Review", report.review?.status.title ?? "Unavailable")
+                    if let provenance = report.provenance {
+                        ManifestRow(
+                            "Hypothesis",
+                            provenance.experiment.map { "\($0.id) — \($0.hypothesis)" }
+                                ?? "Unregistered"
+                        )
+                        ManifestRow(
+                            "Source",
+                            provenance.source.gitCommitSHA.map {
+                                "\($0.prefix(12)) · \(provenance.source.treeState.rawValue)"
+                            } ?? "Unavailable"
+                        )
+                        ManifestRow(
+                            "Runner",
+                            provenance.source.runnerSHA256.map { String($0.prefix(16)) }
+                                ?? "Unavailable"
+                        )
+                        ManifestRow(
+                            "Environment",
+                            [
+                                provenance.environment.operatingSystemVersion,
+                                provenance.environment.operatingSystemBuild,
+                                provenance.environment.hardwareClass,
+                            ].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
+                                ?? "Unavailable"
+                        )
+                        ManifestRow(
+                            "Power / thermal",
+                            "\(provenance.environment.machine.isOnACPower ? "AC" : "battery or unknown") · \(provenance.environment.machine.lowPowerModeEnabled ? "Low Power Mode" : "normal power") · \(provenance.environment.machine.thermalLevel.rawValue)"
+                        )
+                        ManifestRow(
+                            "Invocation",
+                            provenance.invocation.digestSHA256.map { String($0.prefix(16)) }
+                                ?? "Unavailable"
+                        )
+                    } else {
+                        ManifestRow("Provenance", "Unavailable (legacy report)")
+                    }
+                }
+                .font(.callout)
+                .textSelection(.enabled)
+            }
+            .padding(8)
+        }
     }
 
     private var qualityMetrics: some View {
@@ -514,6 +585,10 @@ struct LabRunDetailView: View {
         case .degenerateSilence, .incomplete: .orange
         }
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 private struct RunMetricCard: View {

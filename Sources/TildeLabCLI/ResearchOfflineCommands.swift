@@ -29,14 +29,20 @@ extension ResearchCoordinator {
             suite: suite,
             model: campaign.model,
             budget: campaign.budget,
+            hypothesisID: campaign.hypothesisID,
+            hypothesis: campaign.hypothesis,
             database: try researchDatabase(arguments),
             allowBattery: arguments.hasFlag("allow-battery"),
             usesCandidateCache: !arguments.hasFlag("no-cache")
         )
         ResearchConsole.line("Campaign complete: \(reports.count) aggregate reports")
         for report in reports {
+            let evidence = report.effectiveEvidenceEligibility
             ResearchConsole.line(
                 "  \(report.arm.id): \(report.displayScore); \(report.metrics.useful) useful; \(report.metrics.wrong + report.metrics.unwanted) bad; p95 \(report.metrics.latency.p95Milliseconds.map(String.init) ?? "n/a") ms"
+            )
+            ResearchConsole.line(
+                "    evidence: \(evidence.eligible ? "decision-grade" : evidence.reasons.map(\.rawValue).joined(separator: ", "))"
             )
             if let startup = report.runtimeStartup {
                 ResearchConsole.line(
@@ -46,17 +52,75 @@ extension ResearchCoordinator {
         }
     }
 
+    static func review(_ arguments: CLIArguments) async throws {
+        try arguments.assertAllowed(options: ["campaign", "status", "conclusion"])
+        let documentURL = try campaignURL(arguments, command: "review")
+        let evidenceID: UUID
+        if let campaign = try? LabResearchCampaignFileIO.load(from: documentURL) {
+            evidenceID = campaign.id
+        } else {
+            evidenceID = try LabResearchArtifactIO.load(
+                LabResearchPlan.self,
+                from: documentURL
+            ).validated().id
+        }
+        guard let status = LabReportReviewStatus(
+            rawValue: try arguments.requiredValue("status")
+        ), status != .unreviewed else {
+            throw ResearchCLIError.invalidValue("--status")
+        }
+        let conclusion = try arguments.requiredValue("conclusion")
+        let layout = LabResearchArtifactLayout(documentURL: documentURL)
+        let store = LabReportStore(directory: layout.reportsDirectory)
+        let reports = await store.loadAll().filter {
+            $0.provenance?.campaignID == evidenceID
+        }
+        guard !reports.isEmpty else {
+            throw ResearchCLIError.missingArtifact("provenance-bearing campaign reports")
+        }
+        for report in reports {
+            try await store.save(try report.reviewed(conclusion: conclusion, status: status))
+        }
+        let reviewedReports = await store.loadAll().filter {
+            $0.provenance?.campaignID == evidenceID
+        }
+        ResearchConsole.line("Reviewed \(reports.count) campaign reports")
+        ResearchConsole.line("  status: \(status.rawValue)")
+        ResearchConsole.line(
+            "  decision-grade: \(reviewedReports.filter { $0.effectiveEvidenceEligibility.eligible }.count)/\(reviewedReports.count)"
+        )
+        ResearchConsole.line("  raw writing data persisted: no")
+    }
+
     static func compare(_ arguments: CLIArguments) async throws {
         try arguments.assertAllowed(
             options: ["campaign", "paired-bootstrap", "database"]
         )
         let url = try campaignURL(arguments, command: "compare")
-        let campaign = try LabResearchCampaignFileIO.load(from: url)
+        let manifest: LabExperimentManifest
+        let campaignID: UUID
+        let phase: LabCampaignPhase
+        if let campaign = try? LabResearchCampaignFileIO.load(from: url) {
+            manifest = campaign.manifest
+            campaignID = campaign.id
+            phase = campaign.manifest.research?.phase ?? .discovery
+        } else {
+            let plan = try LabResearchArtifactIO.load(
+                LabResearchPlan.self,
+                from: url
+            ).validated()
+            manifest = plan.manifest
+            campaignID = plan.id
+            guard let planPhase = plan.manifest.research?.phase else {
+                throw LabResearchDatabaseError.durableProtocolRequired
+            }
+            phase = planPhase
+        }
         let iterations = try arguments.integer("paired-bootstrap", default: 10_000)
         let artifacts = try await computeComparisons(
-            manifest: campaign.manifest,
-            campaignID: campaign.id,
-            phase: .discovery,
+            manifest: manifest,
+            campaignID: campaignID,
+            phase: phase,
             layout: LabResearchArtifactLayout(documentURL: url),
             database: try researchDatabase(arguments),
             bootstrapIterations: iterations
@@ -257,6 +321,8 @@ extension ResearchCoordinator {
         let childName = "\(campaign.name) \(stage)"
         let child = LabResearchCampaignFile(
             name: childName,
+            hypothesisID: campaign.hypothesisID,
+            hypothesis: campaign.hypothesis,
             parentCampaignID: campaign.id,
             suite: campaign.suite,
             manifest: LabExperimentManifest(
@@ -378,11 +444,19 @@ extension ResearchCoordinator {
             suite: try campaign.suite.load(),
             model: campaign.model,
             budget: campaign.budget,
+            hypothesisID: campaign.hypothesisID,
+            hypothesis: campaign.hypothesis,
             database: database,
             allowBattery: false,
             usesCandidateCache: false
         )
         ResearchConsole.line("Frozen validation complete: \(reports.count) reports")
+        guard reports.allSatisfy({ $0.effectiveEvidenceEligibility.eligible }) else {
+            ResearchConsole.line(
+                "  comparison pending: review the plan reports, then run `tilde-lab compare --campaign \(planURL.path)`"
+            )
+            return
+        }
         let comparisons = try await computeComparisons(
             manifest: plan.manifest,
             campaignID: plan.id,

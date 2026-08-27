@@ -23,6 +23,8 @@ extension ResearchCoordinator {
         guard let baseline = reports[research.baselineArmID],
               let candidate = reports[candidateID],
               candidateID != research.baselineArmID,
+              baseline.effectiveEvidenceEligibility.eligible,
+              candidate.effectiveEvidenceEligibility.eligible,
               baseline.assets == candidate.assets else {
             throw ResearchCLIError.noComparableReports
         }
@@ -95,6 +97,8 @@ extension ResearchCoordinator {
             suite: try suiteReference.load(),
             model: campaign.model,
             budget: campaign.budget,
+            hypothesisID: campaign.hypothesisID,
+            hypothesis: campaign.hypothesis,
             database: try researchDatabase(arguments),
             allowBattery: false,
             usesCandidateCache: false

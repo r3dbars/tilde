@@ -46,6 +46,8 @@ extension ResearchCoordinator {
         )
         guard let baselineReport = reports[baselineID],
               let candidateReport = reports[passing.candidateArmID],
+              baselineReport.effectiveEvidenceEligibility.eligible,
+              candidateReport.effectiveEvidenceEligibility.eligible,
               baselineReport.assets == candidateReport.assets else {
             throw ResearchCLIError.noComparableReports
         }
@@ -135,11 +137,19 @@ extension ResearchCoordinator {
             suite: suite,
             model: campaign.model,
             budget: campaign.budget,
+            hypothesisID: campaign.hypothesisID,
+            hypothesis: campaign.hypothesis,
             database: database,
             allowBattery: false,
             usesCandidateCache: false
         )
         ResearchConsole.line("One-time holdout complete: \(holdoutReports.count) reports")
+        guard holdoutReports.allSatisfy({ $0.effectiveEvidenceEligibility.eligible }) else {
+            ResearchConsole.line(
+                "  comparison pending: review the holdout plan reports, then run `tilde-lab compare --campaign \(output.path)`"
+            )
+            return
+        }
         let comparisons = try await computeComparisons(
             manifest: plan.manifest,
             campaignID: plan.id,

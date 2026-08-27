@@ -131,6 +131,8 @@ public struct LabResearchCampaignFile: Codable, Equatable, Identifiable, Sendabl
     public let schema: String
     public let id: UUID
     public var name: String
+    public var hypothesisID: String?
+    public var hypothesis: String?
     public let createdAt: Date
     public let parentCampaignID: UUID?
     public var suite: LabResearchSuiteReference
@@ -141,6 +143,8 @@ public struct LabResearchCampaignFile: Codable, Equatable, Identifiable, Sendabl
     public init(
         id: UUID = UUID(),
         name: String,
+        hypothesisID: String? = nil,
+        hypothesis: String? = nil,
         createdAt: Date = Date(),
         parentCampaignID: UUID? = nil,
         suite: LabResearchSuiteReference = .certifiedV2,
@@ -151,6 +155,8 @@ public struct LabResearchCampaignFile: Codable, Equatable, Identifiable, Sendabl
         schema = Self.currentSchema
         self.id = id
         self.name = name
+        self.hypothesisID = hypothesisID
+        self.hypothesis = hypothesis
         self.createdAt = createdAt
         self.parentCampaignID = parentCampaignID
         self.suite = suite
@@ -169,6 +175,20 @@ public struct LabResearchCampaignFile: Codable, Equatable, Identifiable, Sendabl
             options: .regularExpression
         ) == name.startIndex..<name.endIndex else {
             throw LabResearchCampaignFileError.invalidName
+        }
+        if hypothesisID != nil || hypothesis != nil {
+            guard let hypothesisID, let hypothesis,
+                  hypothesisID.range(
+                    of: #"^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$"#,
+                    options: .regularExpression
+                  ) == hypothesisID.startIndex..<hypothesisID.endIndex,
+                  !hypothesis.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  hypothesis.utf8.count <= 1_000,
+                  !hypothesis.lowercased().contains("/users/"),
+                  !hypothesis.lowercased().contains("file://"),
+                  !hypothesis.contains("\n"), !hypothesis.contains("\r") else {
+                throw LabResearchCampaignFileError.invalidHypothesis
+            }
         }
         try suite.validated()
         try model.validated()
@@ -241,6 +261,7 @@ public struct LabResearchCampaignFile: Codable, Equatable, Identifiable, Sendabl
 public enum LabResearchCampaignFileError: Error, LocalizedError, Equatable, Sendable {
     case unsupportedSchema
     case invalidName
+    case invalidHypothesis
     case invalidSuiteReference
     case invalidModelLocation
     case discoveryCampaignRequired
@@ -252,6 +273,8 @@ public enum LabResearchCampaignFileError: Error, LocalizedError, Equatable, Send
         switch self {
         case .unsupportedSchema: "The research campaign schema is unsupported."
         case .invalidName: "The research campaign name is not a safe display label."
+        case .invalidHypothesis:
+            "The hypothesis ID and statement must be stable, bounded, and free of local paths."
         case .invalidSuiteReference: "The campaign suite reference is incomplete or unsafe."
         case .invalidModelLocation: "The local helper or model location is invalid."
         case .discoveryCampaignRequired:

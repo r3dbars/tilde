@@ -16,3 +16,8 @@ queue. Run one causal experiment at a time, use the exact same test for control
 and treatment, do not start locked stages early, and capture every reusable
 supported, rejected, or inconclusive result without checking in private text or
 raw model output.
+
+Decision-grade comparisons require clean, complete v6 reports with a
+registered hypothesis and an explicit supported/rejected/inconclusive review.
+Legacy, dirty, incomplete, unregistered, and unreviewed reports stay readable
+but must never advance a protected phase.

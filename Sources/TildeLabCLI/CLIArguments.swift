@@ -7,6 +7,7 @@ enum ResearchCLIError: Error, LocalizedError {
     case budgetExpired
     case noComparableReports
     case noPromotableCandidate
+    case decisionGradeEvidenceRequired
     case protectedEvidenceRequired
     case rawTelemetryKey(String)
     case regressionFailed(armID: String, failedCases: Int, gates: [String])
@@ -19,6 +20,8 @@ enum ResearchCLIError: Error, LocalizedError {
         case .budgetExpired: "The campaign's cumulative active-time budget is exhausted."
         case .noComparableReports: "No complete, exactly paired baseline/candidate reports are available."
         case .noPromotableCandidate: "No candidate passed the pre-registered paired promotion rule."
+        case .decisionGradeEvidenceRequired:
+            "Comparison and promotion require complete, clean, registered, reviewed v6 reports. Run `tilde-lab status`, resolve every evidence blocker, then attach a review."
         case .protectedEvidenceRequired:
             "Protected work requires a passing frozen comparison from the immediately preceding phase."
         case let .rawTelemetryKey(key):
@@ -124,6 +127,7 @@ struct CLIArguments {
       init                     create an owner-only discovery campaign
       validate CAMPAIGN       validate schema, phase firewall, suite, and budget
       run CAMPAIGN            run or resume durable interleaved work
+      review                  attach a conclusion and review status to reports
       status CAMPAIGN         show durable work, reports, cache, and time budget
       compare                 paired-bootstrap every candidate against the baseline
       risk-coverage           replay confidence thresholds without new inference
