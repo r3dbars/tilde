@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T10:27:04Z",
+  "updatedAt": "2026-08-27T19:11:28Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -690,6 +690,35 @@
       "tags": ["qwen-9b", "inconclusive", "invariant-smoke", "campaign-state", "fingerprint"]
     },
     {
+      "id": "qwen-factorial-v4-rejected",
+      "recordedAt": "2026-08-27T19:11:28Z",
+      "area": "configuration",
+      "status": "rejected",
+      "title": "Full development replication did not justify advancing Qwen God v1",
+      "finding": "Q04 completed 345,600 work observations across eight arms and 600 independent roots in 6.39 active hours, with eight complete reviewed v6 reports and zero failed work items. God v1 versus the greedy control had expected-utility delta -137.35 milliseconds per 1,000 characters, root-cluster 95 percent interval [-806.14, 551.54], and bootstrap positive-effect probability 0.3477. All arms failed bad-suggestion and latency gates. Shorter generation reduced descriptive total latency but did not establish a utility gain or solve unwanted interruptions.",
+      "decision": "Reject God v1 advancement and close this bounded replication route. Do not nominate, validate, consume holdout, or change production. Preserve the earlier preview result as historical evidence; return to the existing Stage 0 foundation queue without unlocking later stages.",
+      "comparisonGroupID": "qwen-factorial-replication-v4",
+      "evaluationCount": 345600,
+      "metrics": [
+        { "subjectID": "campaign", "key": "independent-roots", "value": 600, "unit": "roots" },
+        { "subjectID": "campaign", "key": "aggregate-reports", "value": 8, "unit": "reports" },
+        { "subjectID": "qwen-factorial-a5", "key": "delta-expected-utility", "value": -137.35367227487586, "unit": "milliseconds-per-1000-characters" },
+        { "subjectID": "qwen-factorial-a5", "key": "probability-positive-utility", "value": 0.3477, "unit": "probability" },
+        { "subjectID": "qwen-factorial-a5", "key": "paired-p95-latency-upper95", "value": 60, "unit": "milliseconds" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q04-qwen-factorial-replication-v4.md" },
+        { "kind": "report", "id": "4FA868FF-1E0C-4613-BC2D-67DBA42C2040" },
+        { "kind": "report", "id": "2019E8AC-4763-4DEB-BA49-6F78AE71F07C" }
+      ],
+      "limitations": [
+        "Only a5 versus a0 is confirmatory; exploratory arms cannot replace the registered candidate.",
+        "Repeated cached observations are not independent generations. Synthetic deterministic scoring does not establish retained live usefulness or independent human semantic quality.",
+        "Eight-slot campaign total latency differs from the first-token-or-fallback paired endpoint and from live IMKit performance. Interaction integrity was not run."
+      ],
+      "tags": ["qwen-9b", "rejected", "paired-replication", "hard-gates", "independent-roots"]
+    },
+    {
       "id": "qwen-9b-scoring-confounds",
       "recordedAt": "2026-08-26T18:59:58Z",
       "area": "scoring",
@@ -1042,20 +1071,20 @@
     {
       "id": "qwen-protected-validation",
       "priority": 5,
-      "status": "blocked-on-clean-replication",
+      "status": "closed-replication-rejected",
       "question": "Does God v1 generalize beyond the development speak slice?",
       "hypothesis": "The small gain in useful output and lower wrong count will survive validation without weakening safety.",
-      "nextExperiment": "After F02 campaign-state reconciliation, run a fresh pre-registered a0-versus-a5 development replication. Freeze candidate bytes and run validation once only if that comparison is decision-grade and every hard gate passes.",
+      "nextExperiment": "Q04 completed clean reviewed replication and rejected a5 advancement. Do not run protected validation or another sweep under this queue item; any future Qwen question requires separate authorization and pre-registration. Continue the existing Stage 0 foundation queue.",
       "successCriteria": "Candidate beats baseline on human-acceptable output and wrong interruptions, passes every hard gate, and does not materially regress latency or net typing saved.",
       "dependencies": ["report-provenance-v6", "campaign-state-reconciliation", "certified-corpus-v2", "qwen-9b-god-v1"]
     },
     {
       "id": "qwen-live-meaningful-sample",
       "priority": 6,
-      "status": "blocked-on-validation-and-retention",
+      "status": "blocked-by-replication-rejection",
       "question": "Does Qwen 9B God v1 remain fast and useful during meaningful live use?",
       "hypothesis": "The three-word preview will preserve its quality signal and create positive retained utility during live writing.",
-      "nextExperiment": "After passing protected validation and retained-outcome instrumentation, collect registered 200, 500, and 1,000-completion checkpoints with latency, RNKS, wrong displays, dismissals, and interaction failures.",
+      "nextExperiment": "Do not launch new God v1 live checkpoints: Q04 rejected advancement before protected validation. A separately authorized future candidate would still require protected validation and retained-outcome instrumentation before registered live checkpoints.",
       "successCriteria": "Stable p95 and p99, positive retained utility against the frozen control, no privacy or interaction failure, and no protected app/register regression.",
       "dependencies": ["qwen-protected-validation", "retained-outcome-ledger-v2", "isolated-model-preview"]
     },
