@@ -155,6 +155,7 @@ Completed: <ISO-8601 UTC>
 - [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
 - [Q04 — Qwen 9B factorial replication v4](Q04-qwen-factorial-replication-v4.md) — REJECTED
 - [Q05 — Qwen confidence capture and small filtering pilot](Q05-confidence-filter-pilot.md) — REJECTED (selected policy; capture passed)
+- [Q06 — Fixed confidence filter on additional development roots](Q06-confidence-filter-followup.md) — PROPOSED
 
 The staged theory registry and current eligibility gates live in the
 [Tilde research roadmap](../research-roadmap.md).
