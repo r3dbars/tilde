@@ -34,9 +34,9 @@ the model. A synthetic audit is not a substitute for a live model run, and the
 instrumented Scene Host is not a substitute for driving the real Tilde input
 source in each target application.
 
-## Tilde Research CLI v2
+## Tilde Lab command line
 
-`tilde-research` is the promotion-authority workflow for long experiments. The
+`tilde-lab` runs long experiments and controls promotion evidence. The
 macOS studio and `tilde-lab-runner` remain useful for interactive diagnostics,
 but their point estimates do not nominate a production candidate. The v2 CLI
 binds one causal question to one experiment class, runs durable paired work,
@@ -45,37 +45,37 @@ and makes the protected phases structurally unreachable from an optimizer.
 Build it once, then inspect its complete command map:
 
 ```bash
-swift build --product tilde-research
-.build/debug/tilde-research --help
+swift build --product tilde-lab
+.build/debug/tilde-lab --help
 ```
 
 ### End-to-end campaign
 
 ```bash
 # Development-only discovery. Resume is automatic at the work-item boundary.
-.build/debug/tilde-research init \
+.build/debug/tilde-lab init \
   --name qwen-factorial \
   --class generator \
   --suite certified-v2 \
   --seeds 17,41,73 \
   --repetitions 1 \
   --output qwen-factorial.json
-.build/debug/tilde-research validate qwen-factorial.json
-caffeinate -dimsu .build/debug/tilde-research run qwen-factorial.json --resume
-.build/debug/tilde-research status qwen-factorial.json
-.build/debug/tilde-research compare --campaign qwen-factorial.json
+.build/debug/tilde-lab validate qwen-factorial.json
+caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json --resume
+.build/debug/tilde-lab status qwen-factorial.json
+.build/debug/tilde-lab compare --campaign qwen-factorial.json
 
 # Freeze at most three passing candidates. No optimizer runs beyond this point.
-.build/debug/tilde-research nominate \
+.build/debug/tilde-lab nominate \
   --campaign qwen-factorial.json \
   --top 3 \
   --output validation-plan.json
-.build/debug/tilde-research validate-candidates \
+.build/debug/tilde-lab validate-candidates \
   validation-plan.json \
   --campaign qwen-factorial.json
 
 # Consume one frozen candidate against one baseline once per exact evidence set.
-.build/debug/tilde-research holdout \
+.build/debug/tilde-lab holdout \
   --campaign qwen-factorial.json \
   --validation-plan validation-plan.json \
   --candidate CANDIDATE_ID \
@@ -215,13 +215,13 @@ When a real failure is found, put its reviewed synthetic reproduction in a
 run it:
 
 ```bash
-.build/debug/tilde-research freeze-regression \
+.build/debug/tilde-lab freeze-regression \
   --campaign qwen-factorial.json \
   --candidate CANDIDATE_ID \
   --suite /absolute/path/permanent-regressions.json \
   --evidence-digest FAILURE_EVIDENCE_SHA256 \
   --output regression-plan.json
-.build/debug/tilde-research regression \
+.build/debug/tilde-lab regression \
   regression-plan.json \
   --campaign qwen-factorial.json
 ```
@@ -254,7 +254,7 @@ NVIDIA/Python trainer. It preserves the useful protocol:
 5. discard regressions, periodically rerun the control, and confirm the final
    champion with more repetitions.
 
-This UI is an exploratory aid. Use `tilde-research` for uncertainty-aware
+This UI is an exploratory aid. Use `tilde-lab` for uncertainty-aware
 promotion, protected validation, one-time holdout, online evidence, and durable
 long-run resume.
 

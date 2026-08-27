@@ -14,7 +14,7 @@ existing `--release-proof` lane (dedicated port 17873; the duplicate-instance
 guard makes a colliding second production-mode launch self-terminate before
 touching anything, so release-proof plus `TILDE_SCREEN_MEMORY_DEV=1` — newly
 wired to also start the window-change observer under that same dev flag,
-`Sources/AutocompleteLabApp/App/AppDelegate.swift` — is the only safe lane).
+`Sources/TildeApp/App/AppDelegate.swift` — is the only safe lane).
 
 **OCR p95 result (real, measured on this Mac, Apple M5 Max): FAILS budget.**
 16 real captures over a 90s window of scripted app-switching (Finder ↔
@@ -47,7 +47,7 @@ Settings → Privacy & Security → Screen Recording → enable the entry for th
 that appears on first capture attempt while the toggle and dev flag are on.
 
 Two pre-existing bugs found and fixed while building this harness, both in
-`Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift` (shipped
+`Sources/TildeCore/Text/DiagnosticsMetadataRedactor.swift` (shipped
 in the Phase 1a capture-engine PR, #352): `ScreenCaptureService`'s
 `blocks`/`duration_ms` fields and every one of its `reason=` skip values
 (`permission`, `cadence`, `disabled`, `screen-locked`, `secure-input`,

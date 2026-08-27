@@ -50,10 +50,10 @@ Non-negotiables that survive from the old covenant:
 
 ## Architecture placement (repo rules apply)
 
-- `Sources/AutocompleteLabApp` owns: ScreenCaptureKit capture, Vision OCR,
+- `Sources/TildeApp` owns: ScreenCaptureKit capture, Vision OCR,
   TCC permission flow, redactor model runtime, persistence. It is already the
   sole owner of Personal History; Screen Memory extends that ownership.
-- `Sources/AutocompleteLabCore` owns (pure, deterministic, tested): scene
+- `Sources/TildeCore` owns (pure, deterministic, tested): scene
   classification policy, context assembly/budgeting, redaction RULES layer
   (regex/checksum — the model layer stays app-side), event types and their
   size caps, retention policy.
@@ -311,7 +311,7 @@ an ordinary miss. Small on-device models cannot reliably do relationship
 reasoning or match register in a grief/medical-crisis/emergency
 conversation, so the shipped fix is suppression, not a smarter guess: when
 `SensitiveScenePolicy` (Core, pure, tested —
-`Sources/AutocompleteLabCore/Scene/SensitiveScenePolicy.swift`) finds a
+`Sources/TildeCore/Scene/SensitiveScenePolicy.swift`) finds a
 bereavement, medical-crisis, emergency, breakup/divorce, or job-loss phrase
 in the current scene's conversation turns, `GhostBrainServerHost` answers
 `.silence` and never starts the completion at all, logging only a count-only

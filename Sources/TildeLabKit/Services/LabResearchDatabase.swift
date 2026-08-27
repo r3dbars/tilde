@@ -169,7 +169,7 @@ public struct LabDurableRunConfiguration: Sendable {
         campaignName: String,
         manifestDigestSHA256: String,
         gitCommit: String,
-        leaseOwner: String = "tilde-research-\(ProcessInfo.processInfo.processIdentifier)",
+        leaseOwner: String = "tilde-lab-\(ProcessInfo.processInfo.processIdentifier)",
         leaseDuration: TimeInterval = 300
     ) {
         self.database = database
@@ -227,9 +227,17 @@ public actor LabResearchDatabase {
     private let decoder: JSONDecoder
 
     public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Tilde Lab/Research", isDirectory: true)
-            .appendingPathComponent("tilde-research.sqlite3")
+        let current = directory.appendingPathComponent("tilde-lab.sqlite3")
+        if FileManager.default.fileExists(atPath: current.path) {
+            return current
+        }
+
+        // Preserve resumability for campaigns created before the CLI was
+        // folded into the single Tilde Lab name.
+        let legacy = directory.appendingPathComponent("tilde-research.sqlite3")
+        return FileManager.default.fileExists(atPath: legacy.path) ? legacy : current
     }
 
     public init(fileURL: URL = LabResearchDatabase.defaultURL) throws {

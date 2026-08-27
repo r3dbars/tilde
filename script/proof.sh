@@ -8,12 +8,13 @@
 # Every lane is BLOCKING and real:
 #   1. git diff --check            whitespace / conflict markers
 #   2. structural Swift delta      refactors remove more production code than they add
-#   3. bash -n script/*.sh         all remaining shell tooling parses
-#   4. byte-compile script/*.py    all remaining python tooling parses
-#   5. harness self-tests          request shape, privacy, and metric math hold,
+#   3. repository boundary         Tilde never depends on Tilde Lab
+#   4. bash -n script/*.sh         all remaining shell tooling parses
+#   5. byte-compile script/*.py    all remaining python tooling parses
+#   6. harness self-tests          request shape, privacy, and metric math hold,
 #                                   including the p99 latency budget tripwire
 #                                   against synthetic pass/fail fixture logs
-#   6. swift test                  the complete Swift suite passes
+#   7. swift test                  the complete Swift suite passes
 #
 # After the blocking lanes, one REPORT-ONLY lane runs: if this machine has a
 # live diagnostics log (~/Library/Logs/Tilde/diagnostics.log), it is checked
@@ -216,6 +217,7 @@ echo "Repo: ${ROOT_DIR}"
 
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "structural Swift delta" check_structural_delta
+run_blocking "Tilde / Tilde Lab repository boundary" python3 script/check_repository_boundary.py
 run_blocking "bash -n script/*.sh" bash -n script/*.sh
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "personal brain lab LOC budget" bash -c \

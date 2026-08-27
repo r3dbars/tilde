@@ -15,6 +15,25 @@ Memory uses macOS Screen Recording and on-device OCR when enabled by its
 privacy controls; screen text stays on this Mac and is never sent for cloud
 inference.
 
+## Two parts, one repository
+
+This repository contains exactly two things:
+
+| Name | Purpose | Ships to users? |
+| --- | --- | --- |
+| **Tilde** | The macOS input method and its local runtime | **Yes** |
+| **Tilde Lab** | The separate app and command-line tools used to test and improve Tilde | **No** |
+
+There is no separate “Tilde Research” product. Long-running experiments are a
+Tilde Lab capability and use the `tilde-lab` command.
+
+The source boundary is enforced by Swift package dependencies: Tilde Lab may
+exercise `TildeCore`, but `TildeApp` and `InlineGhostIME` do not import or link
+any `TildeLab…` target. Packaging includes the Tilde app, input method, and
+signed inference helper—not Tilde Lab. See the
+[repository boundary map](docs/repository-boundary.md) for the exact folders and
+dependency direction.
+
 ## How it works
 
 Tilde ships as a small signed package:
@@ -109,7 +128,7 @@ pinned loopback-only Gemma runtime, includes deterministic policy audits and an
 instrumented AppKit Scene Host, and persists aggregate-only reports for
 baseline/candidate comparison. Its locked headline is **Net Keystrokes Saved**,
 with safety, bad-suggestion, temporal-integrity, privacy, interaction, and
-latency gates outside the number. The `tilde-research` CLI adds durable
+latency gates outside the number. The `tilde-lab` CLI adds durable
 work-item resume, interleaved paired blocks, a hard development/validation/
 holdout firewall, root-clustered uncertainty, risk–coverage, chronological
 personalization, local dogfood/attention-tax and confidence calibration,
@@ -121,10 +140,10 @@ history:
 
 ```bash
 ./script/build_and_run.sh --tilde-lab
-swift build --product tilde-research
-.build/debug/tilde-research init --name qwen-factorial --class generator --suite certified-v2 --output campaign.json
-.build/debug/tilde-research run campaign.json --resume
-.build/debug/tilde-research compare --campaign campaign.json
+swift build --product tilde-lab
+.build/debug/tilde-lab init --name qwen-factorial --class generator --suite certified-v2 --output campaign.json
+.build/debug/tilde-lab run campaign.json --resume
+.build/debug/tilde-lab compare --campaign campaign.json
 swift run tilde-lab-runner --workers 1 --slots 8 --repetitions 10
 swift run tilde-lab-runner --built-in-suite slack-reply-gold-v1
 swift run tilde-lab-runner --manifest ./candidate-matrix.tilde-lab.json
@@ -136,15 +155,15 @@ between high-throughput model evidence and foreground real-IME proof. The
 [Tilde Learning Ledger](docs/learning-ledger.md) preserves what experiments
 taught us, why candidates were kept or rejected, and what should be tested next.
 
-Production code has three parts:
+The code follows the same two-part boundary:
 
-- `Sources/AutocompleteLabCore`: pure, deterministic suggestion policy
-- `Sources/InlineGhostIME`: IMKit input and marked-text presentation
-- `Sources/AutocompleteLabApp`: local socket, app-owned llama lifecycle, menu,
-  installation, encrypted Personal History, and redacted diagnostics
-- `Sources/TildeLabKit` + `Sources/TildeLab` + `Sources/TildeLabRunner`:
-  separate regression engine, macOS dashboard, and unattended runner; none is
-  linked into the shipped Tilde app
+- **Tilde:** `Sources/TildeCore`, `Sources/TildeApp`, and
+  `Sources/InlineGhostIME`.
+- **Tilde Lab:** `Sources/TildeLabKit`, `Sources/TildeLab`,
+  `Sources/TildeLabCLI`, and `Sources/TildeLabRunner`.
+
+The names inside each group describe implementation components, not additional
+products.
 
 Read [AGENTS.md](AGENTS.md) before changing behavior.
 

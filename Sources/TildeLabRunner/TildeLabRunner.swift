@@ -1102,7 +1102,7 @@ private enum OptionsError: Error, LocalizedError {
         case let .unknownArgument(flag): "Unknown argument \(flag)."
         case .conflictingInputs: "Choose either --manifest or --campaign, not both."
         case .retiredLearningLoop:
-            "--learning-loop-hours was retired because it automatically opened protected partitions. Use tilde-research nominate, validate-candidates, and holdout with frozen plans."
+            "--learning-loop-hours was retired because it automatically opened protected partitions. Use tilde-lab nominate, validate-candidates, and holdout with frozen plans."
         }
     }
 }

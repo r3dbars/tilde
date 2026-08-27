@@ -6,7 +6,7 @@
 //   2. Whether sorting SCShareableContent.windows by windowLayer really does
 //      give a front-to-back order that survives real overlapping windows
 //      (Apple documents no ordering guarantee for that array — see
-//      Sources/AutocompleteLabApp/ScreenMemory/ScreenCaptureService.swift).
+//      Sources/TildeApp/ScreenMemory/ScreenCaptureService.swift).
 // Real caller: Phase 1b's battery/latency measurements and Phase 4's OCR
 // quality checks both start from a human running this and reading the
 // output, per docs/plans/screen-memory.md.
