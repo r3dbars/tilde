@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T10:27:04Z",
+  "updatedAt": "2026-08-27T12:32:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -15,7 +15,8 @@
     "Compare candidates only on the same corpus, split, prompt, scoring policy, model protocol, and controlled runtime.",
     "Distinct situations measure behavioral coverage; repetitions measure stability and do not create new coverage.",
     "Keep raw personal writing, screen text, prompts, model output, and private corpus material out of checked-in evidence.",
-    "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass."
+    "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass.",
+    "Write every research attempt into the public lab log the same day, including rejected and incomplete work. The ledger stores only reusable lessons; the log stores the try."
   ],
   "researchProgram": [
     {
@@ -102,6 +103,27 @@
     }
   ],
   "entries": [
+    {
+      "id": "lab-partnership-and-failure-log",
+      "recordedAt": "2026-08-27T12:32:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "The lab writes down every try, learn, and fail",
+      "finding": "Decision-grade results already have experiment records, and reusable lessons already have ledger entries, but attempts that stopped early or failed lived only in chat. That is how a lab repeats itself.",
+      "decision": "Keep the owner-agent working agreement in docs/research/lab-partnership.md. Append every public research attempt to docs/research/lab-log.md with try, learn, and fail. Use the ledger only for a reusable lesson or decision. Never treat a missing log line as proof we did not try it.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/research/lab-partnership.md" },
+        { "kind": "documentation", "id": "docs/research/lab-log.md" },
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" }
+      ],
+      "limitations": [
+        "The log is only as complete as the next session that remembers to append it."
+      ],
+      "tags": ["process", "lab-log", "failure", "partnership"]
+    },
     {
       "id": "tilde-lab-platform-v1",
       "recordedAt": "2026-08-24T18:00:00Z",

@@ -9,13 +9,16 @@ egress check loopback-only.
 
 For Tilde Lab or autocomplete research work, also read
 [the staged research roadmap](docs/research-roadmap.md),
-[the Learning Ledger contract](docs/learning-ledger.md), and
-[the experiment record template](docs/experiments/README.md). The bundled
+[the Learning Ledger contract](docs/learning-ledger.md),
+[the experiment record template](docs/experiments/README.md),
+[the lab partnership](docs/research/lab-partnership.md), and
+[the lab log](docs/research/lab-log.md). The bundled
 Learning Ledger JSON is authoritative for the active stage and ordered work
 queue. Run one causal experiment at a time, use the exact same test for control
 and treatment, do not start locked stages early, and capture every reusable
 supported, rejected, or inconclusive result without checking in private text or
-raw model output.
+raw model output. After every attempt, append the lab log with try, learn, and
+fail so the work cannot disappear into chat.
 
 Decision-grade comparisons require clean, complete v6 reports with a
 registered hypothesis and an explicit supported/rejected/inconclusive review.

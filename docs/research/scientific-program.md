@@ -180,6 +180,7 @@ found the hole. The science starts when a pre-registered campaign
 fills it or fails to.
 
 How we work as colleagues — teaching, session shape, what "push the
-field" means — is [`lab-partnership.md`](lab-partnership.md). The first
+field" means — is [`lab-partnership.md`](lab-partnership.md). Every try,
+learn, and fail is appended to [`lab-log.md`](lab-log.md). The first
 timestamped instrument question is
 [`docs/experiments/F03-retained-outcome-ledger.md`](../experiments/F03-retained-outcome-ledger.md).

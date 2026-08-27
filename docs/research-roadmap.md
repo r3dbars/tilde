@@ -5,7 +5,8 @@ program. The machine-readable priority queue in
 `Sources/TildeLabKit/Fixtures/learning-ledger-v1.json` remains the source of
 truth for what is eligible to run next. This roadmap preserves the longer-term
 hypotheses, their dependencies, and the conditions that must be met before they
-enter that queue.
+enter that queue. Every attempt, including failures, is appended to
+[`docs/research/lab-log.md`](research/lab-log.md).
 
 The goal is not the highest next-token accuracy. It is:
 

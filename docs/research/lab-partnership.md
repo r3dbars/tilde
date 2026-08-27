@@ -89,6 +89,24 @@ logs. You can keep a local lab notebook. I will never ask you to commit it.
 Shareable work is the question, the protocol, the aggregate decision, and the
 sanitized regression.
 
+## Where every attempt is written down
+
+Three stores, on purpose:
+
+| Store | What goes there | What does not |
+| --- | --- | --- |
+| [`lab-log.md`](lab-log.md) | Every try, learn, and fail, same day | Private text; a kitchen-sink diary |
+| [`docs/experiments/`](../experiments/README.md) | Pre-registered decision-grade questions and their supported / rejected / inconclusive result | Work that never became a campaign |
+| Learning Ledger JSON | Only a reusable lesson or decision | The attempt itself |
+
+After every research attempt I will append the lab log, even when we
+stop early or the result is embarrassing. If I forget, remind me. A
+lab that only writes wins will repeat its losses.
+
+Your local notebook can be messier and private. I will never ask you
+to commit it. I will ask us to put the *public* try/learn/fail in the
+log before we change the subject.
+
 ## What "push the field" means here
 
 A later paper we would not be embarrassed to put next to Smart Compose and
