@@ -33,38 +33,25 @@ keep from rewrite without storing words.
 
 ## What already landed on GitHub
 
-On branch `cursor/autocomplete-research-briefing-22a1`, PR 424:
+On branch `cursor/f03-live-ruler-and-local-diary` (built on PR 424):
 
 - F03 pre-registered, status **IMPLEMENTING**, not supported.
-- `tilde-lab.online-event.v3` in
-  `Sources/TildeLabKit/Models/LabOnlineExperiment.swift`.
-- Shared contract in
+- `tilde-lab.online-event.v3` plus the IME producer in
+  `Sources/InlineGhostIME/GhostOutcomeLedger.swift`.
+- Shared count contract in
   `Sources/TildeCore/Policy/RetainedCharacterObservation.swift`.
-- Privacy allowlist and horizon reports in
-  `Sources/TildeLabKit/Models/LabRetainedOutcome.swift`.
-- Fixtures in `Tests/TildeLabKitTests/LabRetainedOutcomeTests.swift`
-  and `Tests/TildeCoreTests/RetainedCharacterObservationTests.swift`.
-- `tilde-lab ingest-events` and `online-report` already exist. They
-  accept local JSONL. They do not produce events from the IME.
-- Production still only counts shown / accepted / words in
-  `GhostStats` / `TildeStats`. No 30s or segment retention.
+- A second local word diary. Lab ingest rejects `acceptedText`.
+- `tilde-lab ingest-events --instrument` and `online-report --instrument`.
+- Delete Personalization Data wipes the count file and the diary.
+- Production menu stats are still shown / accepted / words.
 
-## What this Mac thread must do
+## What is still missing
 
-1. Produce v3 **text-free** events from real IMKit use (or a thin
-   recorder next to the IME that the Lab can ingest).
-2. Count retained characters at 5s, 30s, and segment close (focus
-   change, send/commit, or a privacy-safe idle boundary).
-3. If a horizon cannot be watched, store a missingness reason. Never
-   coerce that to zero kept characters.
-4. Distinguish typed-through from ignored and from dismissed.
-5. Keep one store: extend `LabOnlineExperimentEvent`. Do not add a
-   second telemetry format.
-6. Ingest locally with `tilde-lab ingest-events`. **Never check in
-   events, JSONL, or any writing.**
-7. Prove, on this Mac, that Tab-and-keep and Tab-and-rewrite look
-   different in the aggregate report.
-8. Mark F03 **SUPPORTED** only when the protocol's promotion rule is
+1. Rebuild the daily-driver IME so ordinary typing writes events.
+2. Ingest that local count file with `tilde-lab ingest-events --instrument`.
+   **Never check in events, JSONL, or any writing.**
+3. Confirm Tab-and-keep and Tab-and-rewrite look different from real use.
+4. Mark F03 **SUPPORTED** only when the protocol's promotion rule is
    honestly met. Then stop. Do not start H01.
 
 `TildeApp` and `InlineGhostIME` must not depend on Tilde Lab. The

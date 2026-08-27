@@ -131,6 +131,7 @@ final class GhostInputController: IMKInputController {
             screenMemoryTypingTask = nil
             notifyScreenMemory(.textFieldBlurred)
             PersonalHistoryCapture.shared.sensitiveInputBegan()
+            GhostOutcomeLedger.markPrivacyExcluded()
             breakHistorySegment()
             dismiss(client)
             resetFallback()
@@ -200,7 +201,11 @@ final class GhostInputController: IMKInputController {
         case 53: // Escape dismisses only when something is visible.
             let wasVisible = state.isVisible
             dismiss(client)
-            if !wasVisible { breakHistorySegment() }
+            if wasVisible {
+                GhostOutcomeLedger.noteDismissed()
+            } else {
+                breakHistorySegment()
+            }
             return wasVisible
 
         case 51: // The host owns deletion; wait for the next typed character.
@@ -226,6 +231,8 @@ final class GhostInputController: IMKInputController {
             let current = match?.ticket
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
+            GhostOutcomeLedger.noteTyped()
+            GhostOutcomeLedger.closeIfGhostGone(stillVisible: state.isVisible)
             appendFallback(grapheme, for: client)
             capturePersonalHistory(
                 grapheme,
@@ -246,11 +253,17 @@ final class GhostInputController: IMKInputController {
     /// Client-driven composition endings must never commit an unaccepted ghost.
     override func commitComposition(_ sender: Any!) {
         if let client = sender as? IMKTextInput { dismiss(client) }
+        GhostOutcomeLedger.closeOpenGhost()
         breakHistorySegment()
     }
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
+        GhostOutcomeLedger.configure { [weak self] in
+            guard let self, let liveClient = self.client() else { return nil }
+            if IsSecureEventInputEnabled() { return nil }
+            return self.contextBeforeCaret(liveClient)
+        }
         guard !IsSecureEventInputEnabled() else { return }
         notifyScreenMemory(.textFieldFocused)
     }
@@ -261,6 +274,7 @@ final class GhostInputController: IMKInputController {
         notifyScreenMemory(.textFieldBlurred)
         GhostStats.flush(force: true)
         PersonalHistoryCapture.shared.flush()
+        GhostOutcomeLedger.closeSegment()
         if let client = sender as? IMKTextInput { dismiss(client) }
         breakHistorySegment()
         resetFallback()
@@ -300,10 +314,42 @@ final class GhostInputController: IMKInputController {
     private func stopForSecureInput(_ client: IMKTextInput) -> Bool {
         guard IsSecureEventInputEnabled() else { return false }
         PersonalHistoryCapture.shared.sensitiveInputBegan()
+        GhostOutcomeLedger.markPrivacyExcluded()
         breakHistorySegment()
         dismiss(client)
         resetFallback()
         return true
+    }
+
+    private func recordOutcomeShown(_ client: IMKTextInput) {
+        let field = fieldSnapshot(client)
+        guard !Self.isOutcomeExcluded(bundleIdentifier: field.bundleIdentifier) else { return }
+        let context = contextBeforeCaret(client, selection: field.selection)
+        GhostOutcomeLedger.noteShown(
+            sessionIdentifier: suggestionSessionIdentifier,
+            bundleIdentifier: field.bundleIdentifier,
+            candidateCharacters: state.visibleText.count,
+            candidateWordCount: state.visibleText.split(whereSeparator: \Character.isWhitespace).count,
+            opportunityCharacters: max(1, context.count),
+            precedingCharacter: context.last,
+            excluded: false
+        )
+    }
+
+    static func isOutcomeExcluded(
+        bundleIdentifier: String,
+        secureInput: Bool = IsSecureEventInputEnabled()
+    ) -> Bool {
+        if secureInput { return true }
+        let configured = Set(
+            UserDefaults.standard.stringArray(
+                forKey: PersonalHistorySettingsContract.excludedAppsKey
+            ) ?? []
+        )
+        return DefaultExcludedApps.isExcluded(
+            bundleIdentifier,
+            configuredExcludedApps: configured
+        )
     }
 
     private func appendFallback(_ text: String, for client: IMKTextInput) {
@@ -373,10 +419,15 @@ final class GhostInputController: IMKInputController {
                     selectionRange: NSRange(location: 0, length: 0),
                     replacementRange: Self.unset
                 )
+                GhostOutcomeLedger.noteVisibleCandidate(
+                    characters: text.count,
+                    wordCount: text.split(whereSeparator: \Character.isWhitespace).count
+                )
             case let .schedule(afterTyping: grapheme):
                 scheduleSuggestion(for: client, afterUserTyped: grapheme)
             case .shown:
                 GhostStats.recordSuggestionShown()
+                recordOutcomeShown(client)
             case .accepted:
                 GhostStats.recordSuggestionAccepted()
             }
@@ -455,6 +506,11 @@ final class GhostInputController: IMKInputController {
             observation: observation
         )
         GhostStats.recordAccepted(accepted)
+        GhostOutcomeLedger.noteAccepted(
+            accepted,
+            kind: .word,
+            remainderVisible: state.isVisible
+        )
         return true
     }
 
@@ -486,6 +542,11 @@ final class GhostInputController: IMKInputController {
             observation: observation
         )
         GhostStats.recordAccepted(accepted)
+        GhostOutcomeLedger.noteAccepted(
+            accepted,
+            kind: .all,
+            remainderVisible: state.isVisible
+        )
         return true
     }
 

@@ -154,16 +154,18 @@ zero. Redesign the event before any decision-grade live campaign.
 Status: not yet supported
 
 The v3 event, XOR horizons, typed-through, flicker floor, privacy allowlist,
-v2 decode, and aggregate coverage fields are implemented with fixtures. Live
-IME ingest on a Mac is still missing, so the promotion rule is not met.
+v2 decode, and aggregate coverage fields are implemented with fixtures. The
+Mac-side producer is now wired: IME writes text-free counts next to a local
+word diary, Delete Personalization Data wipes both, and
+`tilde-lab ingest-events --instrument` plus `online-report` can show keep
+versus rewrite. Live events from ordinary typing on this Mac are still
+missing, so the promotion rule is not met.
 
-The next session is on-device. Start from
-[`docs/research/next-on-device.md`](../research/next-on-device.md). Playing
-with Lab configs on the Mac is discovery, not a supported F03 result.
+Playing with Lab configs is discovery, not a supported F03 result.
 
 ### Follow-up
 
-On a Mac: emit v3 counts from the input method, ingest them locally, and
-do not check events in. If supported: F04 (freeze scoring cheats as tests),
-then close Qwen, then H01 as the first live scientific question with RNKS
-as the primary metric.
+Rebuild the daily-driver IME, ingest the local count file from real
+typing, and do not check events in. If supported: F04 (freeze scoring
+cheats as tests), then close Qwen, then H01 as the first live scientific
+question with RNKS as the primary metric.
