@@ -307,10 +307,7 @@ public struct LabExperimentManifest: Codable, Equatable, Sendable {
     }
 
     public func digestSHA256() throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let bytes = try encoder.encode(self)
-        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        try LabCanonicalDigest.sha256(self)
     }
 
     private enum CodingKeys: String, CodingKey {

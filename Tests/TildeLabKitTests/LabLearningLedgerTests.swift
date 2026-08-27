@@ -10,8 +10,8 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 36)
-        #expect(snapshot.currentLearnings.count == 29)
+        #expect(snapshot.entries.count == 37)
+        #expect(snapshot.currentLearnings.count == 30)
         #expect(snapshot.archivedLearnings.count == 7)
         #expect(snapshot.researchProgram.count == 6)
         #expect(snapshot.researchProgram.map(\.order).sorted() == Array(0...5))
@@ -29,6 +29,7 @@ struct LabLearningLedgerTests {
         #expect(snapshot.promotionPath.map(\.order).sorted() == Array(1...7))
         #expect(snapshot.researchQueue.min(by: { $0.priority < $1.priority })?.id == "report-provenance-v6")
         #expect(snapshot.researchQueue.first { $0.id == "report-provenance-v6" }?.status == "completed-foundation")
+        #expect(snapshot.researchQueue.first { $0.id == "campaign-state-reconciliation" }?.status == "completed-foundation")
         #expect(
             snapshot.researchQueue.first { $0.id == "qwen-protected-validation" }?.status
                 == "blocked-on-clean-replication"
@@ -40,6 +41,7 @@ struct LabLearningLedgerTests {
             }
         )
         #expect(snapshot.entries.contains { $0.id == "report-provenance-v6" && $0.status == .adopted })
+        #expect(snapshot.entries.contains { $0.id == "campaign-state-reconciliation" && $0.status == .adopted })
         #expect(snapshot.entries.contains { $0.id == "staged-research-program-v1" && $0.status == .adopted })
         #expect(snapshot.entries.contains { $0.id == "protected-learning-cycle-stopped" && $0.status == .incomplete })
         #expect(snapshot.entries.contains { $0.id == "qwen-9b-scoring-confounds" && $0.status == .rejected })

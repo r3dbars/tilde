@@ -33,7 +33,8 @@ extension ResearchCoordinator {
             hypothesis: campaign.hypothesis,
             database: try researchDatabase(arguments),
             allowBattery: arguments.hasFlag("allow-battery"),
-            usesCandidateCache: !arguments.hasFlag("no-cache")
+            usesCandidateCache: !arguments.hasFlag("no-cache"),
+            resumeRequested: arguments.hasFlag("resume")
         )
         ResearchConsole.line("Campaign complete: \(reports.count) aggregate reports")
         for report in reports {
@@ -53,7 +54,7 @@ extension ResearchCoordinator {
     }
 
     static func review(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "status", "conclusion"])
+        try arguments.assertAllowed(options: ["campaign", "status", "conclusion", "database"])
         let documentURL = try campaignURL(arguments, command: "review")
         let evidenceID: UUID
         if let campaign = try? LabResearchCampaignFileIO.load(from: documentURL) {
@@ -72,6 +73,20 @@ extension ResearchCoordinator {
         let conclusion = try arguments.requiredValue("conclusion")
         let layout = LabResearchArtifactLayout(documentURL: documentURL)
         let store = LabReportStore(directory: layout.reportsDirectory)
+        let database = try researchDatabase(arguments)
+        let snapshot = try await database.reconciledSnapshot(campaignID: evidenceID)
+        if snapshot.terminalFailure != nil {
+            let failure = try await database.reviewTerminalFailure(
+                campaignID: evidenceID,
+                status: status,
+                conclusion: conclusion
+            )
+            ResearchConsole.line("Reviewed aggregate terminal failure")
+            ResearchConsole.line("  category: \(failure.category.rawValue)")
+            ResearchConsole.line("  status: \(failure.review.status.rawValue)")
+            ResearchConsole.line("  raw writing data persisted: no")
+            return
+        }
         let reports = await store.loadAll().filter {
             $0.provenance?.campaignID == evidenceID
         }

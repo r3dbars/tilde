@@ -198,6 +198,13 @@ public actor LabExperimentRunner {
                 gitCommit: durable.gitCommit,
                 protocolDefinition: research
             ))
+            try await durable.database.beginRunSession(
+                campaignID: durable.campaignID,
+                owner: durable.leaseOwner,
+                processIdentifier: durable.processIdentifier,
+                resume: durable.resumeRequested,
+                staleAfter: durable.sessionStaleAfter
+            )
         }
         try Task.checkCancellation()
         try await blockGate(0)

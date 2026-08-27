@@ -52,7 +52,7 @@ swift build --product tilde-lab
 ### End-to-end campaign
 
 ```bash
-# Development-only discovery. Resume is automatic at the work-item boundary.
+# Development-only discovery. The first launch does not use --resume.
 .build/debug/tilde-lab init \
   --name qwen-factorial \
   --hypothesis-id QWEN-GEN-01 \
@@ -63,8 +63,10 @@ swift build --product tilde-lab
   --repetitions 1 \
   --output qwen-factorial.json
 .build/debug/tilde-lab validate qwen-factorial.json
-caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json --resume
+caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json
 .build/debug/tilde-lab status qwen-factorial.json
+# Only after status reports `aborted`, resume the unfinished registered work:
+caffeinate -dimsu .build/debug/tilde-lab run qwen-factorial.json --resume
 .build/debug/tilde-lab review \
   --campaign qwen-factorial.json \
   --status supported \
@@ -139,13 +141,29 @@ violation stops the campaign before the expensive blocks.
 
 ### Execution and statistics
 
-The durable coordinator uses SQLite WAL tables for campaigns, leases, work
-items, observations, comparisons, promotions, agent proposals, online events,
-holdout receipts, and cumulative active-time budget. Each work identity binds
-campaign, arm hash, scenario, context variant, generation seed, repetition, and
-block. A crash, SIGINT, or reboot resumes missing work without allowing a
-duplicate observation to change the result. A PID alone is not progress;
-`status` reports pending/running/completed/failed work and active budget.
+The durable coordinator uses SQLite WAL tables for campaigns, owner-scoped run
+sessions, leases, work items, observations, comparisons, promotions, agent
+proposals, online events, holdout receipts, and cumulative active-time budget.
+Each work identity binds campaign, arm hash, scenario, context variant,
+generation seed, repetition, and block. Manifest identities canonicalize the
+known set-valued fields while preserving ordered arrays, so semantically equal
+campaigns keep the same digest across processes.
+
+Campaign state is explicit: `ready`, `running`, `completed`, `failed`, or
+`aborted`. A session is live only while its owner process, heartbeat, and lease
+state agree. `status` reconciles dead or stale sessions before displaying
+progress, releases only their unfinished leases, and preserves completed
+observations. The initial launch must omit `--resume`; an interrupted `aborted`
+campaign requires it. A second live runner is refused, while `failed` and
+`completed` campaigns require a newly registered campaign ID. Completion is
+refused while durable work is absent, pending, running, or failed, and only a
+reconciled completed campaign may create paired comparisons.
+
+Hard-gate and other terminal failures are persisted as aggregate-only artifacts
+with fixed categories and reason codes, even if the run stopped before creating
+an arm report. In that case `review` attaches the honest supported, rejected,
+or inconclusive interpretation to the failure artifact. It never turns the
+failure into a comparison or stores model output, prompts, paths, or writing.
 
 Root situations are the independent units. Blocks are deterministically
 stratified by category, register, and typing boundary; arm order rotates and

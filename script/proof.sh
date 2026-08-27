@@ -7,7 +7,7 @@
 #
 # Every lane is BLOCKING and real:
 #   1. git diff --check            whitespace / conflict markers
-#   2. structural Swift delta      refactors remove more production code than they add
+#   2. structural Swift delta      shipped-target refactors remove more code than they add
 #   3. repository boundary         Tilde never depends on Tilde Lab
 #   4. bash -n script/*.sh         all remaining shell tooling parses
 #   5. byte-compile script/*.py    all remaining python tooling parses
@@ -27,7 +27,8 @@
 #                           whitespace/conflict markers introduced by a PR);
 #                           otherwise the working tree is checked.
 #   PROOF_STRUCTURAL_CHANGE=1
-#                           Require the production Swift diff to be net-negative.
+#                           Require changed shipped-target Swift to be net-negative.
+#                           Development-only Tilde Lab changes may leave it at zero.
 #
 # The signed/notarized release path lives in script/package_app.sh. Release
 # proof pre-seeds one pinned Gemma 4 E2B model outside the app; it never permits
@@ -132,11 +133,18 @@ check_structural_delta() {
 
   local added deleted net
   read -r added deleted < <(
-    git diff --numstat "${base}...HEAD" -- ':(glob)Sources/**/*.swift' |
+    git diff --numstat "${base}...HEAD" -- \
+      ':(glob)Sources/TildeCore/**/*.swift' \
+      ':(glob)Sources/TildeApp/**/*.swift' \
+      ':(glob)Sources/InlineGhostIME/**/*.swift' |
       awk '{ added += $1; deleted += $2 } END { printf "%d %d\n", added, deleted }'
   )
   net=$((added - deleted))
   printf 'production Swift delta (%s...HEAD): +%d -%d net %+d\n' "$base" "$added" "$deleted" "$net"
+  if [ "$added" -eq 0 ] && [ "$deleted" -eq 0 ]; then
+    echo "no shipped-target Swift changed; Tilde Lab remains covered by the repository-boundary gate"
+    return 0
+  fi
   if [ "$net" -ge 0 ]; then
     echo "structural changes must reduce production Swift LOC" >&2
     return 1

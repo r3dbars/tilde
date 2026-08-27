@@ -53,7 +53,7 @@ enum ResearchCoordinator {
         """,
         "validate": "Usage: tilde-lab validate CAMPAIGN.json",
         "run": "Usage: tilde-lab run CAMPAIGN.json [--resume] [--no-cache] [--database PATH] [--allow-battery]",
-        "review": "Usage: tilde-lab review --campaign CAMPAIGN_OR_PLAN.json --status supported|rejected|inconclusive --conclusion TEXT",
+        "review": "Usage: tilde-lab review --campaign CAMPAIGN_OR_PLAN.json --status supported|rejected|inconclusive --conclusion TEXT [--database PATH]",
         "status": "Usage: tilde-lab status CAMPAIGN.json [--database PATH] [--json]",
         "compare": "Usage: tilde-lab compare --campaign CAMPAIGN_OR_PLAN.json [--paired-bootstrap 10000] [--database PATH]",
         "risk-coverage": "Usage: tilde-lab risk-coverage --campaign CAMPAIGN.json --arm ID [--trust-limit 0.01] [--output report.json] [--json]",
@@ -362,7 +362,8 @@ enum ResearchCoordinator {
         let campaign = try LabResearchCampaignFileIO.load(from: url)
         let layout = LabResearchArtifactLayout(documentURL: url)
         let database = try researchDatabase(arguments)
-        let summary = try await database.summary(campaignID: campaign.id)
+        let snapshot = try await database.reconciledSnapshot(campaignID: campaign.id)
+        let summary = snapshot.work
         let activeSeconds = try await database.activeDurationSeconds(campaignID: campaign.id)
         let reports = await LabReportStore(directory: layout.reportsDirectory).loadAll()
         let decisionGradeReports = reports.filter {
@@ -383,6 +384,8 @@ enum ResearchCoordinator {
         if arguments.hasFlag("json") {
             let value = ResearchStatusOutput(
                 campaignID: campaign.id,
+                campaignState: snapshot.state?.rawValue ?? "not-started",
+                activeSessions: snapshot.activeSessions,
                 pending: summary.pending,
                 running: summary.running,
                 completed: summary.completed,
@@ -392,12 +395,22 @@ enum ResearchCoordinator {
                 evidenceBlockers: evidenceBlockers,
                 cachedSyntheticCandidates: cacheCount,
                 activeSeconds: activeSeconds,
-                budgetSeconds: campaign.budget.maximumHours * 3_600
+                budgetSeconds: campaign.budget.maximumHours * 3_600,
+                terminalFailureCategory: snapshot.terminalFailure?.category.rawValue,
+                terminalFailureReasons: snapshot.terminalFailure?.reasons.map(\.rawValue) ?? [],
+                terminalReviewStatus: snapshot.terminalFailure?.review.status.rawValue
             )
             try writeJSON(value)
         } else {
             ResearchConsole.line("Campaign \(campaign.name)")
+            ResearchConsole.line("  state: \(snapshot.state?.rawValue ?? "not-started"); live sessions: \(snapshot.activeSessions)")
             ResearchConsole.line("  work: \(summary.completed)/\(summary.total) completed; \(summary.running) running; \(summary.failed) failed")
+            if let failure = snapshot.terminalFailure {
+                ResearchConsole.line(
+                    "  terminal failure: \(failure.category.rawValue); \(failure.reasons.map(\.rawValue).joined(separator: ", "))"
+                )
+                ResearchConsole.line("  terminal review: \(failure.review.status.rawValue)")
+            }
             ResearchConsole.line("  reports: \(reports.count)/\(campaign.manifest.arms.count)")
             ResearchConsole.line("  decision-grade reports: \(decisionGradeReports)/\(reports.count)")
             if !evidenceBlockers.isEmpty {
@@ -413,6 +426,8 @@ enum ResearchCoordinator {
 
 private struct ResearchStatusOutput: Codable {
     let campaignID: UUID
+    let campaignState: String
+    let activeSessions: Int
     let pending: Int
     let running: Int
     let completed: Int
@@ -423,4 +438,7 @@ private struct ResearchStatusOutput: Codable {
     let cachedSyntheticCandidates: Int
     let activeSeconds: Double
     let budgetSeconds: Double
+    let terminalFailureCategory: String?
+    let terminalFailureReasons: [String]
+    let terminalReviewStatus: String?
 }
