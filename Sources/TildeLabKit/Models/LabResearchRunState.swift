@@ -33,6 +33,7 @@ public enum LabResearchFailureReason: String, Codable, CaseIterable, Sendable {
     case missingSentinelProvenance = "missing-sentinel-provenance"
     case missingInvariantSentinel = "missing-invariant-sentinel"
     case unreadableHelper = "unreadable-helper"
+    case helperLaunchFailed = "helper-launch-failed"
     case unreadableModel = "unreadable-model"
     case invalidModel = "invalid-model"
     case localProtocolFailure = "local-protocol-failure"
@@ -216,7 +217,14 @@ public enum LabResearchFailureClassifier {
                 reasons: [.cooperativeCancellation]
             )
         }
-        if error is LabCompletionError || error is LabServerPoolError {
+        if error is LabServerPoolError {
+            return .init(
+                state: .failed,
+                category: .helperUnavailable,
+                reasons: [.helperLaunchFailed]
+            )
+        }
+        if error is LabCompletionError {
             return .init(
                 state: .failed,
                 category: .protocolFailure,

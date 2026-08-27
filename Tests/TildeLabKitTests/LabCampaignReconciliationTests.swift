@@ -95,6 +95,37 @@ struct LabCampaignReconciliationTests {
         #expect(completed.terminalFailure == nil)
     }
 
+    @Test("Completion refuses unfinished durable work")
+    func incompleteWorkCannotComplete() async throws {
+        let fixture = try await ReconciliationFixture()
+        defer { fixture.remove() }
+        let owner = "tilde-lab-111-incomplete"
+        try await fixture.database.beginRunSession(
+            campaignID: fixture.campaign.id,
+            owner: owner,
+            processIdentifier: 111,
+            resume: false,
+            now: fixture.start,
+            isProcessAlive: { _ in true }
+        )
+        try await fixture.database.enqueue([fixture.workItem(repetition: 0)])
+
+        await #expect(throws: LabResearchDatabaseError.campaignWorkIncomplete) {
+            try await fixture.database.completeCampaign(
+                campaignID: fixture.campaign.id,
+                owner: owner,
+                completedAt: fixture.start.addingTimeInterval(1)
+            )
+        }
+        let snapshot = try await fixture.database.reconciledSnapshot(
+            campaignID: fixture.campaign.id,
+            now: fixture.start.addingTimeInterval(2),
+            isProcessAlive: { _ in true }
+        )
+        #expect(snapshot.state == .running)
+        #expect(snapshot.work.pending == 1)
+    }
+
     @Test("A dead runner aborts, preserves completed work, and requires explicit resume")
     func deadRunnerResume() async throws {
         let fixture = try await ReconciliationFixture()
@@ -145,6 +176,11 @@ struct LabCampaignReconciliationTests {
         #expect(aborted.work.running == 0)
         #expect(aborted.terminalFailure?.category == .runnerTerminated)
         #expect(aborted.terminalFailure?.reasons == [.processNotAlive])
+        #expect(!(try await fixture.database.claim(
+            workItemID: interruptedItem.id,
+            owner: firstOwner,
+            now: fixture.start.addingTimeInterval(3)
+        )))
 
         let reopened = try LabResearchDatabase(fileURL: fixture.url)
         await #expect(throws: LabResearchDatabaseError.campaignResumeRequired) {
@@ -288,6 +324,14 @@ struct LabCampaignReconciliationTests {
                     state: .failed,
                     category: .helperUnavailable,
                     reasons: [.unreadableHelper]
+                )
+        )
+        #expect(
+            LabResearchFailureClassifier.classify(LabServerPoolError.launchFailed(0))
+                == LabResearchFailureClassification(
+                    state: .failed,
+                    category: .helperUnavailable,
+                    reasons: [.helperLaunchFailed]
                 )
         )
     }

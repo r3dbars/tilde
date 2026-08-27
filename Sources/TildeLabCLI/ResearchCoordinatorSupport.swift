@@ -341,11 +341,13 @@ extension ResearchCoordinator {
                 group.addTask {
                     while !Task.isCancelled {
                         try await Task.sleep(for: .seconds(30))
-                        _ = try await database.heartbeatRunSession(
+                        guard try await database.heartbeatRunSession(
                             campaignID: campaignID,
                             owner: durable.leaseOwner,
                             staleAfter: durable.sessionStaleAfter
-                        )
+                        ) else {
+                            throw LabResearchDatabaseError.sessionNotActive
+                        }
                     }
                     throw CancellationError()
                 }
@@ -428,6 +430,10 @@ extension ResearchCoordinator {
             research.promotionRule.bootstrapIterations = bootstrapIterations
         }
         try research.promotionRule.validated()
+        let campaign = try await database.reconciledSnapshot(campaignID: campaignID)
+        guard campaign.state == .completed, campaign.terminalFailure == nil else {
+            throw ResearchCLIError.decisionGradeEvidenceRequired
+        }
         let reports = try await latestReports(manifest: manifest, layout: layout)
         guard reports.values.allSatisfy({ $0.effectiveEvidenceEligibility.eligible }) else {
             throw ResearchCLIError.decisionGradeEvidenceRequired

@@ -73,11 +73,9 @@ extension ResearchCoordinator {
         let conclusion = try arguments.requiredValue("conclusion")
         let layout = LabResearchArtifactLayout(documentURL: documentURL)
         let store = LabReportStore(directory: layout.reportsDirectory)
-        let reports = await store.loadAll().filter {
-            $0.provenance?.campaignID == evidenceID
-        }
-        if reports.isEmpty {
-            let database = try researchDatabase(arguments)
+        let database = try researchDatabase(arguments)
+        let snapshot = try await database.reconciledSnapshot(campaignID: evidenceID)
+        if snapshot.terminalFailure != nil {
             let failure = try await database.reviewTerminalFailure(
                 campaignID: evidenceID,
                 status: status,
@@ -88,6 +86,12 @@ extension ResearchCoordinator {
             ResearchConsole.line("  status: \(failure.review.status.rawValue)")
             ResearchConsole.line("  raw writing data persisted: no")
             return
+        }
+        let reports = await store.loadAll().filter {
+            $0.provenance?.campaignID == evidenceID
+        }
+        guard !reports.isEmpty else {
+            throw ResearchCLIError.missingArtifact("provenance-bearing campaign reports")
         }
         for report in reports {
             try await store.save(try report.reviewed(conclusion: conclusion, status: status))

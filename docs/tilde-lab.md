@@ -155,7 +155,9 @@ state agree. `status` reconciles dead or stale sessions before displaying
 progress, releases only their unfinished leases, and preserves completed
 observations. The initial launch must omit `--resume`; an interrupted `aborted`
 campaign requires it. A second live runner is refused, while `failed` and
-`completed` campaigns require a newly registered campaign ID.
+`completed` campaigns require a newly registered campaign ID. Completion is
+refused while durable work is absent, pending, running, or failed, and only a
+reconciled completed campaign may create paired comparisons.
 
 Hard-gate and other terminal failures are persisted as aggregate-only artifacts
 with fixed categories and reason codes, even if the run stopped before creating

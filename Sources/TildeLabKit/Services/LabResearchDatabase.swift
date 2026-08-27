@@ -209,6 +209,7 @@ public enum LabResearchDatabaseError: Error, LocalizedError, Equatable, Sendable
     case campaignAlreadyActive
     case campaignResumeRequired
     case campaignTerminal(LabResearchRunState)
+    case campaignWorkIncomplete
     case invalidResume
     case sessionNotActive
     case holdoutAlreadyConsumed
@@ -236,6 +237,8 @@ public enum LabResearchDatabaseError: Error, LocalizedError, Equatable, Sendable
             "This interrupted campaign requires an explicit --resume."
         case let .campaignTerminal(state):
             "A \(state.rawValue) campaign cannot resume under the same campaign ID."
+        case .campaignWorkIncomplete:
+            "A campaign cannot complete while durable work is pending, running, failed, or absent."
         case .invalidResume:
             "--resume is valid only for an interrupted campaign with recoverable work."
         case .sessionNotActive:
@@ -464,6 +467,13 @@ public actor LabResearchDatabase {
     ) throws {
         guard try sessionIsActive(campaignID: campaignID, owner: owner) else {
             throw LabResearchDatabaseError.sessionNotActive
+        }
+        let work = try summary(campaignID: campaignID)
+        guard work.total > 0,
+              work.pending == 0,
+              work.running == 0,
+              work.failed == 0 else {
+            throw LabResearchDatabaseError.campaignWorkIncomplete
         }
         try transaction {
             try finishSession(
@@ -757,12 +767,21 @@ public actor LabResearchDatabase {
                 SET status='running', lease_owner=?, lease_expires_at=?,
                     attempt=attempt+1, updated_at=?
                 WHERE id=? AND status='pending'
+                  AND EXISTS(
+                    SELECT 1
+                    FROM campaign_session s JOIN campaign c ON c.id=s.campaign_id
+                    WHERE s.campaign_id=work_item.campaign_id
+                      AND s.owner=? AND s.state='running' AND s.expires_at>?
+                      AND c.status='running'
+                  )
                 """
             ) { statement in
                 try bind(owner, at: 1, in: statement)
                 sqlite3_bind_double(statement, 2, now.addingTimeInterval(leaseDuration).timeIntervalSince1970)
                 sqlite3_bind_double(statement, 3, now.timeIntervalSince1970)
                 try bind(workItemID, at: 4, in: statement)
+                try bind(owner, at: 5, in: statement)
+                sqlite3_bind_double(statement, 6, now.timeIntervalSince1970)
             }
             return changed == 1
         }
