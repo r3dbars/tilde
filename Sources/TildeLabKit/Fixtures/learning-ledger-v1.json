@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T12:32:00Z",
+  "updatedAt": "2026-08-27T22:22:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -16,7 +16,8 @@
     "Distinct situations measure behavioral coverage; repetitions measure stability and do not create new coverage.",
     "Keep raw personal writing, screen text, prompts, model output, and private corpus material out of checked-in evidence.",
     "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass.",
-    "Write every research attempt into the public lab log the same day, including rejected and incomplete work. The ledger stores only reusable lessons; the log stores the try."
+    "Write every research attempt into the public lab log the same day, including rejected and incomplete work. The ledger stores only reusable lessons; the log stores the try.",
+    "Cloud and GitHub own protocol and fixtures. Only a Mac can produce live retained-outcome events. Playing with a config is discovery; promoting it requires one change and kept-character evidence."
   ],
   "researchProgram": [
     {
@@ -103,6 +104,27 @@
     }
   ],
   "entries": [
+    {
+      "id": "cloud-protocol-mac-live-split",
+      "recordedAt": "2026-08-27T22:22:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "GitHub holds the ruler; the Mac must watch typing",
+      "finding": "The v3 text-free event and fixtures can land from a cloud agent, but they cannot see a keystroke. Config play on a live Mac is a hunch until one change is scored on kept characters.",
+      "decision": "Use cloud or GitHub threads for protocol, fixtures, and docs. Use a local Mac thread for F03 live ingest. Do not mark F03 supported from fixtures alone. Do not promote a config from play. First live product bet after the ruler is H01, three words versus eight.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/research/next-on-device.md" },
+        { "kind": "documentation", "id": "docs/research/lab-partnership.md" },
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" }
+      ],
+      "limitations": [
+        "Live ingest does not exist yet. This decision only splits where the next work must run."
+      ],
+      "tags": ["process", "f03", "on-device", "handoff"]
+    },
     {
       "id": "lab-partnership-and-failure-log",
       "recordedAt": "2026-08-27T12:32:00Z",

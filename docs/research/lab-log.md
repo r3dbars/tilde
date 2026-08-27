@@ -28,6 +28,20 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-27 — Hand the ruler to an on-device thread
+
+- **Try:** Write down the cloud-vs-Mac split, the play-vs-decision
+  rule, and a briefing so a new local thread can wire live ingest
+  without rereading this chat.
+- **Learn:** GitHub can hold the schema. Only a Mac can watch whether
+  words stay. Config play is a hunch until one change wins on kept
+  characters. First live bet after F03 is three words versus eight.
+- **Fail:** F03 is still not supported. No live events exist.
+- **Where:** [`next-on-device.md`](next-on-device.md); ledger
+  `cloud-protocol-mac-live-split`.
+- **Next:** In a new on-device thread, produce v3 counts from IMKit
+  and ingest them locally.
+
 ## 2026-08-27 — Start F03 as the first deep-research object
 
 - **Try:** Explain the ruler in plain language, then implement the v3

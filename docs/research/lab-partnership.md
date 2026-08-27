@@ -120,5 +120,17 @@ Roy, claiming:
 We do not need a billion users. We need a ruler, a sequence, and the courage
 to publish rejected.
 
+## GitHub versus the Mac
+
+Cloud / GitHub threads own protocol, fixtures, and docs. They cannot
+watch a keystroke. A Mac thread owns live ingest and dogfood.
+
+Playing with a config in Lab is how we get a hunch. Promoting a config
+requires one change, the same test, and kept-character evidence. First
+live bet after F03 is supported: three words versus eight.
+
+The briefing for the next local thread is
+[`next-on-device.md`](next-on-device.md).
+
 The first timestamped instrument question is
 [`docs/experiments/F03-retained-outcome-ledger.md`](../experiments/F03-retained-outcome-ledger.md).

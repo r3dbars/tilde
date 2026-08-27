@@ -164,7 +164,9 @@ gate has passed; the bundled validator permits at most one active stage.
 Every attempt — including rejected, incomplete, and abandoned work — also
 gets a same-day block in [`docs/research/lab-log.md`](research/lab-log.md).
 The log is the try. This ledger is the lesson. The working agreement is
-[`docs/research/lab-partnership.md`](research/lab-partnership.md).
+[`docs/research/lab-partnership.md`](research/lab-partnership.md). Live
+F03 ingest starts from
+[`docs/research/next-on-device.md`](research/next-on-device.md).
 
 Then run:
 

@@ -10,8 +10,8 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 38)
-        #expect(snapshot.currentLearnings.count == 31)
+        #expect(snapshot.entries.count == 39)
+        #expect(snapshot.currentLearnings.count == 32)
         #expect(snapshot.archivedLearnings.count == 7)
         #expect(snapshot.researchProgram.count == 6)
         #expect(snapshot.researchProgram.map(\.order).sorted() == Array(0...5))
@@ -50,6 +50,11 @@ struct LabLearningLedgerTests {
                 $0.id == "lab-partnership-and-failure-log" && $0.status == .adopted
             }
         )
+        #expect(
+            snapshot.entries.contains {
+                $0.id == "cloud-protocol-mac-live-split" && $0.status == .adopted
+            }
+        )
     }
 
     @Test("Human summary keeps decisions and limitations visible")
@@ -60,6 +65,7 @@ struct LabLearningLedgerTests {
 
         #expect(output.contains("Tilde Learning Ledger"))
         #expect(output.contains("The lab writes down every try, learn, and fail"))
+        #expect(output.contains("GitHub holds the ruler; the Mac must watch typing"))
         #expect(output.contains("finding:"))
         #expect(output.contains("decision:"))
         #expect(output.contains("limitations:"))
