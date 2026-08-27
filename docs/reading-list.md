@@ -54,6 +54,8 @@ How to push that without lying: digest
 The scientific stance (wrong objective, learn the controller, identify the
 Roy interaction) is
 [`docs/research/scientific-program.md`](research/scientific-program.md).
+How we work as colleagues is
+[`docs/research/lab-partnership.md`](research/lab-partnership.md).
 The executable queue does not move because the hole is exciting. Finish the
 ruler, then ask that question on the Mac.
 
