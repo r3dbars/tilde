@@ -64,6 +64,9 @@ their own phrasing, grounded in the thread on screen, hidden during a
 burst, and scored by whether it stays?
 
 That follow-up is the first new paper. It does not require a new model.
+The scientific stance — objective, identification, why the controller
+is the object to learn — is
+[`scientific-program.md`](scientific-program.md).
 
 ## The claim we can uniquely test
 
