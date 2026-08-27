@@ -316,6 +316,14 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 DiagnosticsLog.shared.record("suggestion-suppressed", metadata: ["reason": "sensitive-scene"])
                 return
             }
+            if let reason = SceneSuggestionPolicy.suppressionReason(scene: scene) {
+                _ = Self.write(.silence, to: connection)
+                DiagnosticsLog.shared.record(
+                    "suggestion-suppressed",
+                    metadata: ["reason": reason.rawValue]
+                )
+                return
+            }
 
             // Read fresh, before either task starts, so the personal lookup
             // (if any) runs CONCURRENTLY with the llama call, not after it —
