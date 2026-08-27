@@ -38,17 +38,32 @@ public struct LabModelResponse: Equatable, Sendable {
     public let latencyMilliseconds: Int
     public let firstTokenMilliseconds: Int?
     public let meanTokenProbability: Double?
+    public let tokenIDs: [Int]
+    public let tokenLogProbabilities: [Double]
+    public let tokenProbabilityMargins: [Double]
+    public let tokenEntropies: [Double]
+    public let stopReason: String?
 
     public init(
         content: String,
         latencyMilliseconds: Int,
         firstTokenMilliseconds: Int? = nil,
-        meanTokenProbability: Double? = nil
+        meanTokenProbability: Double? = nil,
+        tokenIDs: [Int] = [],
+        tokenLogProbabilities: [Double] = [],
+        tokenProbabilityMargins: [Double] = [],
+        tokenEntropies: [Double] = [],
+        stopReason: String? = nil
     ) {
         self.content = content
         self.latencyMilliseconds = latencyMilliseconds
         self.firstTokenMilliseconds = firstTokenMilliseconds
         self.meanTokenProbability = meanTokenProbability
+        self.tokenIDs = tokenIDs
+        self.tokenLogProbabilities = tokenLogProbabilities
+        self.tokenProbabilityMargins = tokenProbabilityMargins
+        self.tokenEntropies = tokenEntropies
+        self.stopReason = stopReason
     }
 }
 
@@ -189,7 +204,14 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         return LabModelResponse(
             content: applyingClientStopRule(rawContent, generation: request.generation),
             latencyMilliseconds: milliseconds(since: started),
-            meanTokenProbability: meanTokenProbability(payload["completion_probabilities"])
+            meanTokenProbability: meanTokenProbability(payload["completion_probabilities"]),
+            tokenIDs: tokenIDs(payload["completion_probabilities"]),
+            tokenLogProbabilities: tokenLogProbabilities(payload["completion_probabilities"]),
+            tokenProbabilityMargins: tokenProbabilityMargins(
+                payload["completion_probabilities"]
+            ),
+            tokenEntropies: tokenEntropies(payload["completion_probabilities"]),
+            stopReason: payload["stop_type"] as? String
         )
     }
 
@@ -205,6 +227,10 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         var content = ""
         var firstTokenMilliseconds: Int?
         var probabilities: [Double] = []
+        var tokenIDs: [Int] = []
+        var margins: [Double] = []
+        var entropies: [Double] = []
+        var stopReason: String?
         var recognizedFrame = false
         for try await line in bytes.lines {
             try Task.checkCancellation()
@@ -224,6 +250,12 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
                 }
             }
             probabilities.append(contentsOf: probabilityValues(payload["completion_probabilities"]))
+            tokenIDs.append(contentsOf: self.tokenIDs(payload["completion_probabilities"]))
+            margins.append(contentsOf: tokenProbabilityMargins(
+                payload["completion_probabilities"]
+            ))
+            entropies.append(contentsOf: tokenEntropies(payload["completion_probabilities"]))
+            if let value = payload["stop_type"] as? String { stopReason = value }
             if payload["stop"] as? Bool == true { break }
         }
         guard recognizedFrame else { throw LabCompletionError.protocolFailure }
@@ -234,7 +266,12 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
             content: applyingClientStopRule(content, generation: request.generation),
             latencyMilliseconds: milliseconds(since: started),
             firstTokenMilliseconds: firstTokenMilliseconds,
-            meanTokenProbability: mean
+            meanTokenProbability: mean,
+            tokenIDs: tokenIDs,
+            tokenLogProbabilities: probabilities.map { log(max($0, .leastNonzeroMagnitude)) },
+            tokenProbabilityMargins: margins,
+            tokenEntropies: entropies,
+            stopReason: stopReason
         )
     }
 
@@ -264,6 +301,54 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
             if let probability = entry["prob"] as? Double { return probability }
             guard let alternatives = entry["probs"] as? [[String: Any]] else { return nil }
             return alternatives.first?["prob"] as? Double
+        }
+    }
+
+    private func tokenIDs(_ value: Any?) -> [Int] {
+        guard let entries = value as? [[String: Any]] else { return [] }
+        return entries.compactMap { entry in
+            if let id = entry["id"] as? Int { return id }
+            if let id = entry["token_id"] as? Int { return id }
+            guard let alternatives = entry["probs"] as? [[String: Any]] else { return nil }
+            return alternatives.first?["id"] as? Int
+                ?? alternatives.first?["token_id"] as? Int
+        }
+    }
+
+    private func tokenLogProbabilities(_ value: Any?) -> [Double] {
+        probabilityValues(value).map { log(max($0, .leastNonzeroMagnitude)) }
+    }
+
+    private func tokenProbabilityMargins(_ value: Any?) -> [Double] {
+        alternativeProbabilityRows(value).map { values in
+            let sorted = values.sorted(by: >)
+            return max(0, min(1, sorted[0] - (sorted.count > 1 ? sorted[1] : 0)))
+        }
+    }
+
+    private func tokenEntropies(_ value: Any?) -> [Double] {
+        alternativeProbabilityRows(value).map { values in
+            let bounded = values.map { min(1, max(0, $0)) }
+            let remainder = max(0, 1 - bounded.reduce(0, +))
+            return (bounded + (remainder > 0 ? [remainder] : [])).reduce(0) {
+                $1 > 0 ? $0 - $1 * log($1) : $0
+            }
+        }
+    }
+
+    private func alternativeProbabilityRows(_ value: Any?) -> [[Double]] {
+        guard let entries = value as? [[String: Any]] else { return [] }
+        return entries.compactMap { entry in
+            if let alternatives = entry["probs"] as? [[String: Any]] {
+                let values = alternatives.compactMap { $0["prob"] as? Double }
+                    .filter { $0.isFinite && $0 >= 0 }
+                if !values.isEmpty { return values }
+            }
+            if let probability = entry["prob"] as? Double,
+               probability.isFinite, probability >= 0 {
+                return [probability]
+            }
+            return nil
         }
     }
 

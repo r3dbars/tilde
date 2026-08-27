@@ -203,6 +203,7 @@ final class LabWorkspaceStore {
                     suite: suite,
                     arms: arms,
                     execution: execution,
+                    research: manifest.research,
                     progress: { [weak self] update in
                         await MainActor.run { self?.progress = update }
                     },

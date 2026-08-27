@@ -23,9 +23,14 @@ let package = Package(
         .executable(
             name: "tilde-lab-runner",
             targets: ["TildeLabRunner"]
+        ),
+        .executable(
+            name: "tilde-research",
+            targets: ["TildeResearchCLI"]
         )
     ],
     targets: [
+        .systemLibrary(name: "CSQLite"),
         .target(
             name: "AutocompleteLabCore"
         ),
@@ -43,7 +48,7 @@ let package = Package(
         ),
         .target(
             name: "TildeLabKit",
-            dependencies: ["AutocompleteLabCore"],
+            dependencies: ["AutocompleteLabCore", "CSQLite"],
             resources: [.process("Fixtures")]
         ),
         .executableTarget(
@@ -52,6 +57,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "TildeLabRunner",
+            dependencies: ["TildeLabKit"]
+        ),
+        .executableTarget(
+            name: "TildeResearchCLI",
             dependencies: ["TildeLabKit"]
         ),
         .testTarget(
