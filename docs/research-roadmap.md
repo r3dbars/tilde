@@ -423,9 +423,14 @@ The publication workflow is defined in
 
 The roadmap uses primary sources as directional evidence, not as proof that the
 same effect will transfer from mobile typing, email, or code to system-wide
-macOS prose. One-line notes live in [`docs/reading-list.md`](reading-list.md);
-longer Tilde-specific digests live in [`docs/research/`](research/). Read the
-digest before fetching a paper:
+macOS prose. The full catalog — including runnable-now versus parked flags — is
+[`docs/reading-list.md`](reading-list.md). Longer Tilde-specific digests live in
+[`docs/research/`](research/). Read the digest before fetching a paper.
+
+A 2026-08-27 sweep added the HCI, AAC, interruption, Copilot-metric, and
+writing-agency papers that the first digest set had only named. The claims
+that survived that sweep, and the experiments they unlock, are listed at the
+top of the reading list. Headline pointers:
 
 - [Gmail Smart Compose](https://arxiv.org/abs/1906.00080) supports fast neural
   generation combined with a lightweight personal n-gram model.
@@ -437,10 +442,16 @@ digest before fetching a paper:
   language-model confidence threshold alone.
 - [GitHub's accepted-and-retained completion metric](https://github.blog/ai-and-ml/github-copilot/the-road-to-better-completions-building-a-faster-smarter-github-copilot-with-a-new-custom-model/)
   supports measuring whether accepted text survives later editing.
+- [Ziegler et al., MAPS 2022](https://doi.org/10.1145/3520312.3534864) is the
+  matching warning: acceptance predicts how productive people *feel*, which is
+  why Tab cannot be the promotion target.
 - [Are Word Suggestions Beneficial?](https://doi.org/10.1145/3772716) reports
-  that suggestion usefulness depends on both prediction accuracy and the
-  writer's unaided typing efficiency.
-- [Predictive Text Encourages Predictable Writing](https://www.eecs.harvard.edu/~kgajos/papers/2020/arnold20predictcive.shtml)
+  that desktop fast typists mostly skip, and that speed only rises when
+  suggestions are both highly accurate and the unaided typist is slow.
+- [Quinn and Zhai, CHI 2016](https://doi.org/10.1145/2858036.2858305) is the
+  ancestor cost-benefit result: always-on suggestions save taps and still lose
+  on time.
+- [Predictive Text Encourages Predictable Writing](https://www.eecs.harvard.edu/~kgajos/papers/2020/arnold20predictive.pdf)
   motivates explicit authorial-agency and voice checks.
 - [Multi-line AI-assisted Code Authoring](https://arxiv.org/abs/2402.04141)
   shows that longer suggestions can save disproportionate input while creating
