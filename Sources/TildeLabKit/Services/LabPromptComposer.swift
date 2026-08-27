@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import Foundation
 
 public struct LabPreparedPrompt: Sendable {

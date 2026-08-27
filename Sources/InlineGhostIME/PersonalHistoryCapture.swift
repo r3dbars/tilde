@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import Foundation
 
 /// Bounded, memory-only batching on the keyboard side. The key callback only

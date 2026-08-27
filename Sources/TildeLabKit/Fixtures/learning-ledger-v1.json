@@ -692,7 +692,7 @@
       ],
       "evidence": [
         { "kind": "diagnostic-snapshot", "id": "screen-memory-preview-2026-08-26" },
-        { "kind": "source-file", "id": "Sources/AutocompleteLabApp/ScreenMemory/ScreenCaptureService.swift" }
+        { "kind": "source-file", "id": "Sources/TildeApp/ScreenMemory/ScreenCaptureService.swift" }
       ],
       "limitations": [
         "The snapshot proves pipeline health and timing, not the causal quality lift from Screen Memory."
@@ -711,8 +711,8 @@
       "evaluationCount": null,
       "metrics": [],
       "evidence": [
-        { "kind": "source-file", "id": "Sources/AutocompleteLabApp/Runtime/PreviewModelSelection.swift" },
-        { "kind": "source-file", "id": "Sources/AutocompleteLabCore/Runtime/TildeProductProfile.swift" },
+        { "kind": "source-file", "id": "Sources/TildeApp/Runtime/PreviewModelSelection.swift" },
+        { "kind": "source-file", "id": "Sources/TildeCore/Runtime/TildeProductProfile.swift" },
         { "kind": "pull-request", "id": "416" }
       ],
       "limitations": [],

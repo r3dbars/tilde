@@ -1,4 +1,4 @@
-import AutocompleteLabCore
+import TildeCore
 import Foundation
 
 /// Aggregate-only keyboard counters. Personal History is a separate, explicit subsystem.
