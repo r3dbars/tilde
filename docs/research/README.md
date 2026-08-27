@@ -18,4 +18,6 @@ The hole in the literature — why the best personal-keyboard papers are from
 that hole as an AI research program (objective, controller vs generator,
 identification) is [`scientific-program.md`](scientific-program.md). How we
 work as colleagues is [`lab-partnership.md`](lab-partnership.md). The running
-notebook of tries and failures is [`lab-log.md`](lab-log.md).
+notebook of tries and failures is [`lab-log.md`](lab-log.md). The next
+session is on-device F03 ingest:
+[`next-on-device.md`](next-on-device.md).

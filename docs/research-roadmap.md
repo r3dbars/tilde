@@ -6,7 +6,9 @@ program. The machine-readable priority queue in
 truth for what is eligible to run next. This roadmap preserves the longer-term
 hypotheses, their dependencies, and the conditions that must be met before they
 enter that queue. Every attempt, including failures, is appended to
-[`docs/research/lab-log.md`](research/lab-log.md).
+[`docs/research/lab-log.md`](research/lab-log.md). Live F03 ingest is a
+Mac thread; start from
+[`docs/research/next-on-device.md`](research/next-on-device.md).
 
 The goal is not the highest next-token accuracy. It is:
 

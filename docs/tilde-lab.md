@@ -487,6 +487,8 @@ See [Tilde Learning Ledger](learning-ledger.md) for the current synthesis and
 update contract. How the owner and agent work as colleagues is
 [the lab partnership](research/lab-partnership.md). Every try, learn, and
 fail — including rejected work — goes in [the lab log](research/lab-log.md).
+Live F03 ingest is a Mac thread; start from
+[the on-device briefing](research/next-on-device.md).
 External papers that can change a queued experiment are indexed in
 [the reading list](reading-list.md), with Tilde-specific digests in
 [`docs/research/`](research/).

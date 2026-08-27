@@ -161,4 +161,6 @@ Completed: <ISO-8601 UTC>
 
 The staged theory registry and current eligibility gates live in the
 [Tilde research roadmap](../research-roadmap.md). The running notebook of
-tries and failures is [the lab log](../research/lab-log.md).
+tries and failures is [the lab log](../research/lab-log.md). The next
+session is on-device F03 ingest:
+[the Mac briefing](../research/next-on-device.md).

@@ -157,7 +157,13 @@ The v3 event, XOR horizons, typed-through, flicker floor, privacy allowlist,
 v2 decode, and aggregate coverage fields are implemented with fixtures. Live
 IME ingest on a Mac is still missing, so the promotion rule is not met.
 
+The next session is on-device. Start from
+[`docs/research/next-on-device.md`](../research/next-on-device.md). Playing
+with Lab configs on the Mac is discovery, not a supported F03 result.
+
 ### Follow-up
 
-If supported: F04 (freeze scoring cheats as tests), then close Qwen, then H01
-as the first live scientific question with RNKS as the primary metric.
+On a Mac: emit v3 counts from the input method, ingest them locally, and
+do not check events in. If supported: F04 (freeze scoring cheats as tests),
+then close Qwen, then H01 as the first live scientific question with RNKS
+as the primary metric.

@@ -110,7 +110,10 @@ resolve URL; it must never include user text or screen content.
   [`docs/research/lab-log.md`](docs/research/lab-log.md) with try, learn, and
   fail — including rejected, incomplete, and "we stopped" work. The log is
   the attempt; the ledger is the lesson. Do not let a result live only in
-  chat.
+  chat. Cloud threads own protocol and fixtures. Live F03 ingest is a Mac
+  thread; start from
+  [`docs/research/next-on-device.md`](docs/research/next-on-device.md).
+  Playing with a config is a hunch, not a decision.
 - Decision-grade comparisons require clean, complete v6 reports with a
   registered hypothesis and an explicit supported/rejected/inconclusive
   review. Legacy, dirty, incomplete, unregistered, and unreviewed reports stay

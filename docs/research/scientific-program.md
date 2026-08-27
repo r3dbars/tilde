@@ -181,6 +181,7 @@ fills it or fails to.
 
 How we work as colleagues — teaching, session shape, what "push the
 field" means — is [`lab-partnership.md`](lab-partnership.md). Every try,
-learn, and fail is appended to [`lab-log.md`](lab-log.md). The first
-timestamped instrument question is
+learn, and fail is appended to [`lab-log.md`](lab-log.md). The Mac
+handoff for live ingest is [`next-on-device.md`](next-on-device.md).
+The first timestamped instrument question is
 [`docs/experiments/F03-retained-outcome-ledger.md`](../experiments/F03-retained-outcome-ledger.md).
