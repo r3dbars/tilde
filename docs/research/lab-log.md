@@ -28,6 +28,22 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-27 — Wire the live counter and a local word diary
+
+- **Try:** Produce text-free v3 counts from the IME, keep accepted
+  words in a second owner-only diary, and ingest keep versus rewrite
+  with `tilde-lab ingest-events --instrument`.
+- **Learn:** Lab can tell keep from rewrite from counts alone. The
+  words the owner wants to reread cannot live on that event. Password
+  managers must not emit a displayed-and-unsafe event, and a privacy
+  wipe must not turn a real Tab into an ignored zero.
+- **Fail:** F03 is still not supported. The IME is wired, but this
+  Mac has not yet written events from ordinary typing.
+- **Where:** branch `cursor/f03-live-ruler-and-local-diary`; ledger
+  `score-counts-diary-words`.
+- **Next:** Rebuild the daily-driver IME, type as usual, ingest the
+  local count file, and only then decide if the promotion rule is met.
+
 ## 2026-08-27 — Hand the ruler to an on-device thread
 
 - **Try:** Write down the cloud-vs-Mac split, the play-vs-decision

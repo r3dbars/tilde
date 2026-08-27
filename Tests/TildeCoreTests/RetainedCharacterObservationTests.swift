@@ -35,5 +35,14 @@ struct RetainedCharacterObservationTests {
         #expect(!TypedThroughRule.isEligible(displayed: true, settledVisibleMilliseconds: 80))
         #expect(TypedThroughRule.isEligible(displayed: true, settledVisibleMilliseconds: 200))
         #expect(!TypedThroughRule.isEligible(displayed: false, settledVisibleMilliseconds: 400))
+        #expect(
+            TypedThroughRule.isTypedThrough(
+                displayed: true,
+                settledVisibleMilliseconds: 200,
+                typedAfterShow: true,
+                accepted: false,
+                dismissed: false
+            )
+        )
     }
 }
