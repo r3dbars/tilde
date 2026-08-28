@@ -227,11 +227,13 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         var content = ""
         var firstTokenMilliseconds: Int?
         var probabilities: [Double] = []
+        var logProbabilities: [Double] = []
         var tokenIDs: [Int] = []
         var margins: [Double] = []
         var entropies: [Double] = []
         var stopReason: String?
         var recognizedFrame = false
+        var incompleteProbabilityEvidence = false
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard line.hasPrefix("data:") else { continue }
@@ -249,7 +251,13 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
                     throw LabCompletionError.protocolFailure
                 }
             }
-            probabilities.append(contentsOf: probabilityValues(payload["completion_probabilities"]))
+            let frameProbabilities = probabilityValues(payload["completion_probabilities"])
+            if let rows = payload["completion_probabilities"] as? [[String: Any]],
+               rows.count != frameProbabilities.count {
+                incompleteProbabilityEvidence = true
+            }
+            probabilities.append(contentsOf: frameProbabilities)
+            logProbabilities.append(contentsOf: tokenLogProbabilities(payload["completion_probabilities"]))
             tokenIDs.append(contentsOf: self.tokenIDs(payload["completion_probabilities"]))
             margins.append(contentsOf: tokenProbabilityMargins(
                 payload["completion_probabilities"]
@@ -259,7 +267,7 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
             if payload["stop"] as? Bool == true { break }
         }
         guard recognizedFrame else { throw LabCompletionError.protocolFailure }
-        let mean = probabilities.isEmpty
+        let mean = probabilities.isEmpty || incompleteProbabilityEvidence
             ? nil
             : probabilities.reduce(0, +) / Double(probabilities.count)
         return LabModelResponse(
@@ -268,7 +276,7 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
             firstTokenMilliseconds: firstTokenMilliseconds,
             meanTokenProbability: mean,
             tokenIDs: tokenIDs,
-            tokenLogProbabilities: probabilities.map { log(max($0, .leastNonzeroMagnitude)) },
+            tokenLogProbabilities: incompleteProbabilityEvidence ? [] : logProbabilities,
             tokenProbabilityMargins: margins,
             tokenEntropies: entropies,
             stopReason: stopReason
@@ -295,13 +303,11 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         return values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
     }
 
-    private func probabilityValues(_ value: Any?) -> [Double] {
+    func probabilityValues(_ value: Any?) -> [Double] {
         guard let entries = value as? [[String: Any]] else { return [] }
-        return entries.compactMap { entry in
-            if let probability = entry["prob"] as? Double { return probability }
-            guard let alternatives = entry["probs"] as? [[String: Any]] else { return nil }
-            return alternatives.first?["prob"] as? Double
-        }
+        let values = entries.compactMap { selectedProbabilityEntry($0).flatMap(probability) }
+        // A partial mean would overstate the available confidence evidence.
+        return values.count == entries.count ? values : []
     }
 
     private func tokenIDs(_ value: Any?) -> [Int] {
@@ -309,24 +315,34 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         return entries.compactMap { entry in
             if let id = entry["id"] as? Int { return id }
             if let id = entry["token_id"] as? Int { return id }
-            guard let alternatives = entry["probs"] as? [[String: Any]] else { return nil }
-            return alternatives.first?["id"] as? Int
-                ?? alternatives.first?["token_id"] as? Int
+            guard let selected = selectedProbabilityEntry(entry) else { return nil }
+            return selected["id"] as? Int ?? selected["token_id"] as? Int
         }
     }
 
-    private func tokenLogProbabilities(_ value: Any?) -> [Double] {
-        probabilityValues(value).map { log(max($0, .leastNonzeroMagnitude)) }
+    func tokenLogProbabilities(_ value: Any?) -> [Double] {
+        guard let entries = value as? [[String: Any]],
+              probabilityValues(value).count == entries.count else { return [] }
+        return entries.compactMap { entry in
+            guard let selected = selectedProbabilityEntry(entry),
+                  let value = probability(selected) else { return nil }
+            // Preserve native log probabilities, including values whose exp
+            // underflows, rather than fabricating a less-negative confidence.
+            if let logProbability = selected["logprob"] as? Double {
+                return logProbability
+            }
+            return log(max(value, .leastNonzeroMagnitude))
+        }
     }
 
-    private func tokenProbabilityMargins(_ value: Any?) -> [Double] {
+    func tokenProbabilityMargins(_ value: Any?) -> [Double] {
         alternativeProbabilityRows(value).map { values in
             let sorted = values.sorted(by: >)
             return max(0, min(1, sorted[0] - (sorted.count > 1 ? sorted[1] : 0)))
         }
     }
 
-    private func tokenEntropies(_ value: Any?) -> [Double] {
+    func tokenEntropies(_ value: Any?) -> [Double] {
         alternativeProbabilityRows(value).map { values in
             let bounded = values.map { min(1, max(0, $0)) }
             let remainder = max(0, 1 - bounded.reduce(0, +))
@@ -339,17 +355,40 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
     private func alternativeProbabilityRows(_ value: Any?) -> [[Double]] {
         guard let entries = value as? [[String: Any]] else { return [] }
         return entries.compactMap { entry in
-            if let alternatives = entry["probs"] as? [[String: Any]] {
-                let values = alternatives.compactMap { $0["prob"] as? Double }
-                    .filter { $0.isFinite && $0 >= 0 }
-                if !values.isEmpty { return values }
+            // Current helpers use top_logprobs (default) or top_probs;
+            // older helpers used probs. These are alternatives, not the
+            // selected token's probability.
+            for key in ["top_logprobs", "top_probs", "probs"] {
+                if let alternatives = entry[key] as? [[String: Any]] {
+                    let values = alternatives.compactMap(probability)
+                    return !values.isEmpty && values.count == alternatives.count ? values : nil
+                }
             }
-            if let probability = entry["prob"] as? Double,
-               probability.isFinite, probability >= 0 {
-                return [probability]
+            if let value = probability(entry) {
+                return [value]
             }
             return nil
         }
+    }
+
+    private func probability(_ entry: [String: Any]) -> Double? {
+        if entry["prob"] != nil {
+            guard let value = entry["prob"] as? Double,
+                  value.isFinite, (0...1).contains(value) else { return nil }
+            return value
+        }
+        guard let value = entry["logprob"] as? Double,
+              value.isFinite, value <= 0 else { return nil }
+        return exp(value)
+    }
+
+    private func selectedProbabilityEntry(_ entry: [String: Any]) -> [String: Any]? {
+        if entry["prob"] != nil || entry["logprob"] != nil { return entry }
+        // Legacy rows name the emitted token with content. Never substitute
+        // the highest-probability alternative when the emitted token differs.
+        guard let content = entry["content"] as? String,
+              let alternatives = entry["probs"] as? [[String: Any]] else { return nil }
+        return alternatives.first { ($0["tok_str"] as? String) == content }
     }
 
     private func milliseconds(since started: ContinuousClock.Instant) -> Int {

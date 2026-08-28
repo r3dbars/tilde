@@ -28,6 +28,34 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-27 — Confirm a bounded confidence-filter effect on more roots
+
+- **Try:** Freeze cutoff 0.475 against the identical cached Qwen outputs on 505
+  development roots, with 473 non-pilot roots primary, three seeds and 3,030
+  scored evaluations; cluster uncertainty by counterfactual pair and root.
+- **Learn:** Bad displays fell 413 to 299 while useful displays fell 389 to
+  388; the pre-registered relative-effect and protected-slice rules passed.
+- **Fail:** Both arms still failed absolute bad-suggestion quality; 43.52% of
+  filtered displays scored bad. Existing templates do not prove live utility.
+- **Where:** [Q06](../experiments/Q06-confidence-filter-followup.md); ledger
+  `qwen-confidence-filter-bounded`.
+- **Next:** Preserve the offline lesson and finish the existing retained-outcome
+  instrument before considering any live policy change.
+
+## 2026-08-27 — Repair confidence capture and reject the pilot selection
+
+- **Try:** Probe the helper schema, fix selected-token log-probability parsing,
+  verify cache round-trips, then run a 381-evaluation confidence pilot.
+- **Learn:** Requested probabilities were previously not retained. After the
+  repair, all 213 generated candidates had usable evidence; the selected 0.50
+  cutoff removed 34.57% of bad displays while retaining 97.65% useful overall.
+- **Fail:** The original cache could not support replay, and the pilot's selected
+  policy lost 10.53% useful in the answer slice, above the fixed 10% limit.
+- **Where:** [Q05](../experiments/Q05-confidence-filter-pilot.md);
+  `Tests/TildeLabKitTests/LabTokenProbabilityTests.swift`.
+- **Next:** Test the conservative point in a separately registered campaign;
+  Q06 above records that authorized follow-up without rewriting Q05's failure.
+
 ## 2026-08-27 — Wire the live counter and a local word diary
 
 - **Try:** Produce text-free v3 counts from the IME, keep accepted

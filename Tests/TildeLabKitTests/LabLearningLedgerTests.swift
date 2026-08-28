@@ -10,9 +10,13 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 40)
-        #expect(snapshot.currentLearnings.count == 33)
+        #expect(snapshot.entries.count == 41)
+        #expect(snapshot.currentLearnings.count == 34)
         #expect(snapshot.archivedLearnings.count == 7)
+        #expect(snapshot.entries.contains {
+            $0.id == "qwen-confidence-filter-bounded" && $0.status == .directional
+                && $0.evaluationCount == 3030
+        })
         #expect(snapshot.researchProgram.count == 6)
         #expect(snapshot.researchProgram.map(\.order).sorted() == Array(0...5))
         #expect(snapshot.researchProgram.first?.status == .active)
