@@ -9,7 +9,8 @@ Owner: Tilde research program
 Question: can mean selected-token confidence remove at least 20% of bad
 suggestions while retaining at least 95% of useful ones?
 
-Q04 cached no numeric token probabilities despite requesting them. A separate
+[Q04](https://github.com/r3dbars/tilde/pull/428) cached no numeric token
+probabilities despite requesting them. A separate
 20-request synthetic wire probe found modern `logprob` and `top_logprobs`
 evidence in all 20 responses, while the legacy parser could read none. Five
 responses contained nonempty content and 15 were empty; all had probability
