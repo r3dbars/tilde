@@ -1,6 +1,6 @@
 # Q07 — Prompt-cache instrumentation pilot
 
-Status: PRE-REGISTERED PILOT; no superiority or promotion decision
+Status: INCONCLUSIVE — budget expired; no superiority or promotion decision
 Experiment class: generator (request-level cache flag; all generation otherwise fixed)
 Owner: r3dbars
 Pre-registered: 2026-08-28
@@ -66,6 +66,83 @@ The owner authorized this pilot only; the five-hour run remains on hold.
 
 ## Result
 
-Not run yet. Report pilot functionality separately from quality approval.
-Publish aggregate evidence only; owner-only state, prompts, outputs and paths
-stay local. The experiment index is the durable reader for this record.
+Status: INCONCLUSIVE — pilot readiness failed
+Completed: 2026-08-28T12:09:04Z (approximately)
+
+### Aggregate evidence
+
+The fixed 15-active-minute budget expired. The supervisor exited after
+900.792 seconds with the CLI's budget-expired / active-budget-exhausted
+classification. No watchdog, battery-floor or RSS-ceiling stop was recorded.
+
+- 3,299 of 3,600 planned evaluations completed (91.6 percent).
+- The database had materialized 3,342 items: 3,299 completed and 43 pending;
+  another 258 planned items were not materialized. The smaller status
+  denominator is not the frozen full workload.
+- 2,388 actual model requests; 911 policy suppressions; zero candidate-cache
+  entries. No completed observation had an error/timeout outcome.
+- Zero live campaign sessions, zero running/failed work items, zero complete
+  v6 reports, and no surviving pilot helper. The daily preview remained live.
+- All 12 recorded block orders alternate AB/BA. The mandatory sentinel block
+  completed and subsequent blocks executed; no sentinel stop was recorded.
+- Corrected observer: 355 attributed cache-off RSS samples and 364 cache-on,
+  with six transition samples excluded. Sampled peaks were 5,947,440 KiB off
+  and 5,947,456 KiB on, approximately 5.67 GiB of process RSS, not total
+  GPU/unified memory.
+- Within consecutive same-arm/block/helper sampling intervals, native
+  cached-token counter deltas were zero off and 4,663 on (344/353 intervals).
+  This is evidence of mechanism engagement in the observed intervals, not a
+  complete cache-hit rate or a speed result.
+
+The incomplete arm counts below are descriptive only and are **not paired
+quality comparisons**, since coverage differs:
+
+| Arm | Completed evaluations | Actual requests | Useful | Wrong or unwanted |
+| --- | ---: | ---: | ---: | ---: |
+| Cache off | 1,596 | 1,167 | 473 | 277 |
+| Cache on | 1,703 | 1,221 | 473 | 321 |
+
+### Failures and limitations
+
+The workload estimate was too ambitious for the fixed pilot duration.
+The initial supervisor's UUID-case mismatch left its samples unattributed;
+only the separately attached corrected observer supplies arm-labeled samples,
+beginning about 69 seconds after launch. The original data are not rewritten.
+Battery-to-AC transition, nominal-to-fair thermal state, the separate daily
+preview, and a concurrent study build/proof beginning around 12:02:45Z further
+prevent a comparative speed or energy conclusion. No estimate is made of how
+much the concurrent build contributed to expiry. Repeating synthetic roots
+does not establish live usefulness or independent-template replication.
+
+No complete reports exist, so full report quality gates and paired effect
+uncertainty are unavailable. Partial useful/bad counts cannot establish
+quality approval. Do not confuse the absence of recorded inference errors
+with successful pilot completion.
+
+### Frozen execution provenance
+
+- Source: 5034de21c25185a5be9803784b5e7427ad4f9d6f, clean at execution.
+- Runner SHA-256: 6ee93ea729eb151a7591eaef90b26b2a9239cb12600c4354be444e1cea76f77f.
+- Campaign SHA-256: d77e77f6056f92767f0de826bdcd0fd9b7aadff696012569632e567092471ba0.
+- Manifest SHA-256: af8a82f0d97781e12cd57e0e7da26e833f64e76e613b93639a45cfd4808ceb84.
+- Suite SHA-256: 126505c04c21386333236c1844d9a6cf5a139b722c0959e3eb1af55629f3c8b2.
+- Cache-off arm SHA-256: 44692a9ecf108e214185b7ffa91e504d28a8368ee51f3a9aeadc2803bca26053.
+- Cache-on arm SHA-256: 45334a3117e2dc1730069c9656fe7fa8516df7a32fa5334f7a0901ab7c4ad592.
+- Model and helper hashes are unchanged from pre-registration.
+
+### Decision
+
+The CLI terminal-failure review is INCONCLUSIVE. Q07 did not meet its
+pre-registered completion gate. Q08 was **not launched**. No resume, replacement,
+comparison, promotion, nomination, validation, holdout or production change was
+performed. Automatic launch is paused pending an explicit revised pilot
+decision. A smaller fixed AC pilot with no simultaneous build is the proposed
+next step, not an authorized or launched run.
+
+### Durable changes
+
+- Aggregate record and lab log updated; original frozen runner/source retained.
+- The prepared Q08 supervisor has a real SQLite mixed-case UUID regression
+  self-test. Its build and fast proof passed (778 tests / 101 suites).
+- No Learning Ledger stage or quality decision changed. These are instrument
+  findings, not a demonstrated product benefit.

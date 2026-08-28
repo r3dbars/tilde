@@ -154,9 +154,9 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
-- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — PLANNED, awaiting Q07 readiness
+- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — NOT LAUNCHED; Q07 readiness failed
 
-- [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — PRE-REGISTERED PILOT
+- [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — INCONCLUSIVE; budget expired
 
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED

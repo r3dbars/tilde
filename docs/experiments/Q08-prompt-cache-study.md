@@ -1,6 +1,6 @@
 # Q08 — Local prompt-cache reuse study
 
-Status: PLANNED; launch blocked until Q07 finishes and passes its functional gate
+Status: NOT LAUNCHED; Q07 expired incomplete and failed its functional gate
 Experiment class: generator (the isolated request-level cache flag)
 Owner: r3dbars
 Approved duration: five hours including the preceding 15-minute pilot
@@ -123,7 +123,11 @@ The underlying Lab fix descends from
 
 ## Result
 
-Not launched. Q07 must pass before any Q08 inference.
+Not launched. Q07 expired after 3,299 of 3,600 planned evaluations with zero
+complete reports. Its terminal review is inconclusive. Automatic launch is
+paused; an explicit revised pilot decision is required before any Q08
+inference. The prepared study's build, monitor self-tests and fast proof
+passed, but those checks do not substitute for the failed pilot gate.
 The full-run result must contain aggregate metrics, uncertainty, absolute
 failures, confounders and an honest supported/rejected/inconclusive review.
 Publish a results PR with the public record and lab log; do not merge it.
