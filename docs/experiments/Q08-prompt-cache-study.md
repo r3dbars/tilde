@@ -1,9 +1,9 @@
 # Q08 — Local prompt-cache reuse study
 
-Status: NOT LAUNCHED; Q07 expired incomplete and failed its functional gate
+Status: PREPARED; owner continued after Q07 failure, awaiting Q07B readiness
 Experiment class: generator (the isolated request-level cache flag)
 Owner: r3dbars
-Approved duration: five hours including the preceding 15-minute pilot
+Approved duration: five hours including two bounded 15-minute pilot attempts
 
 ## Pre-registration
 
@@ -29,7 +29,9 @@ live writing, validation or holdout. Repeated roots are not independent data.
 
 ### Pilot readiness gate
 
-Q07 must reconcile completed with 3,600/3,600 evaluations, two complete v6
+Q07 remains aborted and cannot satisfy its gate. After the owner's renewed
+instruction to continue, the separately pre-registered
+[Q07B](Q07B-cache-ac-pilot.md) must reconcile completed with 1,200/1,200 evaluations, two complete v6
 reports, at least 100 model requests and 30 correctly attributed RSS samples
 per arm, alternating AB/BA order, no runtime/sentinel failure and no surviving
 pilot helper. Quality failures remain visible, separate from this functional
@@ -39,8 +41,9 @@ silently relax this requirement; report the blocker.
 ### Fixed workload rule
 
 After the pilot completes, freeze repetitions as
-max(1, floor(0.90 * 17,100 / pilot_elapsed_seconds)), where elapsed is the
-complete pilot supervisor duration including startup. Each repetition has
+max(1, floor(0.90 * 16,200 / (3 * pilot_elapsed_seconds))), where elapsed is
+Q07B's complete one-seed supervisor duration including startup; multiplication
+by three accounts for the full study's three seeds. Each repetition has
 the same 3,600 evaluations: all selected development cases, seeds 17/41/73,
 both arms. Freeze the resulting integer and exact total in the campaign and
 this record before launch. No post-result resizing or padding.
@@ -49,7 +52,8 @@ Use 10-root blocks rather than Q07's 50-root blocks to bound paired-arm time
 separation in a repeated multi-hour workload. Alternate AB/BA including the
 unchanged mandatory invariant block. The cache's shared warm state is part
 of this protocol, not a cold-start benchmark or an app typing-sequence replay.
-The main run has a 4.75-hour active and supervisor wall ceiling. Complete early
+The main run has a 4.5-hour active and supervisor wall ceiling, reserving the
+two pilot ceilings inside the owner's five-hour total. Complete early
 if all frozen work is done; if the cap wins, preserve incomplete evidence
 instead of extending the campaign.
 
@@ -123,11 +127,10 @@ The underlying Lab fix descends from
 
 ## Result
 
-Not launched. Q07 expired after 3,299 of 3,600 planned evaluations with zero
-complete reports. Its terminal review is inconclusive. Automatic launch is
-paused; an explicit revised pilot decision is required before any Q08
-inference. The prepared study's build, monitor self-tests and fast proof
-passed, but those checks do not substitute for the failed pilot gate.
+Not launched. Q07 expired after 3,299 of 3,600 evaluations with zero reports.
+Its review remains inconclusive. The owner subsequently instructed continuation;
+the assistant explained the smaller AC pilot requirement. Q07B must now pass
+before launch. Build/proof success never substitutes for pilot completion.
 The full-run result must contain aggregate metrics, uncertainty, absolute
 failures, confounders and an honest supported/rejected/inconclusive review.
 Publish a results PR with the public record and lab log; do not merge it.

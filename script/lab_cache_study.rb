@@ -23,6 +23,12 @@ def canonical_uuid(value)
   text
 end
 
+def duration_ceiling(config)
+  expected = {'Q07B-ac-pilot' => 0.25, 'Q08-cache-study' => 4.5}[config['hypothesisID']]
+  raise 'unregistered study budget' unless expected && config.fetch('budget').fetch('maximumHours') == expected
+  expected * 3600
+end
+
 def running_identity(database, campaign_id)
   return nil unless File.exist?(database)
   id = canonical_uuid(campaign_id)
@@ -34,6 +40,14 @@ def running_identity(database, campaign_id)
 end
 
 if ARGV == ['--self-test']
+  raise unless duration_ceiling({'hypothesisID'=>'Q07B-ac-pilot', 'budget'=>{'maximumHours'=>0.25}}) == 900
+  raise unless duration_ceiling({'hypothesisID'=>'Q08-cache-study', 'budget'=>{'maximumHours'=>4.5}}) == 16200
+  begin
+    duration_ceiling({'hypothesisID'=>'Q08-cache-study', 'budget'=>{'maximumHours'=>5}})
+    raise 'accepted an expanded budget'
+  rescue RuntimeError => error
+    raise unless error.message == 'unregistered study budget'
+  end
   raise unless numeric_metrics("llamacpp:tokens_predicted_total 12\n# private\nother_metric 99\n") ==
     {'llamacpp:tokens_predicted_total' => 12.0}
   raise unless numeric_metrics("llamacpp:bad NaN\nllamacpp:label{x=1} 2\n").empty?
@@ -67,7 +81,7 @@ runner = File.join(source, '.build/debug/tilde-lab')
 
 # Refuse implicit resume, mutation, or a second execution.
 config = JSON.parse(File.read(campaign_path))
-abort 'full study must have a 4.75-hour cap' unless config.fetch('budget').fetch('maximumHours') == 4.75
+maximum_seconds = duration_ceiling(config)
 abort 'expected two arms' unless config.fetch('manifest').fetch('arms').length == 2
 power, = Open3.capture2('/usr/bin/pmset', '-g', 'batt')
 abort 'AC power required' unless power.include?("'AC Power'")
@@ -162,9 +176,9 @@ File.open(File.join(dir, 'monitor.jsonl'), File::WRONLY | File::CREAT | File::EX
       stop_reason ||= 'ac-power-lost' unless power.include?("'AC Power'")
       last_power_check = elapsed
     end
-    # The CLI owns the 17100-second active budget. This is an outer watchdog
+    # The CLI owns the registered active budget. This is an outer watchdog
     # for a stuck preflight or failed cleanup; it never extends the time budget.
-    stop_reason ||= 'outer-watchdog' if elapsed >= 17100
+    stop_reason ||= 'outer-watchdog' if elapsed >= maximum_seconds
     # Numeric CPU load from other same-device inference helpers is a
     # contention marker, never a request or writing log.
     competitors, = Open3.capture2('/bin/ps', '-axo', 'pid=,ppid=,%cpu=,comm=')

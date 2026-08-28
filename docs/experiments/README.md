@@ -154,7 +154,8 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
-- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — NOT LAUNCHED; Q07 readiness failed
+- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — PREPARED; awaiting Q07B readiness
+- [Q07B — Fixed AC prompt-cache readiness pilot](Q07B-cache-ac-pilot.md) — PRE-REGISTERED
 
 - [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — INCONCLUSIVE; budget expired
 
