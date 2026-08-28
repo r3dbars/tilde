@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T23:00:00Z",
+  "updatedAt": "2026-08-28T00:00:47Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -104,6 +104,36 @@
     }
   ],
   "entries": [
+    {
+      "id": "qwen-confidence-filter-bounded",
+      "recordedAt": "2026-08-27T23:50:27Z",
+      "area": "methodology",
+      "status": "directional",
+      "title": "Measured confidence can remove bad displays without proving live quality",
+      "finding": "After repairing selected-token log-probability capture, Q05 rejected its selected 0.50 cutoff on protected-slice loss. Separately registered Q06 fixed 0.475 and completed 3030 paired evaluations on 505 development roots, with 473 non-pilot roots primary. Bad displays fell 413 to 299 and useful displays 389 to 388. Counterfactual-cluster 95 percent intervals were 19.57 to 36.06 percent bad removal and 99.12 to 100 percent useful retention. Defined protected-slice targets passed, but both arms still failed absolute bad-suggestion quality.",
+      "decision": "Require actual confidence coverage and exact cached-output pairing before interpreting confidence replay. Preserve rejected pilot selections rather than substituting a favorable threshold after results. Keep the 0.475 effect as bounded offline evidence only: 43.52 percent remaining bad-when-shown does not authorize a live change, promotion, or any research-stage unlock.",
+      "comparisonGroupID": "qwen-confidence-06",
+      "evaluationCount": 3030,
+      "metrics": [
+        { "subjectID": "primary", "key": "roots", "value": 473, "unit": "roots" },
+        { "subjectID": "primary", "key": "bad-display-reduction", "value": 27.6029, "unit": "percent" },
+        { "subjectID": "primary", "key": "useful-retention", "value": 99.7429, "unit": "percent" },
+        { "subjectID": "filtered", "key": "bad-when-shown", "value": 43.5226, "unit": "percent" },
+        { "subjectID": "capture", "key": "complete-generated-candidates", "value": 1059, "unit": "candidates" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q05-confidence-filter-pilot.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q06-confidence-filter-followup.md" },
+        { "kind": "test", "id": "Tests/TildeLabKitTests/LabTokenProbabilityTests.swift" }
+      ],
+      "limitations": [
+        "Existing Q04 development templates and synthetic scoring do not prove independent-template or live retained utility.",
+        "The paired lower bad-removal bound was positive but below 20 percent; the supported rule required a 20 percent point effect, not that stronger lower-bound claim.",
+        "Zero-useful slices provide no useful-retention evidence; prose, email and real-host interaction were not tested.",
+        "No speed or energy conclusion, production change, protected evaluation, or stage unlock followed."
+      ],
+      "tags": ["confidence", "paired-replay", "protected-slices", "offline-only", "no-promotion"]
+    },
     {
       "id": "score-counts-diary-words",
       "recordedAt": "2026-08-27T23:00:00Z",
