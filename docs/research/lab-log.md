@@ -28,6 +28,20 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-28 — Prompt-cache pilot expired; full study not launched
+
+- **Try:** Run matched synthetic Qwen cache-off/on arms with fresh inference,
+  balanced blocks and process-memory sampling under a 15-minute limit.
+- **Learn:** Native cached-token counters engaged only for cache-on in observed
+  intervals; a UUID-case attribution bug needs a real SQLite regression test.
+- **Fail:** The budget expired at 3,299/3,600 evaluations and 2,388 actual model
+  requests, producing no complete reports. Mixed power, concurrent preview
+  and build load, and missing early sample labels prohibit a speed verdict.
+- **Where:** [Q07](../experiments/Q07-prompt-cache-pilot.md);
+  [Q08](../experiments/Q08-prompt-cache-study.md) remains unlaunched.
+- **Next:** Ask the owner to approve a smaller fixed AC pilot without a
+  simultaneous build; do not extend or resume this aborted campaign.
+
 ## 2026-08-27 — Confirm a bounded confidence-filter effect on more roots
 
 - **Try:** Freeze cutoff 0.475 against the identical cached Qwen outputs on 505
