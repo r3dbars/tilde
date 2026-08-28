@@ -1,13 +1,13 @@
 # Q07B — Fixed AC prompt-cache readiness pilot
 
-Status: PRE-REGISTERED
+Status: INCONCLUSIVE for superiority; functional readiness PASSED
 Experiment class: generator (request cache flag only)
 Owner: r3dbars
 Pre-registered: 2026-08-28
 
 ## Authorization and question
 
-After Q07 expired, the owner instructed: "Run it when you are fone".
+After Q07 expired, the owner renewed the instruction to continue execution.
 The assistant explained that continuation would use a smaller fixed AC pilot,
 then launch the full study only after functional completion. Q07 remains
 aborted/inconclusive; it is not resumed, extended, renamed or overwritten.
@@ -58,4 +58,33 @@ The experiment index and Q08 launch decision are the durable readers.
 
 ## Result
 
-Not run yet. Q08 cannot launch before this fixed readiness gate is met.
+Finished in 302.643 seconds. All 1,200 evaluations completed, with 424 real
+requests and 176 policy suppressions per arm. Two complete v6 reports exist;
+both were reviewed inconclusive for superiority. Zero errors/timeouts,
+zero live campaign sessions and no surviving helper. All 13 recorded block
+orders match AB/BA; safety sentinels passed and the response cache stayed off.
+
+The corrected supervisor captured 125 cache-off and 120 cache-on attributed
+RSS samples, excluding 12 unassigned samples. Both sampled peaks were
+5,895,648 KiB (process RSS only). It ran on AC throughout; thermal state moved
+from nominal to fair. The daily preview remained separate and unchanged.
+
+Each arm scored 158 useful, 121 wrong/unwanted and 137 silent model results,
+plus 184 correct silences. Both failed the absolute bad-suggestion gate;
+privacy, sensitive-situation and temporal gates passed. Interaction was not
+tested. Latency was diagnostic: off p50/p95 345/449 ms, on 339/439 ms.
+This pilot did not estimate paired uncertainty or show a shipping-quality win.
+The native cached-token counter stayed at zero in this one-pass pilot:
+it verified flag wiring and measurement coverage, not effective prefix reuse.
+The repeated full workload must establish its own cache engagement.
+
+Source: 4e5643f2da99452ef00a4d7e828a8b13ca6c912b, clean at execution.
+Runner SHA-256: 2364f28736ba9bee57bd63072dfa74455b31249bafc22bfff86cfa1e0f3b11be.
+Supervisor SHA-256: bbbee465cbf01747fd8cacf7b6c7002a7b8c7d822b2cf244d98faa8562edbaa8.
+Campaign SHA-256: 4261908567c35daac4ff7d6744f65f6ddca4ea10221b496426835911ee9776e9.
+Reports: B6B476D8-B4CB-4A3A-9CBC-CBF4EF554848 (off),
+8106F86F-2395-4214-B649-A9A4B2408DED (on).
+
+The pre-registered functional gate passed; Q08 is eligible for its approved
+isolated execution. Q07 remains aborted/inconclusive. No comparison,
+validation, holdout, preview or production change was performed.

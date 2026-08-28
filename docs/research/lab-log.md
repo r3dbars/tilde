@@ -30,6 +30,13 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 
 ## 2026-08-28 — Prompt-cache pilot expired; full study not launched
 
+Follow-up: the owner renewed execution. The separate
+[Q07B AC pilot](../experiments/Q07B-cache-ac-pilot.md) completed all 1,200
+evaluations and 848 fresh requests in 302.643 seconds, with valid memory
+coverage, no runtime errors and complete reports. Both arms still failed
+absolute quality; the review is inconclusive for superiority. Its functional
+readiness gate permits the separately registered Q08 run, not production.
+
 - **Try:** Run matched synthetic Qwen cache-off/on arms with fresh inference,
   balanced blocks and process-memory sampling under a 15-minute limit.
 - **Learn:** Native cached-token counters engaged only for cache-on in observed

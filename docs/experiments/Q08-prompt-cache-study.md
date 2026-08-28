@@ -1,6 +1,6 @@
 # Q08 — Local prompt-cache reuse study
 
-Status: PREPARED; owner continued after Q07 failure, awaiting Q07B readiness
+Status: PRE-REGISTERED; Q07B functional readiness passed
 Experiment class: generator (the isolated request-level cache flag)
 Owner: r3dbars
 Approved duration: five hours including two bounded 15-minute pilot attempts
@@ -47,6 +47,12 @@ by three accounts for the full study's three seeds. Each repetition has
 the same 3,600 evaluations: all selected development cases, seeds 17/41/73,
 both arms. Freeze the resulting integer and exact total in the campaign and
 this record before launch. No post-result resizing or padding.
+
+Frozen workload: Q07B elapsed 302.643 seconds; the formula gives **16
+repetitions**, **57,600 evaluations total** (28,800 per arm). This is not
+57,600 guaranteed model requests; policy-suppressed items remain separately
+counted. The helper/run configuration and corpus are not tuned to pilot
+quality or latency differences.
 
 Use 10-root blocks rather than Q07's 50-root blocks to bound paired-arm time
 separation in a repeated multi-hour workload. Alternate AB/BA including the
@@ -125,12 +131,23 @@ power state. Do not write private paths or campaign JSON into Git.
 The underlying Lab fix descends from
 5034de21c25185a5be9803784b5e7427ad4f9d6f.
 
+Frozen campaign ID: 4C22544A-0E77-4164-A690-E5BFFC61A121.
+Campaign SHA-256: 8a8f9318d0e064661c4ec2ca1a36ed14e31842395f92268d7834f822bb50046a.
+Runner SHA-256: 2364f28736ba9bee57bd63072dfa74455b31249bafc22bfff86cfa1e0f3b11be.
+Supervisor SHA-256: bbbee465cbf01747fd8cacf7b6c7002a7b8c7d822b2cf244d98faa8562edbaa8.
+The execution source is the clean commit completing this registration;
+its exact SHA is frozen locally before launch and carried by v6 provenance.
+Model/helper hashes remain those in Q07B. CLI validation passes with 57,600
+planned evaluations, two arms and the 4.5-hour ceiling. Fast proof passed
+all blocking lanes (778 tests / 101 suites) before the readiness pilot;
+subsequent changes only record evidence and this frozen workload.
+
 ## Result
 
-Not launched. Q07 expired after 3,299 of 3,600 evaluations with zero reports.
-Its review remains inconclusive. The owner subsequently instructed continuation;
-the assistant explained the smaller AC pilot requirement. Q07B must now pass
-before launch. Build/proof success never substitutes for pilot completion.
+Q07B completed its fixed readiness gate in 302.643 seconds. Q07 remains
+aborted/inconclusive. Q08 is now pre-registered for the approved durable launch;
+no Q08 result is known at this registration. Build/proof success and functional
+readiness never substitute for the study's quality and timing gates.
 The full-run result must contain aggregate metrics, uncertainty, absolute
 failures, confounders and an honest supported/rejected/inconclusive review.
 Publish a results PR with the public record and lab log; do not merge it.
