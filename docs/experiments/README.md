@@ -154,6 +154,8 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — PRE-REGISTERED PILOT
+
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED
 - [F03 — Retained-outcome ledger](F03-retained-outcome-ledger.md) — IMPLEMENTING
