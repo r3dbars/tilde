@@ -154,6 +154,8 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — PLANNED, awaiting Q07 readiness
+
 - [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — PRE-REGISTERED PILOT
 
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
