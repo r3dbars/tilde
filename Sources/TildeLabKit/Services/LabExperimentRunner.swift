@@ -387,6 +387,19 @@ public actor LabExperimentRunner {
     /// Interleaves candidate arms inside deterministic root blocks so each arm
     /// sees nearly the same cache, power, and thermal window. Arm order rotates
     /// every block; the scenario work-order seed remains paired within a block.
+    static func interleavedArmOrder(armCount: Int, blockIndex: Int) -> [Int] {
+        guard armCount > 0 else { return [] }
+        // Rotating and then reversing cancels out for two arms, always
+        // putting the control first. Alternate paired blocks explicitly.
+        if armCount == 2 {
+            return blockIndex.isMultiple(of: 2) ? [0, 1] : [1, 0]
+        }
+        let indices = Array(0..<armCount)
+        let rotation = blockIndex % armCount
+        let rotated = Array(indices[rotation...]) + Array(indices[..<rotation])
+        return blockIndex.isMultiple(of: 2) ? rotated : Array(rotated.reversed())
+    }
+
     private func runInterleavedMatrix(
         selectedSuites: [LabSelectedArmSuite],
         execution: LabExecutionConfiguration,
@@ -428,10 +441,9 @@ public actor LabExperimentRunner {
         for (blockIndex, rootBlock) in blocks.enumerated() {
             try Task.checkCancellation()
             if blockIndex > 0 { try await blockGate(blockIndex) }
-            let rotation = blockIndex % selectedSuites.count
-            let indices = Array(selectedSuites.indices)
-            let rotated = Array(indices[rotation...]) + Array(indices[..<rotation])
-            let order = blockIndex.isMultiple(of: 2) ? rotated : Array(rotated.reversed())
+            let order = Self.interleavedArmOrder(
+                armCount: selectedSuites.count, blockIndex: blockIndex
+            )
             try await blockObserved(blockIndex, order.map { selectedSuites[$0].arm.id })
             let rootSet = Set(rootBlock)
             let blockSeed = execution.seed &+ UInt64(blockIndex) &* 0x9E37_79B9
