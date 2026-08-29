@@ -102,6 +102,14 @@ promoted.
   question they answer) is load-bearing for the stress positives; its
   failure mode is measured by the per-category retention gate.
 
+### Frozen runtime controls
+
+Declared before the decisive run, per the runtime-control freeze rule:
+8 workers × 2 slots on AC power under caffeinate. Q11 measures quality
+only; at temperature 0 the paired outputs are concurrency-invariant, so
+parallel workers change wall-clock, never results. No latency claim of
+any kind may be made from this campaign.
+
 ### Frozen provenance
 
 - Registered from commit `25ad95b2` (post PR #442 merge).
