@@ -23,6 +23,53 @@ struct RetainedSpanWatchTests {
         #expect(missing.retainedCharacters == nil)
     }
 
+    @Test("Deleted-then-retyped text cannot resurrect at a later horizon")
+    func retentionStaysMonotoneAcrossHorizons() throws {
+        var watch = PendingRetainedWatch(
+            opportunity: acceptedOpportunity("word", shownAt: Date(timeIntervalSince1970: 1_500))
+        )
+        // Gone at 5s: the writer deleted the accepted span.
+        try watch.observeFiveSeconds(window: "something else")
+        #expect(watch.retentionAt5Seconds.retainedCharacters == 0)
+        // Retyped by 30s and still present at segment close: authored, not retained.
+        try watch.observeThirtySeconds(window: "something else word")
+        #expect(watch.retentionAt30Seconds.retainedCharacters == 0)
+        try watch.observeSegment(window: "something else word")
+        #expect(watch.retentionAtSegmentClose.retainedCharacters == 0)
+    }
+
+    @Test("Retyped text after a missing 5s observation clamps to the 30s count")
+    func segmentClampsToThirtySecondsWhenFiveIsMissing() throws {
+        var watch = PendingRetainedWatch(
+            opportunity: acceptedOpportunity("word", shownAt: Date(timeIntervalSince1970: 1_500))
+        )
+        try watch.observeFiveSeconds(window: nil)
+        #expect(watch.retentionAt5Seconds.missingness == .observerStopped)
+        try watch.observeThirtySeconds(window: "wo")
+        #expect(watch.retentionAt30Seconds.retainedCharacters == 2)
+        try watch.observeSegment(window: "word")
+        #expect(watch.retentionAtSegmentClose.retainedCharacters == 2)
+    }
+
+    private func acceptedOpportunity(
+        _ text: String,
+        shownAt: Date
+    ) -> LiveOnlineOpportunity {
+        var opportunity = LiveOnlineOpportunity(
+            shownAt: shownAt,
+            sessionDigestSHA256: String(repeating: "a", count: 64),
+            appCategory: "prose",
+            register: "prose",
+            boundary: "word-boundary",
+            safeOpportunity: true,
+            candidateCharacters: text.count,
+            candidateWordCount: 1,
+            opportunityCharacters: 10
+        )
+        opportunity.noteAccepted(text, kind: .all, at: shownAt.addingTimeInterval(1))
+        return opportunity
+    }
+
     @Test("Typed-through requires a settled show and typing, and loses to Tab")
     func typedThroughCloseRule() {
         #expect(
