@@ -93,32 +93,65 @@ extension ResearchCoordinator {
     }
 
     static func ingestEvents(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "input", "database"])
+        try arguments.assertAllowed(
+            options: ["campaign", "input", "database"],
+            flags: ["instrument"]
+        )
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "ingest-events"))
         }
-        let campaign = try campaignFromOption(arguments)
-        let input = URL(fileURLWithPath: try arguments.requiredValue("input")
-            .expandedResearchPath).standardizedFileURL
+        let database = try researchDatabase(arguments)
+        let input: URL
+        if arguments.hasFlag("instrument") {
+            if arguments.value("campaign") != nil {
+                throw ResearchCLIError.usage(help(for: "ingest-events"))
+            }
+            if let path = arguments.value("input") {
+                input = URL(fileURLWithPath: path.expandedResearchPath).standardizedFileURL
+            } else {
+                input = LabInstrumentCampaign.defaultEventURL()
+            }
+        } else {
+            _ = try campaignFromOption(arguments)
+            input = URL(fileURLWithPath: try arguments.requiredValue("input")
+                .expandedResearchPath).standardizedFileURL
+        }
         let values = try input.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         guard values.isRegularFile == true, (values.fileSize ?? 0) <= 64 * 1_024 * 1_024 else {
             throw ResearchCLIError.invalidValue("--input")
-        }
-        let database = try researchDatabase(arguments)
-        guard let plan = try await database.onlinePlan(campaignID: campaign.id) else {
-            throw ResearchCLIError.missingArtifact("online plan")
         }
         let bytes = try Data(contentsOf: input, options: [.mappedIfSafe])
         let lines = bytes.split(separator: 0x0A, omittingEmptySubsequences: true)
         guard lines.count <= 1_000_000 else { throw ResearchCLIError.invalidValue("--input") }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        var accepted = 0
+        var decoded: [LabOnlineExperimentEvent] = []
         for line in lines {
             guard line.count <= 64 * 1_024 else { throw ResearchCLIError.invalidValue("event line") }
             let data = Data(line)
-            try validateOnlineEventKeys(data)
-            let event = try decoder.decode(LabOnlineExperimentEvent.self, from: data)
+            do {
+                try LabOnlineEventPrivacy.validateJSON(data)
+            } catch LabOnlineExperimentError.forbiddenKey(let key) {
+                throw ResearchCLIError.rawTelemetryKey(key)
+            }
+            decoded.append(try decoder.decode(LabOnlineExperimentEvent.self, from: data))
+        }
+        let plan: LabOnlineExperimentPlan
+        if arguments.hasFlag("instrument") {
+            plan = try await LabInstrumentCampaign.ensureReady(
+                database: database,
+                covering: decoded.map(\.occurredAt),
+                includesChallenger: LabInstrumentCampaign.includesChallenger(decoded)
+            )
+        } else {
+            let campaign = try campaignFromOption(arguments)
+            guard let existing = try await database.onlinePlan(campaignID: campaign.id) else {
+                throw ResearchCLIError.missingArtifact("online plan")
+            }
+            plan = existing
+        }
+        var accepted = 0
+        for event in decoded {
             try await database.recordOnlineEvent(event, plan: plan)
             accepted += 1
         }
@@ -126,13 +159,39 @@ extension ResearchCoordinator {
     }
 
     static func onlineReport(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "database"], flags: ["json"])
+        try arguments.assertAllowed(
+            options: ["campaign", "database"],
+            flags: ["json", "instrument", "by-arm"]
+        )
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "online-report"))
         }
-        let campaign = try campaignFromOption(arguments)
-        let events = try await researchDatabase(arguments).onlineEvents(campaignID: campaign.id)
+        let campaignID = try onlineCampaignID(arguments)
+        let events = try await researchDatabase(arguments).onlineEvents(campaignID: campaignID)
         guard !events.isEmpty else { throw ResearchCLIError.missingArtifact("online events") }
+        if arguments.hasFlag("by-arm") {
+            let comparison = try LabOnlineExperimentAnalyzer.analyzeByArm(events)
+            if arguments.hasFlag("json") {
+                try writeJSON(comparison)
+            } else {
+                ResearchConsole.line("Online utility report by arm")
+                for arm in comparison.arms {
+                    ResearchConsole.line("  \(arm.variant.rawValue):")
+                    ResearchConsole.line("    events: \(arm.report.events)")
+                    ResearchConsole.line("    displayed: \(arm.report.displayed)")
+                    ResearchConsole.line("    acceptance when shown: \(arm.report.acceptanceRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
+                    ResearchConsole.line("    typed-through: \(arm.report.typedThrough)")
+                    ResearchConsole.line(
+                        "    retention 30s: \(arm.report.retentionAt30Seconds.observedEvents) observed / \(arm.report.retentionAt30Seconds.missingEvents) missing, net \(arm.report.retentionAt30Seconds.netRetainedCharacters)"
+                    )
+                    ResearchConsole.line(
+                        "    retention segment: \(arm.report.retentionAtSegmentClose.observedEvents) observed / \(arm.report.retentionAtSegmentClose.missingEvents) missing, net \(arm.report.retentionAtSegmentClose.netRetainedCharacters)"
+                    )
+                }
+                ResearchConsole.line("  arms are event tags, not proof: H01 is not started.")
+            }
+            return
+        }
         let report = try LabOnlineExperimentAnalyzer.analyze(events)
         if arguments.hasFlag("json") {
             try writeJSON(report)
@@ -144,6 +203,17 @@ extension ResearchCoordinator {
             ResearchConsole.line("  undo/correction when shown: \(report.undoOrCorrectionRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
             ResearchConsole.line("  deadline miss rate: \(report.deadlineMissRate.formatted(.percent.precision(.fractionLength(1))))")
             ResearchConsole.line("  attention tax: \(report.attentionTax.attentionTaxMilliseconds.map { $0.formatted(.number.precision(.fractionLength(1))) + " ms" } ?? "not estimable")")
+            ResearchConsole.line("  typed-through: \(report.typedThrough)")
+            ResearchConsole.line("  flicker accepts (not counted as reads): \(report.flickerAccepts)")
+            ResearchConsole.line(
+                "  retention 5s: \(report.retentionAt5Seconds.observedEvents) observed / \(report.retentionAt5Seconds.missingEvents) missing, net \(report.retentionAt5Seconds.netRetainedCharacters)"
+            )
+            ResearchConsole.line(
+                "  retention 30s: \(report.retentionAt30Seconds.observedEvents) observed / \(report.retentionAt30Seconds.missingEvents) missing, net \(report.retentionAt30Seconds.netRetainedCharacters)"
+            )
+            ResearchConsole.line(
+                "  retention segment: \(report.retentionAtSegmentClose.observedEvents) observed / \(report.retentionAtSegmentClose.missingEvents) missing, net \(report.retentionAtSegmentClose.netRetainedCharacters)"
+            )
             ResearchConsole.line("  net time saved / 1,000 chars: \(report.netTimeSavedPer1000Characters.formatted(.number.precision(.fractionLength(1)))) ms")
             if let calibration = report.confidenceCalibration {
                 ResearchConsole.line(
@@ -227,15 +297,30 @@ extension ResearchCoordinator {
     }
 
     static func deleteTelemetry(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "database"])
+        try arguments.assertAllowed(options: ["campaign", "database"], flags: ["instrument"])
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "delete-telemetry"))
         }
-        let campaign = try campaignFromOption(arguments)
+        let campaignID = try onlineCampaignID(arguments)
         let database = try researchDatabase(arguments)
-        let count = try await database.onlineEvents(campaignID: campaign.id).count
-        try await database.deleteOnlineEvents(campaignID: campaign.id)
+        let count = try await database.onlineEvents(campaignID: campaignID).count
+        try await database.deleteOnlineEvents(campaignID: campaignID)
+        if arguments.hasFlag("instrument") {
+            // Count file only. The word diary is owner data; Delete
+            // Personalization Data is the covenant wipe for that file.
+            try? FileManager.default.removeItem(at: LabInstrumentCampaign.defaultEventURL())
+        }
         ResearchConsole.line("Deleted \(count) online events. This deletion is not recoverable from Tilde Lab.")
+    }
+
+    private static func onlineCampaignID(_ arguments: CLIArguments) throws -> UUID {
+        if arguments.hasFlag("instrument") {
+            if arguments.value("campaign") != nil {
+                throw ResearchCLIError.usage("Use --instrument or --campaign, not both.")
+            }
+            return LabInstrumentCampaign.id
+        }
+        return try campaignFromOption(arguments).id
     }
 
     static func clearCache(_ arguments: CLIArguments) async throws {
@@ -463,36 +548,4 @@ extension ResearchCoordinator {
         ))
     }
 
-    private static func validateOnlineEventKeys(_ data: Data) throws {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ResearchCLIError.invalidValue("online event JSON")
-        }
-        let allowed: Set<String> = [
-            "schema", "id", "campaignID", "occurredAt", "sessionDigestSHA256", "variant",
-            "appCategory", "register", "boundary", "typingSpeedBucket", "safeOpportunity",
-            "displayed", "outcome", "acceptedCharacters", "replacedCharactersWithin5Seconds",
-            "nextActionMilliseconds", "generatorMilliseconds", "firstStableWordMilliseconds",
-            "deadlineMissed", "confidence", "candidateCharacters", "championDisagreed",
-            "guardReason", "crashed", "timedOut", "opportunityCharacters",
-            "wrongInsertionCount", "insertionCorruptionCount", "networkEgressDetected",
-            "networkDenied", "residentMemoryMegabytes", "memoryPressureObserved",
-            "thermalLevel", "runtimeRestarted",
-            "sleepWakeObserved", "appSwitchObserved", "cacheHit", "confidenceFeatures",
-        ]
-        if let key = Set(object.keys).subtracting(allowed).sorted().first {
-            throw ResearchCLIError.rawTelemetryKey(key)
-        }
-        if let features = object["confidenceFeatures"] as? [String: Any] {
-            let allowedFeatures: Set<String> = [
-                "schema", "firstTokenProbability", "meanSequenceLogProbability",
-                "minimumTokenProbability", "meanProbabilityMargin", "meanTokenEntropy",
-                "suggestionCharacters", "suggestionWords", "punctuationStop",
-                "contextSourceQuality", "sceneFreshnessSeconds", "personalSupport",
-                "personalConfidence", "firstTokenMilliseconds", "perturbationAgreement",
-            ]
-            if let key = Set(features.keys).subtracting(allowedFeatures).sorted().first {
-                throw ResearchCLIError.rawTelemetryKey("confidenceFeatures.\(key)")
-            }
-        }
-    }
 }

@@ -45,7 +45,7 @@ struct CLIArguments {
         var flags = Set<String>()
         let knownFlags: Set<String> = [
             "help", "resume", "no-cache", "allow-battery", "experimental-model",
-            "confirm-consume", "json",
+            "confirm-consume", "json", "instrument", "by-arm",
         ]
         var index = command == nil ? 0 : 1
         while index < values.count {
@@ -132,6 +132,7 @@ struct CLIArguments {
       compare                 paired-bootstrap every candidate against the baseline
       risk-coverage           replay confidence thresholds without new inference
       personalization-replay chronological local history evaluation; aggregate output only
+      simulate-typist         drive synthetic personas through the real stack; discovery-grade only
       advance-search          create a balanced-halving or adaptive child campaign
       nominate                freeze up to three passing validation candidates
       validate-candidates PLAN
@@ -143,7 +144,7 @@ struct CLIArguments {
       dogfood                 create a sticky controlled local dogfood plan
       soak                    create a bounded four-hour/overnight stability plan
       ingest-events           ingest strict text-free JSONL online events
-      online-report           summarize acceptance, edit harm, latency, and attention tax
+      online-report           summarize retention coverage, typed-through, acceptance, and attention tax
       confidence-report       fit chronological text-free acceptance calibration
       soak-report             enforce duration, reliability, insertion, egress, and p99 gates
       interaction-report      verify complete text-free real-host interaction evidence

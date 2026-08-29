@@ -85,6 +85,16 @@ private struct LabJudgmentEditor: View {
                     Toggle("Apply production silence gate", isOn: $arm.judgment.suppressesSensitiveScenes)
                         .toggleStyle(.checkbox)
                 }
+                LabControlRow(
+                    "Extended ordinary silence",
+                    help: "Development-only display-policy probe: also suppress scenes whose incoming turn is a settled statement, carries more than one question, or refers to an ambiguous antecedent. Off in production."
+                ) {
+                    Toggle(
+                        "Add complete-sentence, multi-question, ambiguous-reference gates",
+                        isOn: $arm.judgment.extendedOrdinarySilenceGate
+                    )
+                    .toggleStyle(.checkbox)
+                }
                 LabControlRow("Dangling tail") {
                     Toggle("Repair trailing function words", isOn: $arm.judgment.repairsDanglingTail)
                         .toggleStyle(.checkbox)

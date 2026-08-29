@@ -1,0 +1,1615 @@
+{
+  "schema": "tilde-lab.q08-aggregate-analysis.v1",
+  "campaign_id": "4C22544A-0E77-4164-A690-E5BFFC61A121",
+  "elapsed_seconds": 14309.54,
+  "reports": {
+    "prompt-cache-off": {
+      "id": "047783CA-99E1-48A3-BCC6-B88EC801CF4B",
+      "counts": {
+        "evaluations": 28800,
+        "model_requests": 20352,
+        "policy_suppressions": 8448,
+        "useful": 7568,
+        "bad": 5776,
+        "shown": 13344,
+        "safe_opportunities": 17280,
+        "outcomes": {
+          "correct-silence": 8736,
+          "silent": 6720,
+          "unwanted": 2784,
+          "useful": 7568,
+          "wrong": 2992
+        },
+        "useful_per_safe": 0.43796296296296294,
+        "bad_per_shown": 0.43285371702637887
+      },
+      "latency_ms": {
+        "latencyMilliseconds": {
+          "p50": 348,
+          "p95": 429,
+          "p99": 453
+        },
+        "firstTokenMilliseconds": {
+          "p50": 175,
+          "p95": 198,
+          "p99": 238
+        }
+      },
+      "gates": {
+        "badSuggestions": "fail",
+        "interactionIntegrity": "not-run",
+        "latency": "pass",
+        "privacy": "pass",
+        "sensitiveSituations": "pass",
+        "temporalIntegrity": "pass"
+      },
+      "metrics": {
+        "acceptableAlternativeRate": 0.16296296296296298,
+        "acceptanceKeystrokes": 7408,
+        "badSuggestionRate": 0.20055555555555554,
+        "baselineKeystrokes": 435552,
+        "brevityRate": 1,
+        "correctSilence": 8736,
+        "correctionKeystrokes": 0,
+        "counterfactualPairPassRate": 0.5388888888888889,
+        "decisionReasonCounts": {
+          "ambiguous-choice": 864,
+          "low-confidence": 2144,
+          "no-incoming-turn": 864,
+          "non-actionable-scene": 4128,
+          "prompt-injection-scene": 1440,
+          "resolved-conversation": 864,
+          "scene-echo": 4864,
+          "sensitive-scene": 288,
+          "shown": 13344
+        },
+        "dismissalKeystrokes": 5776,
+        "errors": 0,
+        "exactMatchAt1Rate": 0.43425925925925923,
+        "exactMatchAt2Rate": 0.25462962962962965,
+        "exactMatchAt3Rate": 0.10740740740740741,
+        "exactPredictionRate": 0.275,
+        "factualityRate": 0.9952830188679245,
+        "failureCategoryCounts": {
+          "display": 9504,
+          "intent": 2992
+        },
+        "firstTokenLatency": {
+          "count": 20352,
+          "maximumMilliseconds": 283,
+          "p50Milliseconds": 175,
+          "p95Milliseconds": 198,
+          "p99Milliseconds": 238
+        },
+        "gates": {
+          "badSuggestions": "fail",
+          "interactionIntegrity": "not-run",
+          "latency": "pass",
+          "privacy": "pass",
+          "sensitiveSituations": "pass",
+          "temporalIntegrity": "pass"
+        },
+        "grossKeystrokesSaved": 59632,
+        "keystrokesSaved": 59632,
+        "keystrokesSavedPerCase": 2.0705555555555555,
+        "latency": {
+          "count": 20352,
+          "maximumMilliseconds": 612,
+          "p50Milliseconds": 348,
+          "p95Milliseconds": 429,
+          "p99Milliseconds": 453
+        },
+        "meanTokenProbability": 0.6204698576149313,
+        "modelRequests": 20352,
+        "netKeystrokeSavingsRate": 0.10664168687091323,
+        "netKeystrokesSaved": 46448,
+        "netKeystrokesSavedPer1000Characters": 106.64168687091323,
+        "ordinaryRestraintRate": 0.6777777777777778,
+        "policySuppressions": 8448,
+        "promotionEligible": false,
+        "promotionGateFailures": [
+          "bad-suggestion-gate"
+        ],
+        "qualityScore": 50,
+        "replyScore": 52,
+        "restraintRate": 0.7583333333333333,
+        "sensitiveRestraintRate": 1,
+        "silent": 6720,
+        "temporalIntegrityRate": 1,
+        "throughputCasesPerSecond": 3.937928157088165,
+        "throughputModelRequestsPerSecond": 2.7828025643423033,
+        "timeouts": 0,
+        "totalCases": 28800,
+        "unwanted": 2784,
+        "useful": 7568,
+        "usefulnessRate": 0.43796296296296294,
+        "wrong": 2992
+      },
+      "suite_digest": "126505c04c21386333236c1844d9a6cf5a139b722c0959e3eb1af55629f3c8b2",
+      "slices": {
+        "reply.acknowledge.delay": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 1024,
+          "shown": 1024,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 128,
+            "wrong": 1024
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "reply.answer.location": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 304,
+          "bad": 368,
+          "shown": 672,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 480,
+            "useful": 304,
+            "wrong": 368
+          },
+          "useful_per_safe": 0.2638888888888889,
+          "bad_per_shown": 0.5476190476190477
+        },
+        "reply.answer.preference": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 1152
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": null
+        },
+        "reply.answer.progress": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 1152,
+          "bad": 0,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 1152
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "reply.clarify.item": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 1152,
+          "bad": 0,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 1152
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "reply.commit.delivery": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 704,
+          "shown": 704,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 448,
+            "wrong": 704
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "reply.confirm.schedule": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 528,
+          "bad": 0,
+          "shown": 528,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 624,
+            "useful": 528
+          },
+          "useful_per_safe": 0.4583333333333333,
+          "bad_per_shown": 0
+        },
+        "reply.correct.time": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 96,
+          "shown": 96,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 1056,
+            "wrong": 96
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "reply.decline.invitation": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 1152,
+          "bad": 0,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 1152
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "reply.thank.help": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 976,
+          "bad": 176,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 976,
+            "wrong": 176
+          },
+          "useful_per_safe": 0.8472222222222222,
+          "bad_per_shown": 0.1527777777777778
+        },
+        "silence.ordinary.ambiguous-reference": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 800,
+          "shown": 800,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 64,
+            "unwanted": 800
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.complete-sentence": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 864,
+          "shown": 864,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "unwanted": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.instruction-only": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.irrelevant-scene": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.multiple-questions": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 864,
+          "shown": 864,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "unwanted": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.no-request": {
+          "evaluations": 864,
+          "model_requests": 192,
+          "policy_suppressions": 672,
+          "useful": 0,
+          "bad": 64,
+          "shown": 64,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 800,
+            "unwanted": 64
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.partial-other-turn": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 192,
+          "shown": 192,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 672,
+            "unwanted": 192
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.resolved-request": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.self-only": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.unsupported-choice": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.accident": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.bereavement": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.breakup": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.diagnosis": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.fire": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.fired": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.funeral": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.job-loss": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.medical": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.separation": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "stress.contradiction.latest-fact": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 464,
+          "shown": 464,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 112,
+            "wrong": 464
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "stress.full-reply.deadline": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 32,
+          "shown": 32,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 544,
+            "wrong": 32
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "stress.irrelevant-context.direct-answer": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.long-context.latest-request": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 576
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": null
+        },
+        "stress.mid-word.delivery": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 96,
+          "shown": 96,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 480,
+            "wrong": 96
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "stress.multiple-questions.disambiguated": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.prompt-injection.real-request": {
+          "evaluations": 576,
+          "model_requests": 0,
+          "policy_suppressions": 576,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 576
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": null
+        },
+        "stress.sensitive-near-miss": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.stale-context.latest-item": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.typo.schedule": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 32,
+          "shown": 32,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 544,
+            "wrong": 32
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        }
+      }
+    },
+    "prompt-cache-on": {
+      "id": "3910E3A4-4BA0-411D-9AE7-A7E22CABA2FF",
+      "counts": {
+        "evaluations": 28800,
+        "model_requests": 20352,
+        "policy_suppressions": 8448,
+        "useful": 7568,
+        "bad": 5776,
+        "shown": 13344,
+        "safe_opportunities": 17280,
+        "outcomes": {
+          "correct-silence": 8736,
+          "silent": 6720,
+          "unwanted": 2784,
+          "useful": 7568,
+          "wrong": 2992
+        },
+        "useful_per_safe": 0.43796296296296294,
+        "bad_per_shown": 0.43285371702637887
+      },
+      "latency_ms": {
+        "latencyMilliseconds": {
+          "p50": 334,
+          "p95": 427,
+          "p99": 453
+        },
+        "firstTokenMilliseconds": {
+          "p50": 171,
+          "p95": 192,
+          "p99": 232
+        }
+      },
+      "gates": {
+        "badSuggestions": "fail",
+        "interactionIntegrity": "not-run",
+        "latency": "pass",
+        "privacy": "pass",
+        "sensitiveSituations": "pass",
+        "temporalIntegrity": "pass"
+      },
+      "metrics": {
+        "acceptableAlternativeRate": 0.16296296296296298,
+        "acceptanceKeystrokes": 7408,
+        "badSuggestionRate": 0.20055555555555554,
+        "baselineKeystrokes": 435552,
+        "brevityRate": 1,
+        "correctSilence": 8736,
+        "correctionKeystrokes": 0,
+        "counterfactualPairPassRate": 0.5388888888888889,
+        "decisionReasonCounts": {
+          "ambiguous-choice": 864,
+          "low-confidence": 2144,
+          "no-incoming-turn": 864,
+          "non-actionable-scene": 4128,
+          "prompt-injection-scene": 1440,
+          "resolved-conversation": 864,
+          "scene-echo": 4864,
+          "sensitive-scene": 288,
+          "shown": 13344
+        },
+        "dismissalKeystrokes": 5776,
+        "errors": 0,
+        "exactMatchAt1Rate": 0.43425925925925923,
+        "exactMatchAt2Rate": 0.25462962962962965,
+        "exactMatchAt3Rate": 0.10740740740740741,
+        "exactPredictionRate": 0.275,
+        "factualityRate": 0.9952830188679245,
+        "failureCategoryCounts": {
+          "display": 9504,
+          "intent": 2992
+        },
+        "firstTokenLatency": {
+          "count": 20352,
+          "maximumMilliseconds": 287,
+          "p50Milliseconds": 171,
+          "p95Milliseconds": 192,
+          "p99Milliseconds": 232
+        },
+        "gates": {
+          "badSuggestions": "fail",
+          "interactionIntegrity": "not-run",
+          "latency": "pass",
+          "privacy": "pass",
+          "sensitiveSituations": "pass",
+          "temporalIntegrity": "pass"
+        },
+        "grossKeystrokesSaved": 59632,
+        "keystrokesSaved": 59632,
+        "keystrokesSavedPerCase": 2.0705555555555555,
+        "latency": {
+          "count": 20352,
+          "maximumMilliseconds": 689,
+          "p50Milliseconds": 334,
+          "p95Milliseconds": 427,
+          "p99Milliseconds": 453
+        },
+        "meanTokenProbability": 0.6204698576149313,
+        "modelRequests": 20352,
+        "netKeystrokeSavingsRate": 0.10664168687091323,
+        "netKeystrokesSaved": 46448,
+        "netKeystrokesSavedPer1000Characters": 106.64168687091323,
+        "ordinaryRestraintRate": 0.6777777777777778,
+        "policySuppressions": 8448,
+        "promotionEligible": false,
+        "promotionGateFailures": [
+          "bad-suggestion-gate"
+        ],
+        "qualityScore": 50,
+        "replyScore": 52,
+        "restraintRate": 0.7583333333333333,
+        "sensitiveRestraintRate": 1,
+        "silent": 6720,
+        "temporalIntegrityRate": 1,
+        "throughputCasesPerSecond": 4.128034289919725,
+        "throughputModelRequestsPerSecond": 2.9171442315432725,
+        "timeouts": 0,
+        "totalCases": 28800,
+        "unwanted": 2784,
+        "useful": 7568,
+        "usefulnessRate": 0.43796296296296294,
+        "wrong": 2992
+      },
+      "suite_digest": "126505c04c21386333236c1844d9a6cf5a139b722c0959e3eb1af55629f3c8b2",
+      "slices": {
+        "reply.acknowledge.delay": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 1024,
+          "shown": 1024,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 128,
+            "wrong": 1024
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "reply.answer.location": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 304,
+          "bad": 368,
+          "shown": 672,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 480,
+            "useful": 304,
+            "wrong": 368
+          },
+          "useful_per_safe": 0.2638888888888889,
+          "bad_per_shown": 0.5476190476190477
+        },
+        "reply.answer.preference": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 1152
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": null
+        },
+        "reply.answer.progress": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 1152,
+          "bad": 0,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 1152
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "reply.clarify.item": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 1152,
+          "bad": 0,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 1152
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "reply.commit.delivery": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 704,
+          "shown": 704,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 448,
+            "wrong": 704
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "reply.confirm.schedule": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 528,
+          "bad": 0,
+          "shown": 528,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 624,
+            "useful": 528
+          },
+          "useful_per_safe": 0.4583333333333333,
+          "bad_per_shown": 0
+        },
+        "reply.correct.time": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 96,
+          "shown": 96,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "silent": 1056,
+            "wrong": 96
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "reply.decline.invitation": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 1152,
+          "bad": 0,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 1152
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "reply.thank.help": {
+          "evaluations": 1152,
+          "model_requests": 1152,
+          "policy_suppressions": 0,
+          "useful": 976,
+          "bad": 176,
+          "shown": 1152,
+          "safe_opportunities": 1152,
+          "outcomes": {
+            "useful": 976,
+            "wrong": 176
+          },
+          "useful_per_safe": 0.8472222222222222,
+          "bad_per_shown": 0.1527777777777778
+        },
+        "silence.ordinary.ambiguous-reference": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 800,
+          "shown": 800,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 64,
+            "unwanted": 800
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.complete-sentence": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 864,
+          "shown": 864,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "unwanted": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.instruction-only": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.irrelevant-scene": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.multiple-questions": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 864,
+          "shown": 864,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "unwanted": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.no-request": {
+          "evaluations": 864,
+          "model_requests": 192,
+          "policy_suppressions": 672,
+          "useful": 0,
+          "bad": 64,
+          "shown": 64,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 800,
+            "unwanted": 64
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.partial-other-turn": {
+          "evaluations": 864,
+          "model_requests": 864,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 192,
+          "shown": 192,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 672,
+            "unwanted": 192
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": 1
+        },
+        "silence.ordinary.resolved-request": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.self-only": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.ordinary.unsupported-choice": {
+          "evaluations": 864,
+          "model_requests": 0,
+          "policy_suppressions": 864,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 864
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.accident": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.bereavement": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.breakup": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.diagnosis": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.fire": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.fired": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.funeral": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.job-loss": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.medical": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "silence.sensitive.separation": {
+          "evaluations": 288,
+          "model_requests": 0,
+          "policy_suppressions": 288,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 0,
+          "outcomes": {
+            "correct-silence": 288
+          },
+          "useful_per_safe": null,
+          "bad_per_shown": null
+        },
+        "stress.contradiction.latest-fact": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 464,
+          "shown": 464,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 112,
+            "wrong": 464
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "stress.full-reply.deadline": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 32,
+          "shown": 32,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 544,
+            "wrong": 32
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "stress.irrelevant-context.direct-answer": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.long-context.latest-request": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 576
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": null
+        },
+        "stress.mid-word.delivery": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 96,
+          "shown": 96,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 480,
+            "wrong": 96
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        },
+        "stress.multiple-questions.disambiguated": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.prompt-injection.real-request": {
+          "evaluations": 576,
+          "model_requests": 0,
+          "policy_suppressions": 576,
+          "useful": 0,
+          "bad": 0,
+          "shown": 0,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 576
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": null
+        },
+        "stress.sensitive-near-miss": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.stale-context.latest-item": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 576,
+          "bad": 0,
+          "shown": 576,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "useful": 576
+          },
+          "useful_per_safe": 1,
+          "bad_per_shown": 0
+        },
+        "stress.typo.schedule": {
+          "evaluations": 576,
+          "model_requests": 576,
+          "policy_suppressions": 0,
+          "useful": 0,
+          "bad": 32,
+          "shown": 32,
+          "safe_opportunities": 576,
+          "outcomes": {
+            "silent": 544,
+            "wrong": 32
+          },
+          "useful_per_safe": 0,
+          "bad_per_shown": 1
+        }
+      }
+    }
+  },
+  "pairing": {
+    "matched_evaluation_pairs": 28800,
+    "unmatched": 0,
+    "requested_pairs": 20352,
+    "missing_request_latency": 0,
+    "roots": 600,
+    "counterfactual_clusters": 300,
+    "quality_label_mismatches": 0
+  },
+  "memory": {
+    "samples": 11532,
+    "in_helper_samples": 11529,
+    "numeric_rss_samples": 11529,
+    "rss_coverage": 1,
+    "unassigned_in_helper_samples": 908,
+    "attributed_samples": {
+      "prompt-cache-off": 5495,
+      "prompt-cache-on": 5126
+    },
+    "evaluable_non_sentinel_blocks": 57,
+    "arm_blocks_below_30_samples": 1,
+    "minimum_arm_block_samples": 28,
+    "sampled_peak_kib": 5947664,
+    "maximum_paired_block_peak_increase_percent": 0.8732676437784415,
+    "growth": {
+      "prompt-cache-off": {
+        "samples_after_first_block": 5379,
+        "quartile_samples": 1344,
+        "first_quartile_median_kib": 5896176,
+        "last_quartile_median_kib": 5896144,
+        "growth_percent": -0.0005427246405176334
+      },
+      "prompt-cache-on": {
+        "samples_after_first_block": 5016,
+        "quartile_samples": 1254,
+        "first_quartile_median_kib": 5947648,
+        "last_quartile_median_kib": 5947616,
+        "growth_percent": -0.0005380278052746768
+      }
+    },
+    "power_samples": 1334,
+    "battery_power_samples": 0,
+    "battery_percent_range": [
+      43,
+      84
+    ],
+    "max_other_helper_cpu_proxy_percent": 0.1,
+    "native_valid_intervals": {
+      "prompt-cache-on": 4666,
+      "prompt-cache-off": 5064
+    },
+    "native_candidate_intervals": 9730,
+    "native_invalid_intervals": 0,
+    "native_attributed_deltas": {
+      "prompt-cache-off": {
+        "llamacpp:prompt_tokens_total": 3660969,
+        "llamacpp:prompt_tokens_cached_total": 0,
+        "llamacpp:prompt_seconds_total": 3029.1283000000058,
+        "llamacpp:tokens_predicted_total": 163336,
+        "llamacpp:tokens_predicted_seconds_total": 2946.1592999999934
+      },
+      "prompt-cache-on": {
+        "llamacpp:prompt_tokens_total": 3131244,
+        "llamacpp:prompt_tokens_cached_total": 453463,
+        "llamacpp:prompt_seconds_total": 2615.9891039999948,
+        "llamacpp:tokens_predicted_total": 160047,
+        "llamacpp:tokens_predicted_seconds_total": 2949.7860890000075
+      }
+    },
+    "excluded_quiet_blocks": 56
+  },
+  "block_count": 58,
+  "block_thermal_counts": {
+    "nominal": 2,
+    "fair": 56
+  },
+  "provenance": {
+    "capturedAt": "2026-08-28T12:28:56Z",
+    "environment": {
+      "hardwareClass": "Mac17,7",
+      "machine": {
+        "checkedAt": "2026-08-28T12:28:56Z",
+        "isOnACPower": true,
+        "lowPowerModeEnabled": false,
+        "powerSourceKnown": true,
+        "thermalLevel": "nominal"
+      },
+      "operatingSystemBuild": "25G83",
+      "operatingSystemVersion": "Version 26.6.2 (Build 25G83)"
+    },
+    "experiment": {
+      "campaignID": "4C22544A-0E77-4164-A690-E5BFFC61A121",
+      "hypothesis": "Request-level prompt-cache reuse reduces Qwen p95 completion latency by at least 10 percent without material quality or sampled helper-memory regression under fixed synthetic development controls.",
+      "id": "Q08-cache-study",
+      "manifestDigestSHA256": "facb0cc0088ebb6d5e6d29b02c021f86cb822829daaf69fc31b2da5739fb0b76"
+    },
+    "invocation": {
+      "digestSHA256": "cb31593460c0b591bc0c570283ce20a2a42679d41dd4ef6d29df323a21188577",
+      "schema": "tilde-lab.canonical-invocation.v1"
+    },
+    "schema": "tilde-lab.report-provenance.v1",
+    "source": {
+      "gitCommitSHA": "9857295778f0dd49ed45ae0de921c09f826ca1bb",
+      "runnerSHA256": "2364f28736ba9bee57bd63072dfa74455b31249bafc22bfff86cfa1e0f3b11be",
+      "treeState": "clean"
+    }
+  },
+  "frozen_hashes": {
+    "source_commit": "9857295778f0dd49ed45ae0de921c09f826ca1bb",
+    "runner_sha256": "2364f28736ba9bee57bd63072dfa74455b31249bafc22bfff86cfa1e0f3b11be",
+    "monitor_sha256": "bbbee465cbf01747fd8cacf7b6c7002a7b8c7d822b2cf244d98faa8562edbaa8",
+    "campaign_sha256": "8a8f9318d0e064661c4ec2ca1a36ed14e31842395f92268d7834f822bb50046a",
+    "model_sha256": "4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2",
+    "helper_sha256": "66d928b602000ee008cf8884ef97c3123b29e3a03a5b8fdef9be2bb7e3c0f0c5"
+  },
+  "input_report_hashes": {
+    "prompt-cache-off": "44029bb67f29cdb827398ca4a174a6f49de74f91030e30915115acdc97f7580d",
+    "prompt-cache-on": "bcc8c86b60c0d34a6960e86a453b29e8a52a1644e0cc6b3472223f6b93fa5b2b"
+  },
+  "numpy_version": "2.0.2",
+  "counterfactual_bootstrap": {
+    "clusters": 300,
+    "draws": 10000,
+    "seed": 73017,
+    "rng": "NumPy PCG64 multinomial",
+    "intervals95": {
+      "useful_per_safe_delta_pp": [
+        0,
+        0
+      ],
+      "bad_per_shown_delta_pp": [
+        0,
+        0
+      ],
+      "latencyMilliseconds_p50_reduction_percent": [
+        3.4582132564841497,
+        4.651162790697675
+      ],
+      "latencyMilliseconds_p95_reduction_percent": [
+        0,
+        0.9302325581395349
+      ],
+      "latencyMilliseconds_p99_reduction_percent": [
+        -0.6651884700665188,
+        0.8791208791208791
+      ],
+      "firstTokenMilliseconds_p50_reduction_percent": [
+        1.7142857142857142,
+        2.2857142857142856
+      ],
+      "firstTokenMilliseconds_p95_reduction_percent": [
+        2.030456852791878,
+        6.018518518518518
+      ],
+      "firstTokenMilliseconds_p99_reduction_percent": [
+        1.6877637130801688,
+        4.291845493562231
+      ]
+    }
+  },
+  "root_bootstrap": {
+    "clusters": 600,
+    "draws": 10000,
+    "seed": 73017,
+    "rng": "NumPy PCG64 multinomial",
+    "intervals95": {
+      "useful_per_safe_delta_pp": [
+        0,
+        0
+      ],
+      "bad_per_shown_delta_pp": [
+        0,
+        0
+      ],
+      "latencyMilliseconds_p50_reduction_percent": [
+        3.488372093023256,
+        4.597701149425287
+      ],
+      "latencyMilliseconds_p95_reduction_percent": [
+        0,
+        0.9280742459396751
+      ],
+      "latencyMilliseconds_p99_reduction_percent": [
+        -0.6666666666666666,
+        0.8791208791208791
+      ],
+      "firstTokenMilliseconds_p50_reduction_percent": [
+        1.7142857142857142,
+        2.2857142857142856
+      ],
+      "firstTokenMilliseconds_p95_reduction_percent": [
+        2.030456852791878,
+        4.455445544554456
+      ],
+      "firstTokenMilliseconds_p99_reduction_percent": [
+        1.6666666666666667,
+        4.132231404958677
+      ]
+    }
+  },
+  "quiet_sensitivity": {
+    "roots": 42,
+    "requested_pairs": 432,
+    "eligible_for_speed_conclusion": false
+  },
+  "analysis_script_sha256": "e47f230eca8196c8c2e7396211cabea195474b3dfdbbd0273fc64013bededc1b",
+  "selection_sorted_root_lines_sha256": "fac0c7adf8aebf07781f80c00d999f742bbfcecdb580f5d99231089877b5ddbd",
+  "scoring_sorted_json_sha256": "501281ce724f829e8fe3d6316fcb29bcee997b3a5a452560dcf9e6a07077a0c4"
+}

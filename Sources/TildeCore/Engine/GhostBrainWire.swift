@@ -20,10 +20,21 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
     /// with the current PID/window number so context and response delivery
     /// can be bound to the exact field/window, not merely an app bundle.
     public let fieldSessionIdentifier: String?
+    /// H01 block-randomization arm (`a` or `b`) for the input method's current
+    /// typing session. Omitted — and therefore ignored by the app — unless the
+    /// disabled-by-default Model Preview harness is on. Only the arm identity
+    /// travels: the visible-word cap is looked up from `H01Arm` inside the
+    /// app, so no wire value can set a length directly.
+    public let experimentArm: String?
 
     public var supportsStreamingResponses: Bool { streamResponses == true }
 
-    public init(context: String, app: String?, fieldSessionIdentifier: String? = nil) {
+    public init(
+        context: String,
+        app: String?,
+        fieldSessionIdentifier: String? = nil,
+        experimentArm: String? = nil
+    ) {
         self.v = Self.version
         self.context = context
         self.app = app
@@ -31,6 +42,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.screenMemoryEvent = nil
         self.streamResponses = true
         self.fieldSessionIdentifier = fieldSessionIdentifier
+        self.experimentArm = experimentArm
     }
 
     public init(personalHistoryEvents: [PersonalHistoryEvent]) {
@@ -41,6 +53,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.screenMemoryEvent = nil
         self.streamResponses = nil
         self.fieldSessionIdentifier = nil
+        self.experimentArm = nil
     }
 
     public init(screenMemoryEvent: ScreenMemoryInputEvent) {
@@ -51,6 +64,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.screenMemoryEvent = screenMemoryEvent
         self.streamResponses = nil
         self.fieldSessionIdentifier = nil
+        self.experimentArm = nil
     }
 }
 

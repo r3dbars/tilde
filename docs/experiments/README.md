@@ -49,6 +49,9 @@ identity; it does not make the hashed private artifact publishable.
 7. Freeze any reusable failure as a sanitized regression.
 8. Add or update the Learning Ledger only when the result changes durable
    knowledge or the active queue.
+9. The same day, append [`docs/research/lab-log.md`](../research/lab-log.md)
+   with try, learn, and fail — even if the result is rejected, inconclusive,
+   or the work stopped.
 
 ## Record template
 
@@ -139,6 +142,7 @@ Completed: <ISO-8601 UTC>
 ### Durable changes
 
 - Learning Ledger entry:
+- Lab log:
 - Regression IDs:
 - Implementation pull request:
 - Rollback:
@@ -150,10 +154,23 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q10 — K=1 early-start timing falsifier](Q10-early-start-timing-falsifier.md) — IMPLEMENTING; registered and built, not yet run
+- [Q09 — Future Lattice K=16 feasibility](Q09-future-lattice-k16-feasibility.md) — REJECTED; K=16 failed diversity and added only 1.39 points over K=8
+- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — REJECTED; p95 gain 0.47%, below 10% target; no promotion
+- [Q07B — Fixed AC prompt-cache readiness pilot](Q07B-cache-ac-pilot.md) — readiness PASSED; superiority INCONCLUSIVE
+
+- [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — INCONCLUSIVE; budget expired
+
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED
+- [F03 — Retained-outcome ledger](F03-retained-outcome-ledger.md) — IMPLEMENTING
 - [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
 - [Q04 — Qwen 9B factorial replication v4](Q04-qwen-factorial-replication-v4.md) — REJECTED
+- [Q05 — Qwen confidence capture and small filtering pilot](Q05-confidence-filter-pilot.md) — REJECTED (selected policy; capture passed)
+- [Q06 — Fixed confidence filter on additional development roots](Q06-confidence-filter-followup.md) — SUPPORTED (bounded synthetic effect; no promotion)
 
 The staged theory registry and current eligibility gates live in the
-[Tilde research roadmap](../research-roadmap.md).
+[Tilde research roadmap](../research-roadmap.md). The running notebook of
+tries and failures is [the lab log](../research/lab-log.md). The next
+session is on-device F03 ingest:
+[the Mac briefing](../research/next-on-device.md).
