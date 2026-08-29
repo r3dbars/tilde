@@ -25,6 +25,7 @@ struct TildeSettings {
         case personalNextWordExperimentIdentifier = "PersonalNextWordExperimentIdentifier"
         case screenMemoryEnabled = "ScreenMemoryEnabled"
         case incrementalOCREnabled = "IncrementalOCREnabled"
+        case h01BlockRandomization = "H01BlockRandomizationEnabled"
     }
 
     static let keyboardSuiteName = PersonalHistorySettingsContract.keyboardSuiteName
@@ -155,6 +156,16 @@ struct TildeSettings {
     var incrementalOCREnabled: Bool {
         get { keyboard.object(forKey: KeyboardKey.incrementalOCREnabled.rawValue) as? Bool ?? false }
         nonmutating set { keyboard.set(newValue, forKey: KeyboardKey.incrementalOCREnabled.rawValue) }
+    }
+
+    /// H01 (three visible words vs eight) block-randomization harness.
+    /// Owner-visible in the Model Preview menu only, and OFF unless the owner
+    /// turns it on: H01 is a Stage 1 experiment and Stage 0 has not closed.
+    /// While it is off, the input method sends no arm and the completion
+    /// stack keeps the profile's own visible-word cap.
+    var h01BlockRandomizationEnabled: Bool {
+        get { H01BlockRandomization.isEnabled(keyboard) }
+        nonmutating set { H01BlockRandomization.setEnabled(newValue, in: keyboard) }
     }
 
     var pausedUntil: Date? {

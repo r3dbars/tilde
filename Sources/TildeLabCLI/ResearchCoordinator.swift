@@ -68,7 +68,7 @@ enum ResearchCoordinator {
         "dogfood": "Usage: tilde-lab dogfood --campaign CAMPAIGN.json --challenger ID --holdout-plan PLAN.json [--champion ID] [--allocation 0.10] [--holdback 0.10] [--days 7]",
         "soak": "Usage: tilde-lab soak --campaign CAMPAIGN.json --candidate ID --holdout-plan PLAN.json [--champion ID] [--hours 4] [--minimum-events 100] [--database PATH]",
         "ingest-events": "Usage: tilde-lab ingest-events (--instrument | --campaign CAMPAIGN.json) [--input events.jsonl] [--database PATH]",
-        "online-report": "Usage: tilde-lab online-report (--instrument | --campaign CAMPAIGN.json) [--database PATH] [--json]",
+        "online-report": "Usage: tilde-lab online-report (--instrument | --campaign CAMPAIGN.json) [--database PATH] [--by-arm] [--json]",
         "confidence-report": "Usage: tilde-lab confidence-report --campaign CAMPAIGN.json [--database PATH] [--output report.json] [--json]",
         "soak-report": "Usage: tilde-lab soak-report --campaign CAMPAIGN.json [--database PATH] [--json]",
         "interaction-report": "Usage: tilde-lab interaction-report --campaign CAMPAIGN.json --candidate ID --holdout-plan PLAN.json --input interaction.jsonl [--output report.json] [--json]",
