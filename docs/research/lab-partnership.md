@@ -82,6 +82,27 @@ For each paper I will answer four things, out loud:
 
 If (4) is background, we index it and move on. We do not implement a paper.
 
+## The three judges (owner directive, 2026-08-29)
+
+No single measurement promotes anything. Every promotion needs three
+independent judges to agree: the registered metric, the hard gates, and the
+owner's felt daily-driving experience. A disagreement between them is a
+finding about what the metric cannot see, never an obstacle to push past.
+Two known ways the retained-character score can be fooled stay on record:
+it under-credits a correct ghost the writer typed through without reading,
+and it over-credits accepted text whose reading-and-verifying cost exceeded
+its savings (the attention tax the live report cannot yet estimate).
+
+## Simulated evidence (owner directive, 2026-08-29)
+
+Frontier-model decision layers (the simulated typist) may rank candidates,
+mine failures, and propose the next question at any scale the owner funds.
+They may never advance a protected phase, and their reports carry a
+permanent ineligibility fence. A simulated persona earns screening trust
+only through the registered ladder: in-sample calibration, out-of-sample
+agreement on fresh live moments, then a written prediction of a live
+experiment's winner before the live result exists.
+
 ## What stays out of Git
 
 Your sentences, screens, prompts, candidates, local paths, and raw event

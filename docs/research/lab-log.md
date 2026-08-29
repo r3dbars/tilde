@@ -28,6 +28,155 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Q11 cannot be replayed from cache; it needs fresh inference
+
+- **Try:** Attempt to execute the registered Q11 extended ordinary-silence
+  gate comparison without loading a model, by reusing the Q05/Q06 cached
+  synthetic candidate replay path
+  (`LabSyntheticCandidateCache` + `LabRiskCoverageAnalyzer.completeSyntheticReplay`)
+  against Q11's registered control — the exact arm Q08 ran on the full
+  certified V2 development suite.
+- **Learn:** The replay path is real and would honour the flag — the
+  analyzer applies `SceneSuggestionPolicy.suppressionReason` with the
+  arm's own `sceneSuppressionOptions` before it ever consults the cache,
+  which also confirms the gate is a pre-generation, candidate-independent
+  decision and therefore perfectly paired. But no cache can serve Q11's
+  registered control. Q08 was pre-registered to run with `--no-cache` and
+  left no candidate cache at all; the only substantial caches on the
+  machine are Q06's (1,059 entries, 353 scenarios, `cachePrompt` on, a
+  505-root file suite) and the factorial-v4 sweep's (10,176 entries, 424
+  scenarios). Q11's control differs from both in generation identity
+  (`cachePrompt` off), scenario coverage (600 selected roots), and
+  selected-suite digest, so every cache key misses and the replay would
+  fail closed on suite fingerprint before the first lookup.
+- **Fail:** Q11 was not run. There is no cache-only or helper-free run
+  mode: `tilde-lab run` is the only producer of v6 reports and always
+  starts the llama-server pool, so even a warm cache loads the model.
+  Running the registered protocol means ~40,704 fresh generations across
+  two arms on a machine the owner is actively using, which the current
+  authorization forbids. No campaign was created, no `--resume` was used,
+  no inference was started, and no production default was touched.
+- **Where:** [`Q11`](../experiments/Q11-ordinary-silence-gate.md) (still
+  REGISTERED, Result section untouched); PR #444.
+- **Next:** Decide whether Q11 runs as registered on an idle machine, or
+  whether its registration is amended before any run to a cache-backed
+  control — never after seeing a number.
+
+## 2026-08-29 — Q11 run: the silence gate clears its registered bar
+
+- **Try:** Execute the registered Q11 campaign — Q08's exact Qwen arm with
+  and without the extended ordinary-silence gate, 3,600 paired evaluations,
+  8×2 workers on AC, seeds 17/41/73, repetitions 1 (declared pre-run).
+- **Learn:** Bad-when-shown fell 43.35% to 30.13% (−13.2pp against the 8pp
+  target; every seed −12pp or better) with useful displays identical at
+  473 and the sensitive slice untouched. The frozen-label prediction of
+  ~30.03% matched measurement almost exactly. Parallel workers cut the
+  wall clock from a projected four hours to seven minutes without touching
+  a single label. Reviewed SUPPORTED as a development confirmation; the
+  flag is a frozen validation candidate only.
+- **Fail:** Net-keystrokes utility was flat (interval touching zero) — the
+  suppressed displays were mostly typed through, and keystroke accounting
+  cannot price interruption. The generic utility gate would not nominate
+  this change; only the registered bad-when-shown rule does. The
+  interruption-cost question is live-instrument work, not offline work.
+  Also recorded: an instruction to run the control on production Gemma was
+  wrong and was refused pre-run — the registration's Q08 anchor governs.
+- **Where:** [Q11](../experiments/Q11-ordinary-silence-gate.md); campaign
+  D4DFEA6A (owner-only local state); detectors from PR #438.
+- **Next:** Register scene-echo precision + grounding as the next
+  display-policy question; the silence flag waits for protected validation.
+
+## 2026-08-29 — Batch shakedown catches a miscount on its first invocation
+
+- **Try:** Run the full mega-run pipeline in miniature — 8 scenarios, 5
+  personas, real local generation, an external frontier decision policy at
+  batch size 10 — before trusting it with tens of thousands of moments.
+- **Learn:** The harness's fail-closed count check worked on first contact:
+  the model answered 11 decisions for 10 moments and the run refused the
+  batch instead of mis-assigning decisions. Stating the exact expected count
+  in the adapter prompt and re-verifying the count adapter-side before
+  submission fixed it; the rerun completed 161 batched decisions cleanly in
+  4.7 minutes with the report confirming zero raw text, zero network
+  inference, and the simulated-decision-layer fence intact. The five
+  personas produced plausibly distinct behavior (accepts 0–7.1%,
+  type-through 63–86%).
+- **Fail:** Machinery proof only — the suite was legacy replying-v1 and the
+  personas are uncalibrated, so none of the quality numbers are findings.
+  A second external adapter (Cursor backend) needed the same count
+  hardening from birth.
+- **Where:** GitHub issue #437; batch runner from PR #442; local decision
+  adapters (owner-only).
+- **Next:** The first full-scale two-brain persona run, chained behind Q11
+  on the same idle-machine window.
+
+## 2026-08-29 — Calibrate the simulated typist against 1,082 live moments
+
+- **Try:** Run two frontier decision brains (Luna via Codex, Grok via
+  Cursor, ten workers each) over every live text-free outcome moment and
+  score them against the owner's actual behavior; then fix the persona
+  from what the misses taught and rerun the missed slice with controls.
+- **Learn:** Skips are trivially predictable (100% both brains); accepts
+  are the signal. Luna 68.3% on accepts, Grok 47.6%, inter-brain
+  agreement 98.4%. Every Luna miss sat in one cell — mid-word exact
+  completions, the owner's signature accept, which the hand-written
+  persona wrongly called an interruption. Two measured persona sentences
+  (long dwell ends in acceptance; short exact mid-word completions are
+  the favorite accept) took the missed cell from 2/28 to 28/28 with
+  typed-through controls holding 15/15.
+- **Fail:** The perfect post-fix score is in-sample — the fix was derived
+  from the same moments — so it is calibration, not validation. The
+  persona must hold on fresh out-of-sample typing before the simulator
+  earns its registered graduation test (predicting the H01 winner ahead
+  of the live result). The ignored control was thin (one eligible
+  moment); nearly all mid-word ignores are sub-200ms flickers.
+- **Where:** GitHub issues #437 and #443; local decision adapters and
+  fleet aggregates (owner-only); batching runner in PR #442.
+- **Next:** Score the frozen persona v2 on the next fresh week of live
+  moments before any screening use.
+
+## 2026-08-29 — Q11 registered: gate the three leaking silence subcategories
+
+- **Try:** Pre-register the display-policy comparison for the extended
+  ordinary-silence gate (built in PR #438) before its decisive run: 8pp
+  bad-when-shown target, 99.5% useful retention, 1% per-category loss
+  budget, paired identical generations, frozen provenance.
+- **Learn:** The registration writes down the overfitting problem plainly:
+  the detectors were developed against the same development categories, so
+  the dev confirmation is expected to pass and can only nominate a frozen
+  validation candidate, never promote.
+- **Fail:** Not yet run. The campaign needs an idle machine, so it waits
+  for a window when the owner is not typing.
+- **Where:** [Q11](../experiments/Q11-ordinary-silence-gate.md); detectors
+  in PR #438; evidence basis in the two entries below.
+- **Next:** Run Q11 on the next idle window and review it before any
+  scene-echo work begins.
+
+## 2026-08-29 — Mine every campaign for chronic versus configuration failures
+
+- **Try:** Read all 14 observation-bearing campaign databases (~468k
+  scored observations) plus the 598 archived report files (~1.03M cases,
+  including the Gemma era) read-only, and classify every category as
+  chronic, configuration-sensitive, or healthy.
+- **Learn:** Five intent failures are chronic across both model families
+  and every sampling knob — acknowledge.delay, contradiction.latest-fact,
+  commit.delivery, answer.location, correct.time — all one skill: tracking
+  the newest fact. The three ordinary-silence subcategories are pinned at
+  ~100% in all 17 arm cells. The largest untreated loss is over-suppression:
+  scene-echo silences 100% of two legitimate reply categories for zero
+  bad-display gain, and the injection gate blocks 100% of its legitimate
+  test category. Grounding was the only display knob to move a pinned
+  failure (91.7%→54.2%); the confidence filter is at its ceiling; length
+  caps did nothing and the three-word cap worsened silence leakage.
+  Sensitive-scene suppression is perfect in every era and arm.
+- **Fail:** Discovery, not a registered result: seven truncated
+  silence-only campaigns cannot be pooled with full-suite ones, and the
+  Gemma/Qwen comparison is unpaired across eras. No queue or stage change
+  from this sweep alone.
+- **Where:** local campaign stores (owner-only); target list frozen in
+  GitHub issue #443; Q11 registration above is the first consequence.
+- **Next:** After Q11, register the scene-echo precision + grounding
+  question — the mining sweep's top recommendation.
+
 ## 2026-08-30 — Batch the simulated typist's decisions across sessions
 
 - **Try:** Add a text-free batch contract
