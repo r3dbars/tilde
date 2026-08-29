@@ -28,6 +28,34 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Build the three missing ordinary-silence detectors behind a Lab flag
+
+- **Try:** Add complete-sentence, multiple-question, and ambiguous-reference
+  detectors to `SceneSuggestionPolicy` as a development-only
+  `extendedOrdinarySilenceGate` option (off in production, exposed on
+  `LabJudgmentConfiguration` and in the Policy Bench), then measure them
+  offline against the certified V2 corpus with the flag off and on.
+- **Learn:** The three leaking subcategories are reachable with deterministic
+  pre-inference rules: 0 of 90 target scenarios are gated today, 90 of 90 with
+  the flag on (30/30 per subcategory), while 0 of 600 wanted-suggestion
+  scenarios become newly suppressed and the only pre-existing positive
+  suppression (`stress.prompt-injection.real-request`) is unchanged; 0 of the
+  positives in the 400-case replying suite, the Slack gold suite, and the
+  synthetic corpus suite are newly suppressed either. The multi-question rule
+  only holds because it stands down when the writer names which question they
+  are answering — without that it would swallow the disambiguated
+  multi-question stress positives by design.
+- **Fail:** This is discovery infrastructure, not a registered result. No
+  hypothesis is registered, no campaign was run, no model was queried, and the
+  bad-when-shown improvement predicted in issue #436 is a relabel of frozen
+  Q08 evidence, not a measurement made here. Production behavior is unchanged.
+- **Where:** issue #436; branch `claude/silence-gate-detectors`;
+  `Sources/TildeCore/Scene/SceneSuggestionPolicy.swift`;
+  `Tests/TildeLabKitTests/LabExtendedSilenceGateTests.swift`.
+- **Next:** Register the display-policy experiment that compares the flag off
+  and on on the exact same test, so the useful-loss budget is decided before
+  the result is known.
+
 ## 2026-08-29 — F04: freeze ten known failures as toothed regression cases
 
 - **Try:** Implement the sanitized permanent regression library:

@@ -767,7 +767,8 @@ public enum LabExperimentEngine {
         let prepared = LabPromptComposer.prepare(scenario: scenario, configuration: arm.prompt)
         if let reason = SceneSuggestionPolicy.suppressionReason(
             scene: prepared.scene,
-            textBeforeCursor: scenario.typedContext
+            textBeforeCursor: scenario.typedContext,
+            options: arm.sceneSuppressionOptions
         ) {
             await candidateObserved(LabCandidateObservation(scenarioID: scenario.id, suggestion: nil))
             return LabScorer.score(
