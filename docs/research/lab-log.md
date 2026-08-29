@@ -204,6 +204,34 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** Stand a real cheap-model policy behind the batch socket and
   score sim-vs-live ranking agreement before trusting any simulated order.
 
+## 2026-08-29 — Resolve the simulated typist's batches concurrently
+
+- **Try:** Add `--decision-workers N` (1...16, default 1, external-command
+  policy only) so up to N decision-policy calls of one round are in flight at
+  once, and record the count in the simulated report.
+- **Learn:** Concurrency needed no new correctness argument, only the one
+  batching already made: a round collects at most one moment per
+  persona/scenario session and its batches partition that round, so parallel
+  calls cannot touch one timeline any more than one batch could. What did
+  need care is where the parallelism is allowed to reach — moments are
+  collected before the round, decisions are applied after it joins, in batch
+  order — which is what keeps a concurrent run's per-persona aggregates
+  byte-identical to the sequential run's rather than merely close. The
+  external command was already concurrency-safe (own process, pipes, buffer,
+  environment per call); we verified that instead of assuming it, and the
+  round now asserts the no-collision invariant rather than trusting it.
+- **Fail:** Infrastructure only — no result, no LLM policy, no calibration,
+  and nothing here makes a simulated number any less fenced. Throughput is
+  still bounded by whatever the owner's decision backend tolerates; 16 is a
+  guess at a safe ceiling, not a measured one, and no overnight run has been
+  made to find the real one. A failing batch still aborts the whole run, so
+  concurrency multiplies the work one flaky command can throw away.
+- **Where:** issue #437; `Sources/TildeLabKit/Simulation/`;
+  `Sources/TildeLabCLI/SimulatedTypistCommand.swift`;
+  [`docs/tilde-lab.md`](../tilde-lab.md) § Simulated typist.
+- **Next:** Stand a real cheap-model policy behind the socket and measure what
+  concurrency it actually sustains before sizing a 100k-moment run.
+
 ## 2026-08-29 — Simulated-typist stage 1: build the skeleton, trust nothing
 
 - **Try:** Build `tilde-lab simulate-typist` — five checked-in synthetic

@@ -12,19 +12,31 @@ public struct LabSimulatedTypistConfiguration: Sendable {
     /// clearing one.
     public var dismissalCooldownCharacters: Int
     public var timeoutSeconds: Double
+    /// How many decision-policy calls of one round may be in flight at once.
+    /// 1 is the sequential driver. Above 1 the round's batches — which already
+    /// hold only causally independent sessions — are resolved concurrently, and
+    /// the decisions are still applied in batch order.
+    public var decisionWorkers: Int
+
+    /// More than this many concurrent external commands buys throughput the
+    /// decision backend cannot absorb and makes one failure cost more in-flight
+    /// work than it saves.
+    public static let maximumDecisionWorkers = 16
 
     public init(
         arm: LabArmConfiguration = LabArmConfiguration(id: "simulated-typist-baseline"),
         strideCharacters: Int = 4,
         maximumDisplaysPerScenario: Int = 8,
         dismissalCooldownCharacters: Int = 12,
-        timeoutSeconds: Double = 30
+        timeoutSeconds: Double = 30,
+        decisionWorkers: Int = 1
     ) {
         self.arm = arm
         self.strideCharacters = max(1, strideCharacters)
         self.maximumDisplaysPerScenario = max(1, maximumDisplaysPerScenario)
         self.dismissalCooldownCharacters = max(0, dismissalCooldownCharacters)
         self.timeoutSeconds = timeoutSeconds
+        self.decisionWorkers = decisionWorkers
     }
 }
 
@@ -69,10 +81,13 @@ public struct LabSimulatedTypistEngine: Sendable {
             }
         }
         let batchSize = effectiveBatchSize
-        if batchSize <= 1 {
+        let workers = effectiveDecisionWorkers
+        if batchSize <= 1, workers <= 1 {
             try await runSequentially(&sessions, client: client)
         } else {
-            try await runBatched(&sessions, client: client, batchSize: batchSize)
+            try await runBatched(
+                &sessions, client: client, batchSize: batchSize, workers: workers
+            )
         }
 
         var slices: [LabSimulatedTypistPersonaSlice] = []
@@ -92,6 +107,7 @@ public struct LabSimulatedTypistEngine: Sendable {
             arm: configuration.arm,
             decisionPolicyIdentifier: policy.identifier,
             decisionBatchSize: batchSize,
+            decisionWorkers: workers,
             provenance: provenance,
             personas: slices
         ).validated()
@@ -101,6 +117,15 @@ public struct LabSimulatedTypistEngine: Sendable {
     /// contract's ceiling. A policy that never opted in stays at 1.
     var effectiveBatchSize: Int {
         min(max(1, policy.decisionBatchSize), LabTypistMomentBatch.maximumSize)
+    }
+
+    /// How many of a round's batches may be resolved at once, clamped to the
+    /// contract's ceiling. A run that never opted in stays at 1.
+    var effectiveDecisionWorkers: Int {
+        min(
+            max(1, configuration.decisionWorkers),
+            LabSimulatedTypistConfiguration.maximumDecisionWorkers
+        )
     }
 
     // MARK: - Drivers
@@ -134,10 +159,19 @@ public struct LabSimulatedTypistEngine: Sendable {
     /// independent of one another by construction. Batching therefore widens
     /// across scenarios and personas only, never along a scenario's own
     /// timeline, and the aggregates are identical to the sequential driver's.
+    ///
+    /// `workers` above 1 resolves several of a round's batches at the same
+    /// time. That is safe for exactly the same reason batching is: the round's
+    /// batches partition one round's moments, and a round holds at most one
+    /// moment per session, so no two concurrent calls can touch one session's
+    /// timeline. Concurrency is confined to the policy calls — the moments are
+    /// collected before the round and every decision is applied after it, in
+    /// batch order — so completion order cannot reach the aggregates.
     private func runBatched(
         _ sessions: inout [TypingSession],
         client: any LabCompletionClient,
-        batchSize: Int
+        batchSize: Int,
+        workers: Int
     ) async throws {
         var active = Array(sessions.indices)
         while !active.isEmpty {
@@ -152,27 +186,109 @@ public struct LabSimulatedTypistEngine: Sendable {
                     moments.append(features)
                 }
             }
+            // The invariant the whole design rests on, checked rather than
+            // assumed: one round carries at most one moment per session, so no
+            // batch — sequential or concurrent — can hold two moments of one
+            // persona/scenario timeline.
+            guard Set(pending).count == pending.count else {
+                throw LabSimulatedTypistError.sessionCollisionInRound
+            }
+
+            var batches: [[LabTypistMomentFeatures]] = []
+            var owners: [[Int]] = []
             var start = 0
             while start < pending.count {
                 let end = min(start + batchSize, pending.count)
-                let slice = Array(moments[start..<end])
-                let decisions = try policy.decide(batch: slice)
+                batches.append(Array(moments[start..<end]))
+                owners.append(Array(pending[start..<end]))
+                start = end
+            }
+
+            let answers = try await resolve(batches, workers: workers)
+            // Apply strictly in batch order, after the whole round has joined.
+            // Whatever order the calls finished in, this loop is the same.
+            for (batch, decisions) in zip(batches.indices, answers) {
                 // A policy that drops, adds, or pads answers would silently
                 // shift decisions onto the wrong scenarios; refuse instead.
-                guard decisions.count == slice.count else {
+                guard decisions.count == batches[batch].count else {
                     throw LabTypistPolicyError.batchCountMismatch(
-                        expected: slice.count, received: decisions.count
+                        expected: batches[batch].count, received: decisions.count
                     )
                 }
-                for offset in 0..<slice.count {
-                    let index = pending[start + offset]
+                for offset in 0..<decisions.count {
+                    let index = owners[batch][offset]
                     var session = sessions[index]
                     session.apply(decisions[offset])
                     sessions[index] = session
                 }
-                start = end
             }
             active = pending
+        }
+    }
+
+    /// Resolves one round's batches, at most `workers` policy calls in flight,
+    /// and returns the answers in batch order regardless of completion order.
+    ///
+    /// A failing batch propagates the policy's own error, exactly as the
+    /// sequential driver did. Leaving this scope cancels and awaits the batches
+    /// still running, so the run never returns with a decision command still
+    /// executing behind it.
+    private func resolve(
+        _ batches: [[LabTypistMomentFeatures]],
+        workers: Int
+    ) async throws -> [[LabTypistDecision]] {
+        if workers <= 1 || batches.count <= 1 {
+            var answers: [[LabTypistDecision]] = []
+            answers.reserveCapacity(batches.count)
+            for batch in batches {
+                try Task.checkCancellation()
+                answers.append(try policy.decide(batch: batch))
+            }
+            return answers
+        }
+        let policy = self.policy
+        var answers = [Int: [LabTypistDecision]](minimumCapacity: batches.count)
+        try await withThrowingTaskGroup(
+            of: (Int, [LabTypistDecision]).self
+        ) { group in
+            var next = 0
+            var running = 0
+            while next < batches.count || running > 0 {
+                while running < workers, next < batches.count {
+                    let index = next
+                    let batch = batches[index]
+                    group.addTask {
+                        (index, try await Self.decide(batch: batch, with: policy))
+                    }
+                    next += 1
+                    running += 1
+                }
+                guard let (index, decisions) = try await group.next() else { break }
+                answers[index] = decisions
+                running -= 1
+            }
+        }
+        return try batches.indices.map { index in
+            guard let decisions = answers[index] else {
+                throw LabTypistPolicyError.batchCountMismatch(
+                    expected: batches[index].count, received: 0
+                )
+            }
+            return decisions
+        }
+    }
+
+    /// The decision contract is synchronous — an external command is a process,
+    /// not an async call — so a concurrent batch runs on a global queue rather
+    /// than parking a cooperative thread the completion path also needs.
+    private static func decide(
+        batch: [LabTypistMomentFeatures],
+        with policy: any TypistDecisionPolicy
+    ) async throws -> [LabTypistDecision] {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try policy.decide(batch: batch) })
+            }
         }
     }
 }

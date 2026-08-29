@@ -264,9 +264,25 @@ mismatch or a short answer is an error rather than something the engine repairs.
 The response byte cap and the command deadline scale with the batch, both
 bounded.
 
+`--decision-workers N` (1...16, default 1, external-command policy only)
+resolves that many of a round's batches at the same time. It is safe for
+exactly the reason batching is: a round holds at most one moment per session,
+its batches partition that round, and so no two concurrent calls can touch one
+scenario's timeline — the engine checks that invariant each round rather than
+assuming it. Concurrency is confined to the policy calls. Every moment is
+collected before the round and every decision is applied after it, in batch
+order, so completion order cannot reach the aggregates: a concurrent run's
+per-persona numbers are byte-identical to the sequential run's. Each external
+invocation already owns its process, pipes, buffers, and environment, so
+nothing is shared between calls in flight. Failure semantics are unchanged — a
+batch that fails after the policy's own retries aborts the run with the same
+error, and the batches still running are awaited before it surfaces, so no
+decision command outlives the run. The worker count is recorded in the report
+next to the batch size.
+
 The report is aggregate-only per persona — displays, simulated acceptance,
 type-through, wrong displays, corrections, and retained-character potential,
-plus the decision batch size the run used. It carries the report provenance envelope and the aggregate-only privacy contract,
+plus the decision batch size and worker count the run used. It carries the report provenance envelope and the aggregate-only privacy contract,
 and it is permanently fenced with the `simulated-decision-layer` evidence
 reason. It is not a `LabRunReport`, is never written into a campaign's reports
 directory, and cannot enter a comparison or advance a protected phase. Until
