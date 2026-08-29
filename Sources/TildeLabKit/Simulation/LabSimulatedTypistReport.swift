@@ -104,6 +104,10 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
     public let scenarioCount: Int
     public let arm: LabArmConfiguration
     public let decisionPolicyIdentifier: String
+    /// Moments resolved per decision-policy call. 1 is one moment per call;
+    /// above 1 the run batched decision-independent moments across sessions.
+    /// Recorded so a run's aggregates can be read next to how they were driven.
+    public let decisionBatchSize: Int
     public let personaCatalogSchema: String
     public let provenance: LabReportProvenance
     public let privacy: LabPrivacyContract
@@ -120,6 +124,7 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         scenarioCount: Int,
         arm: LabArmConfiguration,
         decisionPolicyIdentifier: String,
+        decisionBatchSize: Int = 1,
         personaCatalogSchema: String = LabTypistPersonaCatalog.currentSchema,
         provenance: LabReportProvenance,
         privacy: LabPrivacyContract = LabPrivacyContract(),
@@ -134,6 +139,7 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         self.scenarioCount = scenarioCount
         self.arm = arm
         self.decisionPolicyIdentifier = decisionPolicyIdentifier
+        self.decisionBatchSize = max(1, decisionBatchSize)
         self.personaCatalogSchema = personaCatalogSchema
         self.provenance = provenance
         self.privacy = privacy
@@ -159,6 +165,9 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         guard schema == Self.currentSchema else {
             throw LabSimulatedTypistError.unsupportedSchema
         }
+        guard (1...LabTypistMomentBatch.maximumSize).contains(decisionBatchSize) else {
+            throw LabSimulatedTypistError.invalidDecisionBatchSize
+        }
         guard privacy.aggregateOnly,
               !privacy.rawScenarioText,
               !privacy.rawModelOutput,
@@ -181,6 +190,7 @@ public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable 
     case unsafePrivacyContract
     case evidenceFenceRemoved
     case noSimulatableScenarios
+    case invalidDecisionBatchSize
 
     public var errorDescription: String? {
         switch self {
@@ -191,6 +201,8 @@ public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable 
             "A simulated-typist report must stay fenced as discovery-grade simulated evidence."
         case .noSimulatableScenarios:
             "No selected scenario has a golden continuation to type through."
+        case .invalidDecisionBatchSize:
+            "The simulated-typist report records a decision batch size outside 1...\(LabTypistMomentBatch.maximumSize)."
         }
     }
 }
