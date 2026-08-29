@@ -194,6 +194,10 @@ public enum LabEvidenceIneligibilityReason: String, Codable, CaseIterable, Senda
     case reviewPending = "review-pending"
     case reviewInvalid = "review-invalid"
     case evidenceDecisionMissing = "evidence-decision-missing"
+    /// A simulated decision layer stood in for a human. Simulated evidence is
+    /// discovery-grade forever: it may reorder the queue, never advance a
+    /// protected phase, and never mixes with live evidence in one verdict.
+    case simulatedDecisionLayer = "simulated-decision-layer"
 }
 
 public enum LabRunReportValidationError: Error, LocalizedError, Equatable, Sendable {

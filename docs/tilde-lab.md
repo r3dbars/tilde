@@ -230,6 +230,33 @@ app-specific n-grams are scored before each event is learned. Reports contain
 only aggregate lift, harm, coverage, precision, stress slices, and stale
 override blocks. They explicitly do not claim full-suggestion dogfood utility.
 
+### Simulated typist (discovery-grade only)
+
+`simulate-typist` drives checked-in synthetic personas — goal, register,
+typing-speed bucket, interruption tolerance — through the real completion path:
+the production prompt composer, the configured generation runner, the
+production cleaner, and the Lab display judge. The only simulated part is the
+human at the keyboard. At every display a `TypistDecisionPolicy` answers
+accept, accept-word, continue, or dismiss, plus a would-retain judgment.
+
+Stage 1 ships `DeterministicHeuristicTypist` (frozen rules, no randomness) and
+`ExternalCommandTypist`, which writes one JSON feature object to a configured
+command's stdin and reads one JSON decision from its stdout. That is the socket
+a cheap frontier model plugs into later; no cloud model, endpoint, or
+credential lives in this repository. Both sides of the contract are text-free
+*by schema*: every field is a bucket, a boolean, or a count, and any key
+outside the allowlist is rejected, so scenario text, prompts, and candidates
+structurally cannot cross the boundary.
+
+The report is aggregate-only per persona — displays, simulated acceptance,
+type-through, wrong displays, corrections, and retained-character potential. It
+carries the report provenance envelope and the aggregate-only privacy contract,
+and it is permanently fenced with the `simulated-decision-layer` evidence
+reason. It is not a `LabRunReport`, is never written into a campaign's reports
+directory, and cannot enter a comparison or advance a protected phase. Until
+the sim-vs-live ranking-agreement protocol runs, treat its numbers as untrusted
+search order, never as evidence.
+
 After a passing holdout, `shadow`, `dogfood`, and `soak` create sticky local
 plans. `ingest-events` accepts a closed text-free JSONL schema; raw text fields
 are structurally rejected. v3 events also carry typed-through, settled-visible
