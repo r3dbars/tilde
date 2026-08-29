@@ -28,6 +28,40 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Q11 cannot be replayed from cache; it needs fresh inference
+
+- **Try:** Attempt to execute the registered Q11 extended ordinary-silence
+  gate comparison without loading a model, by reusing the Q05/Q06 cached
+  synthetic candidate replay path
+  (`LabSyntheticCandidateCache` + `LabRiskCoverageAnalyzer.completeSyntheticReplay`)
+  against Q11's registered control — the exact arm Q08 ran on the full
+  certified V2 development suite.
+- **Learn:** The replay path is real and would honour the flag — the
+  analyzer applies `SceneSuggestionPolicy.suppressionReason` with the
+  arm's own `sceneSuppressionOptions` before it ever consults the cache,
+  which also confirms the gate is a pre-generation, candidate-independent
+  decision and therefore perfectly paired. But no cache can serve Q11's
+  registered control. Q08 was pre-registered to run with `--no-cache` and
+  left no candidate cache at all; the only substantial caches on the
+  machine are Q06's (1,059 entries, 353 scenarios, `cachePrompt` on, a
+  505-root file suite) and the factorial-v4 sweep's (10,176 entries, 424
+  scenarios). Q11's control differs from both in generation identity
+  (`cachePrompt` off), scenario coverage (600 selected roots), and
+  selected-suite digest, so every cache key misses and the replay would
+  fail closed on suite fingerprint before the first lookup.
+- **Fail:** Q11 was not run. There is no cache-only or helper-free run
+  mode: `tilde-lab run` is the only producer of v6 reports and always
+  starts the llama-server pool, so even a warm cache loads the model.
+  Running the registered protocol means ~40,704 fresh generations across
+  two arms on a machine the owner is actively using, which the current
+  authorization forbids. No campaign was created, no `--resume` was used,
+  no inference was started, and no production default was touched.
+- **Where:** [`Q11`](../experiments/Q11-ordinary-silence-gate.md) (still
+  REGISTERED, Result section untouched); PR #444.
+- **Next:** Decide whether Q11 runs as registered on an idle machine, or
+  whether its registration is amended before any run to a cache-backed
+  control — never after seeing a number.
+
 ## 2026-08-29 — Calibrate the simulated typist against 1,082 live moments
 
 - **Try:** Run two frontier decision brains (Luna via Codex, Grok via
