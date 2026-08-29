@@ -12,6 +12,7 @@ enum ResearchCoordinator {
         case "compare": try await compare(arguments)
         case "risk-coverage": try await riskCoverage(arguments)
         case "personalization-replay": try await personalizationReplay(arguments)
+        case "simulate-typist": try await simulateTypist(arguments)
         case "advance-search": try await advanceSearch(arguments)
         case "nominate": try await nominate(arguments)
         case "validate-candidates": try await validateCandidates(arguments)
@@ -58,6 +59,22 @@ enum ResearchCoordinator {
         "compare": "Usage: tilde-lab compare --campaign CAMPAIGN_OR_PLAN.json [--paired-bootstrap 10000] [--database PATH]",
         "risk-coverage": "Usage: tilde-lab risk-coverage --campaign CAMPAIGN.json --arm ID [--trust-limit 0.01] [--output report.json] [--json]",
         "personalization-replay": "Usage: tilde-lab personalization-replay --input events.jsonl [--scope app-specific|global|app-then-global] [--evaluation-start-ms UNIX_MS] [--output report.json] [--json]",
+        "simulate-typist": """
+        Usage: tilde-lab simulate-typist [options]
+          Discovery-grade only. Synthetic personas type a scenario's golden
+          continuation through the real prompt/generation/cleaner path. The
+          simulated report is permanently fenced and cannot enter a comparison.
+          --suite replying-v1|replying-v2|slack-reply-gold-v1|/absolute/suite.json
+          --scenarios 8  --stride 4  --maximum-displays 8
+          --personas fast-chat-responder,deliberate-prose-drafter
+          --policy heuristic|external-command
+          --decision-command /absolute/policy-command [--decision-argument VALUE]
+          --helper PATH --model-file PATH --workers 1 --slots 1
+          --output simulated-typist.json [--json]
+        The external command reads one text-free JSON feature object on stdin
+        and writes one text-free JSON decision object on stdout. No scenario
+        text, prompt, or candidate can cross that boundary.
+        """,
         "advance-search": "Usage: tilde-lab advance-search --campaign CAMPAIGN.json --stage halving|adaptive [--candidates 8] [--output CHILD.json]",
         "nominate": "Usage: tilde-lab nominate --campaign CAMPAIGN.json [--top 3] --output validation-plan.json",
         "validate-candidates": "Usage: tilde-lab validate-candidates PLAN.json --campaign CAMPAIGN.json [--database PATH]",
