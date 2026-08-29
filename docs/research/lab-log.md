@@ -28,6 +28,34 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — First full-scale simulated persona run lands in 38 minutes
+
+- **Try:** Run the simulated typist over the full replying-v2 speak-expected
+  set (240 qualifying scenarios × 5 personas, ~5,000 displays) with Luna as
+  the external decision brain — 12 concurrent workers, batch size 25 —
+  after the 16-worker probe passed clean and two full-throttle attempts
+  taught their lessons.
+- **Learn:** Wrong-when-shown is strikingly uniform across personas
+  (60.0–61.7%) while acceptance varies persona-to-persona (4.4–6.7%) —
+  suggestion quality failure is generator/policy-side, not
+  audience-dependent, which is consistent with the mining sweep's chronic
+  list. Simulated acceptance rates bracket the owner's live 7.7%.
+  Operational ceilings measured today: Luna holds 25-moment batches and 12
+  concurrent calls with hardened retries; Grok's loop detector rejects
+  large repetitive batches and its lane was benched pending an engine
+  skip-a-failed-batch mode; 16 concurrent calls per provider is over the
+  reliability line for long runs.
+- **Fail:** Grok's second-opinion column is missing, so no inter-brain
+  agreement map exists at this scale yet. The abort-on-one-bad-batch
+  failure semantics killed two full runs; a counted skip mode (no silent
+  caps — dropped batches must be reported) is the needed engine change.
+  All numbers remain discovery-grade: uncalibrated personas, legacy suite,
+  permanently fenced.
+- **Where:** issue #437; report in owner-local scratch state; engine
+  concurrency from PR #445; Q11 earlier today for the campaign-side result.
+- **Next:** Add the counted skip-failed-batch mode, rerun with Grok, and
+  score inter-brain agreement before any screening use.
+
 ## 2026-08-29 — Q11 cannot be replayed from cache; it needs fresh inference
 
 - **Try:** Attempt to execute the registered Q11 extended ordinary-silence
