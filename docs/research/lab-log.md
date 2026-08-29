@@ -28,6 +28,32 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Pre-register the early-start timing falsifier
+
+- **Try:** Register Q10 — start one hidden continuation after the third
+  character of a word instead of at the following space — freeze issue
+  #434's sketch gates into numbers (ready by boundary >= 50%, median lead
+  >= 200 ms, lockable >= 15%, simulated false locks < 2%, compute <= 1.5x,
+  pair coverage +5pp at <= 2x), and build the aggregate-only replay runner
+  on the production Gemma stack.
+- **Learn:** Nothing about efficacy yet. Two protocol facts came out of the
+  4-situation machinery smoke and changed the registered definitions before
+  any run: a branch that survives to the boundary answers the boundary even
+  when it is too short to display, so compute must charge the fallback only
+  for late or contradicted branches; and the false-lock check has to compare
+  scalars after the same whitespace trim the lock rule uses, or it counts its
+  own normalization as a false lock.
+- **Fail:** Q10 is registered and built but not run, so it supports nothing.
+  The smoke also showed the production cleaner suppressing a real share of
+  mid-word candidates and mid-word requests decoding longer than boundary
+  requests; if those hold at 360 situations, Q10 may fail its compute gate
+  for a reason that is about the cleaner and the stop rule, not about
+  timing.
+- **Where:** [`docs/experiments/Q10-early-start-timing-falsifier.md`](../experiments/Q10-early-start-timing-falsifier.md);
+  issue #434; PR #435.
+- **Next:** Run `--early-start-full` overnight on AC power with no live
+  dogfood typing, then review it against the five frozen gates.
+
 ## 2026-08-29 — F04: freeze ten known failures as toothed regression cases
 
 - **Try:** Implement the sanitized permanent regression library:
