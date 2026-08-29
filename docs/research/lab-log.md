@@ -28,6 +28,80 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — F04: freeze ten known failures as toothed regression cases
+
+- **Try:** Implement the sanitized permanent regression library:
+  ten deterministic cases with stable IDs, each requiring the frozen guard
+  to hold AND the historical loophole to stay reproducible under its named
+  unsafe arm, running inside `swift test` so fast proof blocks on them.
+- **Learn:** Every scoring loophole from `qwen-9b-scoring-confounds` and
+  every interaction failure class could be represented synthetically with
+  existing deterministic machinery (LabOutputJudge, the scene freshness
+  gate, the prompt composer, the interaction evidence analyzer, the stable
+  stream prefix). The two-sided pass rule caught two toothless first
+  drafts during implementation, which is exactly the failure mode it exists
+  to prevent.
+- **Fail:** The repeat-penalty case guards the cleaner's deterministic
+  self-repetition protection, not the sampler distribution — a model-level
+  repeat sweep would still need its own registered experiment.
+- **Where:** [F04](../experiments/F04-sanitized-regression-library.md);
+  `Sources/TildeLabKit/Scoring/LabPermanentRegressions.swift`; ledger queue
+  `sanitized-regression-library` → completed-foundation.
+- **Next:** Judge F03 on a clean live count file from the rebuilt IME; that
+  is the last open Stage 0 exit condition.
+
+## 2026-08-29 — Q08's cached labels say where the 43% bad rate lives
+
+- **Try:** Re-read Q08's 57,600 stored per-case labels (read-only, no new
+  inference) to decompose bad-when-shown by loss bucket, scenario family,
+  and candidate length.
+- **Learn:** The 43.29% splits into exactly two causes of similar size.
+  Display losses (48.2% of bad) are entirely ordinary-silence leakage:
+  three scene subcategories — complete-sentence, multiple-questions,
+  ambiguous-reference — leak nearly 100% while sensitive silence is
+  perfect and contribute zero useful displays, so suppressing them is pure
+  gain; relabeling the existing evidence puts bad-when-shown at ~30% with
+  useful unchanged. Intent losses (51.8% of bad) are required-term
+  omissions on wanted replies, concentrated in a dozen roots and in
+  three-word candidates (47.1% bad at 3 words vs 5.3% at 1 word);
+  1,040 wrong cases even open with the exactly right first word before
+  dropping the required term. The two causes live in disjoint slices, so
+  they need two separate fixes.
+- **Fail:** All labels come from one deterministic synthetic configuration
+  on development roots; the rates are not production estimates, and the
+  relabeling is a hypothesis, not a run. No experiment is registered yet.
+- **Where:** Q08 campaign store (local, owner-only);
+  [Q08](../experiments/Q08-prompt-cache-study.md) for the workload.
+- **Next:** Decide whether to pre-register a scene-gate extension for the
+  three leaky ordinary-silence subcategories as the next offline question.
+
+## 2026-08-29 — First live F03 ingest finds a resurrection bug
+
+- **Try:** Ingest the first real typing evidence — 734 v3 outcome events
+  written by the daily-driven Model Preview IME — with
+  `tilde-lab ingest-events --instrument`.
+- **Learn:** The instrument works on live data and fails closed as designed:
+  two accept-delete-retype events claimed more retained characters at a later
+  horizon than at 5 seconds, because prefix matching counts retyped text as
+  retained. The remaining events ingested into a scratch database and reported
+  cleanly (7.7% acceptance when shown, 232 typed-through). Missingness reads
+  correctly once split by outcome: every not-yet-observed later horizon
+  belongs to a non-accepted event where retention is vacuous, while accepted
+  events had full segment-close coverage and 43 of 58 honestly reported
+  segment-closed-early at 30s — the owner's writing segments usually end
+  before 30 seconds. RNKS-segment looks like the usable live horizon;
+  RNKS-30s may be structurally sparse for this writer.
+- **Fail:** The full-file ingest was rejected by the two resurrection events;
+  F03 stays not supported until a clean full-file ingest exists. Fixed the
+  same day: `RetainedSpanWatch.monotone` now clamps 30s and segment-close
+  observations so deleted characters cannot resurrect, with tests.
+- **Where:** [F03](../experiments/F03-retained-outcome-ledger.md);
+  `Sources/TildeCore/Policy/RetainedCharacterObservation.swift`,
+  `Sources/TildeCore/Policy/LiveOnlineOpportunity.swift`,
+  `Tests/TildeCoreTests/RetainedSpanWatchTests.swift`.
+- **Next:** Rebuild the daily-driver IME with the clamp, collect a fresh
+  count file from real typing, and judge F03 on a clean full-file ingest.
+
 ## 2026-08-28 — Prefix reuse engaged but missed the tail-latency target
 
 - **Try:** Complete Q08's 57,600 matched synthetic evaluations with cache off

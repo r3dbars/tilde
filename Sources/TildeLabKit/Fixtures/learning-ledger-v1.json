@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-28T16:27:25Z",
+  "updatedAt": "2026-08-29T15:30:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -1154,10 +1154,10 @@
     {
       "id": "sanitized-regression-library",
       "priority": 4,
-      "status": "ready-foundation",
+      "status": "completed-foundation",
       "question": "Can every discovered failure become a permanent test?",
       "hypothesis": "A compact sanitized regression set will stop scoring loopholes and known interaction mistakes from returning.",
-      "nextExperiment": "Create stable cases for short-cap echo bypass, repeat-penalty aggression, wrong-scene facts, stale-target delivery, prompt-example removal, factual-filter weakening, duplicate insertion, focus change, restart, and marked-text damage.",
+      "nextExperiment": "Completed 2026-08-29: LabPermanentRegressions freezes all ten failure classes as deterministic sanitized cases with stable IDs; every test run requires guards to hold and loopholes to stay reproducible.",
       "successCriteria": "Every known failure has a stable case ID, current production passes, unsafe diagnostic arms fail, and no private content is stored.",
       "dependencies": ["qwen-9b-scoring-confounds", "score-protocol-separation"]
     },
