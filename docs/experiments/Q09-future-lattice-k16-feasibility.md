@@ -83,8 +83,9 @@ Semantic similarity cannot count as a match.
   replaced, or reconfigured;
 - no validation or holdout data may be opened; and
 - any protocol error, timeout, model/helper mismatch, non-loopback inference,
-  memory-pressure warning, or non-nominal thermal state makes the result
-  `INCONCLUSIVE`, not a pass.
+  memory-pressure warning, or serious/critical thermal state makes the result
+  `INCONCLUSIVE`, not a pass. Fair thermal state is reported and requires a
+  nominal-state sensitivity check before latency can support a decision.
 
 ### Promotion rule
 
