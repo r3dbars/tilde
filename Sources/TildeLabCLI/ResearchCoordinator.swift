@@ -69,7 +69,7 @@ enum ResearchCoordinator {
           --personas fast-chat-responder,deliberate-prose-drafter
           --policy heuristic|external-command
           --decision-command /absolute/policy-command [--decision-argument VALUE]
-          --decision-batch-size 1..100
+          --decision-batch-size 1..100  --decision-workers 1..16
           --helper PATH --model-file PATH --workers 1 --slots 1
           --output simulated-typist.json [--json]
         The external command reads one text-free JSON feature object on stdin
@@ -78,6 +78,8 @@ enum ResearchCoordinator {
         Above a batch size of 1 it instead reads one text-free moment-batch
         envelope and writes the same number of decisions, in the same order.
         Batches only ever group moments from different persona/scenario pairs.
+        Decision workers above 1 resolve that many batches at once; decisions
+        are still applied in batch order, so the aggregates do not change.
         """,
         "advance-search": "Usage: tilde-lab advance-search --campaign CAMPAIGN.json --stage halving|adaptive [--candidates 8] [--output CHILD.json]",
         "nominate": "Usage: tilde-lab nominate --campaign CAMPAIGN.json [--top 3] --output validation-plan.json",
