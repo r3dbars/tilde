@@ -143,6 +143,21 @@ public enum RetainedSpanWatch {
         ).validated()
     }
 
+    /// Characters gone at an earlier horizon cannot return at a later one.
+    /// A retyped span is authored text, not retained text.
+    public static func monotone(
+        _ later: RetainedCharacterObservation,
+        notExceeding earlier: RetainedCharacterObservation
+    ) -> RetainedCharacterObservation {
+        guard let laterCount = later.retainedCharacters,
+              let earlierCount = earlier.retainedCharacters,
+              laterCount > earlierCount,
+              let clamped = try? RetainedCharacterObservation(
+                  retainedCharacters: earlierCount
+              ) else { return later }
+        return clamped
+    }
+
     public static func closedEarlyIfStillWaiting(
         _ observation: RetainedCharacterObservation
     ) -> RetainedCharacterObservation {

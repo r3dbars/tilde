@@ -28,6 +28,33 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — First live F03 ingest finds a resurrection bug
+
+- **Try:** Ingest the first real typing evidence — 734 v3 outcome events
+  written by the daily-driven Model Preview IME — with
+  `tilde-lab ingest-events --instrument`.
+- **Learn:** The instrument works on live data and fails closed as designed:
+  two accept-delete-retype events claimed more retained characters at a later
+  horizon than at 5 seconds, because prefix matching counts retyped text as
+  retained. The remaining events ingested into a scratch database and reported
+  cleanly (7.7% acceptance when shown, 232 typed-through). Missingness reads
+  correctly once split by outcome: every not-yet-observed later horizon
+  belongs to a non-accepted event where retention is vacuous, while accepted
+  events had full segment-close coverage and 43 of 58 honestly reported
+  segment-closed-early at 30s — the owner's writing segments usually end
+  before 30 seconds. RNKS-segment looks like the usable live horizon;
+  RNKS-30s may be structurally sparse for this writer.
+- **Fail:** The full-file ingest was rejected by the two resurrection events;
+  F03 stays not supported until a clean full-file ingest exists. Fixed the
+  same day: `RetainedSpanWatch.monotone` now clamps 30s and segment-close
+  observations so deleted characters cannot resurrect, with tests.
+- **Where:** [F03](../experiments/F03-retained-outcome-ledger.md);
+  `Sources/TildeCore/Policy/RetainedCharacterObservation.swift`,
+  `Sources/TildeCore/Policy/LiveOnlineOpportunity.swift`,
+  `Tests/TildeCoreTests/RetainedSpanWatchTests.swift`.
+- **Next:** Rebuild the daily-driver IME with the clamp, collect a fresh
+  count file from real typing, and judge F03 on a clean full-file ingest.
+
 ## 2026-08-28 — Prefix reuse engaged but missed the tail-latency target
 
 - **Try:** Complete Q08's 57,600 matched synthetic evaluations with cache off
