@@ -1,0 +1,48 @@
+{
+  "schema": "tilde-lab.future-lattice.public-aggregate.v1",
+  "experimentID": "Q09",
+  "status": "rejected",
+  "completedAt": "2026-08-29T12:05:20Z",
+  "suite": {
+    "name": "Tilde Certified Corpus V2 1000 - Development",
+    "digestSHA256": "5bbc362c93e4cf1e3383b81dfe56a48a2f7c5160cc492ad4e1a00b99ddd5b46c",
+    "situations": 360
+  },
+  "execution": {
+    "plannedGenerations": 5760,
+    "completedGenerations": 5760,
+    "startingThermalState": "nominal",
+    "worstThermalState": "fair",
+    "powerSource": "battery",
+    "batteryPercentAtStart": 88,
+    "batteryPercentAfterCompletion": 47
+  },
+  "assets": {
+    "sourceCommit": "999caf70eb67cec9ee7c2322a6a64e3e623a02b0",
+    "sourceDirty": false,
+    "modelIdentifier": "Qwen3.5-9B-Base-Q4_K_M",
+    "modelRevision": "ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6",
+    "modelSHA256": "4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2",
+    "helperSHA256": "66d928b602000ee008cf8884ef97c3123b29e3a03a5b8fdef9be2bb7e3c0f0c5",
+    "runnerSHA256": "f36b2dda5e3103e737d371e1cff0290dd9fefa4373d246bd6b1df75956ff8279",
+    "invocationDigestSHA256": "057c6f817e96b257e56cc9716a08d05439d5318c44a414372fa483afe60381e3"
+  },
+  "metrics": [
+    {"candidateCount": 1, "goldenCoverageCount": 97, "goldenCoverageRate": 0.2694444444, "reviewedCoverageRate": 0.4166666667, "meanBestGoldenPrefixCharacters": 4.3555555556, "medianUniqueCandidates": 1, "medianDistinctFirstTwoContentWordPaths": 1, "atLeastFourDistinctPathsRate": 0.0, "readinessP50Milliseconds": 357, "readinessP95Milliseconds": 460, "summedRequestLatencyMilliseconds": 131372, "computeMultiplierVersusK1": 1.0, "decodedTokens": 2990},
+    {"candidateCount": 4, "goldenCoverageCount": 126, "goldenCoverageRate": 0.35, "reviewedCoverageRate": 0.5888888889, "meanBestGoldenPrefixCharacters": 5.4138888889, "medianUniqueCandidates": 2, "medianDistinctFirstTwoContentWordPaths": 1, "atLeastFourDistinctPathsRate": 0.025, "readinessP50Milliseconds": 1214, "readinessP95Milliseconds": 1513, "summedRequestLatencyMilliseconds": 1020678, "computeMultiplierVersusK1": 7.7693724690, "decodedTokens": 12304},
+    {"candidateCount": 8, "goldenCoverageCount": 163, "goldenCoverageRate": 0.4527777778, "reviewedCoverageRate": 0.6833333333, "meanBestGoldenPrefixCharacters": 6.4027777778, "medianUniqueCandidates": 2, "medianDistinctFirstTwoContentWordPaths": 2, "atLeastFourDistinctPathsRate": 0.2138888889, "readinessP50Milliseconds": 1934, "readinessP95Milliseconds": 2384, "summedRequestLatencyMilliseconds": 1988463, "computeMultiplierVersusK1": 15.1361248972, "decodedTokens": 24237},
+    {"candidateCount": 16, "goldenCoverageCount": 168, "goldenCoverageRate": 0.4666666667, "reviewedCoverageRate": 0.7055555556, "meanBestGoldenPrefixCharacters": 6.5472222222, "medianUniqueCandidates": 3, "medianDistinctFirstTwoContentWordPaths": 2, "atLeastFourDistinctPathsRate": 0.2722222222, "readinessP50Milliseconds": 3593, "readinessP95Milliseconds": 4331, "summedRequestLatencyMilliseconds": 6453345, "computeMultiplierVersusK1": 49.1226821545, "decodedTokens": 49035}
+  ],
+  "privacy": {
+    "aggregateOnly": true,
+    "containsPersonalWriting": false,
+    "containsRawPrompts": false,
+    "containsRawCandidates": false,
+    "containsScenarioText": false
+  },
+  "decision": {
+    "promotionRulePassed": false,
+    "killRuleTriggered": true,
+    "reason": "K=16 failed the registered diversity gate and kill threshold; its nested gain over K=8 was 5 of 360 situations."
+  }
+}

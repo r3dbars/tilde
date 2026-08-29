@@ -154,6 +154,7 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q09 — Future Lattice K=16 feasibility](Q09-future-lattice-k16-feasibility.md) — REJECTED; K=16 failed diversity and added only 1.39 points over K=8
 - [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — REJECTED; p95 gain 0.47%, below 10% target; no promotion
 - [Q07B — Fixed AC prompt-cache readiness pilot](Q07B-cache-ac-pilot.md) — readiness PASSED; superiority INCONCLUSIVE
 

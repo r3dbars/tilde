@@ -105,6 +105,38 @@
   ],
   "entries": [
     {
+      "id": "future-lattice-k16-independent-branches-rejected",
+      "recordedAt": "2026-08-29T12:05:20Z",
+      "area": "generator",
+      "status": "rejected",
+      "title": "Sixteen independent futures add little beyond eight and fail diversity",
+      "finding": "Q09 completed 5760 local generations on 360 synthetic development situations with nested K=1, K=4, K=8, and K=16 sets. Golden exact-prefix coverage rose from 26.94 percent at K=1 to 35.00 percent at K=4, 45.28 percent at K=8, and 46.67 percent at K=16. The second eight branches added only 5 matches, or 1.39 percentage points. At K=16 the median set had 2 distinct first-two-content-word paths and only 27.22 percent of sets had at least 4, failing the registered 50 percent diversity gate and median-4 kill threshold.",
+      "decision": "Reject 16 independently sampled futures, do not build them into the IME, and do not respond by increasing K. Most measured set-level coverage arrived by K=8, but K=4 and K=8 remain offline hypotheses rather than live candidates because readiness was 1214 and 1934 ms at p50 and no target-blind lock or retained utility was tested. Return to the ordered research queue; a future eligible test must use a smaller or genuinely diversity-producing shared generator.",
+      "comparisonGroupID": "q09-future-lattice-k16-v1",
+      "evaluationCount": 5760,
+      "metrics": [
+        { "subjectID": "K1", "key": "golden-exact-prefix-coverage", "value": 26.9444, "unit": "percent" },
+        { "subjectID": "K4", "key": "golden-exact-prefix-coverage", "value": 35.0, "unit": "percent" },
+        { "subjectID": "K8", "key": "golden-exact-prefix-coverage", "value": 45.2778, "unit": "percent" },
+        { "subjectID": "K16", "key": "golden-exact-prefix-coverage", "value": 46.6667, "unit": "percent" },
+        { "subjectID": "K16", "key": "sets-with-four-distinct-paths", "value": 27.2222, "unit": "percent" },
+        { "subjectID": "K16", "key": "readiness-p50", "value": 3593, "unit": "milliseconds" },
+        { "subjectID": "K16", "key": "summed-latency-multiple-versus-K1", "value": 49.1227, "unit": "times" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q09-future-lattice-k16-feasibility.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q09-aggregate-results.json" },
+        { "kind": "pull-request", "id": "432" }
+      ],
+      "limitations": [
+        "The synthetic exact-prefix metric measures candidate-set availability, not target-blind selection, live acceptance, or retained utility.",
+        "The run used independent requests; it does not reject every possible shared-tree or speculative-decoding implementation.",
+        "The battery-powered run reached fair thermal state, so latency is directional and not nominal-hardware proof.",
+        "Validation and holdout remained unopened, and no production or Model Preview behavior changed."
+      ],
+      "tags": ["future-lattice", "candidate-diversity", "negative-result", "offline-only", "no-promotion"]
+    },
+    {
       "id": "qwen-prefix-cache-tail-target-rejected",
       "recordedAt": "2026-08-28T16:27:25Z",
       "area": "methodology",
