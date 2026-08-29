@@ -703,7 +703,45 @@ public enum LabOnlineExperimentError: Error, LocalizedError, Equatable, Sendable
     }
 }
 
+/// One arm's slice of the same aggregate report. Comparing arms is the whole
+/// point of H01, so the slices are the same instrument, never a second one.
+public struct LabOnlineArmReport: Codable, Equatable, Sendable {
+    public let variant: LabOnlineVariant
+    public let report: LabOnlineExperimentReport
+}
+
+public struct LabOnlineArmComparison: Codable, Equatable, Sendable {
+    public static let currentSchema = "tilde-lab.online-arm-comparison.v1"
+
+    public let schema: String
+    public let campaignID: UUID
+    public let arms: [LabOnlineArmReport]
+}
+
 public enum LabOnlineExperimentAnalyzer {
+    /// The pooled report, sliced by the event's own `variant` tag. Arms are
+    /// returned in a stable order so two runs of the same database print the
+    /// same table.
+    public static func analyzeByArm(
+        _ events: [LabOnlineExperimentEvent]
+    ) throws -> LabOnlineArmComparison {
+        guard let campaignID = events.first?.campaignID,
+              events.allSatisfy({ $0.campaignID == campaignID }) else {
+            throw LabOnlineExperimentError.mixedCampaign
+        }
+        var arms: [LabOnlineArmReport] = []
+        for variant in [LabOnlineVariant.champion, .challenger, .hidden] {
+            let slice = events.filter { $0.variant == variant }
+            guard !slice.isEmpty else { continue }
+            arms.append(LabOnlineArmReport(variant: variant, report: try analyze(slice)))
+        }
+        return LabOnlineArmComparison(
+            schema: LabOnlineArmComparison.currentSchema,
+            campaignID: campaignID,
+            arms: arms
+        )
+    }
+
     public static func analyze(
         _ events: [LabOnlineExperimentEvent],
         typingCharactersPerSecond: Double = 5,

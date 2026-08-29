@@ -111,6 +111,14 @@ public struct LabArmConfiguration: Codable, Equatable, Sendable {
     public var includesScene: Bool { prompt.includesScene }
     public var suppressesSensitiveScenes: Bool { judgment.suppressesSensitiveScenes }
 
+    /// Pre-inference scene gate selection for this arm. Defaults match
+    /// production; only a Lab arm can widen the gate.
+    public var sceneSuppressionOptions: SceneSuggestionPolicy.Options {
+        SceneSuggestionPolicy.Options(
+            extendedOrdinarySilenceGate: judgment.extendedOrdinarySilenceGate
+        )
+    }
+
     @discardableResult
     public func validated() throws -> LabArmConfiguration {
         guard id.range(

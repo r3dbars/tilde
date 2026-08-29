@@ -45,7 +45,7 @@ struct CLIArguments {
         var flags = Set<String>()
         let knownFlags: Set<String> = [
             "help", "resume", "no-cache", "allow-battery", "experimental-model",
-            "confirm-consume", "json", "instrument",
+            "confirm-consume", "json", "instrument", "by-arm",
         ]
         var index = command == nil ? 0 : 1
         while index < values.count {
