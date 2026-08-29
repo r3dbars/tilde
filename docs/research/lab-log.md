@@ -28,6 +28,44 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-28 — Prefix reuse engaged but missed the tail-latency target
+
+- **Try:** Complete Q08's 57,600 matched synthetic evaluations with cache off
+  versus on, 40,704 fresh generations, one worker/slot and no response cache.
+- **Learn:** Median response improved 348 to 334 ms, but p95 only 429 to
+  427 ms: 0.47%, with paired counterfactual-cluster 95% interval 0.00–0.93%.
+  Real cache engagement does not imply a meaningful tail-latency improvement.
+- **Fail:** Reject the registered 10% p95 target. Scored quality was identical
+  and both arms failed absolute bad-suggestion quality (43.29% bad/shown).
+  Memory looked stable but one arm-block missed coverage; only 42 roots
+  qualified for quiet sensitivity. Neither limitation is waived.
+- **Where:** [Q08](../experiments/Q08-prompt-cache-study.md), its aggregate
+  evidence and analyzer; ledger `qwen-prefix-cache-tail-target-rejected`.
+- **Next:** Preserve the negative result. Any typing-sequence follow-up needs
+  a new approved protocol; no production, preview, or protected-stage change.
+
+## 2026-08-28 — Prompt-cache pilot expired; full study initially blocked
+
+Follow-up: the owner renewed execution. The separate
+[Q07B AC pilot](../experiments/Q07B-cache-ac-pilot.md) completed all 1,200
+evaluations and 848 fresh requests in 302.643 seconds, with valid memory
+coverage, no runtime errors and complete reports. Both arms still failed
+absolute quality; the review is inconclusive for superiority. Its functional
+readiness gate permits the separately registered Q08 run, not production.
+
+- **Try:** Run matched synthetic Qwen cache-off/on arms with fresh inference,
+  balanced blocks and process-memory sampling under a 15-minute limit.
+- **Learn:** Native cached-token counters engaged only for cache-on in observed
+  intervals; a UUID-case attribution bug needs a real SQLite regression test.
+- **Fail:** The budget expired at 3,299/3,600 evaluations and 2,388 actual model
+  requests, producing no complete reports. Mixed power, concurrent preview
+  and build load, and missing early sample labels prohibit a speed verdict.
+- **Where:** [Q07](../experiments/Q07-prompt-cache-pilot.md); the later
+  [Q08](../experiments/Q08-prompt-cache-study.md) result is recorded above.
+- **Next at the time:** Ask the owner to approve a smaller fixed AC pilot
+  without a simultaneous build. The approved Q07B follow-up above did that;
+  this aborted Q07 campaign was never extended or resumed.
+
 ## 2026-08-27 — Confirm a bounded confidence-filter effect on more roots
 
 - **Try:** Freeze cutoff 0.475 against the identical cached Qwen outputs on 505

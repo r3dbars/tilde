@@ -137,7 +137,7 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         }
     }
 
-    private func requestBody(_ request: LabModelRequest) -> [String: Any] {
+    func requestBody(_ request: LabModelRequest) -> [String: Any] {
         let generation = request.generation
         var body: [String: Any] = [
             "prompt": request.prompt,
