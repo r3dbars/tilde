@@ -30,6 +30,7 @@ enum GhostOutcomeLedger {
         opportunityCharacters: Int,
         precedingCharacter: Character?,
         excluded: Bool,
+        variant: String = "champion",
         at time: Date = Date()
     ) {
         _ = dropIfWiped()
@@ -48,6 +49,7 @@ enum GhostOutcomeLedger {
             sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(
                 sessionIdentifier: sessionIdentifier
             ),
+            variant: variant,
             appCategory: TextFreeAppCategory.from(register: register).rawValue,
             register: register.rawValue,
             boundary: TextFreeCursorBoundary.from(precedingCharacter: precedingCharacter).rawValue,

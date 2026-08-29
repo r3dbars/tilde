@@ -54,6 +54,84 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** Run the simulator on situations mirroring the owner's live F03
   weeks and score sim-vs-live ranking agreement before any other stage.
 
+## 2026-08-29 — Pre-register the early-start timing falsifier
+
+- **Try:** Register Q10 — start one hidden continuation after the third
+  character of a word instead of at the following space — freeze issue
+  #434's sketch gates into numbers (ready by boundary >= 50%, median lead
+  >= 200 ms, lockable >= 15%, simulated false locks < 2%, compute <= 1.5x,
+  pair coverage +5pp at <= 2x), and build the aggregate-only replay runner
+  on the production Gemma stack.
+- **Learn:** Nothing about efficacy yet. Two protocol facts came out of the
+  4-situation machinery smoke and changed the registered definitions before
+  any run: a branch that survives to the boundary answers the boundary even
+  when it is too short to display, so compute must charge the fallback only
+  for late or contradicted branches; and the false-lock check has to compare
+  scalars after the same whitespace trim the lock rule uses, or it counts its
+  own normalization as a false lock.
+- **Fail:** Q10 is registered and built but not run, so it supports nothing.
+  The smoke also showed the production cleaner suppressing a real share of
+  mid-word candidates and mid-word requests decoding longer than boundary
+  requests; if those hold at 360 situations, Q10 may fail its compute gate
+  for a reason that is about the cleaner and the stop rule, not about
+  timing.
+- **Where:** [`docs/experiments/Q10-early-start-timing-falsifier.md`](../experiments/Q10-early-start-timing-falsifier.md);
+  issue #434; PR #441.
+- **Next:** Run `--early-start-full` overnight on AC power with no live
+  dogfood typing, then review it against the five frozen gates.
+
+## 2026-08-29 — Build the H01 block-randomization harness, shipped disabled
+
+- **Try:** Build, but do not start, the instrument H01 will need: a
+  seeded AB/BA block randomizer in `TildeCore` with a persisted schedule,
+  a Model-Preview-only wire-up that lets an arm drive the visible-word
+  cap, arm tagging on the existing text-free v3 event's `variant` field,
+  and a `tilde-lab online-report --by-arm` slice so the two arms can be
+  compared from ingested counts.
+- **Learn:** The v3 event already carried champion/challenger, so H01
+  needs no second telemetry store — only a producer that stamps the arm
+  and an instrument plan that admits a displayed challenger. Pinning the
+  arm to the typing session and sending the arm identity (never a
+  number) over the local socket keeps the two processes from disagreeing
+  about what the writer actually saw.
+- **Fail:** H01 is not started and nothing here is evidence. The harness
+  is OFF by default and inert in every profile except an explicitly
+  enabled Model Preview; Stage 0 still gates the experiment, and F03 is
+  still IMPLEMENTING, not supported.
+- **Where:** `Sources/TildeCore/Policy/H01BlockRandomization.swift`,
+  `Sources/TildeLabKit/Models/LabInstrumentCampaign.swift`, PR "lab: build
+  disabled H01 block-randomization harness for the Model Preview".
+- **Next:** Finish F03 on-device ingest to SUPPORTED — then, and only
+  then, pre-register H01 and turn the toggle on.
+
+## 2026-08-29 — Build the three missing ordinary-silence detectors behind a Lab flag
+
+- **Try:** Add complete-sentence, multiple-question, and ambiguous-reference
+  detectors to `SceneSuggestionPolicy` as a development-only
+  `extendedOrdinarySilenceGate` option (off in production, exposed on
+  `LabJudgmentConfiguration` and in the Policy Bench), then measure them
+  offline against the certified V2 corpus with the flag off and on.
+- **Learn:** The three leaking subcategories are reachable with deterministic
+  pre-inference rules: 0 of 90 target scenarios are gated today, 90 of 90 with
+  the flag on (30/30 per subcategory), while 0 of 600 wanted-suggestion
+  scenarios become newly suppressed and the only pre-existing positive
+  suppression (`stress.prompt-injection.real-request`) is unchanged; 0 of the
+  positives in the 400-case replying suite, the Slack gold suite, and the
+  synthetic corpus suite are newly suppressed either. The multi-question rule
+  only holds because it stands down when the writer names which question they
+  are answering — without that it would swallow the disambiguated
+  multi-question stress positives by design.
+- **Fail:** This is discovery infrastructure, not a registered result. No
+  hypothesis is registered, no campaign was run, no model was queried, and the
+  bad-when-shown improvement predicted in issue #436 is a relabel of frozen
+  Q08 evidence, not a measurement made here. Production behavior is unchanged.
+- **Where:** issue #436; branch `claude/silence-gate-detectors`;
+  `Sources/TildeCore/Scene/SceneSuggestionPolicy.swift`;
+  `Tests/TildeLabKitTests/LabExtendedSilenceGateTests.swift`.
+- **Next:** Register the display-policy experiment that compares the flag off
+  and on on the exact same test, so the useful-loss budget is decided before
+  the result is known.
+
 ## 2026-08-29 — F04: freeze ten known failures as toothed regression cases
 
 - **Try:** Implement the sanitized permanent regression library:

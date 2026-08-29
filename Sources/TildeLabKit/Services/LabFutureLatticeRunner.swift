@@ -91,7 +91,7 @@ public struct LabFutureLatticeReport: Codable, Equatable, Sendable {
     public let startingThermalState: String
     public let worstThermalState: String
     public let metrics: [LabFutureLatticeMetric]
-    public let privacy: LabFutureLatticePrivacy
+    public let privacy: LabAggregateOnlyPrivacy
 
     public init(
         startedAt: Date,
@@ -110,7 +110,7 @@ public struct LabFutureLatticeReport: Codable, Equatable, Sendable {
         startingThermalState: String,
         worstThermalState: String,
         metrics: [LabFutureLatticeMetric],
-        privacy: LabFutureLatticePrivacy = .aggregateOnly
+        privacy: LabAggregateOnlyPrivacy = .aggregateOnly
     ) {
         schema = Self.currentSchema
         self.startedAt = startedAt
@@ -133,14 +133,14 @@ public struct LabFutureLatticeReport: Codable, Equatable, Sendable {
     }
 }
 
-public struct LabFutureLatticePrivacy: Codable, Equatable, Sendable {
+public struct LabAggregateOnlyPrivacy: Codable, Equatable, Sendable {
     public let aggregateOnly: Bool
     public let containsRawPrompts: Bool
     public let containsRawCandidates: Bool
     public let containsScenarioText: Bool
     public let containsPersonalWriting: Bool
 
-    public static let aggregateOnly = LabFutureLatticePrivacy(
+    public static let aggregateOnly = LabAggregateOnlyPrivacy(
         aggregateOnly: true,
         containsRawPrompts: false,
         containsRawCandidates: false,
@@ -237,7 +237,7 @@ public enum LabFutureLatticeAnalyzer {
             if goldenBest >= minimumUsefulCharacters { goldenCoverage += 1 }
             if reviewedBest >= minimumUsefulCharacters { reviewedCoverage += 1 }
             bestGolden.append(goldenBest)
-            uniqueCandidates.append(Set(texts.map(normalizedExact)).count)
+            uniqueCandidates.append(Set(texts.map(LabExactPrefix.normalized)).count)
             distinctPaths.append(Set(texts.compactMap(firstTwoContentWordPath)).count)
             readiness.append(candidates.map(\.readyMilliseconds).max() ?? 0)
             summedLatency += candidates.reduce(0) { $0 + $1.requestLatencyMilliseconds }
@@ -271,14 +271,7 @@ public enum LabFutureLatticeAnalyzer {
     }
 
     public static func exactPrefixCharacters(_ lhs: String, _ rhs: String) -> Int {
-        let left = Array(normalizedExact(lhs))
-        let right = Array(normalizedExact(rhs))
-        var count = 0
-        for (a, b) in zip(left, right) {
-            guard a == b else { break }
-            count += 1
-        }
-        return count
+        LabExactPrefix.sharedCharacters(lhs, rhs)
     }
 
     public static func firstTwoContentWordPath(_ value: String) -> String? {
@@ -286,19 +279,13 @@ public enum LabFutureLatticeAnalyzer {
             "a", "an", "and", "are", "at", "be", "for", "i", "in", "is", "it",
             "of", "on", "or", "that", "the", "this", "to", "we", "will", "you",
         ]
-        let words = normalizedExact(value).lowercased().split {
+        let words = LabExactPrefix.normalized(value).lowercased().split {
             !$0.isLetter && !$0.isNumber
         }.map(String.init)
         let content = words.filter { !stopWords.contains($0) }
         let path = Array(content.prefix(2))
         guard !path.isEmpty else { return nil }
         return path.joined(separator: " ")
-    }
-
-    private static func normalizedExact(_ value: String) -> String {
-        value.precomposedStringWithCanonicalMapping
-            .drop(while: { $0.isWhitespace })
-            .description
     }
 
     private static func summedLatency(

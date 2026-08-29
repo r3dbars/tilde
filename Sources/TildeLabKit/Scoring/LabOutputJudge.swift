@@ -19,6 +19,9 @@ public enum LabDecisionReason: String, Codable, CaseIterable, Sendable {
     case resolvedConversation = "resolved-conversation"
     case ambiguousChoice = "ambiguous-choice"
     case nonActionableScene = "non-actionable-scene"
+    case completeSentenceScene = "complete-sentence-scene"
+    case multipleQuestionsScene = "multiple-questions-scene"
+    case ambiguousReferenceScene = "ambiguous-reference-scene"
     case lowConfidence = "low-confidence"
     case timeout
     case protocolError = "protocol-error"
@@ -32,6 +35,9 @@ extension LabDecisionReason {
         case .resolvedConversation: .resolvedConversation
         case .ambiguousChoice: .ambiguousChoice
         case .nonActionableScene: .nonActionableScene
+        case .completeSentence: .completeSentenceScene
+        case .multipleQuestions: .multipleQuestionsScene
+        case .ambiguousReference: .ambiguousReferenceScene
         }
     }
 }
