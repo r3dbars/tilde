@@ -414,6 +414,220 @@ struct LabSimulatedTypistTests {
         try report.validated()
     }
 
+    // MARK: - Concurrent decision workers
+
+    @Test("Concurrent workers reproduce the sequential aggregates byte for byte")
+    func concurrentWorkersMatchSequentialAggregates() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = try Self.dualStub(in: directory, name: "dual.sh")
+
+        func run(workers: Int, batchSize: Int) async throws -> LabSimulatedTypistReport {
+            var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+            configuration.decisionWorkers = workers
+            return try await LabSimulatedTypistEngine(
+                configuration: configuration,
+                policy: try ExternalCommandTypist(
+                    command: script.path, timeoutSeconds: 20, batchSize: batchSize
+                )
+            ).run(
+                suite: try Self.parallelSuite(scenarios: 6),
+                personas: Self.twoPersonas(),
+                client: StubCompletionClient(content: " sounds good to me."),
+                provenance: .unavailable()
+            )
+        }
+
+        let sequential = try await run(workers: 1, batchSize: 2)
+        let concurrent = try await run(workers: 4, batchSize: 2)
+        #expect(sequential.decisionWorkers == 1)
+        #expect(concurrent.decisionWorkers == 4)
+        #expect(concurrent.totalDisplays > 0)
+
+        // Equatable is the readable assertion; the encoded bytes are the strict
+        // one — completion order may not perturb a single count.
+        #expect(concurrent.personas == sequential.personas)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        #expect(
+            try encoder.encode(concurrent.personas) == encoder.encode(sequential.personas)
+        )
+
+        // And a batch-size-1 concurrent run still matches, so workers alone —
+        // without batching — cannot move an aggregate either.
+        let concurrentUnbatched = try await run(workers: 4, batchSize: 1)
+        #expect(concurrentUnbatched.personas == sequential.personas)
+    }
+
+    @Test("No more than the configured number of decision calls are ever in flight")
+    func workerCapIsEnforced() async throws {
+        for workers in [1, 3] {
+            let probe = ConcurrencyProbeTypist(batchSize: 1, holdSeconds: 0.05)
+            var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+            configuration.decisionWorkers = workers
+            let report = try await LabSimulatedTypistEngine(
+                configuration: configuration, policy: probe
+            ).run(
+                suite: try Self.parallelSuite(scenarios: 6),
+                personas: Self.twoPersonas(),
+                client: StubCompletionClient(content: " sounds good to me."),
+                provenance: .unavailable()
+            )
+            #expect(report.decisionWorkers == workers)
+            #expect(probe.calls() > workers)
+            #expect(probe.peakConcurrency() <= workers)
+            if workers > 1 {
+                // A cap that is never reached would prove nothing about it.
+                #expect(probe.peakConcurrency() > 1)
+            }
+        }
+    }
+
+    @Test("A run above the worker ceiling is clamped, not silently obeyed")
+    func workerCountIsClamped() async throws {
+        var configuration = LabSimulatedTypistConfiguration()
+        configuration.decisionWorkers = 999
+        let engine = LabSimulatedTypistEngine(
+            configuration: configuration, policy: DeterministicHeuristicTypist()
+        )
+        #expect(
+            engine.effectiveDecisionWorkers
+                == LabSimulatedTypistConfiguration.maximumDecisionWorkers
+        )
+        var floored = LabSimulatedTypistConfiguration()
+        floored.decisionWorkers = 0
+        #expect(
+            LabSimulatedTypistEngine(
+                configuration: floored, policy: DeterministicHeuristicTypist()
+            ).effectiveDecisionWorkers == 1
+        )
+        #expect(LabSimulatedTypistEngine(policy: DeterministicHeuristicTypist())
+            .effectiveDecisionWorkers == 1)
+
+        // The recorded value is validated on the artifact as well.
+        #expect(throws: LabSimulatedTypistError.invalidDecisionWorkers) {
+            try Self.report(decisionWorkers: 17).validated()
+        }
+        try Self.report(decisionWorkers: 16).validated()
+    }
+
+    @Test("Slow external decision commands actually overlap under concurrency")
+    func externalCommandsOverlap() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // The stub is its own overlap counter: it marks itself present, holds,
+        // then records how many invocations were present alongside it.
+        let markers = directory.appendingPathComponent("markers", isDirectory: true)
+        try FileManager.default.createDirectory(at: markers, withIntermediateDirectories: true)
+        let script = directory.appendingPathComponent("slow.sh")
+        try """
+        #!/bin/bash
+        cat > /dev/null
+        marker="\(markers.path)/$$"
+        : > "$marker"
+        sleep 0.4
+        ls "\(markers.path)" | wc -l >> "\(directory.path)/observed"
+        rm -f "$marker"
+        echo '{"schema":"tilde-lab.typist-decision.v1","action":"accept","wouldRetain":true}'
+        """.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: script.path
+        )
+
+        var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+        configuration.maximumDisplaysPerScenario = 1
+        configuration.decisionWorkers = 4
+        let started = Date()
+        _ = try await LabSimulatedTypistEngine(
+            configuration: configuration,
+            policy: try ExternalCommandTypist(command: script.path, timeoutSeconds: 20)
+        ).run(
+            suite: try Self.parallelSuite(scenarios: 4),
+            personas: Self.twoPersonas(),
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable()
+        )
+        let elapsed = Date().timeIntervalSince(started)
+
+        let observed = try String(
+            contentsOf: directory.appendingPathComponent("observed"), encoding: .utf8
+        ).split(whereSeparator: \.isNewline).compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        #expect((4...8).contains(observed.count))
+        // Eight 0.4s invocations, four at a time: at least one invocation must
+        // have seen a peer running, and the wall clock cannot be sequential.
+        #expect(observed.max() ?? 0 >= 2)
+        #expect(elapsed < 8 * 0.4)
+    }
+
+    @Test("A failed batch aborts the round and leaves nothing running behind it")
+    func failureMidRoundAbortsCleanly() async throws {
+        let policy = FailingProbeTypist(failOnCall: 3, holdSeconds: 0.05)
+        var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+        configuration.decisionWorkers = 4
+        await #expect(throws: ProbeFailure.injected) {
+            try await LabSimulatedTypistEngine(
+                configuration: configuration, policy: policy
+            ).run(
+                suite: try Self.parallelSuite(scenarios: 6),
+                personas: Self.twoPersonas(),
+                client: StubCompletionClient(content: " sounds good to me."),
+                provenance: .unavailable()
+            )
+        }
+        // Every call that started also finished before the error surfaced: the
+        // group awaits its in-flight batches instead of abandoning them.
+        #expect(policy.started() == policy.finished())
+        #expect(policy.started() >= 3)
+
+        // The same failure aborts a sequential run with the same error, so
+        // concurrency did not change what a broken policy costs.
+        var sequential = LabSimulatedTypistConfiguration(strideCharacters: 3)
+        sequential.decisionWorkers = 1
+        await #expect(throws: ProbeFailure.injected) {
+            try await LabSimulatedTypistEngine(
+                configuration: sequential,
+                policy: FailingProbeTypist(failOnCall: 3, holdSeconds: 0)
+            ).run(
+                suite: try Self.parallelSuite(scenarios: 6),
+                personas: Self.twoPersonas(),
+                client: StubCompletionClient(content: " sounds good to me."),
+                provenance: .unavailable()
+            )
+        }
+    }
+
+    @Test("A failing external command under concurrency leaves no live process")
+    func concurrentExternalFailureLeavesNoZombie() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = directory.appendingPathComponent("fails.sh")
+        try """
+        #!/bin/bash
+        cat > /dev/null
+        sleep 0.2
+        exit 3
+        """.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: script.path
+        )
+
+        var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+        configuration.decisionWorkers = 4
+        await #expect(throws: LabTypistPolicyError.decisionCommandFailed(3)) {
+            try await LabSimulatedTypistEngine(
+                configuration: configuration,
+                policy: try ExternalCommandTypist(command: script.path, timeoutSeconds: 5)
+            ).run(
+                suite: try Self.parallelSuite(scenarios: 4),
+                personas: Self.twoPersonas(),
+                client: StubCompletionClient(content: " sounds good to me."),
+                provenance: .unavailable()
+            )
+        }
+        #expect(Self.runningProcesses(matching: script.path) == 0)
+    }
+
     // MARK: - End-to-end smoke
 
     @Test("A stubbed generation path produces a fenced aggregate report")
@@ -642,6 +856,98 @@ struct LabSimulatedTypistTests {
         return try LabScenarioSuite(name: "simulated batch", scenarios: scenarios).validated()
     }
 
+    /// Speaks both contracts, because a round's last batch may hold a single
+    /// moment even when the policy batches: a moment batch is answered element
+    /// for element, a lone moment with the single-moment envelope. The answer
+    /// depends only on the moment, so it is identical however the run groups.
+    private static func dualStub(in directory: URL, name: String) throws -> URL {
+        let script = directory.appendingPathComponent(name)
+        try #"""
+        #!/bin/bash
+        payload="$(cat)"
+        case "$payload" in
+          *Text*|*prompt*|*continuation*) exit 4 ;;
+        esac
+        decide() {
+          if [ "$1" = "exact" ]; then
+            printf '{"schema":"tilde-lab.typist-decision.v1","action":"accept","wouldRetain":true}'
+          else
+            printf '{"schema":"tilde-lab.typist-decision.v1","action":"dismiss","wouldRetain":false}'
+          fi
+        }
+        matches="$(printf '%s' "$payload" | grep -o '"prefixMatch":"[a-z]*"' | sed 's/.*:"//;s/"//')"
+        case "$payload" in
+          *'"schema":"tilde-lab.typist-moment-batch.v1"'*)
+            decisions=""
+            for match in $matches; do
+              one="$(decide "$match")"
+              if [ -z "$decisions" ]; then decisions="$one"; else decisions="$decisions,$one"; fi
+            done
+            printf '{"schema":"tilde-lab.typist-decision-batch.v1","decisions":[%s]}' "$decisions" ;;
+          *'"schema":"tilde-lab.typist-moment-features.v1"'*)
+            decide "$matches" ;;
+          *) exit 3 ;;
+        esac
+        """#.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: script.path
+        )
+        return script
+    }
+
+    /// Enough independent persona/scenario sessions that one round has several
+    /// batches to resolve at once.
+    private static func parallelSuite(scenarios: Int) throws -> LabScenarioSuite {
+        let cases = (0..<scenarios).map { index in
+            LabScenario(
+                id: "simulated.parallel.\(index)",
+                category: "reply.simulated.smoke",
+                typedContext: "That ",
+                scene: LabScene(
+                    mode: .replying,
+                    turns: [LabSceneTurn(speaker: .other, text: "Can we meet on the usual day?")]
+                ),
+                expectation: LabExpectation(
+                    shouldSuggest: true,
+                    goldenContinuation: "sounds good to me.",
+                    acceptablePrefixes: ["sounds good to me."]
+                )
+            )
+        }
+        return try LabScenarioSuite(name: "simulated parallel", scenarios: cases).validated()
+    }
+
+    private static func report(decisionWorkers: Int) -> LabSimulatedTypistReport {
+        LabSimulatedTypistReport(
+            startedAt: Date(),
+            finishedAt: Date(),
+            suiteName: "smoke",
+            suiteDigestSHA256: String(repeating: "a", count: 64),
+            scenarioCount: 1,
+            arm: LabArmConfiguration(id: "baseline"),
+            decisionPolicyIdentifier: DeterministicHeuristicTypist.identifier,
+            decisionWorkers: decisionWorkers,
+            provenance: .unavailable(),
+            personas: []
+        )
+    }
+
+    /// A zombie check with no privileged access: how many live processes are
+    /// running the stub command.
+    private static func runningProcesses(matching path: String) -> Int {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        process.arguments = ["-f", path]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return 0 }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+            .split(whereSeparator: \.isNewline).count
+    }
+
     private static func smokeSuite() throws -> LabScenarioSuite {
         let scenarios = ["one", "two"].map { suffix in
             LabScenario(
@@ -692,6 +998,106 @@ private final class RecordingBatchTypist: TypistDecisionPolicy, @unchecked Senda
         lock.lock()
         defer { lock.unlock() }
         return batches
+    }
+}
+
+private enum ProbeFailure: Error, Equatable {
+    case injected
+}
+
+/// Holds each call open long enough to overlap with its peers and records the
+/// highest number that were ever inside `decide` at the same time.
+private final class ConcurrencyProbeTypist: TypistDecisionPolicy, @unchecked Sendable {
+    let identifier = "concurrency-probe-typist"
+    let decisionBatchSize: Int
+
+    private let holdSeconds: Double
+    private let lock = NSLock()
+    private var inFlight = 0
+    private var peak = 0
+    private var callCount = 0
+    private let inner = DeterministicHeuristicTypist()
+
+    init(batchSize: Int, holdSeconds: Double) {
+        decisionBatchSize = batchSize
+        self.holdSeconds = holdSeconds
+    }
+
+    func decide(_ features: LabTypistMomentFeatures) throws -> LabTypistDecision {
+        try decide(batch: [features])[0]
+    }
+
+    func decide(batch: [LabTypistMomentFeatures]) throws -> [LabTypistDecision] {
+        lock.lock()
+        inFlight += 1
+        callCount += 1
+        peak = max(peak, inFlight)
+        lock.unlock()
+        if holdSeconds > 0 { Thread.sleep(forTimeInterval: holdSeconds) }
+        defer {
+            lock.lock()
+            inFlight -= 1
+            lock.unlock()
+        }
+        return try batch.map { try inner.decide($0) }
+    }
+
+    func peakConcurrency() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return peak
+    }
+
+    func calls() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return callCount
+    }
+}
+
+/// Fails one nominated call after every call has had time to start, so the
+/// abort happens with peers still in flight.
+private final class FailingProbeTypist: TypistDecisionPolicy, @unchecked Sendable {
+    let identifier = "failing-probe-typist"
+    let decisionBatchSize = 1
+
+    private let failOnCall: Int
+    private let holdSeconds: Double
+    private let lock = NSLock()
+    private var startedCount = 0
+    private var finishedCount = 0
+    private let inner = DeterministicHeuristicTypist()
+
+    init(failOnCall: Int, holdSeconds: Double) {
+        self.failOnCall = failOnCall
+        self.holdSeconds = holdSeconds
+    }
+
+    func decide(_ features: LabTypistMomentFeatures) throws -> LabTypistDecision {
+        lock.lock()
+        startedCount += 1
+        let ordinal = startedCount
+        lock.unlock()
+        if holdSeconds > 0 { Thread.sleep(forTimeInterval: holdSeconds) }
+        defer {
+            lock.lock()
+            finishedCount += 1
+            lock.unlock()
+        }
+        guard ordinal != failOnCall else { throw ProbeFailure.injected }
+        return try inner.decide(features)
+    }
+
+    func started() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return startedCount
+    }
+
+    func finished() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return finishedCount
     }
 }
 

@@ -108,6 +108,12 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
     /// above 1 the run batched decision-independent moments across sessions.
     /// Recorded so a run's aggregates can be read next to how they were driven.
     public let decisionBatchSize: Int
+    /// Decision-policy calls the run allowed in flight at once. 1 is the
+    /// sequential driver; above 1 the run resolved a round's independent
+    /// batches concurrently. It changes only how long the run took — decisions
+    /// are applied in batch order after each round joins — and is recorded so a
+    /// run's aggregates can be read next to how they were driven.
+    public let decisionWorkers: Int
     public let personaCatalogSchema: String
     public let provenance: LabReportProvenance
     public let privacy: LabPrivacyContract
@@ -125,6 +131,7 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         arm: LabArmConfiguration,
         decisionPolicyIdentifier: String,
         decisionBatchSize: Int = 1,
+        decisionWorkers: Int = 1,
         personaCatalogSchema: String = LabTypistPersonaCatalog.currentSchema,
         provenance: LabReportProvenance,
         privacy: LabPrivacyContract = LabPrivacyContract(),
@@ -140,6 +147,7 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         self.arm = arm
         self.decisionPolicyIdentifier = decisionPolicyIdentifier
         self.decisionBatchSize = max(1, decisionBatchSize)
+        self.decisionWorkers = max(1, decisionWorkers)
         self.personaCatalogSchema = personaCatalogSchema
         self.provenance = provenance
         self.privacy = privacy
@@ -168,6 +176,10 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         guard (1...LabTypistMomentBatch.maximumSize).contains(decisionBatchSize) else {
             throw LabSimulatedTypistError.invalidDecisionBatchSize
         }
+        guard (1...LabSimulatedTypistConfiguration.maximumDecisionWorkers)
+            .contains(decisionWorkers) else {
+            throw LabSimulatedTypistError.invalidDecisionWorkers
+        }
         guard privacy.aggregateOnly,
               !privacy.rawScenarioText,
               !privacy.rawModelOutput,
@@ -191,6 +203,8 @@ public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable 
     case evidenceFenceRemoved
     case noSimulatableScenarios
     case invalidDecisionBatchSize
+    case invalidDecisionWorkers
+    case sessionCollisionInRound
 
     public var errorDescription: String? {
         switch self {
@@ -203,6 +217,10 @@ public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable 
             "No selected scenario has a golden continuation to type through."
         case .invalidDecisionBatchSize:
             "The simulated-typist report records a decision batch size outside 1...\(LabTypistMomentBatch.maximumSize)."
+        case .invalidDecisionWorkers:
+            "The simulated-typist report records a decision worker count outside 1...\(LabSimulatedTypistConfiguration.maximumDecisionWorkers)."
+        case .sessionCollisionInRound:
+            "A decision round collected two moments of one persona/scenario session; batches must never group moments from one timeline."
         }
     }
 }
