@@ -28,6 +28,31 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Calibrate the simulated typist against 1,082 live moments
+
+- **Try:** Run two frontier decision brains (Luna via Codex, Grok via
+  Cursor, ten workers each) over every live text-free outcome moment and
+  score them against the owner's actual behavior; then fix the persona
+  from what the misses taught and rerun the missed slice with controls.
+- **Learn:** Skips are trivially predictable (100% both brains); accepts
+  are the signal. Luna 68.3% on accepts, Grok 47.6%, inter-brain
+  agreement 98.4%. Every Luna miss sat in one cell — mid-word exact
+  completions, the owner's signature accept, which the hand-written
+  persona wrongly called an interruption. Two measured persona sentences
+  (long dwell ends in acceptance; short exact mid-word completions are
+  the favorite accept) took the missed cell from 2/28 to 28/28 with
+  typed-through controls holding 15/15.
+- **Fail:** The perfect post-fix score is in-sample — the fix was derived
+  from the same moments — so it is calibration, not validation. The
+  persona must hold on fresh out-of-sample typing before the simulator
+  earns its registered graduation test (predicting the H01 winner ahead
+  of the live result). The ignored control was thin (one eligible
+  moment); nearly all mid-word ignores are sub-200ms flickers.
+- **Where:** GitHub issues #437 and #443; local decision adapters and
+  fleet aggregates (owner-only); batching runner in PR #442.
+- **Next:** Score the frozen persona v2 on the next fresh week of live
+  moments before any screening use.
+
 ## 2026-08-29 — Q11 registered: gate the three leaking silence subcategories
 
 - **Try:** Pre-register the display-policy comparison for the extended
