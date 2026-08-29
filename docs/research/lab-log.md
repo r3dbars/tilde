@@ -28,6 +28,33 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Batch the simulated typist's decisions across sessions
+
+- **Try:** Add a text-free batch contract
+  (`tilde-lab.typist-moment-batch.v1` → `tilde-lab.typist-decision-batch.v1`)
+  and a `--decision-batch-size N` option so an external LLM-backed policy
+  resolves up to 100 moments per process invocation instead of one.
+- **Learn:** Batching and the sequential keystroke driver only coexist if
+  the grouping is decision-independent: within one persona/scenario pair a
+  decision moves the cursor, the cooldown, and the display and dismissal
+  counts the next moment reports, so the engine had to be re-cut into
+  per-pair sessions that are advanced to their own next undecided moment
+  and batched *across* sessions, at most one moment per session per round.
+  With that invariant a batched run reproduces the batch-size-1 aggregates
+  exactly, and position can safely be the only correlation in a contract
+  that has no identifier it is allowed to carry.
+- **Fail:** Infrastructure only — no result, no LLM policy, no calibration.
+  The 100k-moment overnight run is now affordable but has not been run, and
+  nothing here makes a simulated number any less fenced. A count mismatch
+  or a reordered answer from a policy is refused rather than repaired, so a
+  sloppy external command will abort a long run instead of quietly
+  corrupting it.
+- **Where:** issue #437 stage 2; `Sources/TildeLabKit/Simulation/`;
+  `Sources/TildeLabCLI/SimulatedTypistCommand.swift`;
+  [`docs/tilde-lab.md`](../tilde-lab.md) § Simulated typist.
+- **Next:** Stand a real cheap-model policy behind the batch socket and
+  score sim-vs-live ranking agreement before trusting any simulated order.
+
 ## 2026-08-29 — Simulated-typist stage 1: build the skeleton, trust nothing
 
 - **Try:** Build `tilde-lab simulate-typist` — five checked-in synthetic

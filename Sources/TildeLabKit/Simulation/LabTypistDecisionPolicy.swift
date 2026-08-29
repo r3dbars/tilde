@@ -191,6 +191,124 @@ public struct LabTypistDecision: Codable, Equatable, Sendable {
     }
 }
 
+/// A batch of moments handed to a decision policy in one call.
+///
+/// The envelope adds nothing but a schema and an ordered array: every element
+/// is validated by the same text-free feature allowlist as the single-moment
+/// contract, so batching cannot widen what may cross the boundary.
+public struct LabTypistMomentBatch: Codable, Equatable, Sendable {
+    public static let currentSchema = "tilde-lab.typist-moment-batch.v1"
+
+    public static let allowedKeys: Set<String> = ["schema", "moments"]
+
+    /// One process invocation may not be asked to hold more moments than this.
+    /// A bigger batch buys nothing and makes a single command failure cost more
+    /// re-work than it saves.
+    public static let maximumSize = 100
+
+    public let schema: String
+    public let moments: [LabTypistMomentFeatures]
+
+    public init(
+        schema: String = Self.currentSchema,
+        moments: [LabTypistMomentFeatures]
+    ) {
+        self.schema = schema
+        self.moments = moments
+    }
+
+    /// Rejects any envelope key outside the allowlist, any batch outside
+    /// 1...`maximumSize`, and any element that is not a text-free v1 feature
+    /// object — each element is re-serialized and run through the single-moment
+    /// validator, so a text-bearing key anywhere in the batch fails the batch.
+    public static func validateJSON(_ data: Data) throws {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw LabTypistPolicyError.invalidFeaturePayload
+        }
+        if let key = Set(object.keys).subtracting(allowedKeys).sorted().first {
+            throw LabTypistPolicyError.forbiddenKey(key)
+        }
+        guard object["schema"] as? String == currentSchema,
+              let moments = object["moments"] as? [Any] else {
+            throw LabTypistPolicyError.invalidFeaturePayload
+        }
+        guard (1...maximumSize).contains(moments.count) else {
+            throw LabTypistPolicyError.batchSizeOutOfRange(moments.count)
+        }
+        for moment in moments {
+            guard let element = moment as? [String: Any] else {
+                throw LabTypistPolicyError.invalidFeaturePayload
+            }
+            try LabTypistMomentFeatures.validateJSON(
+                try JSONSerialization.data(withJSONObject: element)
+            )
+        }
+    }
+
+    public func encodedJSON() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(self)
+        try Self.validateJSON(data)
+        return data
+    }
+}
+
+/// The answer to a `LabTypistMomentBatch`: the same number of decisions, in the
+/// same order as the moments that produced them. There is no identifier to
+/// correlate on — a text-free contract has nothing safe to key by — so position
+/// *is* the correlation, and a short, long, or reordered answer is an error
+/// rather than something the engine silently repairs.
+public struct LabTypistDecisionBatch: Codable, Equatable, Sendable {
+    public static let currentSchema = "tilde-lab.typist-decision-batch.v1"
+
+    public static let allowedKeys: Set<String> = ["schema", "decisions"]
+
+    public let schema: String
+    public let decisions: [LabTypistDecision]
+
+    public init(
+        schema: String = Self.currentSchema,
+        decisions: [LabTypistDecision]
+    ) {
+        self.schema = schema
+        self.decisions = decisions
+    }
+
+    /// `expectedCount` is the number of moments sent. A mismatch is fatal: the
+    /// engine cannot know which moment a missing or extra decision belongs to.
+    public static func validateJSON(_ data: Data, expectedCount: Int) throws {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw LabTypistPolicyError.invalidDecisionPayload
+        }
+        if let key = Set(object.keys).subtracting(allowedKeys).sorted().first {
+            throw LabTypistPolicyError.forbiddenKey(key)
+        }
+        guard object["schema"] as? String == currentSchema,
+              let decisions = object["decisions"] as? [Any] else {
+            throw LabTypistPolicyError.invalidDecisionPayload
+        }
+        guard decisions.count == expectedCount else {
+            throw LabTypistPolicyError.batchCountMismatch(
+                expected: expectedCount, received: decisions.count
+            )
+        }
+        for decision in decisions {
+            guard let element = decision as? [String: Any] else {
+                throw LabTypistPolicyError.invalidDecisionPayload
+            }
+            try LabTypistDecision.validateJSON(
+                try JSONSerialization.data(withJSONObject: element)
+            )
+        }
+    }
+
+    public static func decode(_ data: Data, expectedCount: Int) throws -> [LabTypistDecision] {
+        try validateJSON(data, expectedCount: expectedCount)
+        return try JSONDecoder().decode(LabTypistDecisionBatch.self, from: data).decisions
+    }
+}
+
 /// The socket a decision layer plugs into. Stage 1 ships a frozen heuristic
 /// and an external-command shim; a cheap frontier model can later stand behind
 /// the same method without touching the keystroke driver.
@@ -198,7 +316,26 @@ public protocol TypistDecisionPolicy: Sendable {
     /// Stable, aggregate-safe label recorded in the simulated report.
     var identifier: String { get }
 
+    /// How many decision-independent moments this policy will take in one call.
+    /// The default is 1: one moment, one answer, today's behavior.
+    var decisionBatchSize: Int { get }
+
     func decide(_ features: LabTypistMomentFeatures) throws -> LabTypistDecision
+
+    /// Decides a batch of moments the engine has proven independent of one
+    /// another. Implementations must answer in the same order, one decision per
+    /// moment.
+    func decide(batch: [LabTypistMomentFeatures]) throws -> [LabTypistDecision]
+}
+
+public extension TypistDecisionPolicy {
+    var decisionBatchSize: Int { 1 }
+
+    /// A policy that has no batch backend still satisfies the batch method by
+    /// answering each moment on its own, in order.
+    func decide(batch: [LabTypistMomentFeatures]) throws -> [LabTypistDecision] {
+        try batch.map { try decide($0) }
+    }
 }
 
 public enum LabTypistPolicyError: Error, LocalizedError, Equatable, Sendable {
@@ -207,6 +344,8 @@ public enum LabTypistPolicyError: Error, LocalizedError, Equatable, Sendable {
     case forbiddenKey(String)
     case decisionCommandUnavailable(String)
     case decisionCommandFailed(Int32)
+    case batchSizeOutOfRange(Int)
+    case batchCountMismatch(expected: Int, received: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -220,6 +359,10 @@ public enum LabTypistPolicyError: Error, LocalizedError, Equatable, Sendable {
             "The external decision command is not an executable owner-controlled file: \(path)."
         case let .decisionCommandFailed(status):
             "The external decision command exited with status \(status)."
+        case let .batchSizeOutOfRange(size):
+            "A typist moment batch must hold 1...\(LabTypistMomentBatch.maximumSize) moments, not \(size)."
+        case let .batchCountMismatch(expected, received):
+            "The typist decision batch answered \(received) of \(expected) moments; decisions must match the moments one for one, in order."
         }
     }
 }

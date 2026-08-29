@@ -69,11 +69,15 @@ enum ResearchCoordinator {
           --personas fast-chat-responder,deliberate-prose-drafter
           --policy heuristic|external-command
           --decision-command /absolute/policy-command [--decision-argument VALUE]
+          --decision-batch-size 1..100
           --helper PATH --model-file PATH --workers 1 --slots 1
           --output simulated-typist.json [--json]
         The external command reads one text-free JSON feature object on stdin
         and writes one text-free JSON decision object on stdout. No scenario
         text, prompt, or candidate can cross that boundary.
+        Above a batch size of 1 it instead reads one text-free moment-batch
+        envelope and writes the same number of decisions, in the same order.
+        Batches only ever group moments from different persona/scenario pairs.
         """,
         "advance-search": "Usage: tilde-lab advance-search --campaign CAMPAIGN.json --stage halving|adaptive [--candidates 8] [--output CHILD.json]",
         "nominate": "Usage: tilde-lab nominate --campaign CAMPAIGN.json [--top 3] --output validation-plan.json",
