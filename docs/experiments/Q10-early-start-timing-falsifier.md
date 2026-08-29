@@ -272,7 +272,7 @@ character or by adding branches.
   12 prediction tokens; early character offset 3; minimum word length 4;
   minimum useful characters 6; keystroke interval 180 ms
 - Invocation digest (SHA-256 of
-  `tilde-lab-runner --early-start-full --helper /Applications/Tilde.app/Contents/Helpers/llama-server`):
+  `tilde-lab-runner --early-start-full --helper /Applications/Tilde Model Preview.app/Contents/Helpers/llama-server`):
   `d1f4f96169a1de880d2ba6b878d118f5cf80abb68fec9477bc9aa19b6a55db30`
 - OS, hardware class, and power state: recorded by the run; AC power required
 
@@ -284,7 +284,7 @@ dogfood typing in progress:
 ```sh
 swift build -c release && \
   ./.build/release/tilde-lab-runner --early-start-full \
-    --helper "/Applications/Tilde.app/Contents/Helpers/llama-server" \
+    --helper "/Applications/Tilde Model Preview.app/Contents/Helpers/llama-server" \
     --early-start-output ~/Desktop/q10-early-start.json
 ```
 
