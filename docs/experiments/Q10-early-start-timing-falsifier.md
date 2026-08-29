@@ -321,7 +321,7 @@ Pending.
 - Learning Ledger entry: none yet; add one only if the result is reusable
 - Lab log: `2026-08-29 — Pre-register the early-start timing falsifier`
 - Regression IDs: none
-- Implementation pull request: [#435](https://github.com/r3dbars/tilde/pull/435)
+- Implementation pull request: [#441](https://github.com/r3dbars/tilde/pull/441)
 - Rollback: delete the development-only runner path and its CLI flags;
   production is unchanged either way
 
