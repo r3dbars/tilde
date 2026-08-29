@@ -191,6 +191,28 @@ readiness gate permits the separately registered Q08 run, not production.
   [`docs/research/`](./).
 - **Next:** Use the catalog as priors; do not implement a paper.
 
+## 2026-08-29 — Push the Future Lattice to sixteen branches
+
+- **Try:** Pre-register and run one nested Qwen candidate-set test at K=1, K=4,
+  K=8, and K=16 on all 360 speak-expected development situations, after a
+  20-situation machinery pilot. The owner explicitly authorized the
+  battery-powered run.
+- **Learn:** More branches improve set-level exact-prefix coverage, but the
+  curve is nearly flat after eight: K=8 found 163 golden paths and K=16 found
+  168. Sixteen branches reached 46.67% coverage yet produced a median of only
+  two distinct first-two-content-word paths; just 27.22% of sets reached four.
+  Candidate readiness was 3,593 ms p50, with 49.12x K=1 summed request latency.
+- **Fail:** K=16 failed the registered diversity gate and median-four kill
+  rule. Battery power and fair thermal state make latency directional, but the
+  rejection does not rely on latency. Do not build 16 independent futures into
+  the IME or try a larger K.
+- **Where:** [Q09](../experiments/Q09-future-lattice-k16-feasibility.md),
+  [aggregate result](../experiments/Q09-aggregate-results.json), ledger
+  `future-lattice-k16-independent-branches-rejected`, PR #432.
+- **Next:** Return to the ordered queue. If the Future Lattice becomes eligible
+  later, preregister a smaller or genuinely diversity-producing shared
+  generator before any target-blind lock or typing-window experiment.
+
 ## Earlier attempts already on record
 
 These happened before this log existed. Do not rewrite them here; point
