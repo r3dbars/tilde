@@ -23,6 +23,9 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     public let id: UUID
     public let shownAt: Date
     public let sessionDigestSHA256: String
+    /// H01 arm tag. `champion` unless the disabled-by-default block
+    /// randomization harness is running, so ordinary events are unchanged.
+    public let variant: String
     public let appCategory: String
     public let register: String
     public let boundary: String
@@ -42,6 +45,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         id: UUID = UUID(),
         shownAt: Date,
         sessionDigestSHA256: String,
+        variant: String = "champion",
         appCategory: String,
         register: String,
         boundary: String,
@@ -53,6 +57,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         self.id = id
         self.shownAt = shownAt
         self.sessionDigestSHA256 = sessionDigestSHA256
+        self.variant = variant
         self.appCategory = appCategory
         self.register = register
         self.boundary = boundary
@@ -135,6 +140,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
             id: id,
             occurredAt: shownAt,
             sessionDigestSHA256: sessionDigestSHA256,
+            variant: variant,
             appCategory: appCategory,
             register: register,
             boundary: boundary,

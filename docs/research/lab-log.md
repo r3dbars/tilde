@@ -28,6 +28,30 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Build the H01 block-randomization harness, shipped disabled
+
+- **Try:** Build, but do not start, the instrument H01 will need: a
+  seeded AB/BA block randomizer in `TildeCore` with a persisted schedule,
+  a Model-Preview-only wire-up that lets an arm drive the visible-word
+  cap, arm tagging on the existing text-free v3 event's `variant` field,
+  and a `tilde-lab online-report --by-arm` slice so the two arms can be
+  compared from ingested counts.
+- **Learn:** The v3 event already carried champion/challenger, so H01
+  needs no second telemetry store — only a producer that stamps the arm
+  and an instrument plan that admits a displayed challenger. Pinning the
+  arm to the typing session and sending the arm identity (never a
+  number) over the local socket keeps the two processes from disagreeing
+  about what the writer actually saw.
+- **Fail:** H01 is not started and nothing here is evidence. The harness
+  is OFF by default and inert in every profile except an explicitly
+  enabled Model Preview; Stage 0 still gates the experiment, and F03 is
+  still IMPLEMENTING, not supported.
+- **Where:** `Sources/TildeCore/Policy/H01BlockRandomization.swift`,
+  `Sources/TildeLabKit/Models/LabInstrumentCampaign.swift`, PR "lab: build
+  disabled H01 block-randomization harness for the Model Preview".
+- **Next:** Finish F03 on-device ingest to SUPPORTED — then, and only
+  then, pre-register H01 and turn the toggle on.
+
 ## 2026-08-29 — Build the three missing ordinary-silence detectors behind a Lab flag
 
 - **Try:** Add complete-sentence, multiple-question, and ambiguous-reference
