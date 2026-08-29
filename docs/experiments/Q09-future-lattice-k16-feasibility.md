@@ -1,6 +1,6 @@
 # Q09 — Future Lattice K=16 feasibility
 
-Status: PROPOSED
+Status: REJECTED
 Experiment class: generator
 Owner: Tilde research program
 Pre-registered: 2026-08-29T11:36:05Z
@@ -126,42 +126,88 @@ candidate-set hypothesis. Do not respond to failure by trying K above 16.
 
 ### Frozen provenance
 
-- Source commit: to be recorded before execution
-- Dirty state: to be recorded before execution
+- Source commit: `999caf70eb67cec9ee7c2322a6a64e3e623a02b0`
+- Dirty state: clean
 - Model: Qwen 3.5 9B Base Q4_K_M
 - Model revision: `ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6`
 - Model SHA-256: `4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`
-- Helper SHA-256: to be recorded before execution
-- Runner SHA-256: to be recorded before execution
-- Suite SHA-256: to be recorded before execution
+- Helper SHA-256: `66d928b602000ee008cf8884ef97c3123b29e3a03a5b8fdef9be2bb7e3c0f0c5`
+- Runner SHA-256: `f36b2dda5e3103e737d371e1cff0290dd9fefa4373d246bd6b1df75956ff8279`
+- Suite SHA-256: `5bbc362c93e4cf1e3383b81dfe56a48a2f7c5160cc492ad4e1a00b99ddd5b46c`
 - Candidate seeds: frozen in the runner implementation
-- Invocation digest: to be recorded before execution
-- OS, hardware class, power state: to be recorded before execution
+- Invocation digest: `057c6f817e96b257e56cc9716a08d05439d5318c44a414372fa483afe60381e3`
+- OS, hardware class, power state: macOS 26.6.2 (`25G83`), Mac17,7,
+  battery power; 88% at decisive-run start and 47% after completion
 
 ## Result
 
-Status: PENDING
+Status: REJECTED
+Completed: 2026-08-29T12:05:20Z
 
 ### Aggregate evidence
 
-Pending.
+The 20-situation protocol pilot completed all 320 planned generations with
+nominal thermal state and no protocol or privacy failure. The decisive
+development run then completed all 5,760 planned generations across 360
+situations. Its report contains aggregates only and records no personal
+writing, raw prompts, raw candidates, or scenario text.
+
+| Set | Golden coverage | 95% Wilson interval | Reviewed-path coverage | Median distinct paths | Sets with >=4 paths | Readiness p50 / p95 | Summed-latency multiple |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| K=1 | 26.94% | 22.62–31.75% | 41.67% | 1 | 0.00% | 357 / 460 ms | 1.00x |
+| K=4 | 35.00% | 30.25–40.06% | 58.89% | 1 | 2.50% | 1,214 / 1,513 ms | 7.77x |
+| K=8 | 45.28% | 40.21–50.44% | 68.33% | 2 | 21.39% | 1,934 / 2,384 ms | 15.14x |
+| K=16 | 46.67% | 41.58–51.83% | 70.56% | 2 | 27.22% | 3,593 / 4,331 ms | 49.12x |
+
+Because the sets are nested, the five new golden matches from K=9–16 equal a
+1.39 percentage-point increment over K=8 (95% Wilson interval 0.59–3.21).
+K=16 improved 11.67 points over K=4, so it passed the registered coverage
+level and K=4 marginal-gain bars. It failed the diversity gate: only 27.22% of
+sets had four distinct first-two-content-word paths, below 50%, and the median
+was two, below the kill threshold of four. K=8 already contained 163 of the
+168 golden paths found by K=16.
+
+The shareable aggregate is
+[`Q09-aggregate-results.json`](Q09-aggregate-results.json).
 
 ### Failures and limitations
 
-Pending.
+- The decisive run began on battery by explicit owner authorization. Thermal
+  state moved from nominal to fair, so the latency figures are directional
+  and cannot establish nominal-hardware timing.
+- The rejection does not depend on timing: the registered diversity kill rule
+  failed, and K=16 added only five golden matches beyond nested K=8.
+- Exact synthetic-prefix coverage is an upper bound on candidate availability,
+  not proof that a target-blind lock can choose the right future or that a
+  writer will accept it.
+- Independent requests are intentionally a pessimistic implementation of a
+  shared decode tree. This result rejects 16 independently sampled branches,
+  not every possible speculative-decoding implementation.
+- Validation and holdout remained unopened. Production and Model Preview were
+  unchanged and still running after the experiment.
 
 ### Decision
 
-Pending.
+Reject the 16-independent-future lattice. Do not build it into the IME and do
+not increase K beyond 16. The reusable signal is narrower: most measurable
+set-level coverage arrived by K=8, while the second eight branches bought only
+1.39 points and still failed to create the registered path diversity.
+
+Retain a bounded K=4/K=8 or shared-tree hypothesis for a later registered
+generator experiment, but do not promote it to live shadow timing from this
+result. Its candidate-set readiness is still much slower than an inline typing
+window, and a target-blind selection rule remains unproved.
 
 ### Durable changes
 
-- Learning Ledger entry: only if the completed result changes durable knowledge
+- Learning Ledger entry: `future-lattice-k16-independent-branches-rejected`
+- Lab log: `2026-08-29 — Push the Future Lattice to sixteen branches`
 - Regression IDs: none
-- Implementation pull request: pending
+- Implementation pull request: [#432](https://github.com/r3dbars/tilde/pull/432)
 - Rollback: delete the development-only runner path; production is unchanged
 
 ### Follow-up
 
-Only a passing coverage result may proceed to a separate target-blind consensus
-lock and real typing-window experiment.
+Return to the ordered research queue. If Future Lattice becomes eligible later,
+test a preregistered smaller or genuinely diversity-producing shared generator
+before any target-blind lock or real typing-window experiment.
