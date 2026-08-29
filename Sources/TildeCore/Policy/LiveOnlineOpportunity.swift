@@ -225,18 +225,20 @@ public struct PendingRetainedWatch: Equatable, Sendable {
 
     public mutating func observeThirtySeconds(window: String?) throws {
         guard retentionAt30Seconds.missingness == .notYetObserved else { return }
-        retentionAt30Seconds = try RetainedSpanWatch.observation(
-            accepted: accepted,
-            window: window
+        retentionAt30Seconds = RetainedSpanWatch.monotone(
+            try RetainedSpanWatch.observation(accepted: accepted, window: window),
+            notExceeding: retentionAt5Seconds
         )
     }
 
     public mutating func observeSegment(window: String?) throws {
         guard retentionAtSegmentClose.missingness == .notYetObserved else { return }
-        retentionAtSegmentClose = try RetainedSpanWatch.observation(
-            accepted: accepted,
-            window: window
+        var observed = RetainedSpanWatch.monotone(
+            try RetainedSpanWatch.observation(accepted: accepted, window: window),
+            notExceeding: retentionAt30Seconds
         )
+        observed = RetainedSpanWatch.monotone(observed, notExceeding: retentionAt5Seconds)
+        retentionAtSegmentClose = observed
     }
 
     public mutating func markPrivacyExcluded() {
