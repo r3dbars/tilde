@@ -28,6 +28,32 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Simulated-typist stage 1: build the skeleton, trust nothing
+
+- **Try:** Build `tilde-lab simulate-typist` — five checked-in synthetic
+  personas, a character-level keystroke driver that replays a scenario's
+  golden continuation through the real prompt composer, generation runner,
+  production cleaner, and Lab display judge, and a pluggable
+  `TypistDecisionPolicy` with a frozen deterministic heuristic plus an
+  external-command shim whose JSON contract is text-free by schema.
+- **Learn:** The decision layer can be separated from the stack cleanly:
+  the driver reuses the existing checkpoint-expansion machinery at
+  character resolution, and every feature a policy needs at a display
+  (length bucket, prefix-match state, persona traits, time since display,
+  confidence bucket) is expressible in buckets, booleans, and counts — so
+  a future cloud policy can never be handed writing.
+- **Fail:** No LLM backend and no calibration. The simulated numbers are
+  the heuristic's own assumptions reflected back; the report is fenced
+  with the new `simulated-decision-layer` evidence reason and cannot enter
+  a comparison. Until the sim-vs-live ranking-agreement protocol in issue
+  #437 runs, these aggregates are untrusted and must not reorder anything
+  that matters.
+- **Where:** issue #437 stage 1; `Sources/TildeLabKit/Simulation/`;
+  `Sources/TildeLabCLI/SimulatedTypistCommand.swift`;
+  [`docs/tilde-lab.md`](../tilde-lab.md) § Simulated typist.
+- **Next:** Run the simulator on situations mirroring the owner's live F03
+  weeks and score sim-vs-live ranking agreement before any other stage.
+
 ## 2026-08-29 — F04: freeze ten known failures as toothed regression cases
 
 - **Try:** Implement the sanitized permanent regression library:

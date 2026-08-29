@@ -55,6 +55,51 @@ public enum LabPrefixReplay {
         }
     }
 
+    /// One keystroke-level moment: the writer has typed `typed` of their
+    /// golden continuation and `remaining` is still ahead of the caret. This
+    /// is the checkpoint expansion at character resolution, so the simulated
+    /// typist meets the same prompt and display policy production would.
+    public static func momentScenario(
+        _ scenario: LabScenario,
+        typed: String,
+        remaining: String
+    ) -> LabScenario {
+        let required = scenario.expectation.requiredTerms.filter {
+            !typed.localizedCaseInsensitiveContains($0)
+        }
+        return LabScenario(
+            id: scenario.id,
+            category: scenario.category,
+            partition: scenario.partition,
+            intent: scenario.intent,
+            tone: scenario.tone,
+            language: scenario.language,
+            tags: scenario.tags,
+            appBundleIdentifier: scenario.appBundleIdentifier,
+            typedContext: scenario.typedContext + typed,
+            scene: scenario.scene,
+            expectation: LabExpectation(
+                shouldSuggest: true,
+                goldenContinuation: remaining,
+                acceptablePrefixes: [remaining],
+                requiredTerms: required,
+                forbiddenTerms: scenario.expectation.forbiddenTerms,
+                maximumWords: scenario.expectation.maximumWords
+            ),
+            evaluation: LabEvaluationMetadata(
+                source: scenario.evaluation.source,
+                checkpoint: scenario.evaluation.checkpoint,
+                contextVariant: scenario.evaluation.contextVariant,
+                temporalIntegrity: scenario.evaluation.temporalIntegrity,
+                evidence: scenario.evaluation.evidence,
+                corpusID: scenario.evaluation.corpusID,
+                rootScenarioID: scenario.evaluation.rootScenarioID ?? scenario.id,
+                correctionKeystrokes: scenario.evaluation.correctionKeystrokes,
+                dismissalKeystrokes: scenario.evaluation.dismissalKeystrokes
+            )
+        )
+    }
+
     public static func contextAblations(
         _ scenario: LabScenario,
         variants: [LabContextVariant]
