@@ -169,6 +169,31 @@ struct LabSimulatedTypistTests {
         #expect(dismissed == LabTypistDecision(action: .dismiss, wouldRetain: false))
     }
 
+    @Test("A command that hangs without closing stdout fails at the deadline")
+    func externalCommandHangHitsTimeout() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tilde-typist-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let script = directory.appendingPathComponent("hang.sh")
+        try #"""
+        #!/bin/bash
+        cat > /dev/null
+        sleep 3600
+        """#.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: script.path
+        )
+
+        let policy = try ExternalCommandTypist(command: script.path, timeoutSeconds: 0.5)
+        let started = Date()
+        #expect(throws: LabTypistPolicyError.self) {
+            _ = try policy.decide(Self.features(prefixMatch: .exact))
+        }
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
+
     @Test("A missing or non-executable decision command is refused before any run")
     func externalCommandMustBeExecutable() {
         #expect(throws: LabTypistPolicyError.self) {

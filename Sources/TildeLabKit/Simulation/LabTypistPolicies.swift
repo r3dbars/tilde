@@ -94,6 +94,11 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
         self.identifier = identifier
     }
 
+    /// Off-thread read buffer; the semaphore orders the write before the read.
+    private final class ResponseBox: @unchecked Sendable {
+        var data = Data()
+    }
+
     public func decide(_ features: LabTypistMomentFeatures) throws -> LabTypistDecision {
         let payload = try features.encodedJSON()
         let process = Process()
@@ -112,9 +117,24 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
         input.fileHandleForWriting.write(payload)
         try? input.fileHandleForWriting.close()
 
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        while process.isRunning, Date() < deadline {
+        // The read happens off-thread so the deadline still fires against a
+        // command that hangs without ever closing stdout; terminating the
+        // process closes the pipe and unblocks the reader.
+        let response = ResponseBox()
+        let readFinished = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            response.data = output.fileHandleForReading.readDataToEndOfFile()
+            readFinished.signal()
+        }
+        if readFinished.wait(timeout: .now() + timeoutSeconds) == .timedOut {
+            process.terminate()
+            _ = readFinished.wait(timeout: .now() + 1)
+            throw LabTypistPolicyError.decisionCommandFailed(-1)
+        }
+        let data = response.data
+        // Brief grace for the gap between stdout closing and process exit.
+        let exitDeadline = Date().addingTimeInterval(1)
+        while process.isRunning, Date() < exitDeadline {
             usleep(2_000)
         }
         if process.isRunning {
