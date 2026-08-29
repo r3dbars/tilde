@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-28T00:00:47Z",
+  "updatedAt": "2026-08-28T16:27:25Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -104,6 +104,34 @@
     }
   ],
   "entries": [
+    {
+      "id": "qwen-prefix-cache-tail-target-rejected",
+      "recordedAt": "2026-08-28T16:27:25Z",
+      "area": "methodology",
+      "status": "rejected",
+      "title": "Prefix-cache engagement does not establish a useful tail-latency gain",
+      "finding": "Q08 completed 57600 evaluations and 40704 fresh generations on 600 synthetic development roots, with three seeds and 16 repetitions. Cache reuse engaged, but p95 changed only 429 to 427 ms: 0.47 percent improvement with paired counterfactual-cluster 95 percent interval 0.00 to 0.93, rejecting the registered 10 percent target. Median latency improved 348 to 334 ms; paired quality labels were identical.",
+      "decision": "Keep mechanism engagement separate from the primary benefit target. Do not substitute a median win for a rejected tail-latency hypothesis, treat repeated roots as new situations, or waive missing memory coverage. Both arms still fail absolute quality; no production, preview, protected-stage, or queue change is authorized.",
+      "comparisonGroupID": "qwen-prompt-cache-q08",
+      "evaluationCount": 57600,
+      "metrics": [
+        { "subjectID": "paired", "key": "root-count", "value": 600, "unit": "roots" },
+        { "subjectID": "paired", "key": "fresh-model-requests", "value": 40704, "unit": "requests" },
+        { "subjectID": "cache-on", "key": "p95-reduction", "value": 0.4662, "unit": "percent" },
+        { "subjectID": "both", "key": "bad-when-shown", "value": 43.2854, "unit": "percent" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q08-prompt-cache-study.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q08-aggregate-results.json" }
+      ],
+      "limitations": [
+        "Shared warm synthetic workload, not live typing or cold-reset proof; the quiet sensitivity retained only 42 roots.",
+        "One arm-block had 28 rather than 30 required RSS samples, leaving memory evidence inconclusive despite bounded observed RSS.",
+        "RSS is process memory, not total GPU or unified memory; CPU is only a contention proxy.",
+        "Both arms failed absolute bad-suggestion quality; interaction integrity was not run."
+      ],
+      "tags": ["prompt-cache", "tail-latency", "negative-result", "offline-only", "no-promotion"]
+    },
     {
       "id": "qwen-confidence-filter-bounded",
       "recordedAt": "2026-08-27T23:50:27Z",

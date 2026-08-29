@@ -154,6 +154,11 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — REJECTED; p95 gain 0.47%, below 10% target; no promotion
+- [Q07B — Fixed AC prompt-cache readiness pilot](Q07B-cache-ac-pilot.md) — readiness PASSED; superiority INCONCLUSIVE
+
+- [Q07 — Prompt-cache instrumentation pilot](Q07-prompt-cache-pilot.md) — INCONCLUSIVE; budget expired
+
 - [F01 — Report provenance v6](F01-report-provenance-v6.md) — SUPPORTED
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED
 - [F03 — Retained-outcome ledger](F03-retained-outcome-ledger.md) — IMPLEMENTING
