@@ -158,6 +158,11 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
         return max(timeoutSeconds, min(scaled, Self.maximumTimeoutSeconds))
     }
 
+    /// Safe to run concurrently: every invocation owns its process, its two
+    /// pipes, its response buffer, and its semaphore, and the policy's own
+    /// state (`executableURL`, `arguments`, deadlines) is immutable. No
+    /// temporary file, working directory, or environment is shared between two
+    /// calls, so N of these may be in flight at once without interfering.
     private func invoke(
         payload: Data,
         responseByteLimit: Int,

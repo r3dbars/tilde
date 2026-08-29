@@ -10,7 +10,7 @@ extension ResearchCoordinator {
         try arguments.assertAllowed(
             options: [
                 "suite", "personas", "policy", "decision-command", "decision-argument",
-                "decision-batch-size",
+                "decision-batch-size", "decision-workers",
                 "scenarios", "stride", "maximum-displays", "helper", "model-file",
                 "model", "model-revision", "workers", "slots", "output",
             ],
@@ -43,6 +43,7 @@ extension ResearchCoordinator {
         configuration.maximumDisplaysPerScenario = try arguments.integer(
             "maximum-displays", default: 8
         )
+        configuration.decisionWorkers = try decisionWorkers(arguments)
 
         let model = try modelConfiguration(arguments)
         let runtime = LabRuntimeConfiguration(
@@ -87,6 +88,24 @@ extension ResearchCoordinator {
             }
             return persona
         }
+    }
+
+    /// Concurrency only pays where a decision is a process or a round trip.
+    /// The frozen heuristic is a local function call, so asking for workers
+    /// there is a mistake worth naming rather than a no-op worth recording.
+    static func decisionWorkers(_ arguments: CLIArguments) throws -> Int {
+        let workers = try arguments.integer("decision-workers", default: 1)
+        guard (1...LabSimulatedTypistConfiguration.maximumDecisionWorkers)
+            .contains(workers) else {
+            throw ResearchCLIError.invalidValue("--decision-workers")
+        }
+        guard workers == 1 || (arguments.value("policy") ?? "heuristic") == "external-command"
+        else {
+            throw ResearchCLIError.usage(
+                "--decision-workers requires --policy external-command."
+            )
+        }
+        return workers
     }
 
     private static func decisionPolicy(
@@ -141,6 +160,7 @@ extension ResearchCoordinator {
         ResearchConsole.line("Simulated typist over \(report.scenarioCount) scenarios")
         ResearchConsole.line("  decision policy: \(report.decisionPolicyIdentifier)")
         ResearchConsole.line("  decision batch size: \(report.decisionBatchSize)")
+        ResearchConsole.line("  decision workers: \(report.decisionWorkers)")
         ResearchConsole.line(
             "  evidence: discovery-grade simulation (\(report.evidenceEligibility.reasons.map(\.rawValue).joined(separator: ", ")))"
         )
