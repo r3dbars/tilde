@@ -50,7 +50,7 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
   for a reason that is about the cleaner and the stop rule, not about
   timing.
 - **Where:** [`docs/experiments/Q10-early-start-timing-falsifier.md`](../experiments/Q10-early-start-timing-falsifier.md);
-  issue #434; PR #435.
+  issue #434; PR #441.
 - **Next:** Run `--early-start-full` overnight on AC power with no live
   dogfood typing, then review it against the five frozen gates.
 
