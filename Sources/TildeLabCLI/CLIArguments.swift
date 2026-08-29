@@ -132,6 +132,7 @@ struct CLIArguments {
       compare                 paired-bootstrap every candidate against the baseline
       risk-coverage           replay confidence thresholds without new inference
       personalization-replay chronological local history evaluation; aggregate output only
+      simulate-typist         drive synthetic personas through the real stack; discovery-grade only
       advance-search          create a balanced-halving or adaptive child campaign
       nominate                freeze up to three passing validation candidates
       validate-candidates PLAN
