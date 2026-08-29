@@ -165,6 +165,7 @@ Completed: <ISO-8601 UTC>
 - [F02 — Campaign state reconciliation](F02-campaign-state-reconciliation.md) — SUPPORTED
 - [F03 — Retained-outcome ledger](F03-retained-outcome-ledger.md) — IMPLEMENTING
 - [Q01 — Qwen God v1 replication](Q01-qwen-god-v1-replication.md) — INCONCLUSIVE
+- [Q04 — Qwen 9B factorial replication v4](Q04-qwen-factorial-replication-v4.md) — REJECTED
 - [Q05 — Qwen confidence capture and small filtering pilot](Q05-confidence-filter-pilot.md) — REJECTED (selected policy; capture passed)
 - [Q06 — Fixed confidence filter on additional development roots](Q06-confidence-filter-followup.md) — SUPPORTED (bounded synthetic effect; no promotion)
 
