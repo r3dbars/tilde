@@ -93,4 +93,26 @@ struct GhostInputControllerTests {
             documentLength: 25
         ) == nil)
     }
+
+    @Test("Password managers stay excluded from the outcome watch")
+    func passwordManagersAreExcluded() {
+        #expect(
+            GhostInputController.isOutcomeExcluded(
+                bundleIdentifier: "com.1password.1password",
+                secureInput: false
+            )
+        )
+        #expect(
+            !GhostInputController.isOutcomeExcluded(
+                bundleIdentifier: "com.apple.mail",
+                secureInput: false
+            )
+        )
+        #expect(
+            GhostInputController.isOutcomeExcluded(
+                bundleIdentifier: "com.apple.mail",
+                secureInput: true
+            )
+        )
+    }
 }

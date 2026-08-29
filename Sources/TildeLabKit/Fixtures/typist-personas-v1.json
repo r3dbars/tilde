@@ -1,0 +1,40 @@
+{
+  "schema": "tilde-lab.typist-personas.v1",
+  "personas": [
+    {
+      "id": "fast-chat-responder",
+      "goal": "answer-quickly",
+      "register": "chat",
+      "typingSpeed": "fast",
+      "interruptionTolerance": "low"
+    },
+    {
+      "id": "careful-chat-confirmer",
+      "goal": "confirm-detail",
+      "register": "chat",
+      "typingSpeed": "medium",
+      "interruptionTolerance": "medium"
+    },
+    {
+      "id": "deliberate-prose-drafter",
+      "goal": "draft-carefully",
+      "register": "prose",
+      "typingSpeed": "slow",
+      "interruptionTolerance": "high"
+    },
+    {
+      "id": "exploratory-prose-thinker",
+      "goal": "think-aloud",
+      "register": "prose",
+      "typingSpeed": "medium",
+      "interruptionTolerance": "low"
+    },
+    {
+      "id": "steady-email-writer",
+      "goal": "draft-carefully",
+      "register": "email",
+      "typingSpeed": "medium",
+      "interruptionTolerance": "high"
+    }
+  ]
+}

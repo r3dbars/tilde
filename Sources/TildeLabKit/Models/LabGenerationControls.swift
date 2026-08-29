@@ -432,6 +432,10 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
     public var rejectsPromptLeaks: Bool
     public var rejectsContextReplay: Bool
     public var rejectsSelfRepetition: Bool
+    /// Development-only: adds the three extended ordinary-silence detectors
+    /// (complete sentence, multiple questions, ambiguous reference) to the
+    /// pre-inference scene gate. Production ships with this off.
+    public var extendedOrdinarySilenceGate: Bool
     public var lengthPolicy: LabSuggestionLengthPolicy
     public var dynamicLength: LabDynamicLengthConfiguration
 
@@ -448,6 +452,7 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
         rejectsPromptLeaks: Bool = true,
         rejectsContextReplay: Bool = true,
         rejectsSelfRepetition: Bool = true,
+        extendedOrdinarySilenceGate: Bool = false,
         lengthPolicy: LabSuggestionLengthPolicy = .fixed,
         dynamicLength: LabDynamicLengthConfiguration = .init()
     ) {
@@ -463,6 +468,7 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
         self.rejectsPromptLeaks = rejectsPromptLeaks
         self.rejectsContextReplay = rejectsContextReplay
         self.rejectsSelfRepetition = rejectsSelfRepetition
+        self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
         self.lengthPolicy = lengthPolicy
         self.dynamicLength = dynamicLength
     }
@@ -472,6 +478,7 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
         case rejectsSceneEcho, sceneEchoMinimumWords, sceneEchoMinimumCharacters
         case repairsDanglingTail, factualGrounding, suppressesSensitiveScenes
         case rejectsPromptLeaks, rejectsContextReplay, rejectsSelfRepetition
+        case extendedOrdinarySilenceGate
         case lengthPolicy, dynamicLength
     }
 
@@ -508,6 +515,10 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .rejectsSelfRepetition
         ) ?? true
+        extendedOrdinarySilenceGate = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .extendedOrdinarySilenceGate
+        ) ?? false
         lengthPolicy = try values.decodeIfPresent(
             LabSuggestionLengthPolicy.self,
             forKey: .lengthPolicy

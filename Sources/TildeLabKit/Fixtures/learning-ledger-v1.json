@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-27T19:11:28Z",
+  "updatedAt": "2026-08-29T15:30:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -15,7 +15,9 @@
     "Compare candidates only on the same corpus, split, prompt, scoring policy, model protocol, and controlled runtime.",
     "Distinct situations measure behavioral coverage; repetitions measure stability and do not create new coverage.",
     "Keep raw personal writing, screen text, prompts, model output, and private corpus material out of checked-in evidence.",
-    "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass."
+    "A Lab winner is not a production winner until validation, sealed holdout, interaction, and meaningful live dogfood gates pass.",
+    "Write every research attempt into the public lab log the same day, including rejected and incomplete work. The ledger stores only reusable lessons; the log stores the try.",
+    "Cloud and GitHub own protocol and fixtures. Only a Mac can produce live retained-outcome events. Playing with a config is discovery; promoting it requires one change and kept-character evidence."
   ],
   "researchProgram": [
     {
@@ -102,6 +104,158 @@
     }
   ],
   "entries": [
+    {
+      "id": "future-lattice-k16-independent-branches-rejected",
+      "recordedAt": "2026-08-29T12:05:20Z",
+      "area": "generator",
+      "status": "rejected",
+      "title": "Sixteen independent futures add little beyond eight and fail diversity",
+      "finding": "Q09 completed 5760 local generations on 360 synthetic development situations with nested K=1, K=4, K=8, and K=16 sets. Golden exact-prefix coverage rose from 26.94 percent at K=1 to 35.00 percent at K=4, 45.28 percent at K=8, and 46.67 percent at K=16. The second eight branches added only 5 matches, or 1.39 percentage points. At K=16 the median set had 2 distinct first-two-content-word paths and only 27.22 percent of sets had at least 4, failing the registered 50 percent diversity gate and median-4 kill threshold.",
+      "decision": "Reject 16 independently sampled futures, do not build them into the IME, and do not respond by increasing K. Most measured set-level coverage arrived by K=8, but K=4 and K=8 remain offline hypotheses rather than live candidates because readiness was 1214 and 1934 ms at p50 and no target-blind lock or retained utility was tested. Return to the ordered research queue; a future eligible test must use a smaller or genuinely diversity-producing shared generator.",
+      "comparisonGroupID": "q09-future-lattice-k16-v1",
+      "evaluationCount": 5760,
+      "metrics": [
+        { "subjectID": "K1", "key": "golden-exact-prefix-coverage", "value": 26.9444, "unit": "percent" },
+        { "subjectID": "K4", "key": "golden-exact-prefix-coverage", "value": 35.0, "unit": "percent" },
+        { "subjectID": "K8", "key": "golden-exact-prefix-coverage", "value": 45.2778, "unit": "percent" },
+        { "subjectID": "K16", "key": "golden-exact-prefix-coverage", "value": 46.6667, "unit": "percent" },
+        { "subjectID": "K16", "key": "sets-with-four-distinct-paths", "value": 27.2222, "unit": "percent" },
+        { "subjectID": "K16", "key": "readiness-p50", "value": 3593, "unit": "milliseconds" },
+        { "subjectID": "K16", "key": "summed-latency-multiple-versus-K1", "value": 49.1227, "unit": "times" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q09-future-lattice-k16-feasibility.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q09-aggregate-results.json" },
+        { "kind": "pull-request", "id": "432" }
+      ],
+      "limitations": [
+        "The synthetic exact-prefix metric measures candidate-set availability, not target-blind selection, live acceptance, or retained utility.",
+        "The run used independent requests; it does not reject every possible shared-tree or speculative-decoding implementation.",
+        "The battery-powered run reached fair thermal state, so latency is directional and not nominal-hardware proof.",
+        "Validation and holdout remained unopened, and no production or Model Preview behavior changed."
+      ],
+      "tags": ["future-lattice", "candidate-diversity", "negative-result", "offline-only", "no-promotion"]
+    },
+    {
+      "id": "qwen-prefix-cache-tail-target-rejected",
+      "recordedAt": "2026-08-28T16:27:25Z",
+      "area": "methodology",
+      "status": "rejected",
+      "title": "Prefix-cache engagement does not establish a useful tail-latency gain",
+      "finding": "Q08 completed 57600 evaluations and 40704 fresh generations on 600 synthetic development roots, with three seeds and 16 repetitions. Cache reuse engaged, but p95 changed only 429 to 427 ms: 0.47 percent improvement with paired counterfactual-cluster 95 percent interval 0.00 to 0.93, rejecting the registered 10 percent target. Median latency improved 348 to 334 ms; paired quality labels were identical.",
+      "decision": "Keep mechanism engagement separate from the primary benefit target. Do not substitute a median win for a rejected tail-latency hypothesis, treat repeated roots as new situations, or waive missing memory coverage. Both arms still fail absolute quality; no production, preview, protected-stage, or queue change is authorized.",
+      "comparisonGroupID": "qwen-prompt-cache-q08",
+      "evaluationCount": 57600,
+      "metrics": [
+        { "subjectID": "paired", "key": "root-count", "value": 600, "unit": "roots" },
+        { "subjectID": "paired", "key": "fresh-model-requests", "value": 40704, "unit": "requests" },
+        { "subjectID": "cache-on", "key": "p95-reduction", "value": 0.4662, "unit": "percent" },
+        { "subjectID": "both", "key": "bad-when-shown", "value": 43.2854, "unit": "percent" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q08-prompt-cache-study.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q08-aggregate-results.json" }
+      ],
+      "limitations": [
+        "Shared warm synthetic workload, not live typing or cold-reset proof; the quiet sensitivity retained only 42 roots.",
+        "One arm-block had 28 rather than 30 required RSS samples, leaving memory evidence inconclusive despite bounded observed RSS.",
+        "RSS is process memory, not total GPU or unified memory; CPU is only a contention proxy.",
+        "Both arms failed absolute bad-suggestion quality; interaction integrity was not run."
+      ],
+      "tags": ["prompt-cache", "tail-latency", "negative-result", "offline-only", "no-promotion"]
+    },
+    {
+      "id": "qwen-confidence-filter-bounded",
+      "recordedAt": "2026-08-27T23:50:27Z",
+      "area": "methodology",
+      "status": "directional",
+      "title": "Measured confidence can remove bad displays without proving live quality",
+      "finding": "After repairing selected-token log-probability capture, Q05 rejected its selected 0.50 cutoff on protected-slice loss. Separately registered Q06 fixed 0.475 and completed 3030 paired evaluations on 505 development roots, with 473 non-pilot roots primary. Bad displays fell 413 to 299 and useful displays 389 to 388. Counterfactual-cluster 95 percent intervals were 19.57 to 36.06 percent bad removal and 99.12 to 100 percent useful retention. Defined protected-slice targets passed, but both arms still failed absolute bad-suggestion quality.",
+      "decision": "Require actual confidence coverage and exact cached-output pairing before interpreting confidence replay. Preserve rejected pilot selections rather than substituting a favorable threshold after results. Keep the 0.475 effect as bounded offline evidence only: 43.52 percent remaining bad-when-shown does not authorize a live change, promotion, or any research-stage unlock.",
+      "comparisonGroupID": "qwen-confidence-06",
+      "evaluationCount": 3030,
+      "metrics": [
+        { "subjectID": "primary", "key": "roots", "value": 473, "unit": "roots" },
+        { "subjectID": "primary", "key": "bad-display-reduction", "value": 27.6029, "unit": "percent" },
+        { "subjectID": "primary", "key": "useful-retention", "value": 99.7429, "unit": "percent" },
+        { "subjectID": "filtered", "key": "bad-when-shown", "value": 43.5226, "unit": "percent" },
+        { "subjectID": "capture", "key": "complete-generated-candidates", "value": 1059, "unit": "candidates" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q05-confidence-filter-pilot.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q06-confidence-filter-followup.md" },
+        { "kind": "test", "id": "Tests/TildeLabKitTests/LabTokenProbabilityTests.swift" }
+      ],
+      "limitations": [
+        "Existing Q04 development templates and synthetic scoring do not prove independent-template or live retained utility.",
+        "The paired lower bad-removal bound was positive but below 20 percent; the supported rule required a 20 percent point effect, not that stronger lower-bound claim.",
+        "Zero-useful slices provide no useful-retention evidence; prose, email and real-host interaction were not tested.",
+        "No speed or energy conclusion, production change, protected evaluation, or stage unlock followed."
+      ],
+      "tags": ["confidence", "paired-replay", "protected-slices", "offline-only", "no-promotion"]
+    },
+    {
+      "id": "score-counts-diary-words",
+      "recordedAt": "2026-08-27T23:00:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "Lab scores counts; words stay in a local diary",
+      "finding": "A public instrument can tell Tab-and-keep from Tab-and-rewrite from retained-character counts. The accepted span the owner wants to reread cannot live on that event, or Lab ingest becomes a writing store.",
+      "decision": "F03 and Tilde Lab store text-free counts only. A second owner-only diary on this Mac may hold the accepted span and keep-versus-edit. Delete Personalization Data wipes both. Lab ingest must reject acceptedText. Do not add a second Lab telemetry format.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" },
+        { "kind": "documentation", "id": "docs/research/lab-log.md" }
+      ],
+      "limitations": [
+        "The diary is local owner-only JSONL, not the encrypted Personal History store. Ordinary typing has not yet produced a live count file on this Mac."
+      ],
+      "tags": ["process", "f03", "privacy", "diary"]
+    },
+    {
+      "id": "cloud-protocol-mac-live-split",
+      "recordedAt": "2026-08-27T22:22:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "GitHub holds the ruler; the Mac must watch typing",
+      "finding": "The v3 text-free event and fixtures can land from a cloud agent, but they cannot see a keystroke. Config play on a live Mac is a hunch until one change is scored on kept characters.",
+      "decision": "Use cloud or GitHub threads for protocol, fixtures, and docs. Use a local Mac thread for F03 live ingest. Do not mark F03 supported from fixtures alone. Do not promote a config from play. First live product bet after the ruler is H01, three words versus eight.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/research/next-on-device.md" },
+        { "kind": "documentation", "id": "docs/research/lab-partnership.md" },
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" }
+      ],
+      "limitations": [
+        "Live ingest does not exist yet. This decision only splits where the next work must run."
+      ],
+      "tags": ["process", "f03", "on-device", "handoff"]
+    },
+    {
+      "id": "lab-partnership-and-failure-log",
+      "recordedAt": "2026-08-27T12:32:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "The lab writes down every try, learn, and fail",
+      "finding": "Decision-grade results already have experiment records, and reusable lessons already have ledger entries, but attempts that stopped early or failed lived only in chat. That is how a lab repeats itself.",
+      "decision": "Keep the owner-agent working agreement in docs/research/lab-partnership.md. Append every public research attempt to docs/research/lab-log.md with try, learn, and fail. Use the ledger only for a reusable lesson or decision. Never treat a missing log line as proof we did not try it.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/research/lab-partnership.md" },
+        { "kind": "documentation", "id": "docs/research/lab-log.md" },
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" }
+      ],
+      "limitations": [
+        "The log is only as complete as the next session that remembers to append it."
+      ],
+      "tags": ["process", "lab-log", "failure", "partnership"]
+    },
     {
       "id": "tilde-lab-platform-v1",
       "recordedAt": "2026-08-24T18:00:00Z",
@@ -1061,10 +1215,10 @@
     {
       "id": "sanitized-regression-library",
       "priority": 4,
-      "status": "ready-foundation",
+      "status": "completed-foundation",
       "question": "Can every discovered failure become a permanent test?",
       "hypothesis": "A compact sanitized regression set will stop scoring loopholes and known interaction mistakes from returning.",
-      "nextExperiment": "Create stable cases for short-cap echo bypass, repeat-penalty aggression, wrong-scene facts, stale-target delivery, prompt-example removal, factual-filter weakening, duplicate insertion, focus change, restart, and marked-text damage.",
+      "nextExperiment": "Completed 2026-08-29: LabPermanentRegressions freezes all ten failure classes as deterministic sanitized cases with stable IDs; every test run requires guards to hold and loopholes to stay reproducible.",
       "successCriteria": "Every known failure has a stable case ID, current production passes, unsafe diagnostic arms fail, and no private content is stored.",
       "dependencies": ["qwen-9b-scoring-confounds", "score-protocol-separation"]
     },

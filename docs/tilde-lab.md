@@ -230,12 +230,41 @@ app-specific n-grams are scored before each event is learned. Reports contain
 only aggregate lift, harm, coverage, precision, stress slices, and stale
 override blocks. They explicitly do not claim full-suggestion dogfood utility.
 
+### Simulated typist (discovery-grade only)
+
+`simulate-typist` drives checked-in synthetic personas — goal, register,
+typing-speed bucket, interruption tolerance — through the real completion path:
+the production prompt composer, the configured generation runner, the
+production cleaner, and the Lab display judge. The only simulated part is the
+human at the keyboard. At every display a `TypistDecisionPolicy` answers
+accept, accept-word, continue, or dismiss, plus a would-retain judgment.
+
+Stage 1 ships `DeterministicHeuristicTypist` (frozen rules, no randomness) and
+`ExternalCommandTypist`, which writes one JSON feature object to a configured
+command's stdin and reads one JSON decision from its stdout. That is the socket
+a cheap frontier model plugs into later; no cloud model, endpoint, or
+credential lives in this repository. Both sides of the contract are text-free
+*by schema*: every field is a bucket, a boolean, or a count, and any key
+outside the allowlist is rejected, so scenario text, prompts, and candidates
+structurally cannot cross the boundary.
+
+The report is aggregate-only per persona — displays, simulated acceptance,
+type-through, wrong displays, corrections, and retained-character potential. It
+carries the report provenance envelope and the aggregate-only privacy contract,
+and it is permanently fenced with the `simulated-decision-layer` evidence
+reason. It is not a `LabRunReport`, is never written into a campaign's reports
+directory, and cannot enter a comparison or advance a protected phase. Until
+the sim-vs-live ranking-agreement protocol runs, treat its numbers as untrusted
+search order, never as evidence.
+
 After a passing holdout, `shadow`, `dogfood`, and `soak` create sticky local
 plans. `ingest-events` accepts a closed text-free JSONL schema; raw text fields
-are structurally rejected. `online-report` estimates realized accepted
-characters, edits/undoes, deadline misses, matched-stratum attention tax, and
-net time per 1,000 typed characters. `delete-telemetry` deletes every event for
-the campaign.
+are structurally rejected. v3 events also carry typed-through, settled-visible
+time, and retained-character counts or missingness at 5s, 30s, and segment
+close. `online-report` prints coverage and missingness at those horizons,
+typed-through, flicker accepts, realized accepted characters, edits/undoes,
+deadline misses, matched-stratum attention tax, and net time per 1,000 typed
+characters. `delete-telemetry` deletes every event for the campaign.
 
 A soak requires sustained active duration, enough events, p99 first-stable-word
 at or below one second, zero crashes, timeouts, wrong insertions, committed-text
@@ -482,7 +511,14 @@ swift run tilde-lab-runner --learning-ledger
 ```
 
 See [Tilde Learning Ledger](learning-ledger.md) for the current synthesis and
-update contract.
+update contract. How the owner and agent work as colleagues is
+[the lab partnership](research/lab-partnership.md). Every try, learn, and
+fail — including rejected work — goes in [the lab log](research/lab-log.md).
+Live F03 ingest is a Mac thread; start from
+[the on-device briefing](research/next-on-device.md).
+External papers that can change a queued experiment are indexed in
+[the reading list](reading-list.md), with Tilde-specific digests in
+[`docs/research/`](research/).
 
 The owner-visible **Model Results** screen and this command read the same
 aggregate-only checked-in catalog:

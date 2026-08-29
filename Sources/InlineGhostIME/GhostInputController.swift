@@ -93,6 +93,11 @@ final class GhostInputController: IMKInputController {
 
     /// IMKit creates one controller for each input session.
     private let suggestionSessionIdentifier = UUID().uuidString
+    /// H01 block-randomization arm for this typing session, resolved once so
+    /// visible length cannot change mid-sentence, and `nil` for every build
+    /// except a Model Preview whose owner turned the harness on.
+    private var h01ArmResolved = false
+    private var h01SessionArmValue: H01Arm?
     /// Personal History needs a stricter notion of continuity than IMKit's
     /// unstable client identifiers. Rotate this on known edit/session
     /// boundaries so replay does not join across deletion or navigation.
@@ -131,6 +136,7 @@ final class GhostInputController: IMKInputController {
             screenMemoryTypingTask = nil
             notifyScreenMemory(.textFieldBlurred)
             PersonalHistoryCapture.shared.sensitiveInputBegan()
+            GhostOutcomeLedger.markPrivacyExcluded()
             breakHistorySegment()
             dismiss(client)
             resetFallback()
@@ -200,7 +206,11 @@ final class GhostInputController: IMKInputController {
         case 53: // Escape dismisses only when something is visible.
             let wasVisible = state.isVisible
             dismiss(client)
-            if !wasVisible { breakHistorySegment() }
+            if wasVisible {
+                GhostOutcomeLedger.noteDismissed()
+            } else {
+                breakHistorySegment()
+            }
             return wasVisible
 
         case 51: // The host owns deletion; wait for the next typed character.
@@ -226,6 +236,8 @@ final class GhostInputController: IMKInputController {
             let current = match?.ticket
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
             apply(effects, to: client)
+            GhostOutcomeLedger.noteTyped()
+            GhostOutcomeLedger.closeIfGhostGone(stillVisible: state.isVisible)
             appendFallback(grapheme, for: client)
             capturePersonalHistory(
                 grapheme,
@@ -246,11 +258,17 @@ final class GhostInputController: IMKInputController {
     /// Client-driven composition endings must never commit an unaccepted ghost.
     override func commitComposition(_ sender: Any!) {
         if let client = sender as? IMKTextInput { dismiss(client) }
+        GhostOutcomeLedger.closeOpenGhost()
         breakHistorySegment()
     }
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
+        GhostOutcomeLedger.configure { [weak self] in
+            guard let self, let liveClient = self.client() else { return nil }
+            if IsSecureEventInputEnabled() { return nil }
+            return self.contextBeforeCaret(liveClient)
+        }
         guard !IsSecureEventInputEnabled() else { return }
         notifyScreenMemory(.textFieldFocused)
     }
@@ -261,6 +279,7 @@ final class GhostInputController: IMKInputController {
         notifyScreenMemory(.textFieldBlurred)
         GhostStats.flush(force: true)
         PersonalHistoryCapture.shared.flush()
+        GhostOutcomeLedger.closeSegment()
         if let client = sender as? IMKTextInput { dismiss(client) }
         breakHistorySegment()
         resetFallback()
@@ -300,10 +319,55 @@ final class GhostInputController: IMKInputController {
     private func stopForSecureInput(_ client: IMKTextInput) -> Bool {
         guard IsSecureEventInputEnabled() else { return false }
         PersonalHistoryCapture.shared.sensitiveInputBegan()
+        GhostOutcomeLedger.markPrivacyExcluded()
         breakHistorySegment()
         dismiss(client)
         resetFallback()
         return true
+    }
+
+    /// One read per typing session. While the harness is off this stays
+    /// `nil`, no schedule is created, and nothing downstream changes.
+    private func h01SessionArm() -> H01Arm? {
+        if h01ArmResolved { return h01SessionArmValue }
+        h01ArmResolved = true
+        h01SessionArmValue = H01BlockRandomization.arm(
+            profile: .current,
+            defaults: UserDefaults.standard
+        )
+        return h01SessionArmValue
+    }
+
+    private func recordOutcomeShown(_ client: IMKTextInput) {
+        let field = fieldSnapshot(client)
+        guard !Self.isOutcomeExcluded(bundleIdentifier: field.bundleIdentifier) else { return }
+        let context = contextBeforeCaret(client, selection: field.selection)
+        GhostOutcomeLedger.noteShown(
+            sessionIdentifier: suggestionSessionIdentifier,
+            bundleIdentifier: field.bundleIdentifier,
+            candidateCharacters: state.visibleText.count,
+            candidateWordCount: state.visibleText.split(whereSeparator: \Character.isWhitespace).count,
+            opportunityCharacters: max(1, context.count),
+            precedingCharacter: context.last,
+            excluded: false,
+            variant: h01SessionArm()?.eventVariant ?? "champion"
+        )
+    }
+
+    static func isOutcomeExcluded(
+        bundleIdentifier: String,
+        secureInput: Bool = IsSecureEventInputEnabled()
+    ) -> Bool {
+        if secureInput { return true }
+        let configured = Set(
+            UserDefaults.standard.stringArray(
+                forKey: PersonalHistorySettingsContract.excludedAppsKey
+            ) ?? []
+        )
+        return DefaultExcludedApps.isExcluded(
+            bundleIdentifier,
+            configuredExcludedApps: configured
+        )
     }
 
     private func appendFallback(_ text: String, for client: IMKTextInput) {
@@ -373,10 +437,15 @@ final class GhostInputController: IMKInputController {
                     selectionRange: NSRange(location: 0, length: 0),
                     replacementRange: Self.unset
                 )
+                GhostOutcomeLedger.noteVisibleCandidate(
+                    characters: text.count,
+                    wordCount: text.split(whereSeparator: \Character.isWhitespace).count
+                )
             case let .schedule(afterTyping: grapheme):
                 scheduleSuggestion(for: client, afterUserTyped: grapheme)
             case .shown:
                 GhostStats.recordSuggestionShown()
+                recordOutcomeShown(client)
             case .accepted:
                 GhostStats.recordSuggestionAccepted()
             }
@@ -455,6 +524,11 @@ final class GhostInputController: IMKInputController {
             observation: observation
         )
         GhostStats.recordAccepted(accepted)
+        GhostOutcomeLedger.noteAccepted(
+            accepted,
+            kind: .word,
+            remainderVisible: state.isVisible
+        )
         return true
     }
 
@@ -486,6 +560,11 @@ final class GhostInputController: IMKInputController {
             observation: observation
         )
         GhostStats.recordAccepted(accepted)
+        GhostOutcomeLedger.noteAccepted(
+            accepted,
+            kind: .all,
+            remainderVisible: state.isVisible
+        )
         return true
     }
 
@@ -776,12 +855,15 @@ final class GhostInputController: IMKInputController {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
         let fieldSessionIdentifier = requestTicket.clientIdentifier
+        // Session-pinned, and nil unless the H01 harness is explicitly on.
+        let experimentArm = h01SessionArm()?.rawValue
         modelTask = Task { [weak self] in
             let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(
                 context: tail,
                 app: bundle,
                 fieldSessionIdentifier: fieldSessionIdentifier,
+                experimentArm: experimentArm,
                 onPartial: { [weak self] text in
                     // Called on the socket worker; the ticket check in
                     // `present` is what discards a partial that arrives late.

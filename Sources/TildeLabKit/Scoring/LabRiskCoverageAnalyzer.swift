@@ -72,7 +72,8 @@ public enum LabRiskCoverageAnalyzer {
                     )
                     if let reason = SceneSuggestionPolicy.suppressionReason(
                         scene: prepared.scene,
-                        textBeforeCursor: scenario.typedContext
+                        textBeforeCursor: scenario.typedContext,
+                        options: report.arm.sceneSuppressionOptions
                     ) {
                         observations.append(ReplayObservation(
                             scenario: scenario,
