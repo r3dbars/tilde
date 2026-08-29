@@ -28,6 +28,49 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-29 — Q11 registered: gate the three leaking silence subcategories
+
+- **Try:** Pre-register the display-policy comparison for the extended
+  ordinary-silence gate (built in PR #438) before its decisive run: 8pp
+  bad-when-shown target, 99.5% useful retention, 1% per-category loss
+  budget, paired identical generations, frozen provenance.
+- **Learn:** The registration writes down the overfitting problem plainly:
+  the detectors were developed against the same development categories, so
+  the dev confirmation is expected to pass and can only nominate a frozen
+  validation candidate, never promote.
+- **Fail:** Not yet run. The campaign needs an idle machine, so it waits
+  for a window when the owner is not typing.
+- **Where:** [Q11](../experiments/Q11-ordinary-silence-gate.md); detectors
+  in PR #438; evidence basis in the two entries below.
+- **Next:** Run Q11 on the next idle window and review it before any
+  scene-echo work begins.
+
+## 2026-08-29 — Mine every campaign for chronic versus configuration failures
+
+- **Try:** Read all 14 observation-bearing campaign databases (~468k
+  scored observations) plus the 598 archived report files (~1.03M cases,
+  including the Gemma era) read-only, and classify every category as
+  chronic, configuration-sensitive, or healthy.
+- **Learn:** Five intent failures are chronic across both model families
+  and every sampling knob — acknowledge.delay, contradiction.latest-fact,
+  commit.delivery, answer.location, correct.time — all one skill: tracking
+  the newest fact. The three ordinary-silence subcategories are pinned at
+  ~100% in all 17 arm cells. The largest untreated loss is over-suppression:
+  scene-echo silences 100% of two legitimate reply categories for zero
+  bad-display gain, and the injection gate blocks 100% of its legitimate
+  test category. Grounding was the only display knob to move a pinned
+  failure (91.7%→54.2%); the confidence filter is at its ceiling; length
+  caps did nothing and the three-word cap worsened silence leakage.
+  Sensitive-scene suppression is perfect in every era and arm.
+- **Fail:** Discovery, not a registered result: seven truncated
+  silence-only campaigns cannot be pooled with full-suite ones, and the
+  Gemma/Qwen comparison is unpaired across eras. No queue or stage change
+  from this sweep alone.
+- **Where:** local campaign stores (owner-only); target list frozen in
+  GitHub issue #443; Q11 registration above is the first consequence.
+- **Next:** After Q11, register the scene-echo precision + grounding
+  question — the mining sweep's top recommendation.
+
 ## 2026-08-30 — Batch the simulated typist's decisions across sessions
 
 - **Try:** Add a text-free batch contract
