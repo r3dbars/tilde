@@ -154,6 +154,7 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q11 — Extended ordinary-silence gate](Q11-ordinary-silence-gate.md) — REGISTERED; not yet run
 - [Q10 — K=1 early-start timing falsifier](Q10-early-start-timing-falsifier.md) — IMPLEMENTING; registered and built, not yet run
 - [Q09 — Future Lattice K=16 feasibility](Q09-future-lattice-k16-feasibility.md) — REJECTED; K=16 failed diversity and added only 1.39 points over K=8
 - [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — REJECTED; p95 gain 0.47%, below 10% target; no promotion
