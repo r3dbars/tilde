@@ -252,16 +252,18 @@ character or by adding branches.
 
 ### Frozen provenance
 
-- Source commit: `PENDING` (filled in from the implementing commit before the
-  decisive run; the record is not amended after the run starts)
+- Source commit: `f609ab6c` (the implementing commit; provenance was frozen
+  in the follow-up commit before the decisive run, and is not amended after
+  the run starts)
 - Dirty state: must be clean at run start
 - Model: Gemma 4 E2B Q4_K_M (production pinned)
 - Model revision: `3762686d74ff8db6c98f8d3c389f56fbdf994d5a`
 - Model SHA-256:
   `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`
 - Helper SHA-256: recorded by the run; the signed in-app `llama-server`
-- Runner SHA-256 (`Sources/TildeLabKit/Services/LabEarlyStartRunner.swift`):
-  `PENDING`
+- Runner SHA-256 (`Sources/TildeLabKit/Services/LabEarlyStartRunner.swift`
+  at `f609ab6c`):
+  `3573e132e64b1068555b1b8d84380ec2dadef2c62cbfe4124950128ff1efdb79`
 - Suite and selection SHA-256:
   `5bbc362c93e4cf1e3383b81dfe56a48a2f7c5160cc492ad4e1a00b99ddd5b46c`
 - Scoring: production output cleaner, three visible words, 48 visible
@@ -269,7 +271,9 @@ character or by adding branches.
 - Arm values: cold temperature 0 seed 0; hot temperature 0.80 seed 907;
   12 prediction tokens; early character offset 3; minimum word length 4;
   minimum useful characters 6; keystroke interval 180 ms
-- Invocation digest: `PENDING`
+- Invocation digest (SHA-256 of
+  `tilde-lab-runner --early-start-full --helper /Applications/Tilde.app/Contents/Helpers/llama-server`):
+  `d1f4f96169a1de880d2ba6b878d118f5cf80abb68fec9477bc9aa19b6a55db30`
 - OS, hardware class, and power state: recorded by the run; AC power required
 
 ### Overnight invocation
