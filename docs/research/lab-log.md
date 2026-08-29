@@ -62,6 +62,30 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
   whether its registration is amended before any run to a cache-backed
   control — never after seeing a number.
 
+## 2026-08-29 — Q11 run: the silence gate clears its registered bar
+
+- **Try:** Execute the registered Q11 campaign — Q08's exact Qwen arm with
+  and without the extended ordinary-silence gate, 3,600 paired evaluations,
+  8×2 workers on AC, seeds 17/41/73, repetitions 1 (declared pre-run).
+- **Learn:** Bad-when-shown fell 43.35% to 30.13% (−13.2pp against the 8pp
+  target; every seed −12pp or better) with useful displays identical at
+  473 and the sensitive slice untouched. The frozen-label prediction of
+  ~30.03% matched measurement almost exactly. Parallel workers cut the
+  wall clock from a projected four hours to seven minutes without touching
+  a single label. Reviewed SUPPORTED as a development confirmation; the
+  flag is a frozen validation candidate only.
+- **Fail:** Net-keystrokes utility was flat (interval touching zero) — the
+  suppressed displays were mostly typed through, and keystroke accounting
+  cannot price interruption. The generic utility gate would not nominate
+  this change; only the registered bad-when-shown rule does. The
+  interruption-cost question is live-instrument work, not offline work.
+  Also recorded: an instruction to run the control on production Gemma was
+  wrong and was refused pre-run — the registration's Q08 anchor governs.
+- **Where:** [Q11](../experiments/Q11-ordinary-silence-gate.md); campaign
+  D4DFEA6A (owner-only local state); detectors from PR #438.
+- **Next:** Register scene-echo precision + grounding as the next
+  display-policy question; the silence flag waits for protected validation.
+
 ## 2026-08-29 — Batch shakedown catches a miscount on its first invocation
 
 - **Try:** Run the full mega-run pipeline in miniature — 8 scenarios, 5

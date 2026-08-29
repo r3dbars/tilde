@@ -120,6 +120,38 @@ any kind may be made from this campaign.
 
 ## Result
 
-Status: not yet run. The campaign must run on an idle machine (never
-concurrently with live dogfood typing — Q07's concurrency lesson) and be
-reviewed supported/rejected/inconclusive before this section is filled.
+Status: SUPPORTED (development confirmation; validation-candidate only)
+Campaign: D4DFEA6A-DAE5-4CE5-932E-AABE678DDBFE, completed 2026-08-29,
+3,600/3,600 evaluations, 8×2 workers on AC under caffeinate, 0.11 hours.
+
+- Bad-when-shown: 43.35% (362/835) control → 30.13% (204/677) treatment —
+  a 13.2pp absolute reduction against the registered 8pp target. Every
+  seed's paired reduction exceeded 12pp (worst seed 17: −12.36pp), so the
+  effect interval excludes zero by a wide margin.
+- Useful displays: 473 = 473, 100% retention. The gate is suppression-only,
+  so no wanted-reply category lost a useful display (kill rule not
+  triggered). Sensitive-scene suppression unchanged.
+- The frozen-label prediction (~30.03%) matched the measured 30.13%.
+- Declared pre-run deviation-free amendments: repetitions = 1 (Q08 proved
+  repetition labels identical; declared before results existed), and the
+  control model is the Q08 Qwen arm exactly as the frozen provenance
+  requires — an earlier instruction to substitute production Gemma was
+  caught and refused before the run.
+
+### Honest nuance
+
+Net-keystrokes utility was flat (Δ 8.08 chars/1000, 95% interval
+[0.00, 25.71], P(>0)=63.1%): the suppressed bad displays were ones the
+scripted evaluation mostly typed through, and keystroke accounting cannot
+see interruption cost. The generic utility-based nomination gate therefore
+does not nominate this treatment on its own; the registered bad-when-shown
+rule does. Whether removing 158 wrong interruptions per ~3,600 moments is
+worth shipping is exactly what the live three-judges evaluation (metric,
+gates, owner experience) must decide after Stage 0.
+
+### Follow-up
+
+Freeze the flag as a validation candidate. Do not enable it anywhere
+user-visible. Next in queue per the mining sweep: scene-echo precision +
+grounding. The live H01/RNKS instrument, once F03 closes, is where the
+interruption-cost question this run cannot answer gets its ruler.
