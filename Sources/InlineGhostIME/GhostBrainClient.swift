@@ -27,13 +27,15 @@ enum GhostBrainClient {
         context: String,
         app: String?,
         fieldSessionIdentifier: String? = nil,
+        experimentArm: String? = nil,
         onPartial: (@Sendable (String) -> Void)? = nil
     ) async -> GhostBrainResponse {
         await send(
             GhostBrainRequest(
                 context: context,
                 app: app,
-                fieldSessionIdentifier: fieldSessionIdentifier
+                fieldSessionIdentifier: fieldSessionIdentifier,
+                experimentArm: experimentArm
             ),
             onPartial: onPartial
         )

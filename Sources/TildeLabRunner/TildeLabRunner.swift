@@ -178,6 +178,61 @@ struct TildeLabRunner {
                 timeoutSeconds: options.timeout,
                 seed: options.seed
             )
+            if let situationCount = options.earlyStartSituationCount {
+                commandLineArm.id = "q10-early-start-k1"
+                commandLineArm.generation.predictionTokens = 12
+                commandLineArm.generation.requestMode = .finalResponse
+                commandLineArm.generation.cachePrompt = false
+                commandLineArm.prompt.includesIntentFutures = true
+                commandLineArm.judgment.maximumVisibleWords = 3
+                commandLineArm.judgment.maximumVisibleCharacters = 48
+                commandLineArm.scenarios = LabScenarioVariationConfiguration(
+                    partition: .development,
+                    suggestionExpectation: .speakOnly,
+                    maximumDistinctSituations: situationCount
+                )
+                // Frozen Q10 runtime: one worker, one slot, no prompt cache.
+                // Sequential requests on an idle server are the only way a
+                // measured latency can stand in for an inline typing window.
+                let execution = LabRuntimeConfiguration(
+                    workerCount: 1,
+                    slotsPerWorker: 1,
+                    repetitions: 1,
+                    contextSizePerSlot: options.contextSize,
+                    cacheReuseTokens: 0,
+                    timeoutSeconds: 120,
+                    seed: options.seed,
+                    promptCaching: false
+                ).materialize(
+                    serverExecutable: URL(fileURLWithPath: options.helperPath),
+                    modelFile: URL(fileURLWithPath: options.modelPath),
+                    modelProfile: modelProfile
+                )
+                let earlyStart = LabEarlyStartRunner()
+                let report = try await earlyStart.run(
+                    suite: suite,
+                    arm: commandLineArm,
+                    execution: execution,
+                    configuration: LabEarlyStartConfiguration(
+                        maximumSituations: situationCount
+                    ),
+                    requiresACPower: !options.earlyStartAllowsBattery,
+                    progress: { completed, total, opportunities in
+                        FileHandle.standardError.write(
+                            Data("early-start progress \(completed)/\(total) situations, \(opportunities) opportunities\n".utf8)
+                        )
+                    }
+                )
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let data = try encoder.encode(report) + Data("\n".utf8)
+                if let output = options.earlyStartOutputPath {
+                    try data.write(to: URL(fileURLWithPath: output), options: .atomic)
+                }
+                FileHandle.standardOutput.write(data)
+                return
+            }
             if let situationCount = options.futureLatticeSituationCount {
                 commandLineArm.id = "q09-future-lattice-k16"
                 commandLineArm.generation.predictionTokens = 12
@@ -905,6 +960,9 @@ private struct Options {
     var semanticQualityShootout = false
     var futureLatticeSituationCount: Int?
     var futureLatticeOutputPath: String?
+    var earlyStartSituationCount: Int?
+    var earlyStartOutputPath: String?
+    var earlyStartAllowsBattery = false
     var savesReport = true
     var json = false
     var showsHelp = false
@@ -1042,6 +1100,31 @@ private struct Options {
                 maxVisibleWords = 3
             case "--future-lattice-output":
                 futureLatticeOutputPath = try nextValue().expandingTilde
+            case "--early-start-smoke":
+                certifiedCorpus = true
+                productionFidelity = true
+                earlyStartSituationCount = 4
+                workers = 1
+                slots = 1
+                repetitions = 1
+                timeout = 120
+                temperature = 0
+                predictionTokens = 12
+                maxVisibleWords = 3
+            case "--early-start-full":
+                certifiedCorpus = true
+                productionFidelity = true
+                earlyStartSituationCount = 360
+                workers = 1
+                slots = 1
+                repetitions = 1
+                timeout = 120
+                temperature = 0
+                predictionTokens = 12
+                maxVisibleWords = 3
+            case "--early-start-output":
+                earlyStartOutputPath = try nextValue().expandingTilde
+            case "--early-start-allow-battery": earlyStartAllowsBattery = true
             case "--no-save": savesReport = false
             case "--json": json = true
             case "--autoresearch-six-hours": autoresearchHours = 6
@@ -1069,6 +1152,18 @@ private struct Options {
             throw OptionsError.conflictingInputs
         }
         if futureLatticeOutputPath != nil, futureLatticeSituationCount == nil {
+            throw OptionsError.conflictingInputs
+        }
+        // Q10 is pinned to the production Gemma stack, so an experimental
+        // model, a manifest, a campaign, or the K16 lattice all conflict.
+        if earlyStartSituationCount != nil,
+           manifestPath != nil || campaign != nil
+            || futureLatticeSituationCount != nil
+            || modelVerificationMode != .productionPinned {
+            throw OptionsError.conflictingInputs
+        }
+        if earlyStartSituationCount == nil,
+           earlyStartOutputPath != nil || earlyStartAllowsBattery {
             throw OptionsError.conflictingInputs
         }
         if corpusPilot, suitePath != nil { throw OptionsError.conflictingInputs }
@@ -1147,6 +1242,13 @@ private struct Options {
       --future-lattice-full      aggregate-only K=1/4/8/16 test on 360 synthetic replies
       --future-lattice-output PATH
                                   atomically save the aggregate-only JSON report
+      --early-start-smoke        Q10 machinery check on 4 synthetic situations
+      --early-start-full         Q10 early-start timing falsifier on all 360
+                                  synthetic development situations, AC power
+      --early-start-output PATH
+                                  atomically save the aggregate-only JSON report
+      --early-start-allow-battery
+                                  smoke-only escape hatch; never decision-grade
       --codex PATH                Codex CLI path for the frontier ceiling
       --frontier-model MODEL      Codex subscription model (default: gpt-5.6-sol)
       --arm ID                     stable experiment arm ID

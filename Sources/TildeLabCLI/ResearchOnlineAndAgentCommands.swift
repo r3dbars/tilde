@@ -140,7 +140,8 @@ extension ResearchCoordinator {
         if arguments.hasFlag("instrument") {
             plan = try await LabInstrumentCampaign.ensureReady(
                 database: database,
-                covering: decoded.map(\.occurredAt)
+                covering: decoded.map(\.occurredAt),
+                includesChallenger: LabInstrumentCampaign.includesChallenger(decoded)
             )
         } else {
             let campaign = try campaignFromOption(arguments)
@@ -158,13 +159,39 @@ extension ResearchCoordinator {
     }
 
     static func onlineReport(_ arguments: CLIArguments) async throws {
-        try arguments.assertAllowed(options: ["campaign", "database"], flags: ["json", "instrument"])
+        try arguments.assertAllowed(
+            options: ["campaign", "database"],
+            flags: ["json", "instrument", "by-arm"]
+        )
         guard arguments.positionals.isEmpty else {
             throw ResearchCLIError.usage(help(for: "online-report"))
         }
         let campaignID = try onlineCampaignID(arguments)
         let events = try await researchDatabase(arguments).onlineEvents(campaignID: campaignID)
         guard !events.isEmpty else { throw ResearchCLIError.missingArtifact("online events") }
+        if arguments.hasFlag("by-arm") {
+            let comparison = try LabOnlineExperimentAnalyzer.analyzeByArm(events)
+            if arguments.hasFlag("json") {
+                try writeJSON(comparison)
+            } else {
+                ResearchConsole.line("Online utility report by arm")
+                for arm in comparison.arms {
+                    ResearchConsole.line("  \(arm.variant.rawValue):")
+                    ResearchConsole.line("    events: \(arm.report.events)")
+                    ResearchConsole.line("    displayed: \(arm.report.displayed)")
+                    ResearchConsole.line("    acceptance when shown: \(arm.report.acceptanceRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
+                    ResearchConsole.line("    typed-through: \(arm.report.typedThrough)")
+                    ResearchConsole.line(
+                        "    retention 30s: \(arm.report.retentionAt30Seconds.observedEvents) observed / \(arm.report.retentionAt30Seconds.missingEvents) missing, net \(arm.report.retentionAt30Seconds.netRetainedCharacters)"
+                    )
+                    ResearchConsole.line(
+                        "    retention segment: \(arm.report.retentionAtSegmentClose.observedEvents) observed / \(arm.report.retentionAtSegmentClose.missingEvents) missing, net \(arm.report.retentionAtSegmentClose.netRetainedCharacters)"
+                    )
+                }
+                ResearchConsole.line("  arms are event tags, not proof: H01 is not started.")
+            }
+            return
+        }
         let report = try LabOnlineExperimentAnalyzer.analyze(events)
         if arguments.hasFlag("json") {
             try writeJSON(report)
