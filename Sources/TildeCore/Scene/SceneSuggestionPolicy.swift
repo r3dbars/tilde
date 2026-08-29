@@ -13,11 +13,28 @@ public enum SceneSuggestionPolicy {
         case resolvedConversation = "resolved-conversation"
         case ambiguousChoice = "ambiguous-choice"
         case nonActionableScene = "non-actionable-scene"
+        case completeSentence = "complete-sentence-scene"
+        case multipleQuestions = "multiple-questions-scene"
+        case ambiguousReference = "ambiguous-reference-scene"
+    }
+
+    /// Gate selection. Production ships the five settled detectors only; the
+    /// extended ordinary-silence detectors are development-only measurement
+    /// machinery until a registered display-policy experiment promotes them.
+    public struct Options: Equatable, Sendable {
+        public var extendedOrdinarySilenceGate: Bool
+
+        public init(extendedOrdinarySilenceGate: Bool = false) {
+            self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
+        }
+
+        public static let production = Options()
     }
 
     public static func suppressionReason(
         scene: ScreenScene.Scene?,
-        textBeforeCursor: String? = nil
+        textBeforeCursor: String? = nil,
+        options: Options = .production
     ) -> SuppressionReason? {
         guard let scene else { return nil }
         let visibleText = scene.conversationTurns.map(\.text) + scene.referenceSnippets
@@ -48,6 +65,17 @@ public enum SceneSuggestionPolicy {
            isNonActionableDeclarative(incoming),
            !hasReplyCue(textBeforeCursor) {
             return .nonActionableScene
+        }
+        guard options.extendedOrdinarySilenceGate else { return nil }
+        if isFinishedSentence(textBeforeCursor), isSettledStatement(incoming) {
+            return .completeSentence
+        }
+        if interrogativeClauseCount(incoming) > 1,
+           !hasQuestionSelectionCue(textBeforeCursor) {
+            return .multipleQuestions
+        }
+        if isReferentiallyAmbiguous(incoming) {
+            return .ambiguousReference
         }
         return nil
     }
@@ -88,6 +116,116 @@ public enum SceneSuggestionPolicy {
         let phrase = normalizedWords(text).joined(separator: " ")
         return replyPrefixes.contains { phrase == $0 || phrase.hasPrefix($0 + " ") }
     }
+
+    // MARK: - Extended ordinary-silence detectors (development-only)
+
+    /// The writer already ended a sentence, so there is nothing to finish.
+    private static func isFinishedSentence(_ text: String?) -> Bool {
+        guard let text else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last, terminators.contains(last) else { return false }
+        return normalizedWords(trimmed).count >= 2
+    }
+
+    /// A finished incoming statement that asks the writer for nothing.
+    private static func isSettledStatement(_ text: String) -> Bool {
+        guard !text.contains("?") else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = trimmed.last, last == "." || last == "!" else { return false }
+        return !hasDirectRequestCue(trimmed)
+    }
+
+    /// Counts the interrogative clauses inside the incoming turn's questions.
+    /// A comma-joined "should we X, and should Y" counts as two.
+    private static func interrogativeClauseCount(_ text: String) -> Int {
+        sentences(in: text).filter(\.isQuestion).reduce(0) { total, sentence in
+            total + sentence.text.split(separator: ",").reduce(0) { count, clause in
+                var words = normalizedWords(String(clause))
+                while let first = words.first, clauseConnectors.contains(first) {
+                    words.removeFirst()
+                }
+                guard let lead = words.first, interrogativeLeads.contains(lead) else { return count }
+                return count + 1
+            }
+        }
+    }
+
+    /// The writer signalled which of several questions they are answering.
+    private static func hasQuestionSelectionCue(_ text: String?) -> Bool {
+        guard let text else { return false }
+        let phrase = normalizedWords(text).joined(separator: " ")
+        return questionSelectionPhrases.contains { phrase.contains($0) }
+    }
+
+    /// A request whose object is a bare pronoun while the same turn offers
+    /// more than one candidate referent.
+    private static func isReferentiallyAmbiguous(_ text: String) -> Bool {
+        let parts = sentences(in: text)
+        guard let request = parts.last(where: { $0.isQuestion || hasDirectRequestCue($0.text) })
+        else { return false }
+        guard !Set(normalizedWords(request.text)).isDisjoint(with: bareReferenceWords) else {
+            return false
+        }
+        let words = normalizedWords(text)
+        return words.contains("both") || words.filter { $0 == "and" }.count >= 2
+    }
+
+    private static func hasDirectRequestCue(_ text: String) -> Bool {
+        let phrase = normalizedWords(text).joined(separator: " ")
+        return directRequestPhrases.contains { phrase == $0 || phrase.contains($0) }
+    }
+
+    private struct Sentence {
+        let text: String
+        let isQuestion: Bool
+    }
+
+    private static func sentences(in text: String) -> [Sentence] {
+        var result: [Sentence] = []
+        var current = ""
+        for character in text {
+            if terminators.contains(character) {
+                if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    result.append(Sentence(text: current, isQuestion: character == "?"))
+                }
+                current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            result.append(Sentence(text: current, isQuestion: false))
+        }
+        return result
+    }
+
+    private static let terminators: Set<Character> = [".", "!", "?"]
+
+    private static let interrogativeLeads: Set<String> = [
+        "am", "are", "can", "could", "did", "do", "does", "how", "is", "may",
+        "should", "was", "were", "what", "when", "where", "which", "who",
+        "why", "will", "would",
+    ]
+
+    private static let clauseConnectors: Set<String> = [
+        "also", "and", "but", "or", "so", "then",
+    ]
+
+    private static let questionSelectionPhrases = [
+        "answering the first", "answering the second", "first question",
+        "for the first", "for the second", "on the first", "on the second",
+        "second question", "to the first", "to the second", "to your first",
+        "to your second",
+    ]
+
+    private static let directRequestPhrases = [
+        "can you", "could you", "let me know", "let us know", "please",
+        "send me", "will you", "would you",
+    ]
+
+    private static let bareReferenceWords: Set<String> = [
+        "it", "that", "them", "these", "this", "those",
+    ]
 
     private static let instructionPhrases = [
         "ignore previous instructions",
