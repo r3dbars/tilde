@@ -10,6 +10,7 @@ extension ResearchCoordinator {
         try arguments.assertAllowed(
             options: [
                 "suite", "personas", "policy", "decision-command", "decision-argument",
+                "decision-batch-size",
                 "scenarios", "stride", "maximum-displays", "helper", "model-file",
                 "model", "model-revision", "workers", "slots", "output",
             ],
@@ -91,6 +92,10 @@ extension ResearchCoordinator {
     private static func decisionPolicy(
         _ arguments: CLIArguments
     ) throws -> any TypistDecisionPolicy {
+        let batchSize = try arguments.integer("decision-batch-size", default: 1)
+        guard (1...LabTypistMomentBatch.maximumSize).contains(batchSize) else {
+            throw ResearchCLIError.invalidValue("--decision-batch-size")
+        }
         switch arguments.value("policy") ?? "heuristic" {
         case "heuristic":
             guard arguments.value("decision-command") == nil else {
@@ -98,11 +103,20 @@ extension ResearchCoordinator {
                     "--decision-command requires --policy external-command."
                 )
             }
+            // The frozen heuristic is a local function call; a batch would buy
+            // nothing and would only blur what the recorded batch size means.
+            guard batchSize == 1 else {
+                throw ResearchCLIError.usage(
+                    "--decision-batch-size requires --policy external-command."
+                )
+            }
             return DeterministicHeuristicTypist()
         case "external-command":
             let command = try arguments.requiredValue("decision-command")
             let extra = arguments.value("decision-argument").map { [$0] } ?? []
-            return try ExternalCommandTypist(command: command, arguments: extra)
+            return try ExternalCommandTypist(
+                command: command, arguments: extra, batchSize: batchSize
+            )
         default:
             throw ResearchCLIError.invalidValue("--policy")
         }
@@ -126,6 +140,7 @@ extension ResearchCoordinator {
         }
         ResearchConsole.line("Simulated typist over \(report.scenarioCount) scenarios")
         ResearchConsole.line("  decision policy: \(report.decisionPolicyIdentifier)")
+        ResearchConsole.line("  decision batch size: \(report.decisionBatchSize)")
         ResearchConsole.line(
             "  evidence: discovery-grade simulation (\(report.evidenceEligibility.reasons.map(\.rawValue).joined(separator: ", ")))"
         )

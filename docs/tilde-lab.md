@@ -248,9 +248,25 @@ credential lives in this repository. Both sides of the contract are text-free
 outside the allowlist is rejected, so scenario text, prompts, and candidates
 structurally cannot cross the boundary.
 
+`--decision-batch-size N` (1...100, default 1) lets an external policy decide
+many moments per process invocation, which is what makes an LLM-backed policy
+affordable over a long run. Typing one scenario is strictly sequential — a
+decision changes the characters typed, the dismissal cooldown, and the counts
+the next moment reports — so a batch may never hold two moments of the same
+persona/scenario pair. The engine advances every active session to its own next
+undecided moment and batches *across* sessions only, at most one moment per
+session per round, so every batch is decision-independent by construction and
+the aggregates match a batch-size-1 run exactly. The batch envelopes
+(`tilde-lab.typist-moment-batch.v1` and `tilde-lab.typist-decision-batch.v1`)
+carry nothing but a schema and an ordered array; every element is validated by
+the same text-free allowlists, position is the only correlation, and a count
+mismatch or a short answer is an error rather than something the engine repairs.
+The response byte cap and the command deadline scale with the batch, both
+bounded.
+
 The report is aggregate-only per persona — displays, simulated acceptance,
-type-through, wrong displays, corrections, and retained-character potential. It
-carries the report provenance envelope and the aggregate-only privacy contract,
+type-through, wrong displays, corrections, and retained-character potential,
+plus the decision batch size the run used. It carries the report provenance envelope and the aggregate-only privacy contract,
 and it is permanently fenced with the `simulated-decision-layer` evidence
 reason. It is not a `LabRunReport`, is never written into a campaign's reports
 directory, and cannot enter a comparison or advance a protected phase. Until

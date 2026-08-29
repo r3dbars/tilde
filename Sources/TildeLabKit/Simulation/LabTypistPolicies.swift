@@ -64,8 +64,24 @@ public struct DeterministicHeuristicTypist: TypistDecisionPolicy {
 /// stdout. No model, endpoint, or credential lives in this repository: the
 /// owner supplies the command, and the schema on both sides guarantees that no
 /// scenario text, prompt, or candidate can reach it.
+///
+/// With `batchSize` above 1 the command instead receives a
+/// `tilde-lab.typist-moment-batch.v1` envelope and answers with a
+/// `tilde-lab.typist-decision-batch.v1` envelope of the same length, in the
+/// same order — one process invocation, and for an LLM-backed policy one round
+/// trip, per batch. That is the gate to overnight 100k-moment runs.
 public struct ExternalCommandTypist: TypistDecisionPolicy {
+    /// A single decision answer is a few dozen bytes; this is the per-moment
+    /// share of the response the command is allowed to produce.
+    static let responseByteLimitPerMoment = 4_096
+    /// However large a batch grows, the deadline is never stretched by more
+    /// than this factor, and never past `maximumTimeoutSeconds`. A batched
+    /// backend amortizes its own overhead; it does not get an unbounded wait.
+    static let maximumTimeoutScale = 10.0
+    static let maximumTimeoutSeconds = 600.0
+
     public let identifier: String
+    public let decisionBatchSize: Int
 
     private let executableURL: URL
     private let arguments: [String]
@@ -75,8 +91,13 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
         command: String,
         arguments: [String] = [],
         timeoutSeconds: Double = 20,
+        batchSize: Int = 1,
         identifier: String = "external-command-v1"
     ) throws {
+        guard (1...LabTypistMomentBatch.maximumSize).contains(batchSize) else {
+            throw LabTypistPolicyError.batchSizeOutOfRange(batchSize)
+        }
+        decisionBatchSize = batchSize
         let path = (command as NSString).expandingTildeInPath
         guard path.hasPrefix("/") else {
             throw LabTypistPolicyError.decisionCommandUnavailable(command)
@@ -100,7 +121,48 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
     }
 
     public func decide(_ features: LabTypistMomentFeatures) throws -> LabTypistDecision {
-        let payload = try features.encodedJSON()
+        let data = try invoke(
+            payload: try features.encodedJSON(),
+            responseByteLimit: Self.responseByteLimitPerMoment,
+            timeout: timeoutSeconds
+        )
+        return try LabTypistDecision.decode(data)
+    }
+
+    /// One invocation, many decision-independent moments. The engine guarantees
+    /// independence; this method guarantees the contract — equal count, same
+    /// order, text-free in both directions.
+    public func decide(batch: [LabTypistMomentFeatures]) throws -> [LabTypistDecision] {
+        guard batch.count > 1 else {
+            // A batch of one keeps the single-moment contract on the wire, so a
+            // command written for stage 1 still works at the default batch size.
+            return try batch.map { try decide($0) }
+        }
+        guard batch.count <= decisionBatchSize else {
+            throw LabTypistPolicyError.batchSizeOutOfRange(batch.count)
+        }
+        let payload = try LabTypistMomentBatch(moments: batch).encodedJSON()
+        let data = try invoke(
+            payload: payload,
+            responseByteLimit: Self.responseByteLimitPerMoment * batch.count,
+            timeout: timeout(forMoments: batch.count)
+        )
+        return try LabTypistDecisionBatch.decode(data, expectedCount: batch.count)
+    }
+
+    /// A batch waits longer than one moment, but never by more than
+    /// `maximumTimeoutScale`, never past `maximumTimeoutSeconds`, and never
+    /// less than the configured single-moment deadline.
+    func timeout(forMoments count: Int) -> Double {
+        let scaled = timeoutSeconds * min(Double(count), Self.maximumTimeoutScale)
+        return max(timeoutSeconds, min(scaled, Self.maximumTimeoutSeconds))
+    }
+
+    private func invoke(
+        payload: Data,
+        responseByteLimit: Int,
+        timeout: Double
+    ) throws -> Data {
         let process = Process()
         let input = Pipe()
         let output = Pipe()
@@ -126,7 +188,7 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
             response.data = output.fileHandleForReading.readDataToEndOfFile()
             readFinished.signal()
         }
-        if readFinished.wait(timeout: .now() + timeoutSeconds) == .timedOut {
+        if readFinished.wait(timeout: .now() + timeout) == .timedOut {
             process.terminate()
             _ = readFinished.wait(timeout: .now() + 1)
             throw LabTypistPolicyError.decisionCommandFailed(-1)
@@ -145,8 +207,11 @@ public struct ExternalCommandTypist: TypistDecisionPolicy {
         guard process.terminationStatus == 0 else {
             throw LabTypistPolicyError.decisionCommandFailed(process.terminationStatus)
         }
-        // Bound the response before parsing; a policy answer is a few dozen bytes.
-        guard data.count <= 4_096 else { throw LabTypistPolicyError.invalidDecisionPayload }
-        return try LabTypistDecision.decode(data)
+        // Bound the response before parsing; a policy answer is a few dozen
+        // bytes per moment, and the cap scales with the batch it answers.
+        guard data.count <= responseByteLimit else {
+            throw LabTypistPolicyError.invalidDecisionPayload
+        }
+        return data
     }
 }
