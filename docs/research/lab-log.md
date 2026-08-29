@@ -62,6 +62,29 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
   whether its registration is amended before any run to a cache-backed
   control — never after seeing a number.
 
+## 2026-08-29 — Batch shakedown catches a miscount on its first invocation
+
+- **Try:** Run the full mega-run pipeline in miniature — 8 scenarios, 5
+  personas, real local generation, an external frontier decision policy at
+  batch size 10 — before trusting it with tens of thousands of moments.
+- **Learn:** The harness's fail-closed count check worked on first contact:
+  the model answered 11 decisions for 10 moments and the run refused the
+  batch instead of mis-assigning decisions. Stating the exact expected count
+  in the adapter prompt and re-verifying the count adapter-side before
+  submission fixed it; the rerun completed 161 batched decisions cleanly in
+  4.7 minutes with the report confirming zero raw text, zero network
+  inference, and the simulated-decision-layer fence intact. The five
+  personas produced plausibly distinct behavior (accepts 0–7.1%,
+  type-through 63–86%).
+- **Fail:** Machinery proof only — the suite was legacy replying-v1 and the
+  personas are uncalibrated, so none of the quality numbers are findings.
+  A second external adapter (Cursor backend) needed the same count
+  hardening from birth.
+- **Where:** GitHub issue #437; batch runner from PR #442; local decision
+  adapters (owner-only).
+- **Next:** The first full-scale two-brain persona run, chained behind Q11
+  on the same idle-machine window.
+
 ## 2026-08-29 — Calibrate the simulated typist against 1,082 live moments
 
 - **Try:** Run two frontier decision brains (Luna via Codex, Grok via
