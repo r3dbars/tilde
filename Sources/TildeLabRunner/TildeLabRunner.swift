@@ -178,6 +178,47 @@ struct TildeLabRunner {
                 timeoutSeconds: options.timeout,
                 seed: options.seed
             )
+            if let situationCount = options.futureLatticeSituationCount {
+                commandLineArm.id = "q09-future-lattice-k16"
+                commandLineArm.generation.predictionTokens = 12
+                commandLineArm.generation.requestMode = .finalResponse
+                commandLineArm.prompt.includesIntentFutures = true
+                commandLineArm.judgment.maximumVisibleWords = 3
+                commandLineArm.judgment.maximumVisibleCharacters = 48
+                commandLineArm.scenarios = LabScenarioVariationConfiguration(
+                    partition: .development,
+                    suggestionExpectation: .speakOnly,
+                    maximumDistinctSituations: situationCount
+                )
+                let execution = runtime.materialize(
+                    serverExecutable: URL(fileURLWithPath: options.helperPath),
+                    modelFile: URL(fileURLWithPath: options.modelPath),
+                    modelProfile: modelProfile
+                )
+                let lattice = LabFutureLatticeRunner()
+                let report = try await lattice.run(
+                    suite: suite,
+                    arm: commandLineArm,
+                    execution: execution,
+                    configuration: LabFutureLatticeConfiguration(
+                        maximumSituations: situationCount
+                    ),
+                    progress: { completed, total in
+                        FileHandle.standardError.write(
+                            Data("future-lattice progress \(completed)/\(total)\n".utf8)
+                        )
+                    }
+                )
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let data = try encoder.encode(report) + Data("\n".utf8)
+                if let output = options.futureLatticeOutputPath {
+                    try data.write(to: URL(fileURLWithPath: output), options: .atomic)
+                }
+                FileHandle.standardOutput.write(data)
+                return
+            }
             if options.semanticQualityShootout {
                 let execution = runtime.materialize(
                     serverExecutable: URL(fileURLWithPath: options.helperPath),
@@ -862,6 +903,8 @@ private struct Options {
     var modelQualitySituationLimit = 50
     var frontierQualityCeiling = false
     var semanticQualityShootout = false
+    var futureLatticeSituationCount: Int?
+    var futureLatticeOutputPath: String?
     var savesReport = true
     var json = false
     var showsHelp = false
@@ -977,6 +1020,28 @@ private struct Options {
                 temperature = 0
                 predictionTokens = 20
                 maxVisibleWords = 3
+            case "--future-lattice-pilot":
+                certifiedCorpus = true
+                productionFidelity = true
+                futureLatticeSituationCount = 20
+                workers = 1
+                slots = 8
+                repetitions = 1
+                timeout = 120
+                predictionTokens = 12
+                maxVisibleWords = 3
+            case "--future-lattice-full":
+                certifiedCorpus = true
+                productionFidelity = true
+                futureLatticeSituationCount = 360
+                workers = 1
+                slots = 8
+                repetitions = 1
+                timeout = 120
+                predictionTokens = 12
+                maxVisibleWords = 3
+            case "--future-lattice-output":
+                futureLatticeOutputPath = try nextValue().expandingTilde
             case "--no-save": savesReport = false
             case "--json": json = true
             case "--autoresearch-six-hours": autoresearchHours = 6
@@ -997,6 +1062,13 @@ private struct Options {
         }
         if manifestPath != nil, campaign != nil { throw OptionsError.conflictingInputs }
         if modelQualitySmoke, manifestPath != nil || campaign != nil {
+            throw OptionsError.conflictingInputs
+        }
+        if futureLatticeSituationCount != nil,
+           manifestPath != nil || campaign != nil || modelVerificationMode != .experimentalLocal {
+            throw OptionsError.conflictingInputs
+        }
+        if futureLatticeOutputPath != nil, futureLatticeSituationCount == nil {
             throw OptionsError.conflictingInputs
         }
         if corpusPilot, suitePath != nil { throw OptionsError.conflictingInputs }
@@ -1071,6 +1143,10 @@ private struct Options {
                                   subscription using GPT-5.6 Sol
       --semantic-quality-shootout run local E2B and GPT-5.6 Sol on the same
                                   50 cases, then score both with a blinded referee
+      --future-lattice-pilot     aggregate-only K=1/4/8/16 test on 20 synthetic replies
+      --future-lattice-full      aggregate-only K=1/4/8/16 test on 360 synthetic replies
+      --future-lattice-output PATH
+                                  atomically save the aggregate-only JSON report
       --codex PATH                Codex CLI path for the frontier ceiling
       --frontier-model MODEL      Codex subscription model (default: gpt-5.6-sol)
       --arm ID                     stable experiment arm ID
