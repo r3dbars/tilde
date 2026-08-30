@@ -28,6 +28,37 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — The simulated typist can run the arm a campaign nominated
+
+- **Try:** `simulate-typist` built its own fixed baseline arm internally, so
+  the only configuration it could ever explore was the one compiled into it —
+  a campaign that nominated custom judgment settings (Q12's scene-echo floor
+  and factual-grounding mode) had no way to be simulated. Add
+  `--arm-file /absolute/arm.json`: one campaign-manifest arm object, decoded
+  by the same `Codable` type and validated by the same check `validate` runs,
+  replacing the built-in baseline for that run.
+- **Learn:** The engine already routed its baseline arm the way a campaign
+  run routes its own — prompt configuration into the composer, generation
+  configuration into the request, whole arm into the display judge — so the
+  arm file needed no new plumbing, only a loader and a refusal path. That is
+  worth writing down: the reason a nominated arm behaves in the simulator
+  the way it behaves in a campaign is that there is one routing, not two, and
+  the stubbed scene-echo-boundary test pins it — the same candidate is
+  suppressed under the default floor and shown under a widened one, decided
+  by the file rather than by the engine. Validation at load, before any model
+  starts, is what keeps a typo from becoming a report.
+- **Fail:** Infrastructure only — no result, no Q12 run, and an arm file
+  changes nothing about the fence: a simulated report is still discovery-grade
+  and still cannot enter a comparison. The simulator also still skips the
+  pre-inference scene gates a campaign run applies before generating, so an
+  arm's gate-widening settings are not exercised here; that gap predates this
+  change and was deliberately left alone.
+- **Where:** issue #437; `Sources/TildeLabKit/Simulation/LabSimulatedTypistArmFile.swift`;
+  `Sources/TildeLabCLI/SimulatedTypistCommand.swift`;
+  [`docs/tilde-lab.md`](../tilde-lab.md) § Simulated typist.
+- **Next:** Run Q12's nominated arm through the simulator and see whether its
+  judgment settings move retained-character potential at all.
+
 ## 2026-08-30 — One flaky batch may no longer cost a whole simulated run
 
 - **Try:** Two full-scale simulated-typist runs died overnight because a

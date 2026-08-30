@@ -304,6 +304,19 @@ skip behind it; the run's limitation text states the incompleteness in the same
 sentence every reader already reads; and the CLI summary prints all of it
 loudly whenever it is not zero.
 
+`--arm-file /absolute/arm.json` pins the run to one nominated configuration.
+The file holds exactly one arm object — the same shape a campaign manifest
+stores in `arms[]`, decoded by the same `Codable` type and checked by the same
+validation `tilde-lab validate` runs, so an out-of-range or malformed file is
+refused by name before any model starts. The loaded arm replaces the built-in
+`simulated-typist-baseline` wholesale: its prompt configuration composes the
+prompt, its generation configuration is what the completion request carries —
+the same routing a campaign run uses — and its judgment configuration is what
+the display judge applies, so a custom echo threshold or grounding mode changes
+what the simulated writer is actually shown. The report's `arm` field records
+the arm that ran, and its provenance digest is that arm's. Without the flag the
+built-in baseline runs exactly as before.
+
 The report is aggregate-only per persona — displays, simulated acceptance,
 type-through, wrong displays, corrections, and retained-character potential,
 plus the decision batch size, worker count, and skip accounting the run used.
