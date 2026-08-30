@@ -297,7 +297,11 @@ final class TildeSettingsViewModel: ObservableObject {
             guard let self else { return }
             do {
                 try await personalHistory.deleteAll()
-                TildeLocalOutcomeStores.deleteAll()
+                guard TildeLocalOutcomeStores.deleteAll() else {
+                    self.message = "Some learning data could not be deleted. Quit and reopen Tilde, then try again."
+                    self.isDeletingLearningData = false
+                    return
+                }
                 self.learningDataSize = "No learning data"
                 self.personalizationEnabled = false
                 self.message = "Learning data was deleted."

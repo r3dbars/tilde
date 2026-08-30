@@ -35,11 +35,17 @@ enum TildeLocalOutcomeStores {
     @discardableResult
     static func deleteAll(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        profile: TildeProductProfile = .current
+        profile: TildeProductProfile = .current,
+        suiteName: String = PersonalHistorySettingsContract.keyboardSuiteName
     ) -> Bool {
-        bumpGeneration()
-        return removeIfPresent(eventURL(homeDirectory: homeDirectory, profile: profile))
-            && removeIfPresent(diaryURL(homeDirectory: homeDirectory, profile: profile))
+        bumpGeneration(suiteName: suiteName)
+        let removedEvents = removeIfPresent(
+            eventURL(homeDirectory: homeDirectory, profile: profile)
+        )
+        let removedDiary = removeIfPresent(
+            diaryURL(homeDirectory: homeDirectory, profile: profile)
+        )
+        return removedEvents && removedDiary
     }
 
     static func bumpGeneration(
