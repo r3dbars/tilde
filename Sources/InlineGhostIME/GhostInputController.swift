@@ -283,7 +283,7 @@ final class GhostInputController: IMKInputController {
         screenMemoryTypingTask = nil
         notifyScreenMemory(.textFieldBlurred)
         GhostOutcomeLedger.closeSegment()
-        GhostOutcomeLedger.flush()
+        GhostOutcomeLedger.flush(acknowledge: true)
         GhostStats.flush(force: true)
         PersonalHistoryCapture.shared.flush()
         if let client = sender as? IMKTextInput { dismiss(client) }

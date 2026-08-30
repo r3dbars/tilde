@@ -33,7 +33,10 @@ struct GhostOutcomeLedgerGenerationTests {
             forKey: PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(0)
         ) as? [String: Int]
         #expect(queuedCounts?["attempted"] == 1)
-        GhostOutcomeLedger.flush()
+        GhostOutcomeLedger.flush(
+            acknowledge: true,
+            at: Date(timeIntervalSince1970: 1_002)
+        )
 
         let event = TextFreeOnlineEventFile.url(
             homeDirectory: root,
@@ -44,7 +47,14 @@ struct GhostOutcomeLedgerGenerationTests {
         #expect(!String(decoding: lines[0], as: UTF8.self).contains("synthetic-session"))
         #expect(defaults.dictionary(
             forKey: PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(0)
-        ) as? [String: Int] == ["attempted": 1, "written": 1])
+        ) as? [String: Int] == [
+            "attempted": 1,
+            "written": 1,
+            "flushedAttempted": 1,
+            "flushedWritten": 1,
+            "flushedDropped": 0,
+            "flushedAtMilliseconds": 1_002_000,
+        ])
     }
 
     @Test("A failed event append is counted without touching the redirected target")
