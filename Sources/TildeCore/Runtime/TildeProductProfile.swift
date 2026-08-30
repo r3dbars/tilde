@@ -123,6 +123,33 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         }
     }
 
+    /// Q12 nominated a 24-character scene-echo floor as a frozen validation
+    /// candidate: at the shipped floor of 10 the detector coincides with a
+    /// short visible-word cap and kills correct short verbatim answers. The
+    /// word floor is unchanged — only the character floor was measured.
+    /// Live in the isolated 9B preview only; this is not promotion.
+    public var sceneEchoMinimumWords: Int {
+        SceneEchoPolicy.defaultMinimumWords
+    }
+
+    public var sceneEchoMinimumCharacters: Int {
+        switch self {
+        case .preview9B: 24
+        case .production, .preview26B, .modelPreview:
+            SceneEchoPolicy.defaultMinimumCharacters
+        }
+    }
+
+    /// Q12's second nominated candidate: refuse a suggestion that asserts a
+    /// number, address, date, or name the writer never typed and the scene
+    /// never showed. Off everywhere but the isolated 9B preview.
+    public var factualGrounding: FactualGroundingPolicy.Mode {
+        switch self {
+        case .preview9B: .numbersAndNames
+        case .production, .preview26B, .modelPreview: .off
+        }
+    }
+
     public var personalHistoryKeychainService: String {
         "\(appBundleIdentifier).personal-history"
     }

@@ -132,3 +132,20 @@ display.
 
 Q13 (registered next) measures the visible-word cap 3 vs 8 on the
 echo-24-grounded arm. Both nominated arms await protected validation.
+
+On 2026-08-30 the echo-24-grounded settings were wired live into the
+isolated `Tilde 9B Preview` identity only (`TildeProductProfile.preview9B`:
+scene-echo minimum characters 24 with the three-word floor unchanged, and
+names-and-numbers factual grounding on, failing closed to silence). This is
+an isolated preview for owner dogfood, **not promotion**: production, the
+26B preview, and the Model Preview daily driver resolve to the shipped
+10-character floor with grounding off, and regression assertions in
+`Tests/TildeCoreTests/SceneEchoPolicyTests.swift` and
+`Tests/TildeAppTests/ProfileDisplayFilterTests.swift` hold them there. The
+grounding rule now has one implementation
+(`TildeCore.FactualGroundingPolicy`) that both the live path and
+`LabOutputJudge` call, so the preview cannot drift from the arm this
+campaign measured; `Tests/TildeLabKitTests/LabGroundingParityTests.swift`
+pins that. Live evidence gathered from this preview is dogfood and must be
+judged by the three-judges rule before it can support any promotion claim;
+the protected validation path is unchanged and still ahead.
