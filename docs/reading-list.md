@@ -133,6 +133,9 @@ whole-sentence ghosts, or an edit brain because a paper exists.
 | SPACE framework (Forsgren et al.) | Felt productivity has several axes; do not let one Likert item ship a model | — | `not-an-experiment` |
 | Soukoreff & MacKenzie, text-entry metrics | WPM, MSD, KSPC — use KSPC as the human-error floor next to NKS | — | `github-now` |
 | CodeCompose metrics (Dunay et al.) | Only credit accepts shown >750 ms; keystrokes saved = accepted / typed | [multiline-code-authoring-2024.md](research/multiline-code-authoring-2024.md) | `github-now` (F04 flicker-accept) |
+| [ChaI-TeA](https://aclanthology.org/2025.naacl-short.3/) (Goren et al., NAACL 2025) | An 11-model chat-interaction autocomplete benchmark found the largest remaining gap in suggestion ranking; use its fixed-task discipline as an H06/H13 prior, not as macOS IME proof | — | `parked` (H06/H13) |
+| [Rank-Calibration](https://aclanthology.org/2024.emnlp-main.18/) (Huang et al., EMNLP 2024) | Test whether confidence actually orders higher-quality completions before choosing a binary display threshold; continuous rank quality comes before another gate | — | `parked` (H06/H13) |
+| [Smart Paste](https://research.google/blog/smart-paste-for-context-aware-adjustments-to-pasted-code/) (Google, 2024) | Post-action edits and explicit no-change examples are stronger supervision than an initial click; code-paste evidence reinforces retention and silence measurement but does not transfer directly to prose | — | `not-an-experiment` (F03/F04 prior) |
 | [The Secret Sharer](https://research.google/pubs/the-secret-sharer-evaluating-and-testing-unintended-memorization-in-neural-networks/) (Carlini et al.) | Synthetic canaries can detect memorization leakage without using owner writing; proposed F04 extension, not part of its completed ten cases | — | `github-now` after pre-registration |
 
 ### 3. How long / how much to show

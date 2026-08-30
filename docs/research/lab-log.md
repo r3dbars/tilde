@@ -28,6 +28,25 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Frontier source refresh does not unlock a second question
+
+- **Try:** Recheck current primary work on chat autocomplete ranking,
+  uncertainty calibration, conditional display, on-device retrieval,
+  production query completion, post-action edits, and current llama.cpp
+  speculative modes against the registered H01–H18 map.
+- **Learn:** The strongest reusable prior is still controller-first: measure
+  whether confidence ranks retained quality, learn when silence helps, and
+  treat retrieval plus verification as a later calibrated expert. Current
+  sources sharpen H04, H06/H07, H09–H13, and H02 follow-ups but do not reorder
+  the executable queue.
+- **Fail:** None of these papers is system-wide macOS prose evidence, and none
+  makes a locked hypothesis eligible. Starting a cascade, verifier, retrieval
+  arm, or speculative mode now would create an unregistered second question.
+- **Where:** `docs/reading-list.md`; `docs/research-roadmap.md`; primary-source
+  links there. No paper result was treated as a Tilde result.
+- **Next:** Close F03 with one attributable fresh on-device file before
+  freezing H01.
+
 ## 2026-08-30 — Clean Preview9B package passes the pre-install proof
 
 - **Try:** Build the Preview9B app from an isolated clean checkout without
