@@ -204,9 +204,20 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
         var suggestion = clean.suggestion
         var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
-        if let candidate = suggestion, SceneEchoPolicy.isEcho(candidate.visibleText, scene: scene) {
+        if let candidate = suggestion,
+           SceneEchoPolicy.isEcho(candidate.visibleText, scene: scene, profile: productProfile) {
             suggestion = nil
             rejectionReason = "replaysScene"
+        }
+        if let candidate = suggestion,
+           FactualGroundingPolicy.containsUnsupportedFact(
+               candidate.visibleText,
+               typedContext: textBeforeCursor,
+               scene: scene,
+               mode: productProfile.factualGrounding
+           ) {
+            suggestion = nil
+            rejectionReason = "unsupportedFact"
         }
 
         if suggestion == nil, !content.isEmpty, let reason = rejectionReason {
@@ -256,8 +267,21 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             recipe.normalizedContinuation(rawOutput),
             after: textBeforeCursor
         ).suggestion else { return nil }
-        guard !SceneEchoPolicy.isEcho(cleaned.visibleText, scene: scene) else { return nil }
+        guard !SceneEchoPolicy.isEcho(
+            cleaned.visibleText,
+            scene: scene,
+            profile: productProfile
+        ) else { return nil }
         guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else { return nil }
+        // The partial is what the writer actually sees first, so it must clear
+        // the same grounding bar as the final — judged on the revealed prefix,
+        // which is the text that would assert the fact.
+        guard !FactualGroundingPolicy.containsUnsupportedFact(
+            prefix,
+            typedContext: textBeforeCursor,
+            scene: scene,
+            mode: productProfile.factualGrounding
+        ) else { return nil }
         return CompletionSuggestion(text: prefix)
     }
 

@@ -380,6 +380,16 @@ public enum LabFactualGroundingMode: String, LabNamedOption {
         case .allAnchors: "All factual anchors"
         }
     }
+
+    /// The shared rule this Lab option selects. One implementation backs the
+    /// judge and the live completion path.
+    public var groundingMode: FactualGroundingPolicy.Mode {
+        switch self {
+        case .off: .off
+        case .numbersAndNames: .numbersAndNames
+        case .allAnchors: .allAnchors
+        }
+    }
 }
 
 public enum LabSuggestionLengthPolicy: String, LabNamedOption {
