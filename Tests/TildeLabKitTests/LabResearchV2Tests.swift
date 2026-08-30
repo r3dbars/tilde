@@ -468,6 +468,157 @@ struct LabResearchV2Tests {
         #expect((comparison.rareEventBounds["bad-when-shown"]?.upper95Wilson ?? 0) > 0)
     }
 
+    /// The 2026-08-30 Q12 nomination block. Lab throughput runs record first
+    /// tokens well past the utility proxy's stable-word deadline, so the
+    /// latency-gated expected utility is a constant across arms while the harm
+    /// a display-policy change actually moves is large. A campaign that
+    /// registers the class-appropriate metric can be judged; nothing about the
+    /// hard gates or the keystroke ledger changes.
+    @Test("A display-policy campaign can register the harm difference as its primary metric")
+    func displayPolicyPrimaryMetric() throws {
+        // Every display is slower than the 400 ms deadline, so expected utility
+        // is zero for every case in both arms. Sensitive silence roots keep the
+        // candidate's own hard gates honest and passing.
+        let silence = (0..<100).map { index in
+            caseResult(
+                scenarioID: "quiet-\(index)",
+                category: "silence.sensitive.medical",
+                expectedSuggestion: false,
+                outcome: .correctSilence,
+                offered: false,
+                saved: 0,
+                latency: nil
+            )
+        }
+        let baselineCases = (0..<100).map { index in
+            caseResult(
+                scenarioID: "root-\(index)",
+                outcome: index < 40 ? .wrong : .useful,
+                offered: true,
+                saved: index < 40 ? 0 : 8,
+                latency: 900
+            )
+        } + silence
+        let candidateCases = (0..<100).map { index in
+            caseResult(
+                scenarioID: "root-\(index)",
+                outcome: .useful,
+                offered: true,
+                saved: 8,
+                latency: 900
+            )
+        } + silence
+        let baseline = report(arm: .init(id: "baseline"), cases: baselineCases)
+        let candidate = report(arm: .init(id: "echo-24"), cases: candidateCases)
+        #expect(candidate.metrics.promotionGateFailures.isEmpty)
+        let rule = LabPromotionRule(
+            bootstrapIterations: 200,
+            minimumProbabilityPositive: 0.95,
+            maximumBadWhenShownIncrease: 0,
+            latencyNoninferiorityMilliseconds: 1_000,
+            maximumProtectedSliceRegression: 0
+        )
+
+        let utilityRegistered = try LabPairedComparison.compare(
+            baseline: baseline,
+            candidate: candidate,
+            phase: .discovery,
+            primaryMetric: .expectedUtility,
+            promotionRule: rule
+        )
+        #expect(utilityRegistered.deltaExpectedUtility.mean == 0)
+        #expect(utilityRegistered.deltaExpectedUtility.lower95 == 0)
+        #expect(utilityRegistered.deltaExpectedUtility.upper95 == 0)
+        #expect(utilityRegistered.ties == 200)
+        #expect(utilityRegistered.decision == .continueTesting)
+        #expect(utilityRegistered.primaryMetric == .expectedUtility)
+
+        let harmRegistered = try LabPairedComparison.compare(
+            baseline: baseline,
+            candidate: candidate,
+            phase: .discovery,
+            primaryMetric: .badWhenShown,
+            promotionRule: rule
+        )
+        #expect(harmRegistered.deltaBadWhenShown.mean == -0.4)
+        #expect(harmRegistered.primaryMetric == .badWhenShown)
+        // The primary estimate is oriented so positive is an improvement.
+        #expect(harmRegistered.deltaPrimaryMetric?.mean == 0.4)
+        #expect((harmRegistered.deltaPrimaryMetric?.lower95 ?? 0) > 0)
+        #expect(harmRegistered.deltaPrimaryMetric?.probabilityPositive == 1)
+        #expect(harmRegistered.decision == .advance)
+        // Registering the class-appropriate metric changes neither the shared
+        // keystroke ledger nor any hard gate.
+        #expect(harmRegistered.deltaOracleNetKSS == utilityRegistered.deltaOracleNetKSS)
+        #expect(harmRegistered.hardGateFailures == utilityRegistered.hardGateFailures)
+        #expect(harmRegistered.candidateSelective.oracleNetKeystrokeSavingsRate
+            == utilityRegistered.candidateSelective.oracleNetKeystrokeSavingsRate)
+    }
+
+    @Test("A harm-metric campaign still fails when a protected slice gets worse")
+    func displayPolicySliceRegression() throws {
+        let baselineCases = [
+            caseResult(scenarioID: "root-a", outcome: .useful, offered: true, saved: 8, latency: 900),
+            caseResult(scenarioID: "root-b", outcome: .wrong, offered: true, saved: 0, latency: 900),
+        ]
+        let candidateCases = [
+            caseResult(scenarioID: "root-a", outcome: .wrong, offered: true, saved: 0, latency: 900),
+            caseResult(scenarioID: "root-b", outcome: .useful, offered: true, saved: 8, latency: 900),
+        ]
+        var sensitive = candidateCases
+        sensitive[0] = LabCaseResult(
+            scenarioID: "root-a",
+            category: "reply.protected",
+            repetition: 0,
+            generationSeed: 0,
+            outcome: .wrong,
+            expectedSuggestion: true,
+            hasGoldenContinuation: true,
+            offered: true,
+            modelRequested: true,
+            rootScenarioID: "root-a",
+            baselineKeystrokes: 10,
+            latencyMilliseconds: 900,
+            firstTokenMilliseconds: 900
+        )
+        var baselineProtected = baselineCases
+        baselineProtected[0] = LabCaseResult(
+            scenarioID: "root-a",
+            category: "reply.protected",
+            repetition: 0,
+            generationSeed: 0,
+            outcome: .useful,
+            expectedSuggestion: true,
+            hasGoldenContinuation: true,
+            offered: true,
+            modelRequested: true,
+            rootScenarioID: "root-a",
+            baselineKeystrokes: 10,
+            grossKeystrokesSaved: 8,
+            acceptanceKeystrokes: 1,
+            netKeystrokesSaved: 7,
+            keystrokesSaved: 8,
+            latencyMilliseconds: 900,
+            firstTokenMilliseconds: 900
+        )
+        let comparison = try LabPairedComparison.compare(
+            baseline: report(arm: .init(id: "baseline"), cases: baselineProtected),
+            candidate: report(arm: .init(id: "candidate"), cases: sensitive),
+            phase: .discovery,
+            primaryMetric: .badWhenShown,
+            promotionRule: .init(
+                bootstrapIterations: 200,
+                minimumProbabilityPositive: 0,
+                maximumBadWhenShownIncrease: 1,
+                latencyNoninferiorityMilliseconds: 1_000,
+                maximumProtectedSliceRegression: 0
+            )
+        )
+        #expect(comparison.worstSlice?.slice == "reply.protected")
+        #expect((comparison.worstSlice?.deltaBadWhenShown ?? 0) > 0)
+        #expect(comparison.decision == .reject)
+    }
+
     @Test("Stochastic comparisons report every seed and the worst seed")
     func seedStability() throws {
         let baseline = report(arm: .init(id: "baseline"), cases: [
@@ -959,6 +1110,8 @@ struct LabResearchV2Tests {
 
     private func caseResult(
         scenarioID: String,
+        category: String = "reply.test",
+        expectedSuggestion: Bool = true,
         generationSeed: Int = 0,
         outcome: LabCaseOutcome,
         offered: Bool,
@@ -967,11 +1120,11 @@ struct LabResearchV2Tests {
     ) -> LabCaseResult {
         LabCaseResult(
             scenarioID: scenarioID,
-            category: "reply.test",
+            category: category,
             repetition: 0,
             generationSeed: generationSeed,
             outcome: outcome,
-            expectedSuggestion: true,
+            expectedSuggestion: expectedSuggestion,
             hasGoldenContinuation: true,
             offered: offered,
             modelRequested: latency != nil,

@@ -485,9 +485,19 @@ extension ResearchCoordinator {
     private static func printComparisons(_ artifacts: [LabResearchComparisonArtifact]) {
         for artifact in artifacts {
             let comparison = artifact.comparison
-            let delta = comparison.deltaExpectedUtility
+            // Print the metric the decision was actually taken on. Reading a
+            // flat Δ utility beside a rejected display-policy candidate hid
+            // which number the promotion rule was applied to.
+            let metric = comparison.primaryMetric ?? .expectedUtility
+            let delta = comparison.deltaPrimaryMetric ?? comparison.deltaExpectedUtility
+            let label = metric == .expectedUtility
+                ? "Δ utility"
+                : "Δ \(metric.title)\(metric.lowerIsBetter ? " (improvement)" : "")"
             ResearchConsole.line(
-                "\(artifact.candidateArmID): \(comparison.decision.rawValue); Δ utility \(delta.mean.formatted(.number.precision(.fractionLength(2)))) [\(delta.lower95.formatted(.number.precision(.fractionLength(2)))), \(delta.upper95.formatted(.number.precision(.fractionLength(2))))]; P(>0)=\(delta.probabilityPositive.formatted(.percent.precision(.fractionLength(1)))); roots=\(comparison.independentRootCount)"
+                "\(artifact.candidateArmID): \(comparison.decision.rawValue); \(label) \(delta.mean.formatted(.number.precision(.fractionLength(2)))) [\(delta.lower95.formatted(.number.precision(.fractionLength(2)))), \(delta.upper95.formatted(.number.precision(.fractionLength(2))))]; P(>0)=\(delta.probabilityPositive.formatted(.percent.precision(.fractionLength(1)))); roots=\(comparison.independentRootCount)"
+            )
+            ResearchConsole.line(
+                "  Δ utility \(comparison.deltaExpectedUtility.mean.formatted(.number.precision(.fractionLength(2)))); Δ net-KSS \(comparison.deltaOracleNetKSS.mean.formatted(.percent.precision(.fractionLength(2)))); Δ bad/show \(comparison.deltaBadWhenShown.mean.formatted(.percent.precision(.fractionLength(2))))"
             )
             if let seed = comparison.worstSeed, comparison.seedComparisons.count > 1 {
                 ResearchConsole.line(
