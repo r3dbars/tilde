@@ -71,6 +71,7 @@ enum ResearchCoordinator {
           --decision-command /absolute/policy-command [--decision-argument VALUE]
           --decision-batch-size 1..100  --decision-workers 1..16
           --skip-failed-batches 0..50
+          --arm-file /absolute/arm.json
           --helper PATH --model-file PATH --workers 1 --slots 1
           --output simulated-typist.json [--json]
         The external command reads one text-free JSON feature object on stdin
@@ -88,6 +89,13 @@ enum ResearchCoordinator {
         abandoned-moment counts. Exceeding N still aborts. The report also
         records the model identity, revision, and asset digests behind the
         candidates.
+        --arm-file holds one campaign arm object — the same shape a campaign
+        manifest stores in arms[] — so a run can be pinned to the exact
+        configuration a campaign nominated. Its prompt, generation, and
+        judgment settings replace the built-in baseline, the same validation
+        `validate` runs refuses an invalid file, and the report's arm field
+        records what actually ran. Without it the built-in baseline arm runs
+        unchanged.
         """,
         "advance-search": "Usage: tilde-lab advance-search --campaign CAMPAIGN.json --stage halving|adaptive [--candidates 8] [--output CHILD.json]",
         "nominate": "Usage: tilde-lab nominate --campaign CAMPAIGN.json [--top 3] --output validation-plan.json",
