@@ -58,7 +58,10 @@ struct LabInstrumentCampaignTests {
             candidateWordCount: 2,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted("alpha beta", kind: .all, at: Date(timeIntervalSince1970: 1_501))
+        opportunity.noteAccepted(
+            "alpha beta", kind: .all, insertionLocationUTF16: 0,
+            at: Date(timeIntervalSince1970: 1_501)
+        )
         var watch = PendingRetainedWatch(opportunity: opportunity)
         watch.markPrivacyExcluded()
         let line = try TextFreeOnlineEvent.encodeJSONL(try watch.finishedEvent())
@@ -101,11 +104,19 @@ struct LabInstrumentCampaignTests {
             candidateWordCount: accepted.split(whereSeparator: \Character.isWhitespace).count,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted(accepted, kind: .all, at: shownAt.addingTimeInterval(0.4))
+        opportunity.noteAccepted(
+            accepted, kind: .all, insertionLocationUTF16: 0,
+            at: shownAt.addingTimeInterval(0.4)
+        )
         var watch = PendingRetainedWatch(opportunity: opportunity)
-        try watch.observeFiveSeconds(window: window)
-        try watch.observeThirtySeconds(window: window)
-        try watch.closeSegment(window: window)
+        let snapshot = RetainedContextSnapshot(
+            text: window,
+            utf16StartLocation: 0,
+            caretLocation: window.utf16.count
+        )
+        try watch.observeFiveSeconds(snapshot: snapshot)
+        try watch.observeThirtySeconds(snapshot: snapshot)
+        try watch.closeSegment(snapshot: snapshot)
         return try watch.finishedEvent()
     }
 }

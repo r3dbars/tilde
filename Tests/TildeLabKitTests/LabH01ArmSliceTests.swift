@@ -125,11 +125,19 @@ struct LabH01ArmSliceTests {
             candidateWordCount: accepted.split(whereSeparator: \Character.isWhitespace).count,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted(accepted, kind: .all, at: shownAt.addingTimeInterval(0.4))
+        opportunity.noteAccepted(
+            accepted, kind: .all, insertionLocationUTF16: 0,
+            at: shownAt.addingTimeInterval(0.4)
+        )
         var watch = PendingRetainedWatch(opportunity: opportunity)
-        try watch.observeFiveSeconds(window: window)
-        try watch.observeThirtySeconds(window: window)
-        try watch.closeSegment(window: window)
+        let snapshot = RetainedContextSnapshot(
+            text: window,
+            utf16StartLocation: 0,
+            caretLocation: window.utf16.count
+        )
+        try watch.observeFiveSeconds(snapshot: snapshot)
+        try watch.observeThirtySeconds(snapshot: snapshot)
+        try watch.closeSegment(snapshot: snapshot)
         return try watch.finishedEvent()
     }
 }

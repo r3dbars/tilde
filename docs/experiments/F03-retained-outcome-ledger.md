@@ -104,6 +104,10 @@ missingness reason, and never both as if they were the same fact.
 - No prompt, candidate, screen, field, or personal text is representable.
 - Production insertion path stays IMKit; this event does not write text.
 - A missing horizon is never coerced to zero retained characters.
+- Retention is counted only at the original accepted insertion range. A
+  duplicate word elsewhere in the bounded field cannot receive credit; if the
+  original range has rolled out of the in-memory snapshot, the horizon is
+  explicitly missing.
 - Fast proof and the existing online-event validators stay green.
 - Local deletion still deletes these events.
 
@@ -132,6 +136,12 @@ zero. Redesign the event before any decision-grade live campaign.
 - App category is coarse. Protected slices will be noisy until we have volume.
 - The owner's awareness that logging exists can change behavior. Do not hide
   that the Outcome Ledger is on; do keep it deletable.
+- The exact-offset watch is deliberately conservative when a length-changing
+  edit occurs before the accepted span: the span may score zero or missing even
+  if it shifted intact. This avoids inflating utility from an unrelated copy.
+  Deletion followed by an identical retype at the same offset between samples
+  remains indistinguishable without retaining an edit stream, which F03 does
+  not do.
 
 ### Frozen provenance
 

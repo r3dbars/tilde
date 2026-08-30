@@ -37,6 +37,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     public var acceptedKind: AcceptKind?
     public var accepted: String
     public var acceptedCharacterCount: Int
+    public var acceptedInsertionLocationUTF16: Int?
     public var dismissed: Bool
     public var nextActionMilliseconds: Int?
     public var settledVisibleMilliseconds: Int?
@@ -69,6 +70,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         acceptedKind = nil
         accepted = ""
         acceptedCharacterCount = 0
+        acceptedInsertionLocationUTF16 = nil
         dismissed = false
         nextActionMilliseconds = nil
         settledVisibleMilliseconds = nil
@@ -86,10 +88,19 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         typedAfterShow = true
     }
 
-    public mutating func noteAccepted(_ text: String, kind: AcceptKind, at time: Date) {
+    public mutating func noteAccepted(
+        _ text: String,
+        kind: AcceptKind,
+        insertionLocationUTF16: Int? = nil,
+        at time: Date
+    ) {
         recordNextAction(at: time)
         if acceptedKind == nil {
             acceptedKind = kind
+            acceptedInsertionLocationUTF16 = insertionLocationUTF16.flatMap { $0 >= 0 ? $0 : nil }
+        } else if let start = acceptedInsertionLocationUTF16,
+                  insertionLocationUTF16 != start + accepted.utf16.count {
+            acceptedInsertionLocationUTF16 = nil
         }
         accepted += text
         acceptedCharacterCount += text.count
@@ -216,11 +227,12 @@ public struct PendingRetainedWatch: Equatable, Sendable {
             && retentionAtSegmentClose.missingness != .notYetObserved
     }
 
-    public mutating func observeFiveSeconds(window: String?) throws {
+    public mutating func observeFiveSeconds(snapshot: RetainedContextSnapshot?) throws {
         guard retentionAt5Seconds.missingness == .notYetObserved else { return }
         retentionAt5Seconds = try RetainedSpanWatch.observation(
             accepted: accepted,
-            window: window
+            insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
+            snapshot: snapshot
         )
         if let kept = retentionAt5Seconds.retainedCharacters {
             let replaced = max(0, accepted.count - kept)
@@ -229,18 +241,26 @@ public struct PendingRetainedWatch: Equatable, Sendable {
         }
     }
 
-    public mutating func observeThirtySeconds(window: String?) throws {
+    public mutating func observeThirtySeconds(snapshot: RetainedContextSnapshot?) throws {
         guard retentionAt30Seconds.missingness == .notYetObserved else { return }
         retentionAt30Seconds = RetainedSpanWatch.monotone(
-            try RetainedSpanWatch.observation(accepted: accepted, window: window),
+            try RetainedSpanWatch.observation(
+                accepted: accepted,
+                insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
+                snapshot: snapshot
+            ),
             notExceeding: retentionAt5Seconds
         )
     }
 
-    public mutating func observeSegment(window: String?) throws {
+    public mutating func observeSegment(snapshot: RetainedContextSnapshot?) throws {
         guard retentionAtSegmentClose.missingness == .notYetObserved else { return }
         var observed = RetainedSpanWatch.monotone(
-            try RetainedSpanWatch.observation(accepted: accepted, window: window),
+            try RetainedSpanWatch.observation(
+                accepted: accepted,
+                insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
+                snapshot: snapshot
+            ),
             notExceeding: retentionAt30Seconds
         )
         observed = RetainedSpanWatch.monotone(observed, notExceeding: retentionAt5Seconds)
@@ -260,8 +280,8 @@ public struct PendingRetainedWatch: Equatable, Sendable {
         opportunity.wipeAcceptedText()
     }
 
-    public mutating func closeSegment(window: String?) throws {
-        try observeSegment(window: window)
+    public mutating func closeSegment(snapshot: RetainedContextSnapshot?) throws {
+        try observeSegment(snapshot: snapshot)
         retentionAt5Seconds = RetainedSpanWatch.closedEarlyIfStillWaiting(retentionAt5Seconds)
         retentionAt30Seconds = RetainedSpanWatch.closedEarlyIfStillWaiting(retentionAt30Seconds)
     }
