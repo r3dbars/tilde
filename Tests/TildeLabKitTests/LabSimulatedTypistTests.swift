@@ -1053,7 +1053,190 @@ struct LabSimulatedTypistTests {
         }
     }
 
+    // MARK: - Campaign-nominated arm file
+
+    @Test("An arm file round-trips into the report the run publishes")
+    func armFileRoundTripsIntoReport() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var nominated = LabArmConfiguration(id: "q12.candidate-3")
+        nominated.judgment.sceneEchoMinimumCharacters = 42
+        nominated.judgment.factualGrounding = .allAnchors
+        nominated.generation.temperature = 0.35
+        nominated.generation.predictionTokens = 24
+        nominated.prompt.maximumSceneCharacters = 900
+        let file = directory.appendingPathComponent("arm.json")
+        try LabResearchArtifactIO.save(nominated, to: file)
+
+        let loaded = try LabSimulatedTypistArmFile.load(at: file)
+        #expect(loaded == nominated)
+
+        var configuration = LabSimulatedTypistConfiguration()
+        configuration.arm = loaded
+        let report = try await LabSimulatedTypistEngine(
+            configuration: configuration,
+            policy: DeterministicHeuristicTypist()
+        ).run(
+            suite: try Self.smokeSuite(),
+            personas: Array(try LabTypistPersonaCatalog.loadBundled().personas.prefix(1)),
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable()
+        )
+        try report.validated()
+        #expect(report.arm == nominated)
+
+        // The arm has to survive the artifact the owner actually reads, not
+        // just the in-memory report.
+        let output = directory.appendingPathComponent("report.json")
+        try LabResearchArtifactIO.save(report, to: output)
+        let reloaded = try LabResearchArtifactIO.load(
+            LabSimulatedTypistReport.self, from: output
+        )
+        #expect(reloaded.arm == nominated)
+        #expect(reloaded.arm.judgment.sceneEchoMinimumCharacters == 42)
+        #expect(reloaded.arm.judgment.factualGrounding == .allAnchors)
+        #expect(reloaded.arm.generation.temperature == 0.35)
+    }
+
+    @Test("An arm file that is not one valid campaign arm is refused")
+    func invalidArmFileRefused() throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // Out of the bounded Lab range: the same validation `validate` runs.
+        var broken = LabArmConfiguration(id: "q12.candidate-3")
+        broken.judgment.sceneEchoMinimumCharacters = 0
+        let invalid = directory.appendingPathComponent("invalid.json")
+        try JSONEncoder().encode(broken).write(to: invalid)
+        #expect(throws: LabSimulatedTypistArmFileError.invalidArm(
+            path: invalid.path,
+            reason: LabConfigurationError.invalidJudgment.localizedDescription
+        )) {
+            _ = try LabSimulatedTypistArmFile.load(at: invalid)
+        }
+
+        // A campaign manifest is not an arm; neither is a truncated file.
+        let manifest = directory.appendingPathComponent("manifest.json")
+        try Data(#"{"arms":[{"id":"q12.candidate-3"}]}"#.utf8).write(to: manifest)
+        #expect(throws: LabSimulatedTypistArmFileError.self) {
+            _ = try LabSimulatedTypistArmFile.load(at: manifest)
+        }
+        let garbage = directory.appendingPathComponent("garbage.json")
+        try Data("{ not json".utf8).write(to: garbage)
+        #expect(throws: LabSimulatedTypistArmFileError.self) {
+            _ = try LabSimulatedTypistArmFile.load(at: garbage)
+        }
+
+        // A missing file, a directory, and a relative path are all refused
+        // before anything is decoded.
+        #expect(throws: LabSimulatedTypistArmFileError.self) {
+            _ = try LabSimulatedTypistArmFile.load(
+                at: directory.appendingPathComponent("absent.json")
+            )
+        }
+        #expect(throws: LabSimulatedTypistArmFileError.unsafePath(directory.path)) {
+            _ = try LabSimulatedTypistArmFile.load(at: directory)
+        }
+        #expect(throws: LabSimulatedTypistArmFileError.notAbsolutePath("arm.json")) {
+            _ = try LabSimulatedTypistArmFile.load(atPath: "arm.json")
+        }
+        // The valid file still loads through the path entry point the CLI uses.
+        let valid = directory.appendingPathComponent("valid.json")
+        try LabResearchArtifactIO.save(LabArmConfiguration(id: "q12.candidate-3"), to: valid)
+        #expect(
+            try LabSimulatedTypistArmFile.load(atPath: valid.path)
+                == LabArmConfiguration(id: "q12.candidate-3")
+        )
+    }
+
+    @Test("The nominated arm's judgment settings decide what the run displays")
+    func armFileJudgmentChangesDisplays() async throws {
+        // One scene-echo boundary candidate, one stubbed client, two arms: the
+        // only difference is the echo threshold the arm file carries.
+        let suite = try Self.echoSuite()
+        let personas = Array(try LabTypistPersonaCatalog.loadBundled().personas.prefix(1))
+
+        func run(_ arm: LabArmConfiguration) async throws -> LabSimulatedTypistReport {
+            var configuration = LabSimulatedTypistConfiguration(strideCharacters: 6)
+            configuration.arm = arm
+            return try await LabSimulatedTypistEngine(
+                configuration: configuration,
+                policy: DeterministicHeuristicTypist()
+            ).run(
+                suite: suite,
+                personas: personas,
+                client: StubCompletionClient(content: " on the usual day"),
+                provenance: .unavailable()
+            )
+        }
+
+        // Default thresholds: the candidate is long enough to read as an echo
+        // of the scene, so every moment is silent.
+        var suppressing = LabArmConfiguration(id: "q12.echo-default")
+        #expect(suppressing.judgment.rejectsSceneEcho)
+        #expect(suppressing.judgment.sceneEchoMinimumCharacters == 10)
+        let suppressed = try await run(suppressing)
+        #expect(suppressed.personas[0].displays == 0)
+        #expect(suppressed.personas[0].silentMoments > 0)
+
+        // The nominated arm raises the character floor past this candidate, so
+        // the same generation is shown instead.
+        var permitting = suppressing
+        permitting.id = "q12.echo-widened"
+        permitting.judgment.sceneEchoMinimumCharacters = 64
+        let shown = try await run(try permitting.validated())
+        #expect(shown.personas[0].displays > 0)
+        #expect(shown.arm.judgment.sceneEchoMinimumCharacters == 64)
+
+        // And the boundary is the arm's, not the engine's: turning the echo
+        // rule off entirely shows the same candidate.
+        suppressing.judgment.rejectsSceneEcho = false
+        let unrejected = try await run(suppressing)
+        #expect(unrejected.personas[0].displays == shown.personas[0].displays)
+    }
+
+    @Test("Without an arm file the run still uses the built-in baseline arm")
+    func defaultArmUnchanged() async throws {
+        let configuration = LabSimulatedTypistConfiguration()
+        #expect(configuration.arm == LabArmConfiguration(id: "simulated-typist-baseline"))
+
+        let report = try await LabSimulatedTypistEngine(
+            configuration: configuration,
+            policy: DeterministicHeuristicTypist()
+        ).run(
+            suite: try Self.smokeSuite(),
+            personas: Array(try LabTypistPersonaCatalog.loadBundled().personas.prefix(1)),
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable()
+        )
+        #expect(report.arm == LabArmConfiguration(id: "simulated-typist-baseline"))
+    }
+
     // MARK: - Helpers
+
+    /// A scenario whose scene turn literally contains the stubbed candidate, so
+    /// the scene-echo threshold is the only thing standing between the
+    /// generation and a display.
+    private static func echoSuite() throws -> LabScenarioSuite {
+        let scenarios = ["one", "two"].map { suffix in
+            LabScenario(
+                id: "simulated.echo.\(suffix)",
+                category: "reply.simulated.smoke",
+                typedContext: "That ",
+                scene: LabScene(
+                    mode: .replying,
+                    turns: [LabSceneTurn(speaker: .other, text: "Can we meet on the usual day?")]
+                ),
+                expectation: LabExpectation(
+                    shouldSuggest: true,
+                    goldenContinuation: "sounds fine, see you then.",
+                    acceptablePrefixes: ["sounds fine, see you then."]
+                )
+            )
+        }
+        return try LabScenarioSuite(name: "simulated echo", scenarios: scenarios).validated()
+    }
 
     private static func features(
         tolerance: LabTypistInterruptionTolerance = .medium,
