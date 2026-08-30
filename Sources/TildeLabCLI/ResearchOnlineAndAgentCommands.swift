@@ -176,6 +176,9 @@ extension ResearchCoordinator {
                 for arm in comparison.arms {
                     ResearchConsole.line("  \(arm.variant.rawValue):")
                     ResearchConsole.line("    events: \(arm.report.events)")
+                    ResearchConsole.line(
+                        "    event schemas: \(schemaCounts(arm.report.eventSchemaCounts))"
+                    )
                     ResearchConsole.line("    displayed: \(arm.report.displayed)")
                     ResearchConsole.line("    acceptance when shown: \(arm.report.acceptanceRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
                     ResearchConsole.line("    typed-through: \(arm.report.typedThrough)")
@@ -195,6 +198,7 @@ extension ResearchCoordinator {
             try writeJSON(report)
         } else {
             ResearchConsole.line("Online utility report")
+            ResearchConsole.line("  event schemas: \(schemaCounts(report.eventSchemaCounts))")
             ResearchConsole.line("  safe opportunities: \(report.safeOpportunities)")
             ResearchConsole.line("  displayed: \(report.displayed)")
             ResearchConsole.line("  acceptance when shown: \(report.acceptanceRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
@@ -544,6 +548,10 @@ extension ResearchCoordinator {
             gitCommit: gitCommit(),
             protocolDefinition: research
         ))
+    }
+
+    private static func schemaCounts(_ counts: [String: Int]) -> String {
+        counts.keys.sorted().map { "\($0)=\(counts[$0, default: 0])" }.joined(separator: ", ")
     }
 
 }

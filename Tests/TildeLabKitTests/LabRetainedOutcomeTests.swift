@@ -23,6 +23,7 @@ struct LabRetainedOutcomeTests {
         #expect(report.retentionAt30Seconds.netRetainedCharacters == 10)
         #expect(report.retentionAtSegmentClose.netRetainedCharacters == 10)
         #expect(report.retentionAt5Seconds.missingEvents == 0)
+        #expect(report.eventSchemaCounts == [LabOnlineExperimentEvent.currentSchema: 1])
         #expect(report.flickerAccepts == 0)
         #expect(report.settledReads == 1)
     }
@@ -213,6 +214,8 @@ struct LabRetainedOutcomeTests {
         #expect(event.retentionAt30Seconds.missingness == .legacySchema)
         #expect(event.retentionAtSegmentClose.missingness == .legacySchema)
         _ = try event.validated(for: plan())
+        let report = try LabOnlineExperimentAnalyzer.analyze([event])
+        #expect(report.eventSchemaCounts == [LabOnlineExperimentEvent.legacySchemaV2: 1])
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
