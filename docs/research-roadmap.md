@@ -32,6 +32,10 @@ desktop typist. See
 [`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md)
 and the scientific stance in
 [`docs/research/scientific-program.md`](research/scientific-program.md).
+The dated
+[`frontier-priors-2026-08-30.md`](research/frontier-priors-2026-08-30.md)
+records newer transfer priors and their falsifiers; it does not change this
+roadmap's order or the Learning Ledger queue.
 That does not unlock later stages early. Tilde must still become an
 intervention system that decides:
 
