@@ -28,6 +28,25 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Harness audit finds the missing silence denominator
+
+- **Try:** Trace the production outcome lifecycle from IME effects through the
+  text-free event, then compare its observable states with H04's planned
+  cooldown and missed-opportunity metrics.
+- **Learn:** `recordOutcomeShown` starts the live opportunity only after the
+  `.shown` effect, and the finished event is always generated and displayed.
+  F03 can measure keep versus rewrite for visible ghosts, but future quiet
+  policies cannot learn from requests that stayed silent, skipped inference,
+  found the runtime unavailable, or were suppressed upstream.
+- **Fail:** The current 889-test suite can prove the shown-opportunity contract
+  while leaving that denominator unobservable. Adding another display gate
+  before fixing the ruler would make the blind spot larger.
+- **Where:** `Sources/InlineGhostIME/GhostInputController.swift`;
+  `Sources/InlineGhostIME/GhostOutcomeLedger.swift`;
+  `Sources/TildeCore/Policy/LiveOnlineOpportunity.swift`; H04 roadmap.
+- **Next:** Keep F03 frozen; before H04 registration, add one text-free
+  request-lifecycle contract with fixed reason codes and shadow missed counts.
+
 ## 2026-08-30 — Frontier source refresh does not unlock a second question
 
 - **Try:** Recheck current primary work on chat autocomplete ranking,
