@@ -28,6 +28,42 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Q12's nominated filters go live in the isolated 9B preview
+
+- **Try:** Take Q12's two nominated display-policy settings — scene-echo
+  minimum characters 10 → 24 (word floor unchanged) and names-and-numbers
+  factual grounding on — out of the Lab judge and into the live completion
+  path for `TildeProductProfile.preview9B` only, routed through
+  profile-computed properties beside `completionTemperature` and
+  `maximumVisibleWords`, so the owner can dogfood the arm the campaign
+  measured instead of only reading its numbers.
+- **Learn:** The product had a scene-echo rejection
+  (`TildeCore.SceneEchoPolicy`, applied twice in `LlamaCompletionEngine` —
+  once on the final, once on every streamed partial) but no factual filter
+  at all; grounding existed only inside `LabOutputJudge`. Rather than write
+  a second copy, the rule moved down into
+  `TildeCore.FactualGroundingPolicy` and the judge now calls it, which is
+  what makes "the preview runs the nominated arm" a checkable claim rather
+  than a hopeful one — a parity suite over a shared fixture set fails if the
+  two ever disagree. Applying grounding to the streamed partial as well as
+  the final mattered: the partial is the text the writer actually sees
+  first, so a filter that only judged the final would have shown the
+  invented number and then withdrawn it.
+- **Fail:** No live evidence yet — this is wiring, not a result, and an
+  isolated preview is explicitly not promotion. The settings remain frozen
+  validation candidates selected on the development partition; production,
+  the 26B preview, and the Model Preview daily driver are byte-identical in
+  behavior and pinned there by regression assertions. Whatever the preview
+  produces in use is dogfood that must clear the three-judges rule, and it
+  cannot substitute for the protected validation path Q12 still owes.
+- **Where:** [`Q12`](../experiments/Q12-scene-echo-grounding.md) § Follow-up;
+  `Sources/TildeCore/Suggestions/FactualGroundingPolicy.swift`;
+  `Sources/TildeCore/Suggestions/SceneEchoPolicy.swift`;
+  `Sources/TildeCore/Runtime/TildeProductProfile.swift`;
+  `Sources/TildeApp/Runtime/LlamaCompletionEngine.swift`.
+- **Next:** Dogfood the 9B preview and see whether the recovered short
+  fact-carrying displays feel useful in real typing, or merely more frequent.
+
 ## 2026-08-29 — First full-scale simulated persona run lands in 38 minutes
 
 - **Try:** Run the simulated typist over the full replying-v2 speak-expected
