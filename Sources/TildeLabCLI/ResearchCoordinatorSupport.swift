@@ -470,13 +470,14 @@ extension ResearchCoordinator {
             artifacts.append(artifact)
         }
         guard !artifacts.isEmpty else { throw ResearchCLIError.noComparableReports }
+        // Ranked on the registered primary metric, always oriented so a larger
+        // mean is the better candidate. Rank alone never promotes; this only
+        // decides which passing candidates `nominate --top` freezes first.
         return artifacts.sorted {
-            if $0.comparison.deltaExpectedUtility.mean
-                == $1.comparison.deltaExpectedUtility.mean {
-                return $0.candidateArmID < $1.candidateArmID
-            }
-            return $0.comparison.deltaExpectedUtility.mean
-                > $1.comparison.deltaExpectedUtility.mean
+            let left = ($0.comparison.deltaPrimaryMetric ?? $0.comparison.deltaExpectedUtility).mean
+            let right = ($1.comparison.deltaPrimaryMetric ?? $1.comparison.deltaExpectedUtility).mean
+            if left == right { return $0.candidateArmID < $1.candidateArmID }
+            return left > right
         }
     }
 

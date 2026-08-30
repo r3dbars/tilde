@@ -119,11 +119,26 @@ display.
 ### Honest nuances
 
 - The generic paired-utility comparator scores Δ utility 0.00 for both
-  treatments while Δ bad/show is −8.8 to −11.7 points: its keystroke
-  credit does not count the recovered acceptable-alternative displays the
-  arm aggregates count. The registered rules govern this experiment; the
-  comparator's credit definition deserves its own look before any later
-  experiment leans on it.
+  treatments while Δ bad/show is −8.8 to −11.7 points. The registered
+  rules govern this experiment; the comparator's definition deserved its
+  own look before any later experiment leaned on it.
+
+  **Correction, 2026-08-30 audit.** The explanation first written here —
+  that the comparator's keystroke credit ignores the recovered
+  acceptable-alternative displays the arm aggregates count — is wrong.
+  Both views read one ledger: the comparator's `oracle-net-keystroke-
+  savings` difference is +8.63 points, 95% CI [6.71, 10.60], P(>0)=1.00,
+  reproducing the arm aggregates exactly. `Δ utility` is a different
+  quantity, the latency-gated expected-utility proxy, which scores a
+  display only when its first token beats the 400 ms stable-word
+  deadline; in this 8×2-worker quality-only run exactly 1 of 1,800 paired
+  observations qualifies, and it is the same unwanted case in every arm,
+  so expected utility is the identical constant −8.0817 ms/1,000 chars
+  and all 600 roots tie. Exact-path-only keystroke credit is documented
+  and identical in both paths. The fix is a class-appropriate registered
+  primary metric (`bad-when-shown`), now the display-policy default. It
+  does not retroactively unblock this campaign, whose candidate reports
+  also fail the bad-suggestion and latency hard gates.
 - Development-partition confirmation of replay-selected settings, per the
   registration's overfitting disclosure. Validation and live proof remain
   ahead; nothing ships from this run.

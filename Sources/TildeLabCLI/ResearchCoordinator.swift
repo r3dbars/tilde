@@ -46,6 +46,7 @@ enum ResearchCoordinator {
           --suite certified-v2|replying-v2|replying-v1|slack-reply-gold-v1|/absolute/suite.json
           --recipe qwen-factorial|qmc|context-matrix|display-matrix|runtime-matrix|baseline-only
           --class generator|context|display-policy|personalization|runtime|interaction
+          --primary-metric expected-utility|oracle-net-keystroke-savings|precision-when-shown|bad-when-shown
           --seeds 17,41,73  --candidates 31  --block-size 20
           --budget-hours 12 --maximum-model-requests 250000
           --workers 2 --slots 4 --repetitions 1
@@ -124,7 +125,7 @@ enum ResearchCoordinator {
                 "model-revision", "model-file", "helper", "budget-hours", "output",
                 "recipe", "search", "candidates", "seeds", "workers", "slots",
                 "repetitions", "maximum-model-requests", "maximum-roots-per-trial",
-                "block-size", "hypothesis-id", "hypothesis",
+                "block-size", "hypothesis-id", "hypothesis", "primary-metric",
             ],
             flags: ["experimental-model"]
         )
@@ -236,6 +237,17 @@ enum ResearchCoordinator {
                 5, arms[index].generation.probabilityCount
             )
         }
+        // A display-policy campaign moves which candidates are shown, not which
+        // characters match the recorded future, so the latency-gated utility
+        // proxy is flat for it by construction. Its class default is the harm
+        // difference it can actually move; every class may still register any
+        // metric explicitly, before the result is known.
+        let defaultPrimaryMetric: LabPrimaryResearchMetric = experimentClass == .displayPolicy
+            ? .badWhenShown
+            : .expectedUtility
+        guard let primaryMetric = LabPrimaryResearchMetric(
+            rawValue: arguments.value("primary-metric") ?? defaultPrimaryMetric.rawValue
+        ) else { throw ResearchCLIError.invalidValue("--primary-metric") }
         let protocolDefinition = LabResearchProtocol(
             phase: .discovery,
             experimentClass: experimentClass,
@@ -243,6 +255,7 @@ enum ResearchCoordinator {
             baselineArmID: arms[0].id,
             fixedGenerationSeeds: seeds,
             interleavedRootBlockSize: try arguments.integer("block-size", default: 20),
+            primaryMetric: primaryMetric,
             runtimeByArm: runtimeByArm
         )
         let manifest = LabExperimentManifest(
