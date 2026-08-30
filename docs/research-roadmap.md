@@ -574,6 +574,12 @@ top of the reading list. Headline pointers:
   latency and visual-stability costs that must be measured separately.
 - [Improving Neural Language Models with a Continuous Cache](https://arxiv.org/abs/1612.04426)
   motivates a cheap recency expert before any continual neural retraining.
+- [ChaI-TeA](https://aclanthology.org/2025.naacl-short.3/) says the open gap in
+  its fixed chat-autocomplete benchmark is principally ranking, which favors a
+  calibrated quiet controller over another uncontrolled candidate expansion.
+- [Rank-Calibration](https://aclanthology.org/2024.emnlp-main.18/) provides a
+  threshold-free way to ask whether a confidence signal actually orders
+  completion quality before H06 or H13 freezes any binary decision rule.
 
 The repository's own [Tilde Lab guide](tilde-lab.md),
 [Learning Ledger](learning-ledger.md), and [evaluation contract](evaluation.md)
