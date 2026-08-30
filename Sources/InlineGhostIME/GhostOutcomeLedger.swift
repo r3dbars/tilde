@@ -484,13 +484,14 @@ enum GhostOutcomeLedger {
         guard fstat(descriptor, &info) == 0,
               info.st_mode & S_IFMT == S_IFREG,
               info.st_uid == getuid(),
+              info.st_nlink == 1,
               fchmod(descriptor, 0o600) == 0,
               flock(descriptor, LOCK_EX) == 0,
               fstat(descriptor, &info) == 0,
               info.st_mode & S_IFMT == S_IFREG,
               info.st_uid == getuid(),
               info.st_mode & 0o7777 == 0o600,
-              info.st_nlink > 0,
+              info.st_nlink == 1,
               clearNonblocking(descriptor),
               permitted() else { return false }
         do {
