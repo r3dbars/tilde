@@ -11,7 +11,7 @@ extension ResearchCoordinator {
             options: [
                 "suite", "personas", "policy", "decision-command", "decision-argument",
                 "decision-batch-size", "decision-workers", "skip-failed-batches",
-                "scenarios", "stride", "maximum-displays", "helper", "model-file",
+                "scenarios", "stride", "maximum-displays", "arm-file", "helper", "model-file",
                 "model", "model-revision", "workers", "slots", "output",
             ],
             flags: ["json", "experimental-model"]
@@ -39,6 +39,13 @@ extension ResearchCoordinator {
         let policy = try decisionPolicy(arguments)
 
         var configuration = LabSimulatedTypistConfiguration()
+        // A campaign nominated one arm; running the simulator against a
+        // different configuration than the one under discussion would answer a
+        // question nobody asked. The file is the campaign manifest's own arm
+        // shape, decoded and validated by the same code `validate` uses.
+        if let armPath = arguments.value("arm-file") {
+            configuration.arm = try LabSimulatedTypistArmFile.load(atPath: armPath)
+        }
         configuration.strideCharacters = try arguments.integer("stride", default: 4)
         configuration.maximumDisplaysPerScenario = try arguments.integer(
             "maximum-displays", default: 8
@@ -191,6 +198,13 @@ extension ResearchCoordinator {
         ResearchConsole.line("  decision policy: \(report.decisionPolicyIdentifier)")
         ResearchConsole.line("  decision batch size: \(report.decisionBatchSize)")
         ResearchConsole.line("  decision workers: \(report.decisionWorkers)")
+        // Only when the run was pinned to a nominated arm: the default run's
+        // summary stays exactly what it has always been.
+        if let armPath = arguments.value("arm-file") {
+            ResearchConsole.line(
+                "  arm: \(report.arm.id) (from \(armPath.expandedResearchPath))"
+            )
+        }
         if let assets = report.assets {
             ResearchConsole.line(
                 "  generation model: \(assets.modelIdentifier) @ \(assets.modelRevision) (\(assets.verificationMode.rawValue))"
