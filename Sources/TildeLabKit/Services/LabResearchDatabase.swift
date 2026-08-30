@@ -224,6 +224,7 @@ public enum LabResearchDatabaseError: Error, LocalizedError, Equatable, Sendable
     case sessionNotActive
     case holdoutAlreadyConsumed
     case durableProtocolRequired
+    case conflictingOnlineEvent
 
     public var errorDescription: String? {
         switch self {
@@ -257,6 +258,8 @@ public enum LabResearchDatabaseError: Error, LocalizedError, Equatable, Sendable
             "This suite digest has already consumed its one protected holdout evaluation."
         case .durableProtocolRequired:
             "Durable research execution requires an explicit research protocol and one paired selected-suite digest."
+        case .conflictingOnlineEvent:
+            "An online event ID was reused with a different text-free payload."
         }
     }
 }
@@ -1163,7 +1166,8 @@ public actor LabResearchDatabase {
 
     /// Validates the entire file before opening a transaction, then commits all
     /// new rows together. A malformed later line can never leave a valid prefix
-    /// behind, and duplicate IDs are reported instead of being called ingested.
+    /// behind, and exact duplicate IDs are reported instead of being called
+    /// ingested. Reusing an ID for a different payload fails the whole batch.
     public func recordOnlineEvents(
         _ events: [LabOnlineExperimentEvent],
         plan: LabOnlineExperimentPlan
@@ -1206,7 +1210,7 @@ public actor LabResearchDatabase {
     }
 
     private func insertOnlineEvent(_ event: LabOnlineExperimentEvent, bytes: Data) throws -> Int {
-        try withStatementReturningChanges(
+        let inserted = try withStatementReturningChanges(
             """
             INSERT INTO online_event(id, campaign_id, event_json, occurred_at)
             VALUES(?, ?, ?, ?)
@@ -1218,6 +1222,25 @@ public actor LabResearchDatabase {
             try bind(bytes, at: 3, in: statement)
             sqlite3_bind_double(statement, 4, event.occurredAt.timeIntervalSince1970)
         }
+        guard inserted == 0 else { return inserted }
+        guard try storedOnlineEvent(id: event.id) == event else {
+            throw LabResearchDatabaseError.conflictingOnlineEvent
+        }
+        return 0
+    }
+
+    private func storedOnlineEvent(id: UUID) throws -> LabOnlineExperimentEvent? {
+        var result: LabOnlineExperimentEvent?
+        try withStatement("SELECT event_json FROM online_event WHERE id=?") { statement in
+            try bind(id.uuidString.lowercased(), at: 1, in: statement)
+            guard sqlite3_step(statement) == SQLITE_ROW,
+                  let bytes = blobColumn(statement, 0) else { return }
+            guard let decoded = try? decoder.decode(LabOnlineExperimentEvent.self, from: bytes) else {
+                throw LabResearchDatabaseError.decodeFailed
+            }
+            result = decoded
+        }
+        return result
     }
 
     public func deleteOnlineEvents(campaignID: UUID) throws {
