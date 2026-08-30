@@ -112,7 +112,10 @@ struct LabInstrumentCampaignTests {
         let snapshot = RetainedContextSnapshot(
             text: window,
             utf16StartLocation: 0,
-            caretLocation: window.utf16.count
+            caretLocation: window.utf16.count,
+            sourceDigestSHA256: TextFreeOnlineEvent.sessionDigest(
+                sessionIdentifier: "instrument"
+            )
         )
         try watch.observeFiveSeconds(snapshot: snapshot)
         try watch.observeThirtySeconds(snapshot: snapshot)

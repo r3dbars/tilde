@@ -133,7 +133,8 @@ struct LabH01ArmSliceTests {
         let snapshot = RetainedContextSnapshot(
             text: window,
             utf16StartLocation: 0,
-            caretLocation: window.utf16.count
+            caretLocation: window.utf16.count,
+            sourceDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "h01")
         )
         try watch.observeFiveSeconds(snapshot: snapshot)
         try watch.observeThirtySeconds(snapshot: snapshot)

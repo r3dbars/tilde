@@ -273,7 +273,10 @@ final class GhostInputController: IMKInputController {
             return RetainedContextSnapshot(
                 text: context,
                 utf16StartLocation: max(0, selection.location - context.utf16.count),
-                caretLocation: selection.location
+                caretLocation: selection.location,
+                sourceDigestSHA256: TextFreeOnlineEvent.sessionDigest(
+                    sessionIdentifier: self.suggestionSessionIdentifier
+                )
             )
         }
         guard !IsSecureEventInputEnabled() else { return }

@@ -15,7 +15,7 @@ struct RetainedSpanWatchTests {
         let deletedAtAnchor = RetainedSpanWatch.retainedCharacters(
             accepted: accepted,
             insertionLocationUTF16: 6,
-            snapshot: snapshot("the x ")
+            snapshot: snapshot("the x Z")
         )
         #expect(kept == accepted.count)
         #expect(deletedAtAnchor == 0)
@@ -82,6 +82,20 @@ struct RetainedSpanWatchTests {
         #expect(watch.retentionAtSegmentClose.retainedCharacters == 0)
     }
 
+    @Test("Retention horizons start when the accepted watch starts, not when the ghost appeared")
+    func horizonClockStartsAtAcceptanceClose() {
+        let shownAt = Date(timeIntervalSince1970: 1_500)
+        let startedAt = shownAt.addingTimeInterval(40)
+        let watch = PendingRetainedWatch(
+            opportunity: acceptedOpportunity("word", shownAt: shownAt),
+            startedAt: startedAt
+        )
+        #expect(!watch.isFiveSecondDue(at: startedAt.addingTimeInterval(1)))
+        #expect(watch.isFiveSecondDue(at: startedAt.addingTimeInterval(5)))
+        #expect(!watch.isThirtySecondDue(at: startedAt.addingTimeInterval(5)))
+        #expect(watch.isThirtySecondDue(at: startedAt.addingTimeInterval(30)))
+    }
+
     @Test("Retyped text after a missing 5s observation clamps to the 30s count")
     func segmentClampsToThirtySecondsWhenFiveIsMissing() throws {
         var watch = PendingRetainedWatch(
@@ -89,7 +103,7 @@ struct RetainedSpanWatchTests {
         )
         try watch.observeFiveSeconds(snapshot: nil)
         #expect(watch.retentionAt5Seconds.missingness == .observerStopped)
-        try watch.observeThirtySeconds(snapshot: snapshot("wo"))
+        try watch.observeThirtySeconds(snapshot: snapshot("woX"))
         #expect(watch.retentionAt30Seconds.retainedCharacters == 2)
         try watch.observeSegment(snapshot: snapshot("word"))
         #expect(watch.retentionAtSegmentClose.retainedCharacters == 2)
@@ -101,7 +115,7 @@ struct RetainedSpanWatchTests {
     ) -> LiveOnlineOpportunity {
         var opportunity = LiveOnlineOpportunity(
             shownAt: shownAt,
-            sessionDigestSHA256: String(repeating: "a", count: 64),
+            sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "session"),
             appCategory: "prose",
             register: "prose",
             boundary: "word-boundary",
@@ -123,8 +137,40 @@ struct RetainedSpanWatchTests {
         RetainedContextSnapshot(
             text: text,
             utf16StartLocation: start,
-            caretLocation: start + text.utf16.count
+            caretLocation: start + text.utf16.count,
+            sourceDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "session")
         )
+    }
+
+    @Test("A caret inside or immediately before the span is missing, not a rewrite")
+    func truncatedBeforeCaretIsMissing() throws {
+        let atAnchor = try RetainedSpanWatch.observation(
+            accepted: "word",
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("hello ")
+        )
+        let inside = try RetainedSpanWatch.observation(
+            accepted: "word",
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("hello wo")
+        )
+        #expect(atAnchor.missingness == .observerStopped)
+        #expect(inside.missingness == .observerStopped)
+    }
+
+    @Test("A snapshot from another field cannot receive retention credit")
+    func sourceIdentityMustMatch() throws {
+        var watch = PendingRetainedWatch(
+            opportunity: acceptedOpportunity("word", shownAt: Date(timeIntervalSince1970: 1_500))
+        )
+        let otherField = RetainedContextSnapshot(
+            text: "word",
+            utf16StartLocation: 0,
+            caretLocation: 4,
+            sourceDigestSHA256: String(repeating: "b", count: 64)
+        )
+        try watch.observeFiveSeconds(snapshot: otherField)
+        #expect(watch.retentionAt5Seconds.missingness == .observerStopped)
     }
 
     @Test("Contiguous Tab chunks share an anchor; a discontinuous chunk becomes missing")

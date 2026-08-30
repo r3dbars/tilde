@@ -18,6 +18,8 @@ enum GhostOutcomeLedger {
     private static var generationByOpportunityID: [UUID: Int] = [:]
     private static var testingHomeDirectory: URL?
     private static var testingDefaults: UserDefaults?
+    private static var idleCloseWorkItem: DispatchWorkItem?
+    private static var idleScheduleGeneration: UInt64 = 0
 
     static func configure(
         contextProvider: @escaping @Sendable () -> RetainedContextSnapshot?
@@ -68,6 +70,7 @@ enum GhostOutcomeLedger {
         generationByOpportunityID[shown.id] = generation
         lastActivity = time
         lock.unlock()
+        rescheduleIdleCloseIfNeeded()
     }
 
     static func noteVisibleCandidate(characters: Int, wordCount: Int) {
@@ -84,6 +87,7 @@ enum GhostOutcomeLedger {
         lastActivity = time
         let stillVisible = opportunity != nil
         lock.unlock()
+        rescheduleIdleCloseIfNeeded()
         if !stillVisible { return }
     }
 
@@ -91,6 +95,7 @@ enum GhostOutcomeLedger {
         if dropIfWiped() { return }
         guard !stillVisible else { return }
         closeOpenOpportunity(at: time)
+        rescheduleIdleCloseIfNeeded()
     }
 
     static func noteAccepted(
@@ -112,8 +117,11 @@ enum GhostOutcomeLedger {
         let ready = remainderVisible ? nil : opportunity
         if !remainderVisible { opportunity = nil }
         lock.unlock()
-        guard let ready, ready.didAccept else { return }
-        startWatch(ready)
+        guard let ready, ready.didAccept else {
+            rescheduleIdleCloseIfNeeded()
+            return
+        }
+        startWatch(ready, at: time)
     }
 
     static func noteDismissed(at time: Date = Date()) {
@@ -123,6 +131,7 @@ enum GhostOutcomeLedger {
         lastActivity = time
         lock.unlock()
         closeOpenOpportunity(at: time)
+        rescheduleIdleCloseIfNeeded()
     }
 
     static func markPrivacyExcluded() {
@@ -150,6 +159,7 @@ enum GhostOutcomeLedger {
         for var watch in completed {
             emit(watch: &watch)
         }
+        rescheduleIdleCloseIfNeeded()
     }
 
     static func closeOpenGhost(at time: Date = Date()) {
@@ -175,6 +185,7 @@ enum GhostOutcomeLedger {
         for var watch in completed {
             emit(watch: &watch)
         }
+        rescheduleIdleCloseIfNeeded()
     }
 
     static func observeDueHorizons(now: Date = Date()) {
@@ -183,11 +194,10 @@ enum GhostOutcomeLedger {
         lock.lock()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
-            let shown = watches[index].opportunity.shownAt
-            if now.timeIntervalSince(shown) >= RetainedSpanWatch.fiveSecondHorizon {
+            if watches[index].isFiveSecondDue(at: now) {
                 try? watches[index].observeFiveSeconds(snapshot: snapshot)
             }
-            if now.timeIntervalSince(shown) >= RetainedSpanWatch.thirtySecondHorizon {
+            if watches[index].isThirtySecondDue(at: now) {
                 try? watches[index].observeThirtySeconds(snapshot: snapshot)
             }
             if now.timeIntervalSince(lastActivity) >= RetainedSpanWatch.idleSegmentSeconds {
@@ -204,7 +214,7 @@ enum GhostOutcomeLedger {
         }
     }
 
-    private static func startWatch(_ opportunity: LiveOnlineOpportunity) {
+    private static func startWatch(_ opportunity: LiveOnlineOpportunity, at time: Date) {
         lock.lock()
         if excluded {
             lock.unlock()
@@ -217,7 +227,7 @@ enum GhostOutcomeLedger {
             emit(watch: &oldest)
             lock.lock()
         }
-        watches.append(PendingRetainedWatch(opportunity: opportunity))
+        watches.append(PendingRetainedWatch(opportunity: opportunity, startedAt: time))
         lock.unlock()
         scheduleHorizonChecks()
     }
@@ -230,7 +240,7 @@ enum GhostOutcomeLedger {
         lock.unlock()
         guard let closing else { return }
         if closing.didAccept {
-            startWatch(closing)
+            startWatch(closing, at: time)
             return
         }
         emitWithoutWatch(closing)
@@ -284,9 +294,39 @@ enum GhostOutcomeLedger {
         DispatchQueue.main.asyncAfter(deadline: .now() + RetainedSpanWatch.thirtySecondHorizon) {
             observeDueHorizons()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + RetainedSpanWatch.idleSegmentSeconds) {
-            observeDueHorizons()
+        rescheduleIdleCloseIfNeeded()
+    }
+
+    private static func rescheduleIdleCloseIfNeeded() {
+        lock.lock()
+        idleCloseWorkItem?.cancel()
+        idleScheduleGeneration &+= 1
+        let generation = idleScheduleGeneration
+        guard !watches.isEmpty else {
+            idleCloseWorkItem = nil
+            lock.unlock()
+            return
         }
+        let work = DispatchWorkItem {
+            handleIdleDeadline(generation: generation)
+        }
+        idleCloseWorkItem = work
+        lock.unlock()
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + RetainedSpanWatch.idleSegmentSeconds,
+            execute: work
+        )
+    }
+
+    private static func handleIdleDeadline(generation: UInt64) {
+        lock.lock()
+        guard generation == idleScheduleGeneration else {
+            lock.unlock()
+            return
+        }
+        idleCloseWorkItem = nil
+        lock.unlock()
+        observeDueHorizons()
     }
 
     private static func dropIfWiped() -> Bool {
@@ -302,6 +342,9 @@ enum GhostOutcomeLedger {
         opportunity = nil
         watches = []
         generationByOpportunityID = [:]
+        idleCloseWorkItem?.cancel()
+        idleCloseWorkItem = nil
+        idleScheduleGeneration &+= 1
         excluded = true
         return true
     }
@@ -371,6 +414,9 @@ enum GhostOutcomeLedger {
         excluded = false
         seenGeneration = nil
         generationByOpportunityID = [:]
+        idleCloseWorkItem?.cancel()
+        idleCloseWorkItem = nil
+        idleScheduleGeneration = 0
         testingHomeDirectory = homeDirectory
         testingDefaults = defaults
         lock.unlock()
@@ -385,6 +431,9 @@ enum GhostOutcomeLedger {
         excluded = false
         seenGeneration = nil
         generationByOpportunityID = [:]
+        idleCloseWorkItem?.cancel()
+        idleCloseWorkItem = nil
+        idleScheduleGeneration = 0
         testingHomeDirectory = nil
         testingDefaults = nil
         lock.unlock()
@@ -392,6 +441,12 @@ enum GhostOutcomeLedger {
 
     static func drainWritesForTesting() {
         io.sync {}
+    }
+
+    static func idleScheduleGenerationForTesting() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return idleScheduleGeneration
     }
 
     @discardableResult

@@ -108,11 +108,18 @@ public struct RetainedContextSnapshot: Equatable, Sendable {
     public let text: String
     public let utf16StartLocation: Int
     public let caretLocation: Int
+    public let sourceDigestSHA256: String
 
-    public init(text: String, utf16StartLocation: Int, caretLocation: Int) {
+    public init(
+        text: String,
+        utf16StartLocation: Int,
+        caretLocation: Int,
+        sourceDigestSHA256: String
+    ) {
         self.text = text
         self.utf16StartLocation = utf16StartLocation
         self.caretLocation = caretLocation
+        self.sourceDigestSHA256 = sourceDigestSHA256
     }
 }
 
@@ -147,7 +154,15 @@ public enum RetainedSpanWatch {
             return nil
         }
         let observed = snapshot.text[insertionIndex...]
-        return zip(accepted, observed).prefix { $0 == $1 }.count
+        var acceptedIterator = accepted.makeIterator()
+        var observedIterator = observed.makeIterator()
+        var retained = 0
+        while let expected = acceptedIterator.next() {
+            guard let actual = observedIterator.next() else { return nil }
+            if actual != expected { return retained }
+            retained += 1
+        }
+        return retained
     }
 
     public static func observation(
