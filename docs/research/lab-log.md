@@ -205,6 +205,33 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** After Q11, register the scene-echo precision + grounding
   question — the mining sweep's top recommendation.
 
+## 2026-08-30 — Q12 supported, Q13 rejected: the filters were the fix; the cap was not
+
+- **Try:** Run the registered Q12 (scene-echo floor 10→24 crossed with
+  names-and-numbers grounding) and, at the owner's direction, Q13 (visible
+  cap 3 vs 8 on the winning arm), each as clean paired campaigns.
+- **Learn:** Q12 confirmed the offline replay to ±1 display: useful 473→765
+  (+62%) at unchanged bad displays from the echo retune alone, and 35
+  wrongs removed free by grounding; bad-when-shown 30.2%→18.2%, net
+  keystrokes saved 11%→20%. Both arms nominated as validation candidates.
+  Q13 answered the cap question emphatically the other way: cap-8 halved
+  useful (766→396), tripled bad-when-shown (18.1%→48.9%), and halved NKS —
+  the 3-word cap is what keeps only the reliable head of each generation
+  visible. First Q12 run was correctly flagged dirty-source-tree (an
+  uncommitted registration) and preserved as non-promotable; the clean
+  rerun matched it exactly.
+- **Fail:** The generic paired-utility comparator scored Δ0.00 while arm
+  aggregates doubled NKS — its keystroke-credit definition ignores
+  recovered acceptable-alternative displays and needs its own
+  investigation before anything leans on it. All results remain
+  development-grade nominations; protected validation and live proof are
+  still ahead.
+- **Where:** [Q12](../experiments/Q12-scene-echo-grounding.md),
+  [Q13](../experiments/Q13-visible-cap-3v8.md); campaigns 177E07E5 and
+  2C57D9F3 (owner-local).
+- **Next:** Protected validation for the echo-24-grounded candidate, and
+  the comparator credit-definition audit as a small instrument question.
+
 ## 2026-08-30 — The floor's cause found: our own filters eat the facts
 
 - **Try:** Re-judge Q11's 1,110 cached raw Qwen candidates offline under

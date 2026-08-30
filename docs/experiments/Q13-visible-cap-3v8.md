@@ -62,4 +62,22 @@ before any product change.
 
 ## Result
 
-Status: not yet run.
+Status: REJECTED (cap-8 killed by the registered rule)
+Campaign: 2C57D9F3, clean tree, 3,600/3,600 evaluations.
+
+- cap-3 (control): 766 useful / 169 bad / bad-when-shown 18.1% / 20% NKS
+- cap-8: 396 useful / 379 bad / bad-when-shown 48.9% / 8% NKS
+
+The kill rule fired on every clause: bad-when-shown rose 30.8 points
+(limit 2), useful halved, and net keystrokes saved fell 20% to 8%. The
+truncation-rescue the hypothesis predicted did not survive contact: what
+the 3-word window truncates, the 8-word window shows — and the shown tail
+is where the generation goes wrong. On this stack, the short cap is not a
+compromise; it is the mechanism that keeps only the reliable head of each
+suggestion visible.
+
+### Follow-up
+
+The offline prior for H01 now strongly favors 3 visible words on the
+tuned stack. H01's live question (feel, interruption, retention on real
+typing) remains open and is unchanged in the queue.
