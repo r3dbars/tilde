@@ -245,27 +245,22 @@ enum GhostOutcomeLedger {
     private static func emitWithoutWatch(_ opportunity: LiveOnlineOpportunity) {
         guard let generation = takeGeneration(for: opportunity.id) else { return }
         guard let event = try? opportunity.eventWithoutAcceptedSpan() else { return }
-        let diary = LocalOutcomeDiaryEntry(
-            id: event.id,
-            recordedAt: event.occurredAt,
-            outcome: event.outcome,
-            acceptedText: "",
-            five: event.retentionAt5Seconds,
-            thirty: event.retentionAt30Seconds,
-            segment: event.retentionAtSegmentClose
-        )
-        append(event: event, diary: diary, generation: generation)
+        emit(event, text: "", generation: generation)
     }
 
     private static func emit(watch: inout PendingRetainedWatch) {
         guard let generation = takeGeneration(for: watch.opportunity.id) else { return }
         let acceptedText = watch.accepted
         guard let event = try? watch.finishedEvent() else { return }
+        emit(event, text: acceptedText, generation: generation)
+    }
+
+    private static func emit(_ event: TextFreeOnlineEvent, text: String, generation: Int) {
         let diary = LocalOutcomeDiaryEntry(
             id: event.id,
             recordedAt: event.occurredAt,
             outcome: event.outcome,
-            acceptedText: acceptedText,
+            acceptedText: text,
             five: event.retentionAt5Seconds,
             thirty: event.retentionAt30Seconds,
             segment: event.retentionAtSegmentClose
@@ -284,11 +279,9 @@ enum GhostOutcomeLedger {
     }
 
     private static func scheduleHorizonChecks() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + RetainedSpanWatch.fiveSecondHorizon) {
-            observeDueHorizons()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + RetainedSpanWatch.thirtySecondHorizon) {
-            observeDueHorizons()
+        let delays = [RetainedSpanWatch.fiveSecondHorizon, RetainedSpanWatch.thirtySecondHorizon]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { observeDueHorizons() }
         }
         rescheduleIdleCloseIfNeeded()
     }
@@ -387,11 +380,22 @@ enum GhostOutcomeLedger {
                     forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
                 ) == generation
             }
-            guard appendOwnerOnly(eventLine, to: eventURL, permitted: permitted) else { return }
+            let written = appendOwnerOnly(eventLine, to: eventURL, permitted: permitted)
+            recordWrite(generation: generation, written: written)
+            guard written else { return }
             guard !diary.acceptedText.isEmpty,
                   let diaryLine = try? LocalOutcomeDiaryEntry.encodeJSONL(diary) else { return }
             appendOwnerOnly(diaryLine, to: diaryURL, permitted: permitted)
         }
+    }
+
+    private static func recordWrite(generation: Int, written: Bool) {
+        let defaults = configuredDefaults()
+        let key = PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(generation)
+        var counts = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
+        counts["attempted", default: 0] += 1
+        counts[written ? "written" : "dropped", default: 0] += 1
+        defaults.set(counts, forKey: key)
     }
 
     static func resetForTesting(homeDirectory: URL, defaults: UserDefaults) {
@@ -404,7 +408,7 @@ enum GhostOutcomeLedger {
         resetState(homeDirectory: nil, defaults: nil)
     }
 
-    static func drainWritesForTesting() {
+    static func flush() {
         io.sync {}
     }
 
