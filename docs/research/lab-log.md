@@ -28,6 +28,30 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — F03 full-file audit remains provenance-ineligible
+
+- **Try:** Audit the active preview's complete local count file with
+  aggregate-only integrity checks, isolated full-file ingest/report, diary
+  separation, permission/provenance checks, F03/v2/privacy fixtures, and the
+  full fast proof.
+- **Learn:** The stable snapshot contained 340 v3 events across one instrument
+  campaign and champion arm: 6 accepted-all, 33 accepted-word, 143
+  typed-through, and 158 ignored. Privacy, schema, duplicate, domain, and
+  monotonic checks were clean. Retention was 331 observed / 9 missing at five
+  seconds, 17 / 323 at 30 seconds, and 39 / 301 at segment close, with
+  missingness explicit.
+- **Fail:** F03 remains unsupported because neither the installed build nor the
+  event file carries a sealed source commit or local rotation record. Valid
+  signatures, binary hashes, and a build number cannot reconstruct that
+  missing provenance. A synthetic TextEdit stimulus did not append a
+  qualifying F03 outcome.
+- **Where:** F03 retained-outcome ledger; isolated aggregate ingest/report;
+  `Tilde 9B Preview` build 2918. No events, diary, prompts, candidates, writing,
+  or local paths were checked in.
+- **Next:** From a clean source commit, rebuild the current daily-driver IME,
+  record commit/build/binary hashes and rotation time, rotate only the
+  text-free count file, then ingest the entire fresh file after ordinary use.
+
 ## 2026-08-30 — Q10R rejects third-character K=1 early start
 
 - **Try:** Repeat Q10's exact 360-situation, 637-opportunity treatment from a

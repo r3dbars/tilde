@@ -58,6 +58,12 @@ The implementation that began on `cursor/f03-live-ruler-and-local-diary`
   violations.
 - That slice is diagnostic only. Its boundary comes from install timing, not
   sealed event provenance, and the complete file is not clean.
+- A later full-file audit of the active `Tilde 9B Preview` identity found
+  340/340 structurally valid v3 events, including 39 accepts and 143
+  typed-through outcomes, with zero privacy, duplicate, domain, or monotonic
+  violations. Its full proof passed 889 tests. It is still diagnostic because
+  the installed build and events contain no sealed source commit or rotation
+  run record; build 2918 and binary hashes cannot repair provenance afterward.
 - F03 therefore remains **IMPLEMENTING**, not supported.
 
 ## What is still missing

@@ -173,6 +173,28 @@ the installed build has no sealed source revision in the event provenance, and
 the complete count file still contains the two earlier violations. A clean,
 provenance-bearing full-file run is still required by the promotion rule.
 
+A second on-device audit on 2026-08-30 examined the active `Tilde 9B Preview`
+identity's complete file in an isolated Lab database. All 340 v3 events decoded
+and ingested: 6 accepted-all, 33 accepted-word, 143 typed-through, and 158
+ignored. There were zero malformed lines, unknown or raw-text keys, duplicate
+IDs, domain violations, or monotonic-retention violations. Five-second
+retention was observed for 331 events with 9 explicit missing observations;
+30-second retention was 17 observed / 323 missing, and segment retention was
+39 / 301. The separate 39-row word diary was rejected by count ingest as
+required. The F03/v2/privacy tests and the complete 889-test proof passed.
+
+That clean structure is still not decision-grade provenance. The signed
+preview bundle is build 2918, but neither the installed binaries nor the event
+file seals a source commit or a rotation run record. Build number and hashes
+cannot reconstruct that missing link after the fact, so F03 remains
+**IMPLEMENTING**.
+
+Partial installed-artifact snapshot for this diagnostic only:
+
+- app SHA-256: `db7643507fca2bd204d43d36df89efd5bd03c80bd7e0c538404f01d77ecc767d`
+- IME SHA-256: `b956695285a762cd962881edb756e7089e82acef670a295b430b4b6724f09009`
+- helper SHA-256: `e7b0946d81c2342d0d5afd1639dcb8af444c843b4fb50cef5ceeafa302a80546`
+
 Playing with Lab configs is discovery, not a supported F03 result.
 
 ### Follow-up
