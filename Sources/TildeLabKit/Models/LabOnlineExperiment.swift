@@ -367,8 +367,12 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         } catch {
             throw LabOnlineExperimentError.invalidEvent
         }
-        if let five = retentionAt5Seconds.retainedCharacters,
-           five > acceptedCharacters {
+        let observedRetentions = [
+            retentionAt5Seconds.retainedCharacters,
+            retentionAt30Seconds.retainedCharacters,
+            retentionAtSegmentClose.retainedCharacters,
+        ].compactMap { $0 }
+        if observedRetentions.contains(where: { $0 > acceptedCharacters }) {
             throw LabOnlineExperimentError.invalidEvent
         }
         if let five = retentionAt5Seconds.retainedCharacters,

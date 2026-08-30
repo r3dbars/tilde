@@ -131,6 +131,18 @@ struct LabRetainedOutcomeTests {
         }
     }
 
+    @Test("Every observed retention horizon is bounded by accepted characters")
+    func everyObservedHorizonIsBoundedByAcceptance() throws {
+        #expect(throws: LabOnlineExperimentError.invalidEvent) {
+            try retainedEvent(
+                accepted: 10,
+                five: RetainedCharacterObservation(missingness: .observerStopped),
+                thirty: try RetainedCharacterObservation(retainedCharacters: 11),
+                segment: try RetainedCharacterObservation(retainedCharacters: 11)
+            ).validated(for: plan())
+        }
+    }
+
     @Test("v2 events remain readable and keep 30s/segment as legacy missingness")
     func legacyV2EventsRemainReadable() throws {
         let payload: [String: Any] = [
