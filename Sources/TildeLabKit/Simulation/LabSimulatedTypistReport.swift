@@ -6,7 +6,14 @@ public struct LabSimulatedTypistPersonaSlice: Codable, Equatable, Sendable {
     public let register: LabOnlineRegister
     public let typingSpeed: LabTypingSpeedBucket
     public let interruptionTolerance: LabTypistInterruptionTolerance
+    /// Scenarios this persona actually finished — every count below is over
+    /// exactly these.
     public let scenarios: Int
+    /// Scenarios whose decision batch failed and whose partial results were
+    /// discarded. They are excluded from every count below rather than
+    /// zero-filled into it, so a reader can tell a persona that ignored its
+    /// ghosts from a persona whose data a provider hiccup threw away.
+    public let abandonedScenarios: Int
     public let opportunities: Int
     public let displays: Int
     public let accepts: Int
@@ -44,6 +51,7 @@ public struct LabSimulatedTypistPersonaSlice: Codable, Equatable, Sendable {
         typingSpeed: LabTypingSpeedBucket,
         interruptionTolerance: LabTypistInterruptionTolerance,
         scenarios: Int,
+        abandonedScenarios: Int = 0,
         opportunities: Int,
         displays: Int,
         accepts: Int,
@@ -62,6 +70,7 @@ public struct LabSimulatedTypistPersonaSlice: Codable, Equatable, Sendable {
         self.typingSpeed = typingSpeed
         self.interruptionTolerance = interruptionTolerance
         self.scenarios = scenarios
+        self.abandonedScenarios = abandonedScenarios
         self.opportunities = opportunities
         self.displays = displays
         self.accepts = accepts
@@ -95,6 +104,27 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
     or mix with live evidence in one verdict.
     """
 
+    /// The limitation text a report with skipped batches must carry. A run that
+    /// abandoned part of its own sample says so in the sentence every reader
+    /// already reads, not only in a field they might not look at.
+    public static func limitation(
+        skippedBatches: Int,
+        abandonedSessions: Int,
+        abandonedMoments: Int
+    ) -> String {
+        guard skippedBatches > 0 else { return limitation }
+        let batches = skippedBatches == 1 ? "1 decision batch" : "\(skippedBatches) decision batches"
+        let sessions = abandonedSessions == 1
+            ? "1 persona/scenario session"
+            : "\(abandonedSessions) persona/scenario sessions"
+        let moments = abandonedMoments == 1 ? "1 decision moment" : "\(abandonedMoments) decision moments"
+        return limitation + " Incomplete sample: \(batches) failed after the decision "
+            + "policy's own retries and \(skippedBatches == 1 ? "was" : "were") skipped, "
+            + "abandoning \(sessions) that carried \(moments). Those sessions are excluded "
+            + "from every persona aggregate, so this run covers less than the suite and "
+            + "persona set it names."
+    }
+
     public let schema: String
     public let id: UUID
     public let startedAt: Date
@@ -103,6 +133,12 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
     public let suiteDigestSHA256: String
     public let scenarioCount: Int
     public let arm: LabArmConfiguration
+    /// Which model bytes and helper produced the candidates the personas typed
+    /// against. Two simulated runs are only comparable if this matches, and
+    /// without it a Gemma run and a Qwen run are indistinguishable once the
+    /// report leaves the machine that made it. Nil only for a run against a
+    /// stubbed client, which has no generation stack to fingerprint.
+    public let assets: LabAssetSnapshot?
     public let decisionPolicyIdentifier: String
     /// Moments resolved per decision-policy call. 1 is one moment per call;
     /// above 1 the run batched decision-independent moments across sessions.
@@ -114,6 +150,20 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
     /// are applied in batch order after each round joins — and is recorded so a
     /// run's aggregates can be read next to how they were driven.
     public let decisionWorkers: Int
+    /// How many failed decision batches this run was permitted to skip. 0 is
+    /// the strict run: any failed batch aborts it.
+    public let skippedBatchAllowance: Int
+    /// Decision batches that failed after the policy's own retries and were
+    /// skipped instead of aborting the run. Always 0 when the allowance is 0.
+    public let skippedBatches: Int
+    /// Persona/scenario sessions the skipped batches abandoned. Their partial
+    /// results are excluded from every persona slice — never counted as
+    /// type-throughs or dismissals — so the run's coverage is smaller than the
+    /// suite and persona set it names by exactly this many sessions.
+    public let abandonedSessions: Int
+    /// Decision moments discarded with those sessions, including the ones that
+    /// had already been decided before the failure.
+    public let abandonedMoments: Int
     public let personaCatalogSchema: String
     public let provenance: LabReportProvenance
     public let privacy: LabPrivacyContract
@@ -129,9 +179,14 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         suiteDigestSHA256: String,
         scenarioCount: Int,
         arm: LabArmConfiguration,
+        assets: LabAssetSnapshot? = nil,
         decisionPolicyIdentifier: String,
         decisionBatchSize: Int = 1,
         decisionWorkers: Int = 1,
+        skippedBatchAllowance: Int = 0,
+        skippedBatches: Int = 0,
+        abandonedSessions: Int = 0,
+        abandonedMoments: Int = 0,
         personaCatalogSchema: String = LabTypistPersonaCatalog.currentSchema,
         provenance: LabReportProvenance,
         privacy: LabPrivacyContract = LabPrivacyContract(),
@@ -145,9 +200,14 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         self.suiteDigestSHA256 = suiteDigestSHA256
         self.scenarioCount = scenarioCount
         self.arm = arm
+        self.assets = assets
         self.decisionPolicyIdentifier = decisionPolicyIdentifier
         self.decisionBatchSize = max(1, decisionBatchSize)
         self.decisionWorkers = max(1, decisionWorkers)
+        self.skippedBatchAllowance = max(0, skippedBatchAllowance)
+        self.skippedBatches = max(0, skippedBatches)
+        self.abandonedSessions = max(0, abandonedSessions)
+        self.abandonedMoments = max(0, abandonedMoments)
         self.personaCatalogSchema = personaCatalogSchema
         self.provenance = provenance
         self.privacy = privacy
@@ -155,12 +215,20 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         // A simulated report carries the fence in its own body. Even a clean,
         // registered, reviewed provenance envelope cannot make it eligible.
         evidenceEligibility = LabEvidenceEligibility(reasons: [.simulatedDecisionLayer])
-        limitation = Self.limitation
+        limitation = Self.limitation(
+            skippedBatches: self.skippedBatches,
+            abandonedSessions: self.abandonedSessions,
+            abandonedMoments: self.abandonedMoments
+        )
     }
 
     /// Always false. Kept as an explicit property so callers read the fence
     /// rather than infer it.
     public var isDecisionGrade: Bool { evidenceEligibility.eligible }
+
+    /// True when a provider failure cost this run part of its own sample. The
+    /// counts below say how much.
+    public var hasSkippedBatches: Bool { skippedBatches > 0 }
 
     public var totalDisplays: Int { personas.reduce(0) { $0 + $1.displays } }
     public var totalBaselineCharacters: Int { personas.reduce(0) { $0 + $1.baselineCharacters } }
@@ -180,6 +248,39 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
             .contains(decisionWorkers) else {
             throw LabSimulatedTypistError.invalidDecisionWorkers
         }
+        guard (0...LabSimulatedTypistConfiguration.maximumSkippedBatches)
+            .contains(skippedBatchAllowance),
+            (0...skippedBatchAllowance).contains(skippedBatches) else {
+            throw LabSimulatedTypistError.invalidSkippedBatchCount
+        }
+        // A skip that cost nothing, or a loss with no skip behind it, means the
+        // accounting is wrong — and a wrong count here is exactly the silent
+        // cap this option exists not to be.
+        let abandonedByPersona = personas.reduce(0) { $0 + $1.abandonedScenarios }
+        let consistent = skippedBatches > 0
+            ? (abandonedSessions >= skippedBatches && abandonedMoments >= abandonedSessions)
+            : (abandonedSessions == 0 && abandonedMoments == 0)
+        guard consistent, abandonedSessions == abandonedByPersona,
+              personas.allSatisfy({ $0.abandonedScenarios >= 0 }) else {
+            throw LabSimulatedTypistError.inconsistentAbandonment
+        }
+        guard limitation == Self.limitation(
+            skippedBatches: skippedBatches,
+            abandonedSessions: abandonedSessions,
+            abandonedMoments: abandonedMoments
+        ) else {
+            throw LabSimulatedTypistError.limitationMisstatesSkips
+        }
+        if let assets {
+            guard (try? LabModelProfile(
+                verificationMode: assets.verificationMode,
+                identifier: assets.modelIdentifier,
+                revision: assets.modelRevision
+            ).validated()) != nil,
+            Self.isSHA256(assets.modelSHA256), Self.isSHA256(assets.helperSHA256) else {
+                throw LabSimulatedTypistError.invalidModelIdentity
+            }
+        }
         guard privacy.aggregateOnly,
               !privacy.rawScenarioText,
               !privacy.rawModelOutput,
@@ -195,6 +296,10 @@ public struct LabSimulatedTypistReport: Codable, Equatable, Identifiable, Sendab
         try provenance.validated()
         return self
     }
+
+    private static func isSHA256(_ value: String) -> Bool {
+        value.count == 64 && value.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+    }
 }
 
 public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable {
@@ -204,6 +309,10 @@ public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable 
     case noSimulatableScenarios
     case invalidDecisionBatchSize
     case invalidDecisionWorkers
+    case invalidSkippedBatchCount
+    case inconsistentAbandonment
+    case limitationMisstatesSkips
+    case invalidModelIdentity
     case sessionCollisionInRound
 
     public var errorDescription: String? {
@@ -219,6 +328,14 @@ public enum LabSimulatedTypistError: Error, LocalizedError, Equatable, Sendable 
             "The simulated-typist report records a decision batch size outside 1...\(LabTypistMomentBatch.maximumSize)."
         case .invalidDecisionWorkers:
             "The simulated-typist report records a decision worker count outside 1...\(LabSimulatedTypistConfiguration.maximumDecisionWorkers)."
+        case .invalidSkippedBatchCount:
+            "The simulated-typist report records more skipped decision batches than the run allowed, or an allowance outside 0...\(LabSimulatedTypistConfiguration.maximumSkippedBatches)."
+        case .inconsistentAbandonment:
+            "The simulated-typist report's skipped-batch, abandoned-session, and abandoned-moment counts do not agree; a skipped batch must always name the sessions and moments it cost."
+        case .limitationMisstatesSkips:
+            "A simulated-typist report that skipped decision batches must say so in its limitation text."
+        case .invalidModelIdentity:
+            "The simulated-typist report does not name a valid generation model identity, revision, and asset digest."
         case .sessionCollisionInRound:
             "A decision round collected two moments of one persona/scenario session; batches must never group moments from one timeline."
         }
