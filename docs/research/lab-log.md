@@ -56,6 +56,44 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** Add the counted skip-failed-batch mode, rerun with Grok, and
   score inter-brain agreement before any screening use.
 
+## 2026-08-30 — One flaky batch may no longer cost a whole simulated run
+
+- **Try:** Two full-scale simulated-typist runs died overnight because a
+  single decision batch failed after the external policy's own retries and
+  aborted everything behind it, so add `--skip-failed-batches N`
+  (0...50, default 0, external-command policy only): that many failed
+  batches abandon the persona/scenario sessions they held and the run
+  continues. While in the same file, give the simulated report the
+  generation model identity, revision, and model/helper digests every
+  other Lab report already carries.
+- **Learn:** Surviving a failure is easy; surviving it *without* quietly
+  changing the number is the work. Three rules did it. An abandoned
+  session is dropped whole rather than zero-filled, because a session
+  whose batch failed is not a writer who ignored or dismissed a ghost and
+  must never aggregate like one. The failure verdict is taken in batch
+  order after the round joins, never in completion order, so which batches
+  a run skips is a property of the policy's answers rather than of the
+  machine's scheduling — which is also what let a failed batch stop
+  cancelling the siblings in flight beside it while skips remain. And the
+  loss is stated everywhere a reader looks: allowance, skipped batches,
+  abandoned sessions, abandoned moments, per-persona abandoned scenarios,
+  cross-validated against each other, plus a limitation sentence and a
+  loud CLI block. A cap you cannot see is worse than an abort. The
+  provenance gap was the same lesson in miniature: the report pinned the
+  suite digest but not the model, so a Gemma run and a Qwen run were
+  indistinguishable once the files left the machine.
+- **Fail:** Infrastructure only — no result, no LLM policy, no
+  calibration, and nothing here makes a simulated number any less fenced.
+  A skipped run is a smaller sample by construction, so a report with
+  skips is weaker evidence than one without, and 50 is a guess at the
+  point where a broken backend should just fail the run rather than a
+  measured one. The two lost runs were not re-run here.
+- **Where:** issue #437; `Sources/TildeLabKit/Simulation/`;
+  `Sources/TildeLabCLI/SimulatedTypistCommand.swift`;
+  [`docs/tilde-lab.md`](../tilde-lab.md) § Simulated typist.
+- **Next:** Re-launch the overnight run behind a real cheap-model policy
+  and see whether a bounded allowance is enough to finish one.
+
 ## 2026-08-29 — Q11 cannot be replayed from cache; it needs fresh inference
 
 - **Try:** Attempt to execute the registered Q11 extended ordinary-silence
