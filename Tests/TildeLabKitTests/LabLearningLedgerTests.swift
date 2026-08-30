@@ -10,9 +10,50 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 44)
-        #expect(snapshot.currentLearnings.count == 37)
+        #expect(snapshot.entries.count == 45)
+        #expect(snapshot.currentLearnings.count == 38)
         #expect(snapshot.archivedLearnings.count == 7)
+        let earlyStart = try #require(snapshot.entries.first {
+            $0.id == "early-start-third-character-k1-rejected"
+        })
+        #expect(earlyStart.status == .rejected)
+        #expect(earlyStart.evaluationCount == 1911)
+        #expect(earlyStart.metrics.first { $0.key == "situations" }?.value == 360)
+        #expect(earlyStart.metrics.first { $0.key == "opportunities" }?.value == 637)
+        #expect(earlyStart.metrics.first { $0.key == "completed-generations" }?.value == 1911)
+        #expect(earlyStart.metrics.first { $0.key == "ready-by-boundary" }?.value == 100)
+        #expect(earlyStart.metrics.first { $0.key == "median-lead" }?.value == 689)
+        #expect(earlyStart.metrics.first { $0.key == "lockable-opportunities" }?.value == 78)
+        #expect(earlyStart.metrics.first { $0.key == "lockable-rate" }?.value == 12.2448979592)
+        #expect(earlyStart.metrics.first { $0.key == "simulated-false-lock-rate" }?.value == 0)
+        #expect(
+            earlyStart.metrics.first { $0.key == "decoded-token-compute-multiple" }?.value
+                == 1.8692756037
+        )
+        #expect(
+            earlyStart.metrics.first { $0.key == "request-latency-multiple" }?.value
+                == 1.7421521121
+        )
+        #expect(earlyStart.evidence.contains {
+            $0.kind == "documentation"
+                && $0.id == "docs/experiments/Q10-early-start-timing-falsifier.md"
+        })
+        #expect(earlyStart.evidence.contains {
+            $0.kind == "documentation"
+                && $0.id == "docs/experiments/Q10R-aggregate-results.json"
+        })
+        #expect(earlyStart.evidence.contains {
+            $0.kind == "campaign"
+                && $0.id == "2d06791d-1fd3-4d84-bfc2-0fb4b8eb1491"
+        })
+        #expect(earlyStart.evidence.contains {
+            $0.kind == "git-commit"
+                && $0.id == "78df853ff6a39a90b1e7b02cb22ebb545264ef59"
+        })
+        #expect(earlyStart.evidence.contains {
+            $0.kind == "artifact-sha256"
+                && $0.id == "0dead997418b0b38ff0c2d4988094a72c3054d416427e9a7430f098e63be4b83"
+        })
         #expect(snapshot.entries.contains {
             $0.id == "qwen-prefix-cache-tail-target-rejected" && $0.status == .rejected
                 && $0.evaluationCount == 57600

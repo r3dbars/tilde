@@ -50,6 +50,19 @@ human calibration and live use remain required.
 
 ### Configuration research
 
+- The clean, registered Q10R replication completed 1,911 of 1,911 local
+  generations across 360 synthetic development situations and 637
+  opportunities. Third-character K=1 early start passed readiness, lead, and
+  false-lock gates: 100% was ready by the following boundary, median lead was
+  689 ms, and simulated false locks were 0%. It was nevertheless rejected
+  because only 78/637 opportunities were lockable (12.24% versus the registered
+  15% gate). Decoded-token compute was 1.869x the boundary control versus the
+  1.5x maximum, while request latency was 1.742x. Fair finishing thermals limit
+  nominal latency interpretation but do not erase the lockability failure,
+  which held at all three registered typing sensitivities. Do not promote this
+  exact timing policy or treat being ready early as equivalent to being useful.
+  See the [Q10/Q10R record](experiments/Q10-early-start-timing-falsifier.md) and
+  [reviewed aggregate](experiments/Q10R-aggregate-results.json).
 - A preregistered 5,760-generation Future Lattice diagnostic produced a strong
   directional negative for 16 independently sampled futures. Exact-prefix
   coverage rose from 45.28% at K=8 to only 46.67% at K=16; the median K=16 set

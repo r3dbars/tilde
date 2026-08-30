@@ -28,6 +28,27 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Q10R rejects third-character K=1 early start
+
+- **Try:** Repeat Q10's exact 360-situation, 637-opportunity treatment from a
+  clean frozen commit with the registered invocation, suite, production model,
+  signed helper, complete v2 provenance, and a separate review.
+- **Learn:** Early execution solved measured readiness but not useful survival:
+  readiness was 100%, median lead 689 ms, and false locks 0%, while only
+  78/637 opportunities (12.24%) remained lockable and decoded-token compute
+  reached 1.87x control.
+- **Fail:** The registered lockability gate (at least 15%) and compute gate (at
+  most 1.5x) both failed. The hot/cold pair added only 0.78 lockability points
+  at 3.06x compute. The reviewed eligible verdict is `REJECTED`; no production
+  or live-shadow change is authorized.
+- **Where:** [Q10](../experiments/Q10-early-start-timing-falsifier.md), reviewed
+  [Q10R aggregate](../experiments/Q10R-aggregate-results.json) SHA-256
+  `0dead997418b0b38ff0c2d4988094a72c3054d416427e9a7430f098e63be4b83`,
+  campaign `2d06791d-1fd3-4d84-bfc2-0fb4b8eb1491`, and ledger ID
+  `early-start-third-character-k1-rejected`.
+- **Next:** Resume F03's clean provenance-bearing retained-outcome run; do not
+  start earlier, multiply branches, or open a live prewarm from Q10R.
+
 ## 2026-08-30 — Correct Q09's evidence status after the F01 audit
 
 - **Try:** Audit the Q09 source report and checked-in aggregate against the F01

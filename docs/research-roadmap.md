@@ -465,6 +465,14 @@ measure top-k intent coverage, characters typed before branch lock, false
 locks, compute cost, and time to first useful ghost. Build live precomputation
 only if offline top-k coverage and consensus-prefix value are already strong.
 
+The decision-grade Q10R falsifier rejects one tempting shortcut: a single
+greedy branch started after the third character was ready in time but only
+12.24% lockable at 1.87x decoded-token compute, missing both frozen gates.
+Q09's K=16 run is separately useful directional evidence against brute-force
+branch multiplication, but its custom report lacks F01 provenance and cannot
+serve as a formal verdict. Together they narrow H15 toward source diversity and
+consensus value after earlier stages; they do not unlock it.
+
 ### Stage 4 exit gate
 
 Future generation must beat direct top-one generation after accounting for its

@@ -1,6 +1,6 @@
 # Q10 — K=1 early-start timing falsifier
 
-Status: INCONCLUSIVE
+Status: REJECTED (Q10R exact replication; original run remains inconclusive)
 Experiment class: generator
 Owner: Tilde research program
 Pre-registered: 2026-08-29T15:55:00Z
@@ -470,6 +470,67 @@ review rewrites only the explicit review and eligibility state:
   --early-start-output /tmp/tilde-q10r-report.json
 ```
 
-The result will be appended only after the full run and separate review. Q10R
-remains a development-only, owner-authorized exception; it cannot unlock H15,
-start a live shadow, change Model Preview, or promote production.
+Q10R remains a development-only, owner-authorized exception; it cannot unlock
+H15, start a live shadow, change Model Preview, or promote production.
+
+## Q10R decision-grade result
+
+- Run: 2026-08-30T21:04:11Z to 2026-08-30T21:08:26Z
+- Review: `REJECTED` at 2026-08-30T21:08:45Z
+- Evidence eligibility: `true` with no reasons withheld
+
+The exact replication completed all 360 situations, 637 opportunities, and
+1,911/1,911 registered generations. Its report bound clean source commit
+`78df853ff6a39a90b1e7b02cb22ebb545264ef59`, runner SHA-256
+`d2250416b296754b677b6952991c7df3a2326eadce7f3553f71554ca978aa84f`,
+the registered manifest and invocation digests, production model and signed
+helper hashes, local inference, AC power, and the complete arm/runtime
+definition. Thermal state moved from nominal to fair; no serious or critical
+thermal state occurred.
+
+### Registered primary gates
+
+| Gate | Registered threshold | Q10R result | Verdict |
+| --- | ---: | ---: | --- |
+| Ready by boundary | at least 50% | 637/637 = 100% | pass |
+| Median lead | at least 200 ms | 689 ms | pass |
+| Lockable | at least 15% | 78/637 = 12.24% | **fail** |
+| Simulated false locks | below 2% | 0/250 = 0% | pass |
+| Decoded-token compute | at most 1.5x | 1.87x | **fail** |
+
+The treatment also used 1.74x summed request latency. At the registered 120 ms
+fast-typing sensitivity point, readiness remained 100% and median lead was
+449 ms, but lockability remained 12.24%. The hot/cold pair did not rescue the
+design: it reached 13.03% lockability, a gain of only 0.78 percentage points,
+at 3.06x decoded-token compute. Its 73.63% cleaner survival and 31.40%
+duplication avoided the pair kill rule, but both pair promotion-interest gates
+failed.
+
+### Decision
+
+Reject third-character K=1 early start. Starting the request early solved the
+measured readiness problem, but too few branches survived with six useful
+future characters and the compute cost exceeded the frozen budget. This is a
+decision-grade falsification of this exact treatment, not authorization to
+start earlier, add branches, run a live shadow, or change production. H15
+remains locked behind the canonical staged program.
+
+The aggregate-only artifact is
+[`Q10R-aggregate-results.json`](Q10R-aggregate-results.json), SHA-256
+`0dead997418b0b38ff0c2d4988094a72c3054d416427e9a7430f098e63be4b83`.
+It contains no personal writing, raw scenario text, raw model output, file
+paths, or network inference.
+
+### Durable changes
+
+- Learning Ledger entry: `early-start-third-character-k1-rejected`
+- Lab log: `2026-08-30 — Q10R rejects third-character K=1 early start`
+- Regression IDs: none; no production behavior changed
+- Implementation pull request: this research branch's review
+- Rollback: remove the development-only Q10 runner/review path and aggregate;
+  the shipped product is unchanged
+
+### Follow-up
+
+Do not spend live-product risk on this treatment. Return to F03's clean,
+provenance-bearing retained-outcome run; the staged queue does not move.
