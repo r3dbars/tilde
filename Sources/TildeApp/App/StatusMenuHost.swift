@@ -77,7 +77,6 @@ final class StatusMenuHost: NSObject {
     private var setupOrTildeItem: NSMenuItem?
     private var modelPickerItem: NSMenuItem?
     private var modelChoiceItems: [PreviewModelChoice: NSMenuItem] = [:]
-    private var h01Item: NSMenuItem?
 
     private var tildeWindow: TildeSettingsWindowController?
 
@@ -113,14 +112,6 @@ final class StatusMenuHost: NSObject {
             picker.submenu = submenu
             menu.addItem(picker)
             modelPickerItem = picker
-
-            // H01 harness (three visible words vs eight). Model Preview only,
-            // off unless the owner turns it on, and inert while off.
-            h01Item = addAction(
-                to: menu,
-                "Experiment: 3 vs 8 Visible Words",
-                #selector(toggleH01BlockRandomization(_:))
-            )
             menu.addItem(.separator())
         }
 
@@ -160,8 +151,6 @@ final class StatusMenuHost: NSObject {
             }
         }
 
-        h01Item?.state = settings.h01BlockRandomizationEnabled ? .on : .off
-
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
     }
@@ -195,12 +184,6 @@ final class StatusMenuHost: NSObject {
 
     @objc private func openTilde(_ sender: Any?) {
         showYourTilde()
-    }
-
-    @objc private func toggleH01BlockRandomization(_ sender: Any?) {
-        guard TildeProductProfile.current == .modelPreview else { return }
-        settings.h01BlockRandomizationEnabled = !settings.h01BlockRandomizationEnabled
-        refresh()
     }
 
     @objc private func selectModel(_ sender: NSMenuItem) {

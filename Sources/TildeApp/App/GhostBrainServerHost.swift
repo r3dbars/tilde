@@ -346,7 +346,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     textBeforeCursor: completionRequest.context,
                     appBundleIdentifier: completionRequest.app,
                     scene: scene,
-                    experimentArm: completionRequest.experimentArm,
                     onPartialSuggestion: { partials.send($0) }
                 )
             }
@@ -572,7 +571,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 guard request.context.isEmpty, request.app == nil,
                       request.screenMemoryEvent == nil,
                       request.fieldSessionIdentifier == nil,
-                      request.experimentArm == nil,
                       PersonalHistoryEvent.validBatch(events) else {
                     return .failure(WireError.invalid)
                 }
@@ -582,7 +580,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 guard request.context.isEmpty, request.app == nil,
                       request.personalHistoryEvents == nil,
                       request.fieldSessionIdentifier == nil,
-                      request.experimentArm == nil,
                       UUID(uuidString: event.sessionIdentifier) != nil else {
                     return .failure(WireError.invalid)
                 }
@@ -593,9 +590,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
                   request.context.count <= 3_000,
                   request.context.last?.isWhitespace == true,
                   request.fieldSessionIdentifier.map({ UUID(uuidString: $0) != nil }) ?? true,
-                  // An unknown arm identifier is a malformed request, not a
-                  // silent fallback: the harness must never guess a cap.
-                  request.experimentArm.map(H01BlockRandomization.isValidArmIdentifier) ?? true,
                   (request.app?.count ?? 0) <= 512 else {
                 return .failure(WireError.invalid)
             }

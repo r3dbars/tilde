@@ -26,8 +26,7 @@ struct ProfileDisplayFilterTests {
             baseURL: URL(string: "http://127.0.0.1:17872")!,
             diagnostics: .disabled,
             transport: FrameTransport(lines: lines),
-            productProfile: profile,
-            experimentDefaults: nil
+            productProfile: profile
         )
     }
 
