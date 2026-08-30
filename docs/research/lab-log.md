@@ -28,6 +28,36 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Wrong-rate attack sweep: 24 interventions measured, 24 killed
+
+- **Try:** Ran a 35-agent autoresearch workflow (understand → ideate through
+  six lenses → adversarial audits with offline replay of the q12b
+  echo-24-grounded candidate cache → synthesize) hunting every filter,
+  prompt, decoding, and selection lever against the 170 residual bad
+  displays; no inference, aggregates only, rigs reproduced the shipped
+  reports exactly (1110/1110) before any variant was trusted.
+- **Learn:** The residue is generation-side, seed-invariant, and
+  category-deterministic (four categories carry ~90%); at temperature 0.1
+  the model is confidently wrong at the divergence token, so per-token
+  probability floors convert 0 of the 64 opens-right-then-diverges wrongs;
+  every alternative confidence lever tested (first-token, top-2 margin, p1
+  ladder, prefix-min) is dominated by the existing mean-probability floor
+  on the bad-versus-net-keystrokes frontier; reverse-grounding and
+  anchor-obligation gates are category kill switches — the delay
+  category's own acceptable replies mostly carry no anchor, so the honest
+  next move is auditing the suite's answer-path authoring before any new
+  gate; truncation is monotone-safe (zero useful→wrong transitions at any
+  threshold) but converts nothing.
+- **Fail:** Zero of 24 audited interventions survived to preregistration,
+  and the workflow's auto-synthesized "top 5" plan re-derived two ideas
+  its own audits had measured dead, so the ranked plan had to be rebuilt
+  by hand from the audit evidence.
+- **Where:** workflow wf_8b9ee4f1-9f2; replay rigs under the session
+  scratchpad `wra/` (not checked in); this entry.
+- **Next:** Does a preregistered answer-path adequacy audit of the
+  residual categories reclassify enough of the 170 to change the target
+  H16 is aimed at?
+
 ## 2026-08-30 — Q12's nominated filters go live in the isolated 9B preview
 
 - **Try:** Take Q12's two nominated display-policy settings — scene-echo
