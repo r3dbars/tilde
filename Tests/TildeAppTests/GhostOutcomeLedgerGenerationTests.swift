@@ -29,6 +29,10 @@ struct GhostOutcomeLedgerGenerationTests {
             at: Date(timeIntervalSince1970: 1_000)
         )
         GhostOutcomeLedger.noteDismissed(at: Date(timeIntervalSince1970: 1_001))
+        let queuedCounts = defaults.dictionary(
+            forKey: PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(0)
+        ) as? [String: Int]
+        #expect(queuedCounts?["attempted"] == 1)
         GhostOutcomeLedger.flush()
 
         let event = TextFreeOnlineEventFile.url(

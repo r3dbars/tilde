@@ -1,11 +1,7 @@
 import TildeCore
 import Foundation
 
-/// Side-effect recorder next to the IME. It does not change marked text.
-///
-/// Writes two local files:
-/// - text-free v3 events for Lab ingest
-/// - a word diary the owner can delete, which Lab must never ingest
+/// Records text-free events and a separate owner-deletable word diary without changing marked text.
 enum GhostOutcomeLedger {
     private static let io = DispatchQueue(label: "com.tilde.outcome-ledger", qos: .utility)
     private static let lock = NSLock()
@@ -244,14 +240,20 @@ enum GhostOutcomeLedger {
 
     private static func emitWithoutWatch(_ opportunity: LiveOnlineOpportunity) {
         guard let generation = takeGeneration(for: opportunity.id) else { return }
-        guard let event = try? opportunity.eventWithoutAcceptedSpan() else { return }
+        io.sync { recordWrite(generation: generation) }
+        guard let event = try? opportunity.eventWithoutAcceptedSpan() else {
+            return io.sync { recordWrite(generation: generation, written: false) }
+        }
         emit(event, text: "", generation: generation)
     }
 
     private static func emit(watch: inout PendingRetainedWatch) {
         guard let generation = takeGeneration(for: watch.opportunity.id) else { return }
         let acceptedText = watch.accepted
-        guard let event = try? watch.finishedEvent() else { return }
+        io.sync { recordWrite(generation: generation) }
+        guard let event = try? watch.finishedEvent() else {
+            return io.sync { recordWrite(generation: generation, written: false) }
+        }
         emit(event, text: acceptedText, generation: generation)
     }
 
@@ -373,8 +375,10 @@ enum GhostOutcomeLedger {
             homeDirectory: home,
             supportDirectoryName: support
         )
-        guard let eventLine = try? TextFreeOnlineEvent.encodeJSONL(event) else { return }
         io.async {
+            guard let eventLine = try? TextFreeOnlineEvent.encodeJSONL(event) else {
+                return recordWrite(generation: generation, written: false)
+            }
             let permitted = {
                 configuredDefaults().integer(
                     forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
@@ -389,12 +393,11 @@ enum GhostOutcomeLedger {
         }
     }
 
-    private static func recordWrite(generation: Int, written: Bool) {
+    private static func recordWrite(generation: Int, written: Bool? = nil) {
         let defaults = configuredDefaults()
         let key = PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(generation)
         var counts = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
-        counts["attempted", default: 0] += 1
-        counts[written ? "written" : "dropped", default: 0] += 1
+        counts[written.map { $0 ? "written" : "dropped" } ?? "attempted", default: 0] += 1
         defaults.set(counts, forKey: key)
     }
 
