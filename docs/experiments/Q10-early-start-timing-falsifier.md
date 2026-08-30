@@ -412,9 +412,9 @@ to repair the evidence path that made the first run inconclusive.
   `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`
 - Signed Model Preview helper SHA-256:
   `d55a40de87ff739fe0b6ab4bc7b9ee15c0d3121a47f693dc5ef0ed626d37f343`
-- Execution source: the clean implementation commit containing this protocol;
-  its exact SHA is frozen in the follow-up commit before inference and must
-  equal the run-start report provenance.
+- Execution source: clean implementation commit
+  `78df853ff6a39a90b1e7b02cb22ebb545264ef59`; the decisive run must execute
+  that exact commit and the run-start report provenance must match it.
 
 The decisive argv is exactly this six-element array; shell quoting and
 redirection are not part of the digest:
