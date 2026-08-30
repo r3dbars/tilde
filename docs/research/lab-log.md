@@ -205,6 +205,41 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** After Q11, register the scene-echo precision + grounding
   question — the mining sweep's top recommendation.
 
+## 2026-08-30 — The floor's cause found: our own filters eat the facts
+
+- **Try:** Re-judge Q11's 1,110 cached raw Qwen candidates offline under
+  variant judgment configurations (no inference, Lab state read from a
+  copy; replay reproduces the shipped report exactly) to decide whether
+  the fact-free floor is model-side, prompt-side, or filter-side.
+- **Learn:** The withholding story reverses: 66% of raw candidates
+  already satisfy every required term and 75% carry a scene anchor. The
+  scene-echo detector killed 304 candidates and every single one was a
+  fact-carrier — its floor (3 words / 10 chars) sits exactly on the
+  3-word display cap, so short correct verbatim answers are
+  indistinguishable from echo. Offline: retuning echo to 10→24 characters
+  alone yields +292 useful (+62%) with zero measured cost on any slice;
+  adding names-and-numbers grounding removes 32 wrong for free; stacked,
+  bad-when-shown falls 30.1%→18.1% and useful rises 473→765. A third
+  mechanism: reply.commit.delivery loses its fact to the 3-word
+  truncation (fact present in every wrong shown raw). Genuine model-side
+  factlessness is only ~10% of opportunities (acknowledge.delay,
+  contradiction.latest-fact raws carry no anchor). The visible-text form
+  of "no fact, no ghost" is destructive (−56% useful); only the
+  raw-candidate form is viable, scoped and sequenced after the filter
+  fixes. Longer visible windows are not the fix (words 4–6 add 61–148
+  wrong).
+- **Fail:** Development-grade offline re-judgment of one arm on the dev
+  suite; the ~60% persona-sim floor is a different instrument, so
+  30.1%→18.1% is directional for it, not a substitution. Yesterday's
+  "withholding, not forgetting" mechanism entry overstated the
+  model-side share; this entry supersedes its emphasis.
+- **Where:** rig in owner-local scratch; issues #447 (reframed) and #448
+  (deprioritized); scene-echo thresholds in LabGenerationControls;
+  detector in LabOutputJudge.
+- **Next:** Register the two-factor display-policy experiment — scene-echo
+  minimum characters 10→24 crossed with names-and-numbers grounding — as
+  Q12, ahead of everything else in the queue.
+
 ## 2026-08-30 — Three-way model portrait: size loses again
 
 - **Try:** Complete the fair same-judge persona comparison with Gemma 4
