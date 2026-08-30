@@ -302,34 +302,111 @@ enum GhostOutcomeLedger {
             forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
         )
         io.async {
-            let live = UserDefaults.standard.integer(
-                forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
-            )
-            guard live == generation else { return }
-            appendOwnerOnly(eventLine, to: eventURL)
+            let permitted = {
+                UserDefaults.standard.integer(
+                    forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
+                ) == generation
+            }
+            guard appendOwnerOnly(eventLine, to: eventURL, permitted: permitted) else { return }
             guard !diary.acceptedText.isEmpty,
                   let diaryLine = try? LocalOutcomeDiaryEntry.encodeJSONL(diary) else { return }
-            appendOwnerOnly(diaryLine, to: diaryURL)
+            appendOwnerOnly(diaryLine, to: diaryURL, permitted: permitted)
         }
     }
 
-    private static func appendOwnerOnly(_ data: Data, to url: URL) {
+    @discardableResult
+    static func appendOwnerOnly(
+        _ data: Data,
+        to url: URL,
+        permitted: () -> Bool = { true }
+    ) -> Bool {
         let directory = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(
-                atPath: url.path,
-                contents: nil,
-                attributes: [.posixPermissions: 0o600]
-            )
+        guard !url.lastPathComponent.isEmpty,
+              let directoryDescriptor = ownerOnlyDirectoryDescriptor(at: directory) else {
+            return false
         }
-        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { close(directoryDescriptor) }
+        var directoryInfo = stat()
+        guard flock(directoryDescriptor, LOCK_EX) == 0,
+              fstat(directoryDescriptor, &directoryInfo) == 0,
+              directoryInfo.st_mode & S_IFMT == S_IFDIR,
+              directoryInfo.st_uid == getuid(),
+              directoryInfo.st_mode & 0o7777 == 0o700,
+              directoryInfo.st_nlink > 0,
+              permitted() else { return false }
+
+        let descriptor = openat(
+            directoryDescriptor,
+            url.lastPathComponent,
+            O_WRONLY | O_APPEND | O_CREAT | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC,
+            0o600
+        )
+        guard descriptor >= 0 else { return false }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? handle.close() }
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: data)
+
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              fchmod(descriptor, 0o600) == 0,
+              flock(descriptor, LOCK_EX) == 0,
+              fstat(descriptor, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o7777 == 0o600,
+              info.st_nlink > 0,
+              clearNonblocking(descriptor),
+              permitted() else { return false }
+        do {
+            try handle.write(contentsOf: data)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func ownerOnlyDirectoryDescriptor(at directory: URL) -> Int32? {
+        let components = directory.path.split(separator: "/").map(String.init)
+        guard directory.isFileURL, !components.isEmpty,
+              !components.contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+
+        var parent = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard parent >= 0 else { return nil }
+        for (index, component) in components.enumerated() {
+            var child = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            var wasMissing = false
+            if child < 0, errno == ENOENT {
+                wasMissing = true
+                guard mkdirat(parent, component, 0o700) == 0 || errno == EEXIST else {
+                    close(parent)
+                    return nil
+                }
+                child = openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            }
+            close(parent)
+            guard child >= 0 else { return nil }
+
+            let mustTighten = wasMissing || index == components.count - 1
+            var info = stat()
+            guard fstat(child, &info) == 0,
+                  info.st_mode & S_IFMT == S_IFDIR,
+                  (!mustTighten || (info.st_uid == getuid() && fchmod(child, 0o700) == 0)),
+                  fstat(child, &info) == 0,
+                  info.st_mode & S_IFMT == S_IFDIR,
+                  (!mustTighten || (
+                      info.st_uid == getuid() && info.st_mode & 0o7777 == 0o700
+                  )) else {
+                close(child)
+                return nil
+            }
+            parent = child
+        }
+        return parent
+    }
+
+    private static func clearNonblocking(_ descriptor: Int32) -> Bool {
+        let flags = fcntl(descriptor, F_GETFL)
+        return flags >= 0 && fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) == 0
     }
 }
