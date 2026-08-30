@@ -103,4 +103,32 @@ quality-only, no latency claims.
 
 ## Result
 
-Status: not yet run.
+Status: SUPPORTED (development confirmation; validation candidates only)
+Campaigns: 00480136 (first run, flagged dirty-source-tree — an uncommitted
+registration file; preserved as non-promotable) and 177E07E5 (clean rerun,
+decision-grade, reviewed). Both runs and the offline replay agree to ±1
+display.
+
+- echo-24: useful 473 → 765 (+61.7%, target ≥40%), bad displays unchanged
+  (205), bad-when-shown 30.2% → 21.1%, no slice regression. NOMINATED.
+- echo-24-grounded: 35 wrongs removed at zero useful lost (target ≥20 at
+  ≤5), bad-when-shown 18.2%. NOMINATED over echo-24.
+- Net keystrokes saved (arm aggregates): 11% → 20%.
+- Sensitive and ordinary silence slices: unchanged in all arms.
+
+### Honest nuances
+
+- The generic paired-utility comparator scores Δ utility 0.00 for both
+  treatments while Δ bad/show is −8.8 to −11.7 points: its keystroke
+  credit does not count the recovered acceptable-alternative displays the
+  arm aggregates count. The registered rules govern this experiment; the
+  comparator's credit definition deserves its own look before any later
+  experiment leans on it.
+- Development-partition confirmation of replay-selected settings, per the
+  registration's overfitting disclosure. Validation and live proof remain
+  ahead; nothing ships from this run.
+
+### Follow-up
+
+Q13 (registered next) measures the visible-word cap 3 vs 8 on the
+echo-24-grounded arm. Both nominated arms await protected validation.
