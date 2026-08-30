@@ -23,8 +23,8 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     public let id: UUID
     public let shownAt: Date
     public let sessionDigestSHA256: String
-    /// H01 arm tag. `champion` unless the disabled-by-default block
-    /// randomization harness is running, so ordinary events are unchanged.
+    /// Text-free analysis tag. Product events are `champion`; Lab fixtures may
+    /// construct challenger events without adding an experiment path to IMKit.
     public let variant: String
     public let appCategory: String
     public let register: String
@@ -244,11 +244,6 @@ public struct PendingRetainedWatch: Equatable, Sendable {
             insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
             snapshot: matchingSnapshot(snapshot)
         )
-        if let kept = retentionAt5Seconds.retainedCharacters {
-            let replaced = max(0, accepted.count - kept)
-            // Five-second replacement is the v2 field; keep it honest.
-            _ = replaced
-        }
     }
 
     public mutating func observeThirtySeconds(snapshot: RetainedContextSnapshot?) throws {
@@ -278,16 +273,7 @@ public struct PendingRetainedWatch: Equatable, Sendable {
     }
 
     public mutating func markPrivacyExcluded() {
-        if retentionAt5Seconds.missingness == .notYetObserved {
-            retentionAt5Seconds = RetainedCharacterObservation(missingness: .privacyExcluded)
-        }
-        if retentionAt30Seconds.missingness == .notYetObserved {
-            retentionAt30Seconds = RetainedCharacterObservation(missingness: .privacyExcluded)
-        }
-        if retentionAtSegmentClose.missingness == .notYetObserved {
-            retentionAtSegmentClose = RetainedCharacterObservation(missingness: .privacyExcluded)
-        }
-        opportunity.wipeAcceptedText()
+        stop(reason: .privacyExcluded)
     }
 
     private func matchingSnapshot(
@@ -304,14 +290,18 @@ public struct PendingRetainedWatch: Equatable, Sendable {
     }
 
     public mutating func stopObserver() {
+        stop(reason: .observerStopped)
+    }
+
+    private mutating func stop(reason: RetentionMissingness) {
         if retentionAt5Seconds.missingness == .notYetObserved {
-            retentionAt5Seconds = RetainedCharacterObservation(missingness: .observerStopped)
+            retentionAt5Seconds = RetainedCharacterObservation(missingness: reason)
         }
         if retentionAt30Seconds.missingness == .notYetObserved {
-            retentionAt30Seconds = RetainedCharacterObservation(missingness: .observerStopped)
+            retentionAt30Seconds = RetainedCharacterObservation(missingness: reason)
         }
         if retentionAtSegmentClose.missingness == .notYetObserved {
-            retentionAtSegmentClose = RetainedCharacterObservation(missingness: .observerStopped)
+            retentionAtSegmentClose = RetainedCharacterObservation(missingness: reason)
         }
         opportunity.wipeAcceptedText()
     }
