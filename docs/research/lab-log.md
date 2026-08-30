@@ -28,6 +28,30 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — First live owner session on tuned Qwen: 42% acceptance, and a new instrument lesson
+
+- **Try:** Give the owner a scripted threaded-chat test drive (ten
+  incoming turns exercising the chronic categories, silence traps, and a
+  contradiction) against the tuned 9B preview, measured by the preview's
+  own text-free outcome ledger.
+- **Learn:** 33 opportunities: 14 accepts (42% acceptance when shown —
+  roughly 5x the owner's historical ~8% on the untuned daily driver and
+  above the sim's 27%), 12 typed-through, 7 ignored; 78% of accepted
+  characters still present at 5 seconds; generation p50 ~300 ms. The
+  owner's unprompted verdict: "this works insanely well" — the third
+  judge and the instruments currently agree.
+- **Fail:** Segment-close retention read zero for every accept: in a
+  send-and-clear compose field, segment close (Enter) empties the field,
+  so window matching sees vanished text. RNKS-segment is structurally
+  blind wherever sending clears the field; "cleared by send" needs to be
+  a distinct, positive outcome (the text shipped) rather than zero
+  retention. Session caveats: tiny N, a script built to exercise known
+  behaviors, an engaged rather than impatient owner.
+- **Where:** preview outcome ledger (owner-only); test page local to the
+  owner's desktop; tuned preview wiring PR #450.
+- **Next:** Protected validation for the Q12 candidates (firing now), and
+  a send-clear outcome for the retention instrument.
+
 ## 2026-08-30 — Cross-instrument staircase: the tuned stack quadruples simulated value
 
 - **Try:** Rerun the persona simulator with the Q12-nominated arm on both
