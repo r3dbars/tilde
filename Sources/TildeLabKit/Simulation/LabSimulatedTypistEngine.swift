@@ -17,11 +17,23 @@ public struct LabSimulatedTypistConfiguration: Sendable {
     /// hold only causally independent sessions — are resolved concurrently, and
     /// the decisions are still applied in batch order.
     public var decisionWorkers: Int
+    /// How many decision batches may fail — after the policy's own retries —
+    /// before the run gives up. 0 is the historical behavior: one failed batch
+    /// aborts the whole run. Above 0, that many failed batches abandon the
+    /// sessions they held and the run continues; nothing about a skip is
+    /// silent, because every one of them is counted into the report.
+    public var skippedBatchAllowance: Int
 
     /// More than this many concurrent external commands buys throughput the
     /// decision backend cannot absorb and makes one failure cost more in-flight
     /// work than it saves.
     public static let maximumDecisionWorkers = 16
+
+    /// Past this many skips a run is not surviving transient provider hiccups
+    /// any more, it is grinding through a broken decision backend and throwing
+    /// away its own sample. A run that needs more than this should fail and be
+    /// re-launched, not quietly finish on whatever survived.
+    public static let maximumSkippedBatches = 50
 
     public init(
         arm: LabArmConfiguration = LabArmConfiguration(id: "simulated-typist-baseline"),
@@ -29,7 +41,8 @@ public struct LabSimulatedTypistConfiguration: Sendable {
         maximumDisplaysPerScenario: Int = 8,
         dismissalCooldownCharacters: Int = 12,
         timeoutSeconds: Double = 30,
-        decisionWorkers: Int = 1
+        decisionWorkers: Int = 1,
+        skippedBatchAllowance: Int = 0
     ) {
         self.arm = arm
         self.strideCharacters = max(1, strideCharacters)
@@ -37,6 +50,7 @@ public struct LabSimulatedTypistConfiguration: Sendable {
         self.dismissalCooldownCharacters = max(0, dismissalCooldownCharacters)
         self.timeoutSeconds = timeoutSeconds
         self.decisionWorkers = decisionWorkers
+        self.skippedBatchAllowance = skippedBatchAllowance
     }
 }
 
@@ -59,11 +73,17 @@ public struct LabSimulatedTypistEngine: Sendable {
 
     /// Runs every persona against every simulatable scenario and returns an
     /// aggregate-only, permanently fenced discovery report.
+    ///
+    /// `assets` is the fingerprint of the generation stack that produced the
+    /// candidates: without it two reports from two different models are
+    /// indistinguishable once they leave the machine that made them. It is
+    /// optional only because a stubbed client has no model to fingerprint.
     public func run(
         suite: LabScenarioSuite,
         personas: [LabTypistPersona],
         client: any LabCompletionClient,
         provenance: LabReportProvenance,
+        assets: LabAssetSnapshot? = nil,
         startedAt: Date = Date()
     ) async throws -> LabSimulatedTypistReport {
         let simulatable = suite.scenarios.filter {
@@ -82,21 +102,44 @@ public struct LabSimulatedTypistEngine: Sendable {
         }
         let batchSize = effectiveBatchSize
         let workers = effectiveDecisionWorkers
-        if batchSize <= 1, workers <= 1 {
+        let skipAllowance = effectiveSkippedBatchAllowance
+        var abandonment = Abandonment()
+        // The historical driver is kept for the historical configuration: with
+        // no batching, no workers, and no skip allowance the run is exactly the
+        // one stage 1 shipped.
+        if batchSize <= 1, workers <= 1, skipAllowance == 0 {
             try await runSequentially(&sessions, client: client)
         } else {
-            try await runBatched(
-                &sessions, client: client, batchSize: batchSize, workers: workers
+            abandonment = try await runBatched(
+                &sessions,
+                client: client,
+                batchSize: batchSize,
+                workers: workers,
+                skipAllowance: skipAllowance
             )
         }
 
         var slices: [LabSimulatedTypistPersonaSlice] = []
         for (index, persona) in personas.enumerated() {
             var totals = PersonaTotals()
+            var abandonedScenarios = 0
             for offset in 0..<simulatable.count {
-                totals.add(sessions[index * simulatable.count + offset].outcome)
+                let session = sessions[index * simulatable.count + offset]
+                // An abandoned session is dropped whole, not zero-filled: its
+                // partial displays never became a decision the writer made, so
+                // counting them as type-throughs or dismissals would invent
+                // behavior the simulator never observed.
+                guard !session.isAbandoned else {
+                    abandonedScenarios += 1
+                    continue
+                }
+                totals.add(session.outcome)
             }
-            slices.append(totals.slice(persona: persona, scenarios: simulatable.count))
+            slices.append(totals.slice(
+                persona: persona,
+                scenarios: simulatable.count - abandonedScenarios,
+                abandonedScenarios: abandonedScenarios
+            ))
         }
         return try LabSimulatedTypistReport(
             startedAt: startedAt,
@@ -105,9 +148,14 @@ public struct LabSimulatedTypistEngine: Sendable {
             suiteDigestSHA256: try suite.digestSHA256(),
             scenarioCount: simulatable.count,
             arm: configuration.arm,
+            assets: assets,
             decisionPolicyIdentifier: policy.identifier,
             decisionBatchSize: batchSize,
             decisionWorkers: workers,
+            skippedBatchAllowance: skipAllowance,
+            skippedBatches: abandonment.skippedBatches,
+            abandonedSessions: abandonment.sessions.count,
+            abandonedMoments: abandonment.moments,
             provenance: provenance,
             personas: slices
         ).validated()
@@ -125,6 +173,16 @@ public struct LabSimulatedTypistEngine: Sendable {
         min(
             max(1, configuration.decisionWorkers),
             LabSimulatedTypistConfiguration.maximumDecisionWorkers
+        )
+    }
+
+    /// How many failed decision batches this run may skip, clamped to the
+    /// contract's ceiling. A run that never opted in stays at 0 and aborts on
+    /// the first failure, exactly as before.
+    var effectiveSkippedBatchAllowance: Int {
+        min(
+            max(0, configuration.skippedBatchAllowance),
+            LabSimulatedTypistConfiguration.maximumSkippedBatches
         )
     }
 
@@ -167,12 +225,22 @@ public struct LabSimulatedTypistEngine: Sendable {
     /// timeline. Concurrency is confined to the policy calls — the moments are
     /// collected before the round and every decision is applied after it, in
     /// batch order — so completion order cannot reach the aggregates.
+    ///
+    /// `skipAllowance` above 0 lets a failed batch abandon the sessions it held
+    /// instead of ending the run. The failure verdict is taken in batch order
+    /// after the round has joined, never in completion order, so which batches
+    /// a run skips is a property of the policy's answers and not of the
+    /// machine's scheduling. Abandoned sessions are never advanced again and
+    /// never reach an aggregate; their surviving siblings are untouched,
+    /// because sessions were already independent of one another.
     private func runBatched(
         _ sessions: inout [TypingSession],
         client: any LabCompletionClient,
         batchSize: Int,
-        workers: Int
-    ) async throws {
+        workers: Int,
+        skipAllowance: Int
+    ) async throws -> Abandonment {
+        var abandonment = Abandonment()
         var active = Array(sessions.indices)
         while !active.isEmpty {
             var pending: [Int] = []
@@ -204,78 +272,135 @@ public struct LabSimulatedTypistEngine: Sendable {
                 start = end
             }
 
-            let answers = try await resolve(batches, workers: workers)
+            let answers = try await resolve(
+                batches,
+                workers: workers,
+                skipBudget: skipAllowance - abandonment.skippedBatches
+            )
             // Apply strictly in batch order, after the whole round has joined.
             // Whatever order the calls finished in, this loop is the same.
-            for (batch, decisions) in zip(batches.indices, answers) {
-                // A policy that drops, adds, or pads answers would silently
-                // shift decisions onto the wrong scenarios; refuse instead.
-                guard decisions.count == batches[batch].count else {
-                    throw LabTypistPolicyError.batchCountMismatch(
-                        expected: batches[batch].count, received: decisions.count
-                    )
-                }
-                for offset in 0..<decisions.count {
-                    let index = owners[batch][offset]
-                    var session = sessions[index]
-                    session.apply(decisions[offset])
-                    sessions[index] = session
+            var survivors: [Int] = []
+            for (batch, answer) in zip(batches.indices, answers) {
+                switch answer {
+                case let .success(decisions):
+                    // A policy that drops, adds, or pads answers would silently
+                    // shift decisions onto the wrong scenarios; refuse instead.
+                    guard decisions.count == batches[batch].count else {
+                        throw LabTypistPolicyError.batchCountMismatch(
+                            expected: batches[batch].count, received: decisions.count
+                        )
+                    }
+                    for offset in 0..<decisions.count {
+                        let index = owners[batch][offset]
+                        var session = sessions[index]
+                        session.apply(decisions[offset])
+                        sessions[index] = session
+                        survivors.append(index)
+                    }
+                case let .failure(error):
+                    // The allowance is spent in batch order, so the batch that
+                    // exceeds it — and the error that ends the run — is the
+                    // same one on every machine.
+                    guard abandonment.skippedBatches < skipAllowance else { throw error }
+                    abandonment.skippedBatches += 1
+                    for index in owners[batch] {
+                        var session = sessions[index]
+                        abandonment.sessions.insert(index)
+                        abandonment.moments += session.decisionMoments
+                        session.abandon()
+                        sessions[index] = session
+                    }
                 }
             }
-            active = pending
+            active = survivors
         }
+        return abandonment
     }
 
     /// Resolves one round's batches, at most `workers` policy calls in flight,
-    /// and returns the answers in batch order regardless of completion order.
+    /// and returns one answer per batch in batch order regardless of completion
+    /// order. A failure is an answer here, not an exception: the caller owns
+    /// the verdict, so the same failures always produce the same outcome.
     ///
-    /// A failing batch propagates the policy's own error, exactly as the
-    /// sequential driver did. Leaving this scope cancels and awaits the batches
-    /// still running, so the run never returns with a decision command still
-    /// executing behind it.
+    /// `skipBudget` is how many failures the caller can still absorb. While a
+    /// failure is survivable this method resolves the whole round, so a failed
+    /// batch never cancels a sibling that was already in flight. Once the
+    /// failures in one round exceed the budget the run is going to abort no
+    /// matter which batch the caller lands on, so scheduling stops, the batches
+    /// still running are awaited, and the error is thrown — the historical
+    /// behavior at a budget of 0, where the first failure ends the round.
     private func resolve(
         _ batches: [[LabTypistMomentFeatures]],
-        workers: Int
-    ) async throws -> [[LabTypistDecision]] {
+        workers: Int,
+        skipBudget: Int
+    ) async throws -> [Result<[LabTypistDecision], any Error>] {
         if workers <= 1 || batches.count <= 1 {
-            var answers: [[LabTypistDecision]] = []
+            var answers: [Result<[LabTypistDecision], any Error>] = []
             answers.reserveCapacity(batches.count)
+            var failures = 0
             for batch in batches {
                 try Task.checkCancellation()
-                answers.append(try policy.decide(batch: batch))
+                do {
+                    answers.append(.success(try policy.decide(batch: batch)))
+                } catch {
+                    failures += 1
+                    guard failures <= skipBudget else { throw error }
+                    answers.append(.failure(error))
+                }
             }
             return answers
         }
         let policy = self.policy
-        var answers = [Int: [LabTypistDecision]](minimumCapacity: batches.count)
-        try await withThrowingTaskGroup(
-            of: (Int, [LabTypistDecision]).self
-        ) { group in
+        var answers = [Int: Result<[LabTypistDecision], any Error>](
+            minimumCapacity: batches.count
+        )
+        var failures = 0
+        var abort: (any Error)?
+        await withTaskGroup(of: BatchAnswer.self) { group in
             var next = 0
             var running = 0
             while next < batches.count || running > 0 {
-                while running < workers, next < batches.count {
+                while running < workers, next < batches.count, abort == nil {
                     let index = next
                     let batch = batches[index]
                     group.addTask {
-                        (index, try await Self.decide(batch: batch, with: policy))
+                        await Self.decide(batch: batch, index: index, with: policy)
                     }
                     next += 1
                     running += 1
                 }
-                guard let (index, decisions) = try await group.next() else { break }
-                answers[index] = decisions
+                guard let answer = await group.next() else { break }
+                answers[answer.index] = answer.result
                 running -= 1
+                if case let .failure(error) = answer.result {
+                    failures += 1
+                    if failures > skipBudget, abort == nil {
+                        abort = error
+                        // Nothing more may start; what is already running is
+                        // still awaited, so no decision command outlives the
+                        // run even when it ends here.
+                        group.cancelAll()
+                    }
+                }
             }
         }
+        if let abort { throw abort }
         return try batches.indices.map { index in
-            guard let decisions = answers[index] else {
+            guard let answer = answers[index] else {
                 throw LabTypistPolicyError.batchCountMismatch(
                     expected: batches[index].count, received: 0
                 )
             }
-            return decisions
+            return answer
         }
+    }
+
+    /// One batch's answer, carried back out of the task group. The policy's own
+    /// error type is not `Sendable`, so it crosses the boundary in a box that
+    /// is only ever written once, before the task returns it.
+    private struct BatchAnswer: @unchecked Sendable {
+        let index: Int
+        let result: Result<[LabTypistDecision], any Error>
     }
 
     /// The decision contract is synchronous — an external command is a process,
@@ -283,14 +408,28 @@ public struct LabSimulatedTypistEngine: Sendable {
     /// than parking a cooperative thread the completion path also needs.
     private static func decide(
         batch: [LabTypistMomentFeatures],
+        index: Int,
         with policy: any TypistDecisionPolicy
-    ) async throws -> [LabTypistDecision] {
-        try await withCheckedThrowingContinuation { continuation in
+    ) async -> BatchAnswer {
+        await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(with: Result { try policy.decide(batch: batch) })
+                continuation.resume(returning: BatchAnswer(
+                    index: index,
+                    result: Result { try policy.decide(batch: batch) }
+                ))
             }
         }
     }
+}
+
+/// What a run threw away to keep going: the failed batches it skipped, the
+/// persona/scenario sessions those batches held, and the decision moments that
+/// went with them. Every field ends up in the report; none of them is ever
+/// folded into a persona's behavior.
+private struct Abandonment {
+    var skippedBatches = 0
+    var sessions: Set<Int> = []
+    var moments = 0
 }
 
 // MARK: - One persona typing one scenario
@@ -304,6 +443,14 @@ private struct TypingSession {
     let persona: LabTypistPersona
     let configuration: LabSimulatedTypistConfiguration
     private(set) var outcome = ScenarioOutcome()
+    /// True once a failed decision batch abandoned this pair. An abandoned
+    /// session is never advanced again and never reaches an aggregate.
+    private(set) var isAbandoned = false
+
+    /// The decision moments this session has produced — every display that was
+    /// handed to the policy, including the one whose batch failed. It is what a
+    /// skip costs, so it is what the report counts.
+    var decisionMoments: Int { outcome.displays }
 
     private let golden: String?
     private var typedCount = 0
@@ -392,6 +539,14 @@ private struct TypingSession {
             return features
         }
         return nil
+    }
+
+    /// Drops this pair because the decision call that held its moment failed.
+    /// The undecided display is discarded rather than guessed at, and the
+    /// partial outcome is left for the aggregator to exclude whole.
+    mutating func abandon() {
+        pending = nil
+        isAbandoned = true
     }
 
     /// Applies the decision for the display handed out by `nextMoment`. The
@@ -548,13 +703,18 @@ private struct PersonaTotals {
         totals.retainedCharacterPotential += outcome.retainedCharacterPotential
     }
 
-    func slice(persona: LabTypistPersona, scenarios: Int) -> LabSimulatedTypistPersonaSlice {
+    func slice(
+        persona: LabTypistPersona,
+        scenarios: Int,
+        abandonedScenarios: Int
+    ) -> LabSimulatedTypistPersonaSlice {
         LabSimulatedTypistPersonaSlice(
             personaID: persona.id,
             register: persona.register,
             typingSpeed: persona.typingSpeed,
             interruptionTolerance: persona.interruptionTolerance,
             scenarios: scenarios,
+            abandonedScenarios: abandonedScenarios,
             opportunities: totals.opportunities,
             displays: totals.displays,
             accepts: totals.accepts,

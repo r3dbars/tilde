@@ -10,7 +10,7 @@ extension ResearchCoordinator {
         try arguments.assertAllowed(
             options: [
                 "suite", "personas", "policy", "decision-command", "decision-argument",
-                "decision-batch-size", "decision-workers",
+                "decision-batch-size", "decision-workers", "skip-failed-batches",
                 "scenarios", "stride", "maximum-displays", "helper", "model-file",
                 "model", "model-revision", "workers", "slots", "output",
             ],
@@ -44,6 +44,7 @@ extension ResearchCoordinator {
             "maximum-displays", default: 8
         )
         configuration.decisionWorkers = try decisionWorkers(arguments)
+        configuration.skippedBatchAllowance = try skippedBatchAllowance(arguments)
 
         let model = try modelConfiguration(arguments)
         let runtime = LabRuntimeConfiguration(
@@ -51,9 +52,15 @@ extension ResearchCoordinator {
             slotsPerWorker: try arguments.integer("slots", default: 1),
             repetitions: 1
         )
+        let execution = model.execution(runtime)
+        // Fingerprint the generation stack before launching it. A simulated
+        // report that cannot name the model behind its candidates cannot be
+        // read next to another model's run, which is the only thing a
+        // discovery-grade number is good for.
+        let assets = try await LabAssetVerifier.shared.verify(execution)
         let pool = LabLlamaServerPool()
         defer { Task { await pool.stop() } }
-        let clients = try await pool.start(configuration: model.execution(runtime))
+        let clients = try await pool.start(configuration: execution)
         guard let client = clients.first else {
             throw ResearchCLIError.missingArtifact("local llama-server worker")
         }
@@ -68,7 +75,8 @@ extension ResearchCoordinator {
                 manifestDigestSHA256: try configuration.arm.digestSHA256(),
                 hypothesisID: nil,
                 hypothesis: nil
-            )
+            ),
+            assets: assets
         )
         await pool.stop()
         try emit(report, arguments: arguments)
@@ -106,6 +114,28 @@ extension ResearchCoordinator {
             )
         }
         return workers
+    }
+
+    /// A decision batch that fails after the policy's own retries is usually a
+    /// provider hiccup, not a result — and today it costs the whole run. This
+    /// allowance lets a run survive that many hiccups by abandoning the
+    /// sessions those batches held, never by inventing a decision for them.
+    /// Only an external command can hiccup: the frozen heuristic is a local
+    /// function call, so a failure there is a bug worth aborting on, and asking
+    /// for skips is a mistake worth naming rather than a no-op worth recording.
+    static func skippedBatchAllowance(_ arguments: CLIArguments) throws -> Int {
+        let allowance = try arguments.integer("skip-failed-batches", default: 0)
+        guard (0...LabSimulatedTypistConfiguration.maximumSkippedBatches)
+            .contains(allowance) else {
+            throw ResearchCLIError.invalidValue("--skip-failed-batches")
+        }
+        guard allowance == 0 || (arguments.value("policy") ?? "heuristic") == "external-command"
+        else {
+            throw ResearchCLIError.usage(
+                "--skip-failed-batches requires --policy external-command."
+            )
+        }
+        return allowance
     }
 
     private static func decisionPolicy(
@@ -161,11 +191,45 @@ extension ResearchCoordinator {
         ResearchConsole.line("  decision policy: \(report.decisionPolicyIdentifier)")
         ResearchConsole.line("  decision batch size: \(report.decisionBatchSize)")
         ResearchConsole.line("  decision workers: \(report.decisionWorkers)")
+        if let assets = report.assets {
+            ResearchConsole.line(
+                "  generation model: \(assets.modelIdentifier) @ \(assets.modelRevision) (\(assets.verificationMode.rawValue))"
+            )
+            ResearchConsole.line("  model SHA-256: \(assets.modelSHA256)")
+            ResearchConsole.line("  helper SHA-256: \(assets.helperSHA256)")
+        } else {
+            ResearchConsole.line("  generation model: not fingerprinted")
+        }
+        // Loud on purpose. A run that abandoned part of its own sample must not
+        // read like a complete one, in the report or on the way past.
+        if report.hasSkippedBatches {
+            ResearchConsole.line(
+                "  !! SKIPPED DECISION BATCHES: \(report.skippedBatches) of \(report.skippedBatchAllowance) allowed"
+            )
+            ResearchConsole.line(
+                "  !! ABANDONED SESSIONS (excluded from every persona aggregate): \(report.abandonedSessions)"
+            )
+            ResearchConsole.line(
+                "  !! ABANDONED DECISION MOMENTS: \(report.abandonedMoments)"
+            )
+            ResearchConsole.line(
+                "  !! this run covers less than the suite and persona set it names"
+            )
+        } else {
+            ResearchConsole.line(
+                "  skipped decision batches: 0 of \(report.skippedBatchAllowance) allowed"
+            )
+        }
         ResearchConsole.line(
             "  evidence: discovery-grade simulation (\(report.evidenceEligibility.reasons.map(\.rawValue).joined(separator: ", ")))"
         )
         for slice in report.personas {
             ResearchConsole.line("  \(slice.personaID) [\(slice.register.rawValue)/\(slice.typingSpeed.rawValue)]")
+            if slice.abandonedScenarios > 0 {
+                ResearchConsole.line(
+                    "    !! \(slice.abandonedScenarios) abandoned scenario(s) excluded; the counts below cover \(slice.scenarios)"
+                )
+            }
             ResearchConsole.line(
                 "    displays \(slice.displays); accept \(slice.simulatedAcceptanceRate.formatted(.percent.precision(.fractionLength(1)))); type-through \(slice.simulatedTypeThroughRate.formatted(.percent.precision(.fractionLength(1)))); wrong \(slice.simulatedWrongDisplayRate.formatted(.percent.precision(.fractionLength(1))))"
             )

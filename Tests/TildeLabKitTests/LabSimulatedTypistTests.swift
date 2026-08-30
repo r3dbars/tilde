@@ -628,6 +628,327 @@ struct LabSimulatedTypistTests {
         #expect(Self.runningProcesses(matching: script.path) == 0)
     }
 
+    // MARK: - Counted skip of failed decision batches
+
+    @Test("A failed batch abandons its sessions, and the report says so loudly")
+    func skippedBatchesAreCountedAndStated() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = try Self.poisonedStub(in: directory, name: "poison.sh")
+
+        let report = try await Self.simulate(
+            command: script, skippedBatchAllowance: 5, personas: Self.twoPersonas()
+        )
+
+        // Three careful-persona sessions failed after their first decision.
+        #expect(report.skippedBatchAllowance == 5)
+        #expect(report.skippedBatches == 3)
+        #expect(report.abandonedSessions == 3)
+        // Each abandoned session had already spent a decision moment before the
+        // failing one; both are discarded, and both are counted.
+        #expect(report.abandonedMoments == 6)
+
+        let quick = try #require(report.personas.first { $0.personaID == "batch-fast" })
+        let careful = try #require(report.personas.first { $0.personaID == "batch-careful" })
+        #expect(quick.scenarios == 3)
+        #expect(quick.abandonedScenarios == 0)
+        #expect(quick.displays > 0)
+
+        // Excluded, not zero-filled: the abandoned sessions contribute no
+        // opportunity, no baseline characters, and above all no dismissal or
+        // type-through the simulated writer never made.
+        #expect(careful.scenarios == 0)
+        #expect(careful.abandonedScenarios == 3)
+        #expect(careful.displays == 0)
+        #expect(careful.opportunities == 0)
+        #expect(careful.baselineCharacters == 0)
+        #expect(careful.dismissals == 0)
+        #expect(careful.typeThroughs == 0)
+        #expect(careful.accepts + careful.wordAccepts == 0)
+
+        // A reader who only reads the limitation still learns the sample is
+        // incomplete, and by how much.
+        #expect(report.hasSkippedBatches)
+        #expect(report.limitation.contains("Incomplete sample"))
+        #expect(report.limitation.contains("3 decision batches"))
+        #expect(report.limitation.contains("3 persona/scenario sessions"))
+        #expect(report.limitation.contains("6 decision moments"))
+        #expect(report.limitation.hasPrefix(LabSimulatedTypistReport.limitation))
+        try report.validated()
+    }
+
+    @Test("Exceeding the skip allowance aborts the run exactly as it does today")
+    func skipAllowanceIsACapNotASuggestion() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = try Self.poisonedStub(in: directory, name: "poison.sh")
+
+        // Three batches fail. Two skips are not enough, and the run ends with
+        // the decision command's own error rather than a truncated report.
+        for allowance in [0, 1, 2] {
+            await #expect(throws: LabTypistPolicyError.decisionCommandFailed(7)) {
+                try await Self.simulate(
+                    command: script,
+                    skippedBatchAllowance: allowance,
+                    personas: Self.twoPersonas()
+                )
+            }
+        }
+        // One more than the failures is enough, so the cap is what decides.
+        let report = try await Self.simulate(
+            command: script, skippedBatchAllowance: 3, personas: Self.twoPersonas()
+        )
+        #expect(report.skippedBatches == 3)
+    }
+
+    @Test("Surviving sessions are identical whether or not other batches were skipped")
+    func skippingDoesNotPerturbSurvivingSessions() async throws {
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = try Self.poisonedStub(in: directory, name: "poison.sh")
+
+        let withSkips = try await Self.simulate(
+            command: script, skippedBatchAllowance: 5, personas: Self.twoPersonas()
+        )
+        // The control never trips the stub, never skips, and runs the
+        // default-off driver: the surviving persona must not be able to tell.
+        let control = try await Self.simulate(
+            command: script,
+            skippedBatchAllowance: 0,
+            personas: Array(Self.twoPersonas().prefix(1))
+        )
+        #expect(control.skippedBatches == 0)
+
+        // The same failing batches under four concurrent workers: which batches
+        // a run skips comes from the policy's answers, not from what finished
+        // first, so both the survivor and the skip accounting must repeat.
+        let concurrent = try await Self.simulate(
+            command: script,
+            skippedBatchAllowance: 5,
+            personas: Self.twoPersonas(),
+            decisionWorkers: 4
+        )
+        #expect(concurrent.skippedBatches == withSkips.skippedBatches)
+        #expect(concurrent.abandonedSessions == withSkips.abandonedSessions)
+        #expect(concurrent.abandonedMoments == withSkips.abandonedMoments)
+
+        let survivor = try #require(withSkips.personas.first { $0.personaID == "batch-fast" })
+        let reference = try #require(control.personas.first { $0.personaID == "batch-fast" })
+        let parallel = try #require(concurrent.personas.first { $0.personaID == "batch-fast" })
+        #expect(survivor == reference)
+        #expect(parallel == reference)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        #expect(try encoder.encode(survivor) == encoder.encode(reference))
+        #expect(try encoder.encode(parallel) == encoder.encode(reference))
+    }
+
+    @Test("A skipped batch never cancels the sibling batches still in flight")
+    func skippedBatchLeavesConcurrentSiblingsAlone() async throws {
+        let probe = FailingProbeTypist(failOnCall: 3, holdSeconds: 0.05)
+        var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+        configuration.decisionWorkers = 4
+        configuration.skippedBatchAllowance = 1
+        let report = try await LabSimulatedTypistEngine(
+            configuration: configuration, policy: probe
+        ).run(
+            suite: try Self.parallelSuite(scenarios: 6),
+            personas: Self.twoPersonas(),
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable()
+        )
+
+        // The run finished instead of aborting, and every call that started —
+        // including the three that were in flight beside the failing one —
+        // finished rather than being cancelled out from under the round.
+        #expect(report.skippedBatches == 1)
+        #expect(report.abandonedSessions == 1)
+        #expect(probe.started() == probe.finished())
+        #expect(probe.started() > 3)
+        // Twelve sessions are still accounted for: eleven aggregated, one
+        // abandoned, none silently dropped.
+        let counted = report.personas.reduce(0) { $0 + $1.scenarios + $1.abandonedScenarios }
+        #expect(counted == 12)
+        #expect(report.personas.reduce(0) { $0 + $1.abandonedScenarios } == 1)
+        #expect(report.totalDisplays > 0)
+        try report.validated()
+    }
+
+    @Test("With the option off a run behaves and reports exactly as before")
+    func skipModeIsOffByDefault() async throws {
+        let engine = LabSimulatedTypistEngine(policy: DeterministicHeuristicTypist())
+        #expect(engine.effectiveSkippedBatchAllowance == 0)
+        #expect(LabSimulatedTypistConfiguration().skippedBatchAllowance == 0)
+
+        let report = try await engine.run(
+            suite: try Self.smokeSuite(),
+            personas: Array(try LabTypistPersonaCatalog.loadBundled().personas.prefix(2)),
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable()
+        )
+        #expect(report.skippedBatchAllowance == 0)
+        #expect(report.skippedBatches == 0)
+        #expect(report.abandonedSessions == 0)
+        #expect(report.abandonedMoments == 0)
+        #expect(report.hasSkippedBatches == false)
+        #expect(report.limitation == LabSimulatedTypistReport.limitation)
+        #expect(report.personas.allSatisfy { $0.abandonedScenarios == 0 })
+        #expect(report.personas.allSatisfy { $0.scenarios == 2 })
+        try report.validated()
+
+        // A run asking for more skips than the contract allows is clamped, and
+        // the ceiling is the one the report validates against.
+        var beyond = LabSimulatedTypistConfiguration()
+        beyond.skippedBatchAllowance = 999
+        #expect(
+            LabSimulatedTypistEngine(configuration: beyond, policy: DeterministicHeuristicTypist())
+                .effectiveSkippedBatchAllowance
+                == LabSimulatedTypistConfiguration.maximumSkippedBatches
+        )
+        var negative = LabSimulatedTypistConfiguration()
+        negative.skippedBatchAllowance = -3
+        #expect(
+            LabSimulatedTypistEngine(configuration: negative, policy: DeterministicHeuristicTypist())
+                .effectiveSkippedBatchAllowance == 0
+        )
+    }
+
+    @Test("Skip accounting a report cannot back up is refused")
+    func skipAccountingIsValidated() throws {
+        try Self.report().validated()
+        #expect(throws: LabSimulatedTypistError.invalidSkippedBatchCount) {
+            try Self.report(skippedBatchAllowance: 51).validated()
+        }
+        #expect(throws: LabSimulatedTypistError.invalidSkippedBatchCount) {
+            try Self.report(
+                skippedBatchAllowance: 1, skippedBatches: 2,
+                abandonedSessions: 2, abandonedMoments: 2
+            ).validated()
+        }
+        // A skip that cost no session, a session that cost no moment, and a
+        // loss with no skip behind it are all accounting errors.
+        #expect(throws: LabSimulatedTypistError.inconsistentAbandonment) {
+            try Self.report(skippedBatchAllowance: 5, skippedBatches: 2).validated()
+        }
+        #expect(throws: LabSimulatedTypistError.inconsistentAbandonment) {
+            try Self.report(
+                skippedBatchAllowance: 5, skippedBatches: 1,
+                abandonedSessions: 2, abandonedMoments: 1
+            ).validated()
+        }
+        #expect(throws: LabSimulatedTypistError.inconsistentAbandonment) {
+            try Self.report(abandonedSessions: 3, abandonedMoments: 3).validated()
+        }
+        // The persona slices have to agree with the run-level total.
+        #expect(throws: LabSimulatedTypistError.inconsistentAbandonment) {
+            try Self.report(
+                skippedBatchAllowance: 5, skippedBatches: 1,
+                abandonedSessions: 1, abandonedMoments: 1,
+                personas: [Self.slice(abandonedScenarios: 0)]
+            ).validated()
+        }
+        try Self.report(
+            skippedBatchAllowance: 5, skippedBatches: 1,
+            abandonedSessions: 1, abandonedMoments: 2,
+            personas: [Self.slice(abandonedScenarios: 1)]
+        ).validated()
+
+        // And a report whose limitation was quietly reset to the clean text is
+        // refused rather than read as a complete run.
+        let skipped = Self.report(
+            skippedBatchAllowance: 5, skippedBatches: 1,
+            abandonedSessions: 1, abandonedMoments: 2,
+            personas: [Self.slice(abandonedScenarios: 1)]
+        )
+        var object = try #require(
+            try JSONSerialization.jsonObject(
+                with: try JSONEncoder().encode(skipped)
+            ) as? [String: Any]
+        )
+        object["limitation"] = LabSimulatedTypistReport.limitation
+        let tampered = try JSONDecoder().decode(
+            LabSimulatedTypistReport.self,
+            from: try JSONSerialization.data(withJSONObject: object)
+        )
+        #expect(throws: LabSimulatedTypistError.limitationMisstatesSkips) {
+            try tampered.validated()
+        }
+    }
+
+    // MARK: - Generation model provenance
+
+    @Test("A Gemma run and a Qwen run are distinguishable from their reports alone")
+    func reportNamesTheGenerationModel() async throws {
+        let gemma = Self.report(assets: LabAssetSnapshot(
+            verificationMode: .productionPinned,
+            modelIdentifier: LabModelProfile.production.identifier,
+            modelRevision: LabModelProfile.production.revision,
+            modelSHA256: String(repeating: "a", count: 64),
+            helperSHA256: String(repeating: "b", count: 64)
+        ))
+        let qwen = Self.report(assets: Self.experimentalAssets())
+        try gemma.validated()
+        try qwen.validated()
+        #expect(gemma.assets != qwen.assets)
+        #expect(gemma.assets?.modelIdentifier != qwen.assets?.modelIdentifier)
+        #expect(qwen.assets?.modelRevision == "2026-08-01")
+        #expect(qwen.assets?.modelSHA256 == String(repeating: "c", count: 64))
+        #expect(qwen.assets?.helperSHA256 == String(repeating: "d", count: 64))
+
+        // The identity survives the artifact round trip, which is the only way
+        // two reports ever meet.
+        let decoded = try JSONDecoder().decode(
+            LabSimulatedTypistReport.self, from: try JSONEncoder().encode(qwen)
+        )
+        #expect(decoded.assets == qwen.assets)
+        try decoded.validated()
+
+        // And the engine records the stack it was actually run against.
+        let report = try await LabSimulatedTypistEngine(
+            configuration: LabSimulatedTypistConfiguration(strideCharacters: 3),
+            policy: DeterministicHeuristicTypist()
+        ).run(
+            suite: try Self.smokeSuite(),
+            personas: Self.twoPersonas(),
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable(),
+            assets: Self.experimentalAssets()
+        )
+        #expect(report.assets == Self.experimentalAssets())
+        try report.validated()
+    }
+
+    @Test("A report cannot claim a model identity it could not have had")
+    func modelIdentityIsValidated() throws {
+        // A digest that is not a digest.
+        #expect(throws: LabSimulatedTypistError.invalidModelIdentity) {
+            try Self.report(assets: Self.experimentalAssets(modelSHA256: "not-a-digest"))
+                .validated()
+        }
+        #expect(throws: LabSimulatedTypistError.invalidModelIdentity) {
+            try Self.report(assets: Self.experimentalAssets(
+                helperSHA256: String(repeating: "A", count: 64)
+            )).validated()
+        }
+        // An unusable identity or revision.
+        #expect(throws: LabSimulatedTypistError.invalidModelIdentity) {
+            try Self.report(assets: Self.experimentalAssets(identifier: "")).validated()
+        }
+        #expect(throws: LabSimulatedTypistError.invalidModelIdentity) {
+            try Self.report(assets: Self.experimentalAssets(revision: "a revision")).validated()
+        }
+        // Production-pinned may only ever name the pinned production asset.
+        #expect(throws: LabSimulatedTypistError.invalidModelIdentity) {
+            try Self.report(assets: LabAssetSnapshot(
+                verificationMode: .productionPinned,
+                modelIdentifier: "qwen3-4b-instruct",
+                modelRevision: "2026-08-01",
+                modelSHA256: String(repeating: "c", count: 64),
+                helperSHA256: String(repeating: "d", count: 64)
+            )).validated()
+        }
+    }
+
     // MARK: - End-to-end smoke
 
     @Test("A stubbed generation path produces a fenced aggregate report")
@@ -917,7 +1238,15 @@ struct LabSimulatedTypistTests {
         return try LabScenarioSuite(name: "simulated parallel", scenarios: cases).validated()
     }
 
-    private static func report(decisionWorkers: Int) -> LabSimulatedTypistReport {
+    private static func report(
+        decisionWorkers: Int = 1,
+        assets: LabAssetSnapshot? = nil,
+        skippedBatchAllowance: Int = 0,
+        skippedBatches: Int = 0,
+        abandonedSessions: Int = 0,
+        abandonedMoments: Int = 0,
+        personas: [LabSimulatedTypistPersonaSlice] = []
+    ) -> LabSimulatedTypistReport {
         LabSimulatedTypistReport(
             startedAt: Date(),
             finishedAt: Date(),
@@ -925,10 +1254,127 @@ struct LabSimulatedTypistTests {
             suiteDigestSHA256: String(repeating: "a", count: 64),
             scenarioCount: 1,
             arm: LabArmConfiguration(id: "baseline"),
+            assets: assets,
             decisionPolicyIdentifier: DeterministicHeuristicTypist.identifier,
             decisionWorkers: decisionWorkers,
+            skippedBatchAllowance: skippedBatchAllowance,
+            skippedBatches: skippedBatches,
+            abandonedSessions: abandonedSessions,
+            abandonedMoments: abandonedMoments,
             provenance: .unavailable(),
-            personas: []
+            personas: personas
+        )
+    }
+
+    private static func slice(abandonedScenarios: Int) -> LabSimulatedTypistPersonaSlice {
+        LabSimulatedTypistPersonaSlice(
+            personaID: "batch-fast",
+            register: .chat,
+            typingSpeed: .fast,
+            interruptionTolerance: .high,
+            scenarios: 1,
+            abandonedScenarios: abandonedScenarios,
+            opportunities: 1,
+            displays: 0,
+            accepts: 0,
+            wordAccepts: 0,
+            typeThroughs: 0,
+            dismissals: 0,
+            wrongDisplays: 0,
+            silentMoments: 0,
+            baselineCharacters: 0,
+            acceptedCharacters: 0,
+            correctionCharacters: 0,
+            retainedCharacterPotential: 0
+        )
+    }
+
+    /// A Lab-only alternate model, so a report built with it cannot be
+    /// confused with a production Gemma run.
+    private static func experimentalAssets(
+        identifier: String = "qwen3-4b-instruct",
+        revision: String = "2026-08-01",
+        modelSHA256: String = String(repeating: "c", count: 64),
+        helperSHA256: String = String(repeating: "d", count: 64)
+    ) -> LabAssetSnapshot {
+        LabAssetSnapshot(
+            verificationMode: .experimentalLocal,
+            modelIdentifier: identifier,
+            modelRevision: revision,
+            modelSHA256: modelSHA256,
+            helperSHA256: helperSHA256
+        )
+    }
+
+    /// A decision command that fails for one identifiable set of sessions, so a
+    /// chosen batch fails on every machine rather than whichever one happened
+    /// to be in flight. The careful persona's first display is answered — the
+    /// session spends a real decision — and every later display of that persona
+    /// exits non-zero, so an abandoned session always carries partial results
+    /// the report must exclude rather than count.
+    private static func poisonedStub(in directory: URL, name: String) throws -> URL {
+        let script = directory.appendingPathComponent(name)
+        try #"""
+        #!/bin/bash
+        payload="$(cat)"
+        case "$payload" in
+          *Text*|*prompt*|*continuation*) exit 4 ;;
+        esac
+        case "$payload" in
+          *'"personaGoal":"draft-carefully"'*)
+            case "$payload" in
+              *'"displaysSoFar":1,'*)
+                printf '{"schema":"tilde-lab.typist-decision.v1","action":"continue","wouldRetain":false}'
+                exit 0 ;;
+              *) exit 7 ;;
+            esac ;;
+        esac
+        decide() {
+          if [ "$1" = "exact" ]; then
+            printf '{"schema":"tilde-lab.typist-decision.v1","action":"accept","wouldRetain":true}'
+          else
+            printf '{"schema":"tilde-lab.typist-decision.v1","action":"dismiss","wouldRetain":false}'
+          fi
+        }
+        matches="$(printf '%s' "$payload" | grep -o '"prefixMatch":"[a-z]*"' | sed 's/.*:"//;s/"//')"
+        case "$payload" in
+          *'"schema":"tilde-lab.typist-moment-batch.v1"'*)
+            decisions=""
+            for match in $matches; do
+              one="$(decide "$match")"
+              if [ -z "$decisions" ]; then decisions="$one"; else decisions="$decisions,$one"; fi
+            done
+            printf '{"schema":"tilde-lab.typist-decision-batch.v1","decisions":[%s]}' "$decisions" ;;
+          *'"schema":"tilde-lab.typist-moment-features.v1"'*)
+            decide "$matches" ;;
+          *) exit 3 ;;
+        esac
+        """#.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: script.path
+        )
+        return script
+    }
+
+    @discardableResult
+    private static func simulate(
+        command: URL,
+        skippedBatchAllowance: Int,
+        personas: [LabTypistPersona],
+        scenarios: Int = 3,
+        decisionWorkers: Int = 1
+    ) async throws -> LabSimulatedTypistReport {
+        var configuration = LabSimulatedTypistConfiguration(strideCharacters: 3)
+        configuration.skippedBatchAllowance = skippedBatchAllowance
+        configuration.decisionWorkers = decisionWorkers
+        return try await LabSimulatedTypistEngine(
+            configuration: configuration,
+            policy: try ExternalCommandTypist(command: command.path, timeoutSeconds: 20)
+        ).run(
+            suite: try parallelSuite(scenarios: scenarios),
+            personas: personas,
+            client: StubCompletionClient(content: " sounds good to me."),
+            provenance: .unavailable()
         )
     }
 

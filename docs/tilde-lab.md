@@ -274,15 +274,43 @@ collected before the round and every decision is applied after it, in batch
 order, so completion order cannot reach the aggregates: a concurrent run's
 per-persona numbers are byte-identical to the sequential run's. Each external
 invocation already owns its process, pipes, buffers, and environment, so
-nothing is shared between calls in flight. Failure semantics are unchanged — a
-batch that fails after the policy's own retries aborts the run with the same
-error, and the batches still running are awaited before it surfaces, so no
-decision command outlives the run. The worker count is recorded in the report
-next to the batch size.
+nothing is shared between calls in flight. The batches still running are awaited
+before a failure surfaces, so no decision command outlives the run. The worker
+count is recorded in the report next to the batch size.
+
+`--skip-failed-batches N` (0...50, default 0, external-command policy only)
+decides what one failed batch costs. At the default a batch that fails after
+the policy's own retries aborts the run, which is the right answer for a short
+run and the wrong one for an overnight run that a single provider hiccup can
+throw away whole. Above 0, that many failed batches instead abandon the
+persona/scenario sessions they held: those sessions are never advanced again,
+their remaining moments are never judged, and their partial results are
+excluded from every persona aggregate rather than zero-filled into it — an
+abandoned session is not a writer who ignored or dismissed a ghost, and must
+never read like one. The failure verdict is taken in batch order after the
+round has joined, never in completion order, so which batches a run skips is a
+property of the policy's answers and not of the machine's scheduling, and the
+surviving sessions' apply order and aggregates are identical to a run where
+nothing failed. While skips remain a failed batch does not cancel the sibling
+batches in flight beside it; only the final abort does. Exceeding N aborts
+exactly as the default does.
+
+Nothing about a skip is silent. The report carries the allowance, the number of
+batches skipped, the sessions abandoned, and the decision moments those
+sessions cost; each persona slice carries its own abandoned-scenario count next
+to the scenarios it actually finished; the counts are validated against one
+another, so a report cannot claim a skip that cost nothing or a loss with no
+skip behind it; the run's limitation text states the incompleteness in the same
+sentence every reader already reads; and the CLI summary prints all of it
+loudly whenever it is not zero.
 
 The report is aggregate-only per persona — displays, simulated acceptance,
 type-through, wrong displays, corrections, and retained-character potential,
-plus the decision batch size and worker count the run used. It carries the report provenance envelope and the aggregate-only privacy contract,
+plus the decision batch size, worker count, and skip accounting the run used.
+It names the generation stack behind its candidates — model identity,
+revision, and the model and helper SHA-256 digests, validated the same way an
+ordinary Lab report's asset snapshot is — so a Gemma run and a Qwen run are
+distinguishable from their reports alone. It carries the report provenance envelope and the aggregate-only privacy contract,
 and it is permanently fenced with the `simulated-decision-layer` evidence
 reason. It is not a `LabRunReport`, is never written into a campaign's reports
 directory, and cannot enter a comparison or advance a protected phase. Until
