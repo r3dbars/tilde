@@ -101,10 +101,24 @@ public enum TypedThroughRule {
     }
 }
 
-/// In-memory count of how much of an accepted span is still in the field.
-///
-/// `accepted` and `window` stay in RAM for the watch only. They are never
-/// part of the event. A missing window is a missingness reason, never zero.
+/// A bounded, in-memory view of text before the current caret. Absolute UTF-16
+/// locations let retention check the original insertion range instead of
+/// finding the same word somewhere else in the document.
+public struct RetainedContextSnapshot: Equatable, Sendable {
+    public let text: String
+    public let utf16StartLocation: Int
+    public let caretLocation: Int
+
+    public init(text: String, utf16StartLocation: Int, caretLocation: Int) {
+        self.text = text
+        self.utf16StartLocation = utf16StartLocation
+        self.caretLocation = caretLocation
+    }
+}
+
+/// In-memory count of how much of an accepted span is still at its insertion
+/// range. The accepted text and context snapshot never enter the event.
+/// A missing or rolled-out range is missingness, never zero.
 public enum RetainedSpanWatch {
     public static let fiveSecondHorizon: TimeInterval = 5
     public static let thirtySecondHorizon: TimeInterval = 30
@@ -112,34 +126,46 @@ public enum RetainedSpanWatch {
     public static let idleSegmentSeconds: TimeInterval = 60
     public static let maximumPendingWatches = 32
 
-    /// Longest prefix of `accepted` that still occurs as a contiguous
-    /// substring in `window`. Edits that break the prefix count as replacement
-    /// from that point. The window is typically context-before-caret.
-    public static func retainedCharacters(accepted: String, window: String) -> Int {
-        guard !accepted.isEmpty else { return 0 }
-        var kept = 0
-        var prefix = ""
-        prefix.reserveCapacity(accepted.count)
-        for character in accepted {
-            prefix.append(character)
-            if window.contains(prefix) {
-                kept += 1
-            } else {
-                break
-            }
+    /// Longest accepted prefix still present at the exact original UTF-16
+    /// insertion location. Returns `nil` when that range is outside or invalid
+    /// in the bounded snapshot, because unwitnessed text is not a rewrite.
+    public static func retainedCharacters(
+        accepted: String,
+        insertionLocationUTF16: Int,
+        snapshot: RetainedContextSnapshot
+    ) -> Int? {
+        let utf16Count = snapshot.text.utf16.count
+        guard snapshot.utf16StartLocation >= 0,
+              snapshot.caretLocation >= snapshot.utf16StartLocation,
+              snapshot.caretLocation - snapshot.utf16StartLocation == utf16Count,
+              insertionLocationUTF16 >= snapshot.utf16StartLocation,
+              insertionLocationUTF16 <= snapshot.caretLocation else { return nil }
+        let offset = insertionLocationUTF16 - snapshot.utf16StartLocation
+        let utf16 = snapshot.text.utf16
+        let utf16Index = utf16.index(utf16.startIndex, offsetBy: offset)
+        guard let insertionIndex = String.Index(utf16Index, within: snapshot.text) else {
+            return nil
         }
-        return kept
+        let observed = snapshot.text[insertionIndex...]
+        return zip(accepted, observed).prefix { $0 == $1 }.count
     }
 
     public static func observation(
         accepted: String,
-        window: String?
+        insertionLocationUTF16: Int?,
+        snapshot: RetainedContextSnapshot?
     ) throws -> RetainedCharacterObservation {
-        guard let window else {
+        guard let insertionLocationUTF16,
+              let snapshot,
+              let retained = retainedCharacters(
+                  accepted: accepted,
+                  insertionLocationUTF16: insertionLocationUTF16,
+                  snapshot: snapshot
+              ) else {
             return RetainedCharacterObservation(missingness: .observerStopped)
         }
         return try RetainedCharacterObservation(
-            retainedCharacters: retainedCharacters(accepted: accepted, window: window)
+            retainedCharacters: retained
         ).validated()
     }
 

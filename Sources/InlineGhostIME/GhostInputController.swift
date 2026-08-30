@@ -267,7 +267,14 @@ final class GhostInputController: IMKInputController {
         GhostOutcomeLedger.configure { [weak self] in
             guard let self, let liveClient = self.client() else { return nil }
             if IsSecureEventInputEnabled() { return nil }
-            return self.contextBeforeCaret(liveClient)
+            let selection = liveClient.selectedRange()
+            guard selection.location != NSNotFound, selection.length == 0 else { return nil }
+            let context = self.contextBeforeCaret(liveClient, selection: selection)
+            return RetainedContextSnapshot(
+                text: context,
+                utf16StartLocation: max(0, selection.location - context.utf16.count),
+                caretLocation: selection.location
+            )
         }
         guard !IsSecureEventInputEnabled() else { return }
         notifyScreenMemory(.textFieldFocused)
@@ -527,6 +534,7 @@ final class GhostInputController: IMKInputController {
         GhostOutcomeLedger.noteAccepted(
             accepted,
             kind: .word,
+            insertionLocationUTF16: match?.ticket.selectionLocation,
             remainderVisible: state.isVisible
         )
         return true
@@ -563,6 +571,7 @@ final class GhostInputController: IMKInputController {
         GhostOutcomeLedger.noteAccepted(
             accepted,
             kind: .all,
+            insertionLocationUTF16: match?.ticket.selectionLocation,
             remainderVisible: state.isVisible
         )
         return true

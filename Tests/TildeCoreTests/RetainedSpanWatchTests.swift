@@ -4,23 +4,67 @@ import Testing
 
 @Suite("Retained span watch and local diary")
 struct RetainedSpanWatchTests {
-    @Test("Tab-and-keep counts the whole public span; rewrite counts less")
-    func keepAndRewriteLookDifferent() throws {
-        let accepted = "alpha beta"
+    @Test("Retention is measured at the accepted insertion range, not a duplicate elsewhere")
+    func exactInsertionRangeIgnoresDuplicateText() throws {
+        let accepted = "the"
         let kept = RetainedSpanWatch.retainedCharacters(
             accepted: accepted,
-            window: "hello alpha beta"
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("the x the")
         )
-        let rewritten = RetainedSpanWatch.retainedCharacters(
+        let deletedAtAnchor = RetainedSpanWatch.retainedCharacters(
             accepted: accepted,
-            window: "hello something else"
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("the x ")
         )
         #expect(kept == accepted.count)
-        #expect(rewritten == 0)
+        #expect(deletedAtAnchor == 0)
 
-        let missing = try RetainedSpanWatch.observation(accepted: accepted, window: nil)
+        let missing = try RetainedSpanWatch.observation(
+            accepted: accepted,
+            insertionLocationUTF16: 6,
+            snapshot: nil
+        )
         #expect(missing.missingness == .observerStopped)
         #expect(missing.retainedCharacters == nil)
+    }
+
+    @Test("Appended text is harmless and an internal edit keeps only the exact prefix")
+    func appendedAndInternallyEditedText() {
+        #expect(RetainedSpanWatch.retainedCharacters(
+            accepted: "alpha beta",
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("hello alpha beta and more")
+        ) == 10)
+        #expect(RetainedSpanWatch.retainedCharacters(
+            accepted: "alpha beta",
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("hello alpha X and more")
+        ) == 6)
+    }
+
+    @Test("A rolled-out insertion range is missing and a preceding edit is conservative")
+    func rolledOutAndShiftedRanges() throws {
+        let rolledOut = try RetainedSpanWatch.observation(
+            accepted: "word",
+            insertionLocationUTF16: 50,
+            snapshot: snapshot("new bounded window", start: 100)
+        )
+        #expect(rolledOut.missingness == .observerStopped)
+        #expect(RetainedSpanWatch.retainedCharacters(
+            accepted: "word",
+            insertionLocationUTF16: 6,
+            snapshot: snapshot("hello Xword")
+        ) == 0)
+    }
+
+    @Test("UTF-16 offsets still report retained grapheme counts")
+    func utf16OffsetCountsGraphemes() {
+        #expect(RetainedSpanWatch.retainedCharacters(
+            accepted: "🫶🏽a",
+            insertionLocationUTF16: 2,
+            snapshot: snapshot("😀🫶🏽a later")
+        ) == 2)
     }
 
     @Test("Deleted-then-retyped text cannot resurrect at a later horizon")
@@ -29,12 +73,12 @@ struct RetainedSpanWatchTests {
             opportunity: acceptedOpportunity("word", shownAt: Date(timeIntervalSince1970: 1_500))
         )
         // Gone at 5s: the writer deleted the accepted span.
-        try watch.observeFiveSeconds(window: "something else")
+        try watch.observeFiveSeconds(snapshot: snapshot("something else"))
         #expect(watch.retentionAt5Seconds.retainedCharacters == 0)
         // Retyped by 30s and still present at segment close: authored, not retained.
-        try watch.observeThirtySeconds(window: "something else word")
+        try watch.observeThirtySeconds(snapshot: snapshot("something else word"))
         #expect(watch.retentionAt30Seconds.retainedCharacters == 0)
-        try watch.observeSegment(window: "something else word")
+        try watch.observeSegment(snapshot: snapshot("something else word"))
         #expect(watch.retentionAtSegmentClose.retainedCharacters == 0)
     }
 
@@ -43,11 +87,11 @@ struct RetainedSpanWatchTests {
         var watch = PendingRetainedWatch(
             opportunity: acceptedOpportunity("word", shownAt: Date(timeIntervalSince1970: 1_500))
         )
-        try watch.observeFiveSeconds(window: nil)
+        try watch.observeFiveSeconds(snapshot: nil)
         #expect(watch.retentionAt5Seconds.missingness == .observerStopped)
-        try watch.observeThirtySeconds(window: "wo")
+        try watch.observeThirtySeconds(snapshot: snapshot("wo"))
         #expect(watch.retentionAt30Seconds.retainedCharacters == 2)
-        try watch.observeSegment(window: "word")
+        try watch.observeSegment(snapshot: snapshot("word"))
         #expect(watch.retentionAtSegmentClose.retainedCharacters == 2)
     }
 
@@ -66,8 +110,47 @@ struct RetainedSpanWatchTests {
             candidateWordCount: 1,
             opportunityCharacters: 10
         )
-        opportunity.noteAccepted(text, kind: .all, at: shownAt.addingTimeInterval(1))
+        opportunity.noteAccepted(
+            text,
+            kind: .all,
+            insertionLocationUTF16: 0,
+            at: shownAt.addingTimeInterval(1)
+        )
         return opportunity
+    }
+
+    private func snapshot(_ text: String, start: Int = 0) -> RetainedContextSnapshot {
+        RetainedContextSnapshot(
+            text: text,
+            utf16StartLocation: start,
+            caretLocation: start + text.utf16.count
+        )
+    }
+
+    @Test("Contiguous Tab chunks share an anchor; a discontinuous chunk becomes missing")
+    func multiChunkAnchorContinuity() throws {
+        let shownAt = Date(timeIntervalSince1970: 1_500)
+        var contiguous = acceptedOpportunity("alpha ", shownAt: shownAt)
+        contiguous.noteAccepted(
+            "beta",
+            kind: .word,
+            insertionLocationUTF16: 6,
+            at: shownAt.addingTimeInterval(2)
+        )
+        var kept = PendingRetainedWatch(opportunity: contiguous)
+        try kept.observeFiveSeconds(snapshot: snapshot("alpha beta"))
+        #expect(kept.retentionAt5Seconds.retainedCharacters == 10)
+
+        var discontinuous = acceptedOpportunity("alpha ", shownAt: shownAt)
+        discontinuous.noteAccepted(
+            "beta",
+            kind: .word,
+            insertionLocationUTF16: 9,
+            at: shownAt.addingTimeInterval(2)
+        )
+        var missing = PendingRetainedWatch(opportunity: discontinuous)
+        try missing.observeFiveSeconds(snapshot: snapshot("alpha beta"))
+        #expect(missing.retentionAt5Seconds.missingness == .observerStopped)
     }
 
     @Test("Typed-through requires a settled show and typing, and loses to Tab")
@@ -115,13 +198,16 @@ struct RetainedSpanWatchTests {
             candidateWordCount: 2,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted("alpha beta", kind: .all, at: shownAt.addingTimeInterval(0.4))
+        opportunity.noteAccepted(
+            "alpha beta", kind: .all, insertionLocationUTF16: 0,
+            at: shownAt.addingTimeInterval(0.4)
+        )
         opportunity.settleVisible(at: shownAt.addingTimeInterval(0.4))
 
         var watch = PendingRetainedWatch(opportunity: opportunity)
-        try watch.observeFiveSeconds(window: "alpha beta")
-        try watch.observeThirtySeconds(window: "alpha beta")
-        try watch.closeSegment(window: "alpha beta")
+        try watch.observeFiveSeconds(snapshot: snapshot("alpha beta"))
+        try watch.observeThirtySeconds(snapshot: snapshot("alpha beta"))
+        try watch.closeSegment(snapshot: snapshot("alpha beta"))
         let acceptedText = watch.accepted
         let event = try watch.finishedEvent()
         let eventLine = try TextFreeOnlineEvent.encodeJSONL(event)
@@ -163,11 +249,14 @@ struct RetainedSpanWatchTests {
             candidateWordCount: 2,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted("alpha beta", kind: .all, at: shownAt.addingTimeInterval(0.5))
+        opportunity.noteAccepted(
+            "alpha beta", kind: .all, insertionLocationUTF16: 0,
+            at: shownAt.addingTimeInterval(0.5)
+        )
         var watch = PendingRetainedWatch(opportunity: opportunity)
-        try watch.observeFiveSeconds(window: "rewritten")
-        try watch.observeThirtySeconds(window: "rewritten")
-        try watch.closeSegment(window: "rewritten")
+        try watch.observeFiveSeconds(snapshot: snapshot("rewritten"))
+        try watch.observeThirtySeconds(snapshot: snapshot("rewritten"))
+        try watch.closeSegment(snapshot: snapshot("rewritten"))
         let event = try watch.finishedEvent()
         #expect(event.retentionAt5Seconds.retainedCharacters == 0)
         #expect(event.replacedCharactersWithin5Seconds == 10)
@@ -197,9 +286,12 @@ struct RetainedSpanWatchTests {
             candidateWordCount: 2,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted("alpha beta", kind: .word, at: Date(timeIntervalSince1970: 1_501))
+        opportunity.noteAccepted(
+            "alpha beta", kind: .word, insertionLocationUTF16: 0,
+            at: Date(timeIntervalSince1970: 1_501)
+        )
         var watch = PendingRetainedWatch(opportunity: opportunity)
-        try watch.closeSegment(window: "alpha beta")
+        try watch.closeSegment(snapshot: snapshot("alpha beta"))
         #expect(watch.retentionAt5Seconds.missingness == .segmentClosedEarly)
         #expect(watch.retentionAt30Seconds.missingness == .segmentClosedEarly)
         #expect(watch.retentionAtSegmentClose.retainedCharacters == 10)
@@ -220,7 +312,10 @@ struct RetainedSpanWatchTests {
             candidateWordCount: 2,
             opportunityCharacters: 20
         )
-        opportunity.noteAccepted("alpha beta", kind: .all, at: Date(timeIntervalSince1970: 1_501))
+        opportunity.noteAccepted(
+            "alpha beta", kind: .all, insertionLocationUTF16: 0,
+            at: Date(timeIntervalSince1970: 1_501)
+        )
         var watch = PendingRetainedWatch(opportunity: opportunity)
         watch.markPrivacyExcluded()
         #expect(watch.accepted.isEmpty)

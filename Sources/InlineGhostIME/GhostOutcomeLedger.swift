@@ -12,11 +12,13 @@ enum GhostOutcomeLedger {
     private static var opportunity: LiveOnlineOpportunity?
     private static var watches: [PendingRetainedWatch] = []
     private static var lastActivity = Date.distantPast
-    private static var contextProvider: (@Sendable () -> String?)?
+    private static var contextProvider: (@Sendable () -> RetainedContextSnapshot?)?
     private static var excluded = false
     private static var seenGeneration: Int?
 
-    static func configure(contextProvider: @escaping @Sendable () -> String?) {
+    static func configure(
+        contextProvider: @escaping @Sendable () -> RetainedContextSnapshot?
+    ) {
         lock.lock()
         self.contextProvider = contextProvider
         lock.unlock()
@@ -85,12 +87,18 @@ enum GhostOutcomeLedger {
     static func noteAccepted(
         _ text: String,
         kind: LiveOnlineOpportunity.AcceptKind,
+        insertionLocationUTF16: Int?,
         remainderVisible: Bool,
         at time: Date = Date()
     ) {
         if dropIfWiped() { return }
         lock.lock()
-        opportunity?.noteAccepted(text, kind: kind, at: time)
+        opportunity?.noteAccepted(
+            text,
+            kind: kind,
+            insertionLocationUTF16: insertionLocationUTF16,
+            at: time
+        )
         lastActivity = time
         let ready = remainderVisible ? nil : opportunity
         if !remainderVisible { opportunity = nil }
@@ -141,11 +149,11 @@ enum GhostOutcomeLedger {
     static func closeSegment(at time: Date = Date()) {
         if dropIfWiped() { return }
         closeOpenOpportunity(at: time)
-        let window = currentWindow()
+        let snapshot = currentSnapshot()
         lock.lock()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
-            try? watches[index].closeSegment(window: window)
+            try? watches[index].closeSegment(snapshot: snapshot)
             if watches[index].isComplete {
                 completed.append(watches[index])
             }
@@ -160,19 +168,19 @@ enum GhostOutcomeLedger {
 
     static func observeDueHorizons(now: Date = Date()) {
         if dropIfWiped() { return }
-        let window = currentWindow()
+        let snapshot = currentSnapshot()
         lock.lock()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
             let shown = watches[index].opportunity.shownAt
             if now.timeIntervalSince(shown) >= RetainedSpanWatch.fiveSecondHorizon {
-                try? watches[index].observeFiveSeconds(window: window)
+                try? watches[index].observeFiveSeconds(snapshot: snapshot)
             }
             if now.timeIntervalSince(shown) >= RetainedSpanWatch.thirtySecondHorizon {
-                try? watches[index].observeThirtySeconds(window: window)
+                try? watches[index].observeThirtySeconds(snapshot: snapshot)
             }
             if now.timeIntervalSince(lastActivity) >= RetainedSpanWatch.idleSegmentSeconds {
-                try? watches[index].closeSegment(window: window)
+                try? watches[index].closeSegment(snapshot: snapshot)
             }
             if watches[index].isComplete {
                 completed.append(watches[index])
@@ -246,7 +254,7 @@ enum GhostOutcomeLedger {
         append(event: event, diary: diary)
     }
 
-    private static func currentWindow() -> String? {
+    private static func currentSnapshot() -> RetainedContextSnapshot? {
         lock.lock()
         let provider = contextProvider
         let isExcluded = excluded
