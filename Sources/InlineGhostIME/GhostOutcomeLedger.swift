@@ -15,6 +15,9 @@ enum GhostOutcomeLedger {
     private static var contextProvider: (@Sendable () -> RetainedContextSnapshot?)?
     private static var excluded = false
     private static var seenGeneration: Int?
+    private static var generationByOpportunityID: [UUID: Int] = [:]
+    private static var testingHomeDirectory: URL?
+    private static var testingDefaults: UserDefaults?
 
     static func configure(
         contextProvider: @escaping @Sendable () -> RetainedContextSnapshot?
@@ -38,6 +41,7 @@ enum GhostOutcomeLedger {
         _ = dropIfWiped()
         closeOpenOpportunity(at: time)
         let register = ContinuationRegister.from(bundleIdentifier: bundleIdentifier)
+        let generation = currentGeneration()
         lock.lock()
         self.excluded = excluded
         guard !excluded else {
@@ -46,7 +50,7 @@ enum GhostOutcomeLedger {
             lock.unlock()
             return
         }
-        opportunity = LiveOnlineOpportunity(
+        let shown = LiveOnlineOpportunity(
             shownAt: time,
             sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(
                 sessionIdentifier: sessionIdentifier
@@ -60,17 +64,21 @@ enum GhostOutcomeLedger {
             candidateWordCount: candidateWordCount,
             opportunityCharacters: opportunityCharacters
         )
+        opportunity = shown
+        generationByOpportunityID[shown.id] = generation
         lastActivity = time
         lock.unlock()
     }
 
     static func noteVisibleCandidate(characters: Int, wordCount: Int) {
+        if dropIfWiped() { return }
         lock.lock()
         opportunity?.noteVisibleCandidate(characters: characters, wordCount: wordCount)
         lock.unlock()
     }
 
     static func noteTyped(at time: Date = Date()) {
+        if dropIfWiped() { return }
         lock.lock()
         opportunity?.noteTyped(at: time)
         lastActivity = time
@@ -80,6 +88,7 @@ enum GhostOutcomeLedger {
     }
 
     static func closeIfGhostGone(stillVisible: Bool, at time: Date = Date()) {
+        if dropIfWiped() { return }
         guard !stillVisible else { return }
         closeOpenOpportunity(at: time)
     }
@@ -108,6 +117,7 @@ enum GhostOutcomeLedger {
     }
 
     static func noteDismissed(at time: Date = Date()) {
+        if dropIfWiped() { return }
         lock.lock()
         opportunity?.noteDismissed(at: time)
         lastActivity = time
@@ -116,6 +126,7 @@ enum GhostOutcomeLedger {
     }
 
     static func markPrivacyExcluded() {
+        if dropIfWiped() { return }
         lock.lock()
         excluded = true
         var completed: [PendingRetainedWatch] = []
@@ -226,6 +237,7 @@ enum GhostOutcomeLedger {
     }
 
     private static func emitWithoutWatch(_ opportunity: LiveOnlineOpportunity) {
+        guard let generation = takeGeneration(for: opportunity.id) else { return }
         guard let event = try? opportunity.eventWithoutAcceptedSpan() else { return }
         let diary = LocalOutcomeDiaryEntry(
             id: event.id,
@@ -236,10 +248,11 @@ enum GhostOutcomeLedger {
             thirty: event.retentionAt30Seconds,
             segment: event.retentionAtSegmentClose
         )
-        append(event: event, diary: diary)
+        append(event: event, diary: diary, generation: generation)
     }
 
     private static func emit(watch: inout PendingRetainedWatch) {
+        guard let generation = takeGeneration(for: watch.opportunity.id) else { return }
         let acceptedText = watch.accepted
         guard let event = try? watch.finishedEvent() else { return }
         let diary = LocalOutcomeDiaryEntry(
@@ -251,7 +264,7 @@ enum GhostOutcomeLedger {
             thirty: event.retentionAt30Seconds,
             segment: event.retentionAtSegmentClose
         )
-        append(event: event, diary: diary)
+        append(event: event, diary: diary, generation: generation)
     }
 
     private static func currentSnapshot() -> RetainedContextSnapshot? {
@@ -277,9 +290,7 @@ enum GhostOutcomeLedger {
     }
 
     private static func dropIfWiped() -> Bool {
-        let current = UserDefaults.standard.integer(
-            forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
-        )
+        let current = currentGeneration()
         lock.lock()
         defer { lock.unlock() }
         if seenGeneration == nil {
@@ -290,12 +301,43 @@ enum GhostOutcomeLedger {
         seenGeneration = current
         opportunity = nil
         watches = []
+        generationByOpportunityID = [:]
         excluded = true
         return true
     }
 
-    private static func append(event: TextFreeOnlineEvent, diary: LocalOutcomeDiaryEntry) {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+    private static func takeGeneration(for id: UUID) -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        return generationByOpportunityID.removeValue(forKey: id)
+    }
+
+    private static func currentGeneration() -> Int {
+        configuredDefaults().integer(
+            forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
+        )
+    }
+
+    private static func configuredDefaults() -> UserDefaults {
+        lock.lock()
+        defer { lock.unlock() }
+        return testingDefaults
+            ?? UserDefaults(suiteName: PersonalHistorySettingsContract.keyboardSuiteName)
+            ?? .standard
+    }
+
+    private static func configuredHomeDirectory() -> URL {
+        lock.lock()
+        defer { lock.unlock() }
+        return testingHomeDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+    }
+
+    private static func append(
+        event: TextFreeOnlineEvent,
+        diary: LocalOutcomeDiaryEntry,
+        generation: Int
+    ) {
+        let home = configuredHomeDirectory()
         let support = TildeProductProfile.current.supportDirectoryName
         let eventURL = TextFreeOnlineEventFile.url(
             homeDirectory: home,
@@ -306,12 +348,9 @@ enum GhostOutcomeLedger {
             supportDirectoryName: support
         )
         guard let eventLine = try? TextFreeOnlineEvent.encodeJSONL(event) else { return }
-        let generation = UserDefaults.standard.integer(
-            forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
-        )
         io.async {
             let permitted = {
-                UserDefaults.standard.integer(
+                configuredDefaults().integer(
                     forKey: PersonalHistorySettingsContract.outcomeLedgerGenerationKey
                 ) == generation
             }
@@ -320,6 +359,39 @@ enum GhostOutcomeLedger {
                   let diaryLine = try? LocalOutcomeDiaryEntry.encodeJSONL(diary) else { return }
             appendOwnerOnly(diaryLine, to: diaryURL, permitted: permitted)
         }
+    }
+
+    static func resetForTesting(homeDirectory: URL, defaults: UserDefaults) {
+        io.sync {}
+        lock.lock()
+        opportunity = nil
+        watches = []
+        lastActivity = .distantPast
+        contextProvider = nil
+        excluded = false
+        seenGeneration = nil
+        generationByOpportunityID = [:]
+        testingHomeDirectory = homeDirectory
+        testingDefaults = defaults
+        lock.unlock()
+    }
+
+    static func finishTesting() {
+        io.sync {}
+        lock.lock()
+        opportunity = nil
+        watches = []
+        contextProvider = nil
+        excluded = false
+        seenGeneration = nil
+        generationByOpportunityID = [:]
+        testingHomeDirectory = nil
+        testingDefaults = nil
+        lock.unlock()
+    }
+
+    static func drainWritesForTesting() {
+        io.sync {}
     }
 
     @discardableResult
