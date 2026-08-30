@@ -205,6 +205,39 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** After Q11, register the scene-echo precision + grounding
   question — the mining sweep's top recommendation.
 
+## 2026-08-30 — The shared floor autopsy: withholding, not forgetting
+
+- **Try:** Cross-examine Q11's fresh Qwen per-case labels (1,800
+  silence-gate-off cases) against 71 config-matched Gemma v4 reports
+  (~78k shown cases, same certified suite) to pinpoint what the two
+  models' chronic failures share, signature by signature.
+- **Learn:** The floor is deterministic, not stochastic: per scenario the
+  outcome is uniformly all-wrong or all-useful across every seed,
+  temperature, and sampler ever tried — an argmax property, which is why
+  the entire sampler-sweep era moved nothing. Both models share three
+  signatures with matching proportions: fluent continuations carrying no
+  fact at all (off-path from word 1; the largest bucket, and the same
+  mechanism as the ordinary-silence over-triggering), correct first word
+  then a generic swerve at the entity slot (89–95% of commit.delivery
+  failures in BOTH models), and genuine stale-fact import confined almost
+  entirely to reply.correct.time. The "loses the newest fact" framing was
+  mostly wrong — the shared disease is base-model generic-continuation
+  bias: the required entity is a low-prior token and pretraining prefers
+  the safe filler even when the fact is present in the prompt (the
+  fact-anchor prompt arms left all five categories at 100% bad while only
+  moving exactMatchAt1). Scale only changes which categories the fact
+  happens to win; the objective is the disease.
+- **Fail:** requiredTermsSatisfied is necessary-not-sufficient (false on
+  most useful three-word prefixes too), so it can gate but never score.
+  The mechanism ranking is offline and interpretive; no registered
+  experiment has yet tested the implied interventions.
+- **Where:** Q11 campaign store and Runs archive (owner-only, aggregate
+  analysis); intervention candidates filed as GitHub issues; earlier
+  chronic-failure sweep entry below for the category-level view.
+- **Next:** Register the required-term-aware quiet gate ("no fact, no
+  ghost") as the display-policy question after scene-echo precision, and
+  hold entity-slot constrained decoding behind it.
+
 ## 2026-08-30 — Fair rerun: the judge bug hid Qwen's real advantage
 
 - **Try:** After discovering that a persona-brief rule ("dismissed twice =
