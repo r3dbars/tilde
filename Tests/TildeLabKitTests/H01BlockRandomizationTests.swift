@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import TildeCore
+import TildeCore
+@testable import TildeLabKit
 
 /// In-memory stand-in for the settings suite the app and input method share.
 private final class MemoryDefaults: H01ExperimentDefaults, @unchecked Sendable {
@@ -147,7 +148,7 @@ struct H01BlockRandomizationTests {
         #expect(H01Arm.b.eventVariant == "challenger")
     }
 
-    @Test("Only the two arm identifiers are accepted from the local socket")
+    @Test("Only the two arm identifiers are registered by the Lab protocol")
     func armIdentifiersAreValidated() {
         let defaults = MemoryDefaults()
         H01BlockRandomization.setEnabled(true, in: defaults)
@@ -180,26 +181,6 @@ struct H01BlockRandomizationTests {
             let text = String(decoding: encoded, as: UTF8.self)
             #expect(text.contains("\"variant\":\"\(arm.eventVariant)\""))
         }
-    }
-
-    @Test("The wire omits the arm entirely while the harness is off")
-    func wireOmitsTheArmWhenAbsent() throws {
-        let plain = GhostBrainRequest(context: "hello ", app: "com.apple.TextEdit")
-        #expect(plain.experimentArm == nil)
-        let encoded = try JSONEncoder().encode(plain)
-        #expect(String(decoding: encoded, as: UTF8.self).contains("experimentArm") == false)
-        let decoded = try JSONDecoder().decode(GhostBrainRequest.self, from: encoded)
-        #expect(decoded == plain)
-
-        let tagged = GhostBrainRequest(
-            context: "hello ",
-            app: "com.apple.TextEdit",
-            experimentArm: H01Arm.b.rawValue
-        )
-        let taggedData = try JSONEncoder().encode(tagged)
-        let taggedBack = try JSONDecoder().decode(GhostBrainRequest.self, from: taggedData)
-        #expect(taggedBack.experimentArm == "b")
-        #expect(taggedData.count <= GhostBrainRequest.maximumWireBytes)
     }
 
     private func opportunity(variant: String?) -> LiveOnlineOpportunity {

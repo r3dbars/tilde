@@ -1,12 +1,12 @@
+import TildeCore
 import Foundation
 
 /// H01 — "three visible words beat eight" — block randomization harness.
 ///
-/// PREPARATION ONLY. Stage 0 has not closed, so this harness ships **off**:
-/// `H01BlockRandomization.arm(...)` returns `nil` unless the owner-visible
-/// toggle is on *and* the build is the Model Preview profile. With `nil`
-/// nothing downstream changes: the completion stack keeps the profile's own
-/// `maximumVisibleWords` and events keep the default `champion` variant.
+/// LAB ONLY. Stage 0 has not closed, so no shipped target can enable H01 or
+/// carry an arm over the completion wire. This preserves the frozen schedule
+/// and arm semantics for review and simulation until F03 actually unlocks the
+/// experiment; production keeps each profile's fixed visible-word cap.
 ///
 /// Design:
 /// - A *block* is a fixed wall-clock window (30 minutes by default) measured
@@ -117,9 +117,8 @@ public struct H01BlockSchedule: Codable, Equatable, Sendable {
     }
 }
 
-/// The two defaults reads the harness needs. `UserDefaults` satisfies it
-/// as written, so the app and the input method can share one contract while
-/// tests use an in-memory double and TildeCore keeps no file-system work.
+/// Minimal persistence surface for exercising the frozen Lab protocol.
+/// Tests use an in-memory double; production does not use this contract.
 public protocol H01ExperimentDefaults: AnyObject {
     func object(forKey key: String) -> Any?
     func set(_ value: Any?, forKey key: String)
@@ -128,8 +127,7 @@ public protocol H01ExperimentDefaults: AnyObject {
 extension UserDefaults: H01ExperimentDefaults {}
 
 public enum H01BlockRandomization {
-    /// Owner-visible toggle, written by the app's Model Preview menu into the
-    /// keyboard settings suite both processes already share. Absent = OFF.
+    /// Registered protocol key retained for reproducible Lab simulations.
     public static let enabledKey = "H01BlockRandomizationEnabled"
     /// Persisted schedule. Written once, then only read.
     public static let scheduleKey = "H01BlockSchedule"
@@ -144,7 +142,7 @@ public enum H01BlockRandomization {
         defaults?.set(enabled, forKey: enabledKey)
     }
 
-    /// Only the Model Preview build may ever run this experiment.
+    /// The registered future host profile; this does not enable production.
     public static func isEligible(profile: TildeProductProfile) -> Bool {
         profile == .modelPreview
     }
@@ -169,9 +167,7 @@ public enum H01BlockRandomization {
         return created
     }
 
-    /// The arm for a typing session that starts at `now`, or `nil` when the
-    /// harness must not touch anything — which is every build and every
-    /// setting except an explicitly enabled Model Preview.
+    /// Simulates the arm a future eligible typing session would pin.
     public static func arm(
         profile: TildeProductProfile,
         defaults: H01ExperimentDefaults?,
@@ -181,10 +177,8 @@ public enum H01BlockRandomization {
         return schedule(in: defaults, now: now).arm(at: now)
     }
 
-    /// The visible-word cap the completion stack should apply for a request
-    /// that declared `requestedArm`, or `nil` to leave the profile's own cap
-    /// alone. The cap is looked up from the arm identity here — a peer never
-    /// sends a number, so no wire value can widen or narrow what is shown.
+    /// Resolves the registered Lab arm to its frozen cap. Shipped completion
+    /// requests have no arm field and cannot call this path.
     public static func visibleWordCap(
         requestedArm: String?,
         profile: TildeProductProfile,
@@ -195,7 +189,7 @@ public enum H01BlockRandomization {
         return arm.visibleWordCap
     }
 
-    /// Arm identifiers are the only values accepted on the local socket.
+    /// The only identifiers registered by the Lab protocol.
     public static func isValidArmIdentifier(_ value: String) -> Bool {
         H01Arm(rawValue: value) != nil
     }

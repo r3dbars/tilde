@@ -35,36 +35,18 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     private let diagnostics: DiagnosticsLog
     private let productProfile: TildeProductProfile
     private let transport: any LlamaCompletionStreamingTransport
-    /// Owner settings shared with the input method. Only the H01 harness
-    /// reads them, and only in the Model Preview profile.
-    private let experimentDefaults: (any H01ExperimentDefaults)?
 
     init(
         baseURL: URL,
         diagnostics: DiagnosticsLog = .shared,
         transport: any LlamaCompletionStreamingTransport = URLSessionLlamaCompletionTransport(),
-        productProfile: TildeProductProfile = .current,
-        experimentDefaults: (any H01ExperimentDefaults)? = UserDefaults(
-            suiteName: PersonalHistorySettingsContract.keyboardSuiteName
-        )
+        productProfile: TildeProductProfile = .current
     ) {
         self.baseURL = baseURL
         self.diagnostics = diagnostics
         self.transport = transport
         self.productProfile = productProfile
-        self.experimentDefaults = experimentDefaults
         cleaner = CompletionOutputCleaner(maxVisibleWords: productProfile.maximumVisibleWords)
-    }
-
-    /// The profile's own cleaner unless the disabled-by-default H01 harness
-    /// is on in a Model Preview build and the input method declared an arm.
-    func visibleCleaner(forExperimentArm arm: String?) -> CompletionOutputCleaner {
-        guard let cap = H01BlockRandomization.visibleWordCap(
-            requestedArm: arm,
-            profile: productProfile,
-            defaults: experimentDefaults
-        ), cap != productProfile.maximumVisibleWords else { return cleaner }
-        return CompletionOutputCleaner(maxVisibleWords: cap)
     }
 
     func suggestion(
@@ -87,7 +69,6 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             textBeforeCursor: textBeforeCursor,
             appBundleIdentifier: appBundleIdentifier,
             scene: scene,
-            experimentArm: nil,
             onPartialSuggestion: { _ in }
         )
     }
@@ -99,11 +80,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         textBeforeCursor: String,
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?,
-        experimentArm: String? = nil,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
         let startedAt = ProcessInfo.processInfo.systemUptime
-        let cleaner = visibleCleaner(forExperimentArm: experimentArm)
         if let reason = SceneSuggestionPolicy.suppressionReason(
             scene: scene,
             textBeforeCursor: textBeforeCursor

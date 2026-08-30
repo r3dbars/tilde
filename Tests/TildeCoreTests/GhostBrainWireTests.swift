@@ -32,6 +32,24 @@ struct GhostBrainWireTests {
         #expect(decoded == request)
     }
 
+    @Test("Obsolete experiment-arm input is ignored and cannot survive the wire")
+    func obsoleteExperimentArmIsInert() throws {
+        let request = GhostBrainRequest(context: "hello ", app: "com.apple.TextEdit")
+        var object = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any]
+        )
+        object["experimentArm"] = "b"
+        let decoded = try JSONDecoder().decode(
+            GhostBrainRequest.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        #expect(decoded == request)
+        let reencoded = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any]
+        )
+        #expect(reencoded["experimentArm"] == nil)
+    }
+
     @Test("Requests without the stream flag remain final-only")
     func legacyRequestIsFinalOnly() throws {
         let current = GhostBrainRequest(context: "hello ", app: "com.apple.TextEdit")

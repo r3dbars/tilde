@@ -93,11 +93,6 @@ final class GhostInputController: IMKInputController {
 
     /// IMKit creates one controller for each input session.
     private let suggestionSessionIdentifier = UUID().uuidString
-    /// H01 block-randomization arm for this typing session, resolved once so
-    /// visible length cannot change mid-sentence, and `nil` for every build
-    /// except a Model Preview whose owner turned the harness on.
-    private var h01ArmResolved = false
-    private var h01SessionArmValue: H01Arm?
     /// Personal History needs a stricter notion of continuity than IMKit's
     /// unstable client identifiers. Rotate this on known edit/session
     /// boundaries so replay does not join across deletion or navigation.
@@ -336,18 +331,6 @@ final class GhostInputController: IMKInputController {
         return true
     }
 
-    /// One read per typing session. While the harness is off this stays
-    /// `nil`, no schedule is created, and nothing downstream changes.
-    private func h01SessionArm() -> H01Arm? {
-        if h01ArmResolved { return h01SessionArmValue }
-        h01ArmResolved = true
-        h01SessionArmValue = H01BlockRandomization.arm(
-            profile: .current,
-            defaults: UserDefaults.standard
-        )
-        return h01SessionArmValue
-    }
-
     private func recordOutcomeShown(_ client: IMKTextInput) {
         let field = fieldSnapshot(client)
         guard !Self.isOutcomeExcluded(bundleIdentifier: field.bundleIdentifier) else { return }
@@ -359,8 +342,7 @@ final class GhostInputController: IMKInputController {
             candidateWordCount: state.visibleText.split(whereSeparator: \Character.isWhitespace).count,
             opportunityCharacters: max(1, context.count),
             precedingCharacter: context.last,
-            excluded: false,
-            variant: h01SessionArm()?.eventVariant ?? "champion"
+            excluded: false
         )
     }
 
@@ -867,15 +849,12 @@ final class GhostInputController: IMKInputController {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
         let fieldSessionIdentifier = requestTicket.clientIdentifier
-        // Session-pinned, and nil unless the H01 harness is explicitly on.
-        let experimentArm = h01SessionArm()?.rawValue
         modelTask = Task { [weak self] in
             let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(
                 context: tail,
                 app: bundle,
                 fieldSessionIdentifier: fieldSessionIdentifier,
-                experimentArm: experimentArm,
                 onPartial: { [weak self] text in
                     // Called on the socket worker; the ticket check in
                     // `present` is what discards a partial that arrives late.
