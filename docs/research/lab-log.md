@@ -205,6 +205,26 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** After Q11, register the scene-echo precision + grounding
   question — the mining sweep's top recommendation.
 
+## 2026-08-30 — Three-way model portrait: size loses again
+
+- **Try:** Complete the fair same-judge persona comparison with Gemma 4
+  26B A4B Q4_K_M alongside production Gemma E2B and Qwen 9B.
+- **Learn:** The 26B came last: ~67% wrong-when-shown (vs ~61/60),
+  accepts and retained value at or below the tiny production model.
+  Third independent confirmation that parameter count does not predict
+  quality in this stack (ledger `model-size-and-quantization` called it
+  months ago). Qwen 9B remains the only generator materially above
+  production, and active-parameter count (~4B in the MoE) tracks the
+  outcome better than total size.
+- **Fail:** Registered prediction missed again (called it between E2B and
+  9B; it landed below E2B) — 1-for-6 on model predictions across the
+  night. Discovery-grade, uncalibrated personas, fenced.
+- **Where:** owner-local simulated reports; fair-rerun entry above for
+  method; prompt/filter deep-dive running as the follow-up.
+- **Next:** The generator-side fix hunt moves to the prompt scaffold and
+  filter pipeline, which would lift every model including the shippable
+  small one.
+
 ## 2026-08-30 — The shared floor autopsy: withholding, not forgetting
 
 - **Try:** Cross-examine Q11's fresh Qwen per-case labels (1,800
