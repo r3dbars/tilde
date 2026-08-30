@@ -8,8 +8,7 @@ public enum PersonalHistorySettingsContract {
     public static let excludedAppsKey = "PersonalHistoryExcludedApps"
     public static let historyIdentifierKey = "PersonalHistoryIdentifier"
     public static let consentIdentifierKey = "PersonalHistoryConsentIdentifier"
-    /// Bumped by Delete Personalization Data so the IME drops in-flight watches
-    /// and will not recreate the count file or diary after a wipe.
+    /// Bumped by deletion so the IME drops in-flight watches and cannot recreate wiped files.
     public static let outcomeLedgerGenerationKey = "OutcomeLedgerGeneration"
     public static func outcomeLedgerWriteCountsKey(_ generation: Int) -> String {
         "OutcomeLedgerWriteCounts.\(generation)"

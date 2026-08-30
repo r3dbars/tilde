@@ -39,13 +39,8 @@ enum TildeLocalOutcomeStores {
         suiteName: String = PersonalHistorySettingsContract.keyboardSuiteName
     ) -> Bool {
         bumpGeneration(suiteName: suiteName)
-        let removedEvents = removeIfPresent(
-            eventURL(homeDirectory: homeDirectory, profile: profile)
-        )
-        let removedDiary = removeIfPresent(
-            diaryURL(homeDirectory: homeDirectory, profile: profile)
-        )
-        return removedEvents && removedDiary
+        let urls = [eventURL(homeDirectory: homeDirectory, profile: profile), diaryURL(homeDirectory: homeDirectory, profile: profile)]
+        return urls.map(removeIfPresent).allSatisfy { $0 }
     }
 
     static func bumpGeneration(

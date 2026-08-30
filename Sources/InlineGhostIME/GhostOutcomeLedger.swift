@@ -249,12 +249,11 @@ enum GhostOutcomeLedger {
 
     private static func emit(watch: inout PendingRetainedWatch) {
         guard let generation = takeGeneration(for: watch.opportunity.id) else { return }
-        let acceptedText = watch.accepted
         io.sync { recordWrite(generation: generation) }
         guard let event = try? watch.finishedEvent() else {
             return io.sync { recordWrite(generation: generation, written: false) }
         }
-        emit(event, text: acceptedText, generation: generation)
+        emit(event, text: watch.accepted, generation: generation)
     }
 
     private static func emit(_ event: TextFreeOnlineEvent, text: String, generation: Int) {
@@ -351,9 +350,9 @@ enum GhostOutcomeLedger {
     }
 
     private static func configuredDefaults() -> UserDefaults {
-        lock.withLock { testingDefaults }
-            ?? UserDefaults(suiteName: PersonalHistorySettingsContract.keyboardSuiteName)
-            ?? .standard
+        lock.withLock { testingDefaults } ?? UserDefaults(
+            suiteName: PersonalHistorySettingsContract.keyboardSuiteName
+        ) ?? .standard
     }
 
     private static func configuredHomeDirectory() -> URL {
@@ -402,33 +401,37 @@ enum GhostOutcomeLedger {
     }
 
     static func resetForTesting(homeDirectory: URL, defaults: UserDefaults) {
+        drainAndReset(homeDirectory: homeDirectory, defaults: defaults)
+    }
+
+    static func finishTesting() {
+        drainAndReset(homeDirectory: nil, defaults: nil)
+    }
+
+    private static func drainAndReset(homeDirectory: URL?, defaults: UserDefaults?) {
         io.sync {}
         resetState(homeDirectory: homeDirectory, defaults: defaults)
     }
 
-    static func finishTesting() {
-        io.sync {}
-        resetState(homeDirectory: nil, defaults: nil)
-    }
-
-    static func flush() {
-        io.sync {}
+    static func flush(acknowledge: Bool = false, at time: Date = Date()) {
+        io.sync {
+            guard acknowledge else { return }
+            let defaults = configuredDefaults(), generation = currentGeneration()
+            let key = PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(generation)
+            var counts = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
+            for name in ["Attempted", "Written", "Dropped"] { counts["flushed\(name)"] = counts[name.lowercased(), default: 0] }
+            counts["flushedAtMilliseconds"] = Int(time.timeIntervalSince1970 * 1_000)
+            defaults.set(counts, forKey: key)
+        }
     }
 
     private static func resetState(homeDirectory: URL?, defaults: UserDefaults?) {
         lock.withLock {
-            opportunity = nil
-            watches = []
-            lastActivity = .distantPast
-            contextProvider = nil
-            excluded = false
-            seenGeneration = nil
-            generationByOpportunityID = [:]
+            (opportunity, watches, lastActivity) = (nil, [], .distantPast)
+            (contextProvider, excluded, seenGeneration) = (nil, false, nil)
             idleCloseWorkItem?.cancel()
-            idleCloseWorkItem = nil
-            idleScheduleGeneration = 0
-            testingHomeDirectory = homeDirectory
-            testingDefaults = defaults
+            (generationByOpportunityID, idleCloseWorkItem, idleScheduleGeneration) = ([:], nil, 0)
+            (testingHomeDirectory, testingDefaults) = (homeDirectory, defaults)
         }
     }
 
