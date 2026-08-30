@@ -205,6 +205,33 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** After Q11, register the scene-echo precision + grounding
   question — the mining sweep's top recommendation.
 
+## 2026-08-30 — Fair rerun: the judge bug hid Qwen's real advantage
+
+- **Try:** After discovering that a persona-brief rule ("dismissed twice =
+  stopped reading") cascaded against Qwen's longer suggestion style, remove
+  the rule and rerun both generators with byte-identical judges over the
+  same 240 scenarios and five personas.
+- **Learn:** Three results. (1) The ~60% wrong-when-shown floor is
+  model-independent for the third time — it survived the judge fix too.
+  (2) The rigged run's verdict inverted: judged fairly, Qwen delivers
+  roughly 2–3x the retained-character value (persona range 6.1–10.2% vs
+  Gemma's 2.5–4.4%), with 2.5x longer accepted spans — but pays a ~25%
+  correction tax on accepted characters, draws ~5x the active dismissals,
+  and surfaces half the moments. Quieter, richer, more annoying when
+  wrong, and still slower to generate. (3) Absolute simulated rates moved
+  substantially when one judge sentence changed, so only same-judge paired
+  comparisons mean anything; cross-run absolute numbers are not comparable.
+- **Fail:** The first Qwen comparison shipped to chat with an instrument
+  artifact that suppressed the very effect it was measuring; caught by an
+  owner "are you sure?" and a totals audit, not by the harness. Session
+  abandonment mechanics (dismissal cooldowns eating half of Qwen's
+  moments) remain a confound the skip-mode-era engine should surface
+  explicitly. All numbers stay discovery-grade and fenced.
+- **Where:** issue #437; owner-local reports; skip-mode + model provenance
+  in PR #446 were built the same night from these failures.
+- **Next:** Once calibrated personas exist, rerun this pair as the
+  simulator's first ranking-agreement exercise against live evidence.
+
 ## 2026-08-30 — Batch the simulated typist's decisions across sessions
 
 - **Try:** Add a text-free batch contract
