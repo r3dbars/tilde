@@ -24,6 +24,25 @@ struct TildeLabRunner {
                 }
                 return
             }
+            if let input = options.earlyStartReviewPath,
+               let status = options.earlyStartReviewStatus,
+               let conclusion = options.earlyStartReviewConclusion,
+               let output = options.earlyStartOutputPath {
+                let report = try LabEarlyStartReport.decodeAndValidate(
+                    Data(contentsOf: URL(fileURLWithPath: input))
+                )
+                let reviewed = try report.reviewed(
+                    conclusion: conclusion,
+                    status: status
+                )
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let data = try encoder.encode(reviewed) + Data("\n".utf8)
+                try writePrivate(data, to: URL(fileURLWithPath: output))
+                FileHandle.standardOutput.write(data)
+                return
+            }
             if options.printsModelBenchmarkLeaderboard {
                 let snapshot = try LabModelBenchmarkCatalog.loadBundled()
                 print("Tilde Lab model benchmark history")
@@ -208,27 +227,44 @@ struct TildeLabRunner {
                     modelFile: URL(fileURLWithPath: options.modelPath),
                     modelProfile: modelProfile
                 )
+                let earlyConfiguration = LabEarlyStartConfiguration(
+                    maximumSituations: situationCount
+                )
+                let protocolDefinition = LabEarlyStartProtocol(
+                    arm: commandLineArm,
+                    execution: execution,
+                    configuration: earlyConfiguration
+                )
+                let provenance: LabReportProvenance
+                if situationCount == LabEarlyStartProtocol.expectedSituationCount {
+                    provenance = try LabReportProvenanceCapture.captureDecisionGrade(
+                        experiment: protocolDefinition.experimentRegistration
+                    )
+                } else {
+                    provenance = try LabReportProvenanceCapture.capture(experiment: nil)
+                }
                 let earlyStart = LabEarlyStartRunner()
                 let report = try await earlyStart.run(
                     suite: suite,
                     arm: commandLineArm,
                     execution: execution,
-                    configuration: LabEarlyStartConfiguration(
-                        maximumSituations: situationCount
-                    ),
+                    configuration: earlyConfiguration,
+                    provenance: provenance,
+                    requiresRegisteredProtocol:
+                        situationCount == LabEarlyStartProtocol.expectedSituationCount,
                     requiresACPower: !options.earlyStartAllowsBattery,
                     progress: { completed, total, opportunities in
                         FileHandle.standardError.write(
                             Data("early-start progress \(completed)/\(total) situations, \(opportunities) opportunities\n".utf8)
                         )
                     }
-                )
+                ).validatedForPersistence()
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 let data = try encoder.encode(report) + Data("\n".utf8)
                 if let output = options.earlyStartOutputPath {
-                    try data.write(to: URL(fileURLWithPath: output), options: .atomic)
+                    try writePrivate(data, to: URL(fileURLWithPath: output))
                 }
                 FileHandle.standardOutput.write(data)
                 return
@@ -865,6 +901,14 @@ struct TildeLabRunner {
     private static func writeError(_ message: String) {
         FileHandle.standardError.write(Data(message.utf8))
     }
+
+    private static func writePrivate(_ data: Data, to url: URL) throws {
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
+    }
 }
 
 private enum LabAutoresearchFocus: String {
@@ -963,6 +1007,9 @@ private struct Options {
     var earlyStartSituationCount: Int?
     var earlyStartOutputPath: String?
     var earlyStartAllowsBattery = false
+    var earlyStartReviewPath: String?
+    var earlyStartReviewStatus: LabReportReviewStatus?
+    var earlyStartReviewConclusion: String?
     var savesReport = true
     var json = false
     var showsHelp = false
@@ -1125,6 +1172,15 @@ private struct Options {
             case "--early-start-output":
                 earlyStartOutputPath = try nextValue().expandingTilde
             case "--early-start-allow-battery": earlyStartAllowsBattery = true
+            case "--early-start-review":
+                earlyStartReviewPath = try nextValue().expandingTilde
+            case "--review-status":
+                guard let value = LabReportReviewStatus(rawValue: try nextValue()),
+                      value != .unreviewed else {
+                    throw OptionsError.invalidValue(argument)
+                }
+                earlyStartReviewStatus = value
+            case "--review-conclusion": earlyStartReviewConclusion = try nextValue()
             case "--no-save": savesReport = false
             case "--json": json = true
             case "--autoresearch-six-hours": autoresearchHours = 6
@@ -1162,8 +1218,19 @@ private struct Options {
             || modelVerificationMode != .productionPinned {
             throw OptionsError.conflictingInputs
         }
-        if earlyStartSituationCount == nil,
+        if earlyStartSituationCount == nil, earlyStartReviewPath == nil,
            earlyStartOutputPath != nil || earlyStartAllowsBattery {
+            throw OptionsError.conflictingInputs
+        }
+        if earlyStartReviewPath != nil {
+            guard earlyStartSituationCount == nil,
+                  earlyStartOutputPath != nil,
+                  earlyStartReviewStatus != nil,
+                  earlyStartReviewConclusion != nil,
+                  !earlyStartAllowsBattery else {
+                throw OptionsError.conflictingInputs
+            }
+        } else if earlyStartReviewStatus != nil || earlyStartReviewConclusion != nil {
             throw OptionsError.conflictingInputs
         }
         if corpusPilot, suitePath != nil { throw OptionsError.conflictingInputs }
@@ -1249,6 +1316,9 @@ private struct Options {
                                   atomically save the aggregate-only JSON report
       --early-start-allow-battery
                                   smoke-only escape hatch; never decision-grade
+      --early-start-review PATH   review a complete v2 aggregate report
+      --review-status STATUS      supported, rejected, or inconclusive
+      --review-conclusion TEXT    privacy-safe explicit research conclusion
       --codex PATH                Codex CLI path for the frontier ceiling
       --frontier-model MODEL      Codex subscription model (default: gpt-5.6-sol)
       --arm ID                     stable experiment arm ID

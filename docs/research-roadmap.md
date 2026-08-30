@@ -20,11 +20,15 @@ The goal is not the highest next-token accuracy. It is:
 The strongest conclusion across predictive keyboards, Smart Compose, code
 completion, accessibility input, cache language models, and Tilde's own Lab
 results is that candidate generation is only one part of autocomplete. The
-same sweep showed a second fact: the last shipped *personal* keyboard papers
-are from 2018–2020. Recent work is HCI on generic suggestions or Copilot on
-code. Tilde's unique shot is the combination those papers never published —
-on-device personal memory, screen context, and retained characters without
-stored writing, for a fast desktop typist. See
+same sweep showed a second fact: published personal keyboard and prose-writing
+methods cluster in 2018–2020. That is not the end of all personal autocomplete:
+Apple published on-device personalized email-search query completion in 2024
+and production search query completion with retrieval and verification in
+2026. Those are useful retrieval, ranking, and verifier priors, not evidence
+that the methods transfer to system-wide prose or an IME. Tilde's unique shot
+is the combination those papers never published — on-device personal memory,
+screen context, and retained characters without stored writing, for a fast
+desktop typist. See
 [`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md)
 and the scientific stance in
 [`docs/research/scientific-program.md`](research/scientific-program.md).
@@ -45,12 +49,14 @@ chronological personalization, text-free online events, confidence
 calibration, interaction evidence, and soak gates. Rebuilding those systems
 would be wasted motion.
 
-The main remaining evidence gap is the live outcome loop. The current online
-event can subtract text replaced within five seconds, but it cannot yet measure
-30-second or segment-close retention. It also does not yet create a complete
-privacy-safe record of every eligible, generated, shown, hidden, accepted,
-typed-through, dismissed, corrected, and retained outcome. Until that loop is
-trustworthy, a learned Control Brain would optimize an incomplete target.
+The main remaining evidence gap is a clean live outcome run. The v3 event and
+three retention horizons exist, but the current 1,364-event count file contains
+two pre-fix monotonic-retention violations. An inferred post-install slice has
+575 events, including 39 accepts and 225 typed-through outcomes, with zero
+structural or monotonic violations. That slice is useful diagnostic evidence,
+not a decision-grade result: its cutoff is inferred and it is not a clean,
+provenance-bearing full file. Until a fresh run makes the loop trustworthy, a
+learned Control Brain would still optimize an incompletely proven target.
 
 ## Corrections and boundaries from the repository audit
 
@@ -64,6 +70,48 @@ trustworthy, a learned Control Brain would optimize an incomplete target.
 | Train continually on private writing | Personal writing is explicit, local, encrypted, and user-controlled | Prefer counts, caches, retrieval, and calibration; no private text leaves the device for training or evaluation |
 | Treat acceptance as ground truth | Tilde records acceptance but not durable retention horizons | Add retained outcomes before fitting a decision policy |
 | Try every promising mechanism | The Tilde Lab CLI enforces one experiment class per campaign | Run one causal question at a time and unlock later stages only after exit gates pass |
+
+## Canonical 20-question portfolio
+
+The bounded portfolio is exactly **F03, F04, and H01–H18**. It is a map of the
+twenty questions worth resolving, not permission to run them in parallel or a
+replacement for the Learning Ledger's executable queue.
+
+| Portfolio block | IDs | Current boundary |
+| --- | --- | --- |
+| Trust the ruler | F03–F04 | F04 is a completed foundation; F03 still needs a clean live proof |
+| Cheap product bets | H01–H04 | Locked until Stage 0 exits; run in order |
+| Control Brain | H05–H08 | Locked until retained outcomes and the Stage 1 baseline exist |
+| Personal experts | H09–H12 | Locked behind the global controller and Personal History covenant |
+| Agreement and futures | H13–H15 | Locked behind the earlier gates and compute accounting |
+| Isolated moonshots | H16–H18 | Parked until the mature production stack provides a fair baseline |
+
+F01 and F02 are completed prerequisites. Q-series attempts are evidence about
+these questions or their boundaries; they do not expand the portfolio. The
+sections below define the frozen order, proof, and kill conditions.
+
+| ID | Theory to falsify | Earliest decisive test |
+| --- | --- | --- |
+| F03 | Text-free retention can measure durable value | One fresh attributable full file passes every horizon, missingness, privacy, and integrity gate |
+| F04 | Permanent sanitized regressions stop known failures returning | Every safe arm passes and every named unsafe arm fails; the ten-case foundation already does |
+| H01 | Three visible words beat eight | Block-randomized live RNKS with generator, prompt, timing, and cleaner fixed |
+| H02 | Generation can stop at the display-safe span | At least 99.5% visible-output equivalence with lower p99 and no RNKS or safety loss |
+| H03 | Source-quality routing beats equal context trust | Fresh attributed context wins while stale/wrong-scene arms cannot win and redaction fails closed |
+| H04 | Flow-aware cooldowns reduce interruption | Wrong displays and attention tax fall without material retained-value or recall loss |
+| H05 | Retention labels train a better controller than Tab labels | Chronological validation beats acceptance-trained and fixed-policy controls on RNKS and risk |
+| H06 | A learned quiet gate beats fixed thresholds | Better held-out risk/coverage than registered mean-probability and top-one/top-two baselines |
+| H07 | A pre-inference gate skips safely | Fewer neural calls, less energy/heat, and preserved registered retained opportunities in shadow |
+| H08 | Dynamic visible length beats every fixed cap | A held-out length policy dominates the best fixed cap on RNKS under the same risk budget |
+| H09 | Hierarchical Personal History beats one global or per-app model | Chronological local replay adds retained value without sparse-app collapse or cross-register leakage |
+| H10 | A decayed recent cache adds distinct value | Recency improves retained utility beyond H09 while stale facts fail their protected slice |
+| H11 | An exact phrase expert beats next-word-only memory | Supported phrases add complete-phrase retention; stale/secrets/cross-register cases remain silent |
+| H12 | Strong personal memory may speak when Gemma is silent | Newly shown personal candidates add retained value without crossing the registered bad-display limit |
+| H13 | Independent-source agreement predicts retention | Agreement bins calibrate monotonically on held-out retained outcomes beyond source confidence alone |
+| H14 | Consensus Prefix beats truncated top-one output | Consensus improves retained characters or risk at equal latency without unstable rewrites/fragments |
+| H15 | A Future Lattice can hide latency and fit intent | Hidden futures arrive in time, lock safely, improve retained value, and stay inside compute/thermal gates |
+| H16 | A Tilde-native objective beats a generic base model | Isolated preview wins protected quality, latency, interaction, and live retained-value gates |
+| H17 | A selection-only Edit Brain saves revision time | Chosen local rewrites reduce task time/errors without autonomous insertion or source-text retention |
+| H18 | Personal shorthand can become learned compression | Local, user-controlled expansions save retained keystrokes without ambiguity, leakage, or register harm |
 
 ## Public proof contract
 
@@ -152,12 +200,24 @@ The event must remain local, deletable, aggregate-reportable, and incapable of
 containing prompt, candidate, screen, field, recipient, document, or personal
 text.
 
+Current audit: the complete 1,364-event file contains two pre-fix monotonic
+violations. The inferred post-install slice contains 575 events, 39 accepts,
+and 225 typed-through outcomes with zero violations, but it cannot support F03
+because neither the cutoff nor the build is sealed in a clean full-file run.
+Rebuild with provenance, archive and rotate the text-free count file, type
+normally, then ingest the entire fresh file.
+
 ### F04 — Freeze permanent regressions
 
 Turn every known scoring loophole and interaction failure into a sanitized,
 stable case: short-cap echo bypass, repeat-penalty aggression, wrong-scene
 facts, stale-target delivery, prompt-example removal, factual-filter weakening,
 duplicate insertion, focus changes, runtime restart, and marked-text damage.
+The completed ten-case suite remains the frozen foundation. A later extension
+may add synthetic canary leakage probes following the
+[Secret Sharer](https://research.google/pubs/the-secret-sharer-evaluating-and-testing-unintended-memorization-in-neural-networks/)
+method, but those probes are a proposed privacy regression, not part of the
+completed proof.
 
 ### Stage 0 exit gate
 
@@ -223,6 +283,15 @@ not increase, and tail latency improves enough to matter.
 **Kill if:** hidden tail tokens are required to detect repetition, invalid
 grammar, or unsafe facts.
 
+**Prior-art follow-up:** current llama.cpp exposes prompt-derived
+`ngram-simple`, map, modified, and cache speculation modes plus accepted-versus-
+drafted counters. After H01 fixes the visible span, pre-register one runtime A/B
+against direct generation using the signed helper; a supported flag is not an
+efficacy result. See the
+[server](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
+and [speculative-decoding](https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md)
+documentation.
+
 ### H03 — Context-quality routing beats treating every scene alike
 
 **Control:** current context selection.
@@ -239,6 +308,12 @@ cannot win; redaction and exclusion always fail closed.
 
 **Kill if:** a more complex quality router adds no value over the current
 deterministic source priority.
+
+**Prior-art refinement:** Apple's 2024
+[on-device personalized email-search completion](https://machinelearning.apple.com/research/query-auto-completion-email)
+separates retrieval, personalized features, and ranking under a tight device
+budget. Borrow those ablations for source-quality routing; do not treat a search
+query result as proof for prose continuation.
 
 ### H04 — Flow-aware refractory periods reduce interruption
 
@@ -285,6 +360,10 @@ personal-support, recent-outcome, app-category, and confidence features.
 The first win target is fewer wrong displays at essentially preserved retained
 characters, or greater retained utility at the same wrong-display rate. A model
 that merely reproduces the hard gates is rejected as unnecessary complexity.
+The open-source [Inkling](https://github.com/dafuct/Inkling-macOS) gate supplies
+two cheap baselines — a stricter first-token test and top-one/top-two dominance
+— to include before fitting a learned policy. Its implementation is prior art,
+not evidence that either rule improves Tilde.
 
 ### H07 — A pre-inference gate skips work safely
 
@@ -292,6 +371,11 @@ Run the generator in shadow behind proposed skips so missed useful candidates
 remain measurable. Compare always-invoke, deterministic pre-gate, and the
 frozen learned pre-gate. Promote only if neural calls, energy, and thermal load
 fall while at least the registered share of retained opportunities survives.
+Apple's
+[language identification from very short strings](https://machinelearning.apple.com/research/language-identification-from-very-short-strings)
+is a prior for a shadow-only language/uncertainty feature at this stage. It may
+help skip clearly mismatched work, but it must not become an unmeasured silence
+gate.
 
 ### H08 — Dynamic visible length beats every fixed cap
 
@@ -329,6 +413,12 @@ Add a deterministic repeated-phrase candidate with support, winner margin,
 scope, freshness, and historical-retention evidence. First run it in shadow.
 Promote only if it improves complete-phrase retained value without surfacing
 secrets, stale facts, or cross-register language.
+Weighting exact retrieval by estimated evidence quality is a bounded follow-up,
+motivated by
+[retrieval-quality-aware generation](https://aclanthology.org/2022.findings-emnlp.218/)
+and [adaptive retrieval](https://aclanthology.org/2021.emnlp-main.461/).
+It remains behind the exact-phrase baseline; semantic retrieval does not enter
+early because a paper exists.
 
 ### H12 — Strong personal memory may speak when Gemma is silent
 
@@ -346,6 +436,12 @@ state, calibration, and experiment evidence required by the privacy contract.
 ## Stage 4 — Test agreement, Consensus Prefix, and Future Lattice
 
 These are promising architectural ideas, but they are not first experiments.
+Apple's 2026 production
+[query-autocomplete system](https://machinelearning.apple.com/research/query-auto-completion)
+is a useful verifier/reranker and retrieval-augmented-generation protocol prior
+for this stage. Its controlled search experiment reported 5.44% fewer
+characters typed and 3.46% more suggestions taken. That result is not prose,
+IME, or Tilde evidence, and it does not unlock H13 early.
 
 ### H13 — Independent candidate agreement predicts retained value
 

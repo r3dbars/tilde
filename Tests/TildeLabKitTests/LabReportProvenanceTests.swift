@@ -158,6 +158,55 @@ struct LabReportProvenanceTests {
         #expect(first == repeated)
         #expect(first != changed)
         #expect(!first.contains("campaign"))
+
+        let q10r = LabReportInvocationProvenance.canonicalDigest(arguments: [
+            "./.build/release/tilde-lab-runner",
+            "--early-start-full",
+            "--helper",
+            "/Applications/Tilde Model Preview.app/Contents/Helpers/llama-server",
+            "--early-start-output",
+            "/tmp/tilde-q10r-report.json",
+        ])
+        #expect(q10r == "4a3f2ec8cbd98fb4aad338f28c92841aa6de443ab67dd261c4eb41f6e40a0cf5")
+    }
+
+    @Test("Run-start capture hashes the runner and distinguishes clean and dirty trees")
+    func runStartCapture() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try runGit(["init", "-q"], at: root)
+        try runGit(["config", "user.name", "Tilde Lab Test"], at: root)
+        try runGit(["config", "user.email", "lab-test@invalid.example"], at: root)
+        let tracked = root.appendingPathComponent("tracked.txt")
+        try Data("aggregate-only\n".utf8).write(to: tracked)
+        try runGit(["add", "tracked.txt"], at: root)
+        try runGit(["commit", "-qm", "fixture"], at: root)
+
+        let executable = try #require(Bundle.main.executableURL)
+        let arguments = ["tilde-lab-test", "--aggregate-only"]
+        let clean = try LabReportProvenanceCapture.capture(
+            experiment: nil,
+            arguments: arguments,
+            executableURL: executable,
+            currentDirectoryURL: root,
+            capturedAt: Date(timeIntervalSince1970: 4)
+        )
+        #expect(clean.source.treeState == .clean)
+        #expect(clean.source.gitCommitSHA?.count == 40)
+        #expect(clean.source.runnerSHA256?.count == 64)
+        #expect(clean.invocation.digestSHA256
+            == LabReportInvocationProvenance.canonicalDigest(arguments: arguments))
+
+        try Data("dirty\n".utf8).write(to: tracked)
+        let dirty = try LabReportProvenanceCapture.capture(
+            experiment: nil,
+            arguments: arguments,
+            executableURL: executable,
+            currentDirectoryURL: root
+        )
+        #expect(dirty.source.treeState == .dirty)
     }
 
     @Test("Campaign hypothesis registration is optional only for legacy files")
@@ -276,5 +325,17 @@ struct LabReportProvenanceTests {
             metrics: LabScorer.aggregate([result], elapsedSeconds: 1),
             cases: [result]
         )
+    }
+
+    private func runGit(_ arguments: [String], at directory: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = directory
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0)
     }
 }

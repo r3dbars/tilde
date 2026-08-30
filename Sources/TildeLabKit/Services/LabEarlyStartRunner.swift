@@ -62,6 +62,7 @@ public enum LabEarlyStartError: Error, LocalizedError, Sendable {
     case notOnACPower
     case noOpportunities
     case incompleteMeasurement(expected: Int, actual: Int)
+    case protocolMismatch(String)
 
     public var errorDescription: String? {
         switch self {
@@ -77,6 +78,8 @@ public enum LabEarlyStartError: Error, LocalizedError, Sendable {
             "No golden continuation produced a qualifying mid-word opportunity."
         case let .incompleteMeasurement(expected, actual):
             "Early start expected \(expected) terminal generations but received \(actual)."
+        case let .protocolMismatch(component):
+            "Q10R stopped before inference because \(component) did not match the frozen protocol."
         }
     }
 }
@@ -291,8 +294,151 @@ public struct LabEarlyStartGateOutcome: Codable, Equatable, Sendable {
     }
 }
 
+/// Frozen Q10R protocol. Its canonical digest binds the entire arm and runtime,
+/// not only the handful of fields surfaced by the original v1 aggregate.
+public struct LabEarlyStartProtocol: Codable, Equatable, Sendable {
+    public static let currentSchema = "tilde-lab.early-start-protocol.v1"
+    public static let registrationID = "Q10R"
+    public static let campaignID = UUID(
+        uuidString: "2d06791d-1fd3-4d84-bfc2-0fb4b8eb1491"
+    )!
+    public static let hypothesis = "Starting one K=1 generation after the third character of a qualifying word will make at least 50% of opportunities ready at the following boundary with at least 200 ms median lead, at least 15% lockable, false locks below 2%, and decoded-token compute at or below 1.5x control."
+    public static let expectedInvocationDigestSHA256 = "4a3f2ec8cbd98fb4aad338f28c92841aa6de443ab67dd261c4eb41f6e40a0cf5"
+    public static let expectedSuiteDigestSHA256 = "5bbc362c93e4cf1e3383b81dfe56a48a2f7c5160cc492ad4e1a00b99ddd5b46c"
+    public static let expectedSituationCount = 360
+    public static let expectedOpportunityCount = 637
+    public static let expectedGenerationCount = 1_911
+    public static let expectedHelperSHA256 = "d55a40de87ff739fe0b6ab4bc7b9ee15c0d3121a47f693dc5ef0ed626d37f343"
+    public static let registeredManifestDigestSHA256 = "f01473c5de946e35b29581e6dd8c9f573f4d30ba0e6a2d774a0b5b9b0122f284"
+
+    public let schema: String
+    public let registeredHypothesis: String
+    public let arm: LabArmConfiguration
+    public let execution: LabExecutionSnapshot
+    public let maximumSituations: Int
+    public let maximumOpportunitiesPerSituation: Int
+    public let earlyCharacterOffset: Int
+    public let minimumWordCharacters: Int
+    public let minimumUsefulCharacters: Int
+    public let predictionTokens: Int
+    public let keystrokeIntervalMilliseconds: Int
+    public let sensitivityIntervalsMilliseconds: [Int]
+    public let coldTemperature: Double
+    public let coldSeed: Int
+    public let hotTemperature: Double
+    public let hotSeed: Int
+    public let expectedSuiteDigestSHA256: String
+    public let expectedSituationCount: Int
+    public let expectedOpportunityCount: Int
+    public let expectedGenerationCount: Int
+    public let expectedInferenceBackend: LabAssetSnapshot.InferenceBackend
+    public let expectedModelVerificationMode: LabModelVerificationMode
+    public let expectedModelIdentifier: String
+    public let expectedModelRevision: String
+    public let expectedModelBytes: Int64
+    public let expectedModelSHA256: String
+    public let expectedHelperSHA256: String
+    public let expectedInvocationDigestSHA256: String
+    public let minimumReadyByBoundaryRate: Double
+    public let minimumLeadMedianMilliseconds: Int
+    public let minimumLockableRate: Double
+    public let maximumSimulatedFalseLockRate: Double
+    public let maximumComputeMultiple: Double
+    public let minimumPairCoverageGainPercentagePoints: Double
+    public let maximumPairComputeMultiple: Double
+    public let maximumHotDuplicateRate: Double
+    public let minimumHotCleanerSurvivalRate: Double
+
+    public init(
+        arm: LabArmConfiguration,
+        execution: LabExecutionConfiguration,
+        configuration: LabEarlyStartConfiguration = .init()
+    ) {
+        schema = Self.currentSchema
+        registeredHypothesis = Self.hypothesis
+        self.arm = arm
+        self.execution = LabExecutionSnapshot(execution)
+        maximumSituations = configuration.maximumSituations
+        maximumOpportunitiesPerSituation = configuration.maximumOpportunitiesPerSituation
+        earlyCharacterOffset = LabEarlyStartConfiguration.earlyCharacterOffset
+        minimumWordCharacters = LabEarlyStartConfiguration.minimumWordCharacters
+        minimumUsefulCharacters = configuration.minimumUsefulCharacters
+        predictionTokens = configuration.predictionTokens
+        keystrokeIntervalMilliseconds = LabEarlyStartConfiguration.keystrokeIntervalMilliseconds
+        sensitivityIntervalsMilliseconds = LabEarlyStartConfiguration.sensitivityIntervalsMilliseconds
+        coldTemperature = LabEarlyStartConfiguration.coldTemperature
+        coldSeed = LabEarlyStartConfiguration.coldSeed
+        hotTemperature = LabEarlyStartConfiguration.hotTemperature
+        hotSeed = LabEarlyStartConfiguration.hotSeed
+        expectedSuiteDigestSHA256 = Self.expectedSuiteDigestSHA256
+        expectedSituationCount = Self.expectedSituationCount
+        expectedOpportunityCount = Self.expectedOpportunityCount
+        expectedGenerationCount = Self.expectedGenerationCount
+        expectedInferenceBackend = .localLlama
+        expectedModelVerificationMode = .productionPinned
+        expectedModelIdentifier = ProductionModelAsset.identifier
+        expectedModelRevision = ProductionModelAsset.revision
+        expectedModelBytes = ProductionModelAsset.expectedBytes
+        expectedModelSHA256 = ProductionModelAsset.sha256
+        expectedHelperSHA256 = Self.expectedHelperSHA256
+        expectedInvocationDigestSHA256 = Self.expectedInvocationDigestSHA256
+        minimumReadyByBoundaryRate = LabEarlyStartGateOutcome.minimumReadyByBoundaryRate
+        minimumLeadMedianMilliseconds = LabEarlyStartGateOutcome.minimumLeadMedianMilliseconds
+        minimumLockableRate = LabEarlyStartGateOutcome.minimumLockableRate
+        maximumSimulatedFalseLockRate = LabEarlyStartGateOutcome.maximumSimulatedFalseLockRate
+        maximumComputeMultiple = LabEarlyStartGateOutcome.maximumComputeMultiple
+        minimumPairCoverageGainPercentagePoints = LabEarlyStartGateOutcome.minimumPairCoverageGainPercentagePoints
+        maximumPairComputeMultiple = LabEarlyStartGateOutcome.maximumPairComputeMultiple
+        maximumHotDuplicateRate = LabEarlyStartGateOutcome.maximumHotDuplicateRate
+        minimumHotCleanerSurvivalRate = LabEarlyStartGateOutcome.minimumHotCleanerSurvivalRate
+    }
+
+    public func canonicalDigestSHA256() throws -> String {
+        try LabCanonicalDigest.sha256(self)
+    }
+
+    public var experimentRegistration: LabExperimentRegistration {
+        LabExperimentRegistration(
+            id: Self.registrationID,
+            campaignID: Self.campaignID,
+            manifestDigestSHA256: Self.registeredManifestDigestSHA256,
+            hypothesis: registeredHypothesis
+        )
+    }
+
+    public var isRegisteredDefinition: Bool {
+        schema == Self.currentSchema
+            && (try? canonicalDigestSHA256()) == Self.registeredManifestDigestSHA256
+    }
+}
+
+public enum LabEarlyStartReportValidationError: Error, LocalizedError, Equatable, Sendable {
+    case unsupportedSchema
+    case missingDecisionGradeEnvelope
+    case evidenceDecisionMismatch
+    case unsafePrivacyContract
+    case forbiddenRawData(String)
+    case localPath
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedSchema: "The early-start report schema is unsupported."
+        case .missingDecisionGradeEnvelope:
+            "A current early-start report must contain protocol, provenance, review, arm, and eligibility."
+        case .evidenceDecisionMismatch:
+            "The early-start report's eligibility decision does not match its evidence."
+        case .unsafePrivacyContract:
+            "The early-start report violates the aggregate-only, local-only privacy contract."
+        case let .forbiddenRawData(key):
+            "The early-start report contains forbidden raw-data key \(key)."
+        case .localPath: "The early-start report contains a local file path."
+        }
+    }
+}
+
 public struct LabEarlyStartReport: Codable, Equatable, Sendable {
-    public static let currentSchema = "tilde-lab.early-start.v1"
+    public static let currentSchema = "tilde-lab.early-start.v2"
+    public static let supportedSchemas = ["tilde-lab.early-start.v1", currentSchema]
 
     public let schema: String
     public let startedAt: Date
@@ -310,6 +456,12 @@ public struct LabEarlyStartReport: Codable, Equatable, Sendable {
     public let predictionTokens: Int
     public let hotTemperature: Double
     public let hotSeed: Int
+    public let maximumSituations: Int?
+    public let maximumOpportunitiesPerSituation: Int?
+    public let coldTemperature: Double?
+    public let coldSeed: Int?
+    public let arm: LabArmConfiguration?
+    public let protocolDefinition: LabEarlyStartProtocol?
     public let assets: LabAssetSnapshot
     public let execution: LabExecutionSnapshot
     public let startingThermalState: String
@@ -320,7 +472,26 @@ public struct LabEarlyStartReport: Codable, Equatable, Sendable {
     public let pair: LabEarlyStartPairMetrics
     public let sensitivity: [LabEarlyStartSensitivityPoint]
     public let gates: LabEarlyStartGateOutcome
-    public let privacy: LabAggregateOnlyPrivacy
+    public let privacy: LabPrivacyContract
+    public let provenance: LabReportProvenance?
+    public let review: LabReportReview?
+    public let evidenceEligibility: LabEvidenceEligibility?
+
+    private static let forbiddenRawDataKeys: Set<String> = [
+        "candidate",
+        "candidatetext",
+        "filepath",
+        "goldencontinuation",
+        "modeloutput",
+        "personalwriting",
+        "prompttext",
+        "rawcontinuation",
+        "rawprompt",
+        "remainderaftercut",
+        "scenario",
+        "scenariotext",
+        "typedcontext",
+    ]
 
     public init(
         startedAt: Date,
@@ -331,8 +502,12 @@ public struct LabEarlyStartReport: Codable, Equatable, Sendable {
         opportunityCount: Int,
         plannedGenerations: Int,
         completedGenerations: Int,
+        maximumSituations: Int,
+        maximumOpportunitiesPerSituation: Int,
         minimumUsefulCharacters: Int,
         predictionTokens: Int,
+        arm: LabArmConfiguration,
+        protocolDefinition: LabEarlyStartProtocol,
         assets: LabAssetSnapshot,
         execution: LabExecutionSnapshot,
         startingThermalState: String,
@@ -342,7 +517,9 @@ public struct LabEarlyStartReport: Codable, Equatable, Sendable {
         primary: LabEarlyStartPrimaryMetrics,
         pair: LabEarlyStartPairMetrics,
         sensitivity: [LabEarlyStartSensitivityPoint],
-        privacy: LabAggregateOnlyPrivacy = .aggregateOnly
+        provenance: LabReportProvenance,
+        review: LabReportReview = .unreviewed,
+        privacy: LabPrivacyContract = .init()
     ) {
         schema = Self.currentSchema
         self.startedAt = startedAt
@@ -353,13 +530,19 @@ public struct LabEarlyStartReport: Codable, Equatable, Sendable {
         self.opportunityCount = opportunityCount
         self.plannedGenerations = plannedGenerations
         self.completedGenerations = completedGenerations
+        self.maximumSituations = maximumSituations
+        self.maximumOpportunitiesPerSituation = maximumOpportunitiesPerSituation
         earlyCharacterOffset = LabEarlyStartConfiguration.earlyCharacterOffset
         minimumWordCharacters = LabEarlyStartConfiguration.minimumWordCharacters
         keystrokeIntervalMilliseconds = LabEarlyStartConfiguration.keystrokeIntervalMilliseconds
         self.minimumUsefulCharacters = minimumUsefulCharacters
         self.predictionTokens = predictionTokens
+        coldTemperature = LabEarlyStartConfiguration.coldTemperature
+        coldSeed = LabEarlyStartConfiguration.coldSeed
         hotTemperature = LabEarlyStartConfiguration.hotTemperature
         hotSeed = LabEarlyStartConfiguration.hotSeed
+        self.arm = arm
+        self.protocolDefinition = protocolDefinition
         self.assets = assets
         self.execution = execution
         self.startingThermalState = startingThermalState
@@ -371,6 +554,300 @@ public struct LabEarlyStartReport: Codable, Equatable, Sendable {
         self.sensitivity = sensitivity
         gates = LabEarlyStartGateOutcome(primary: primary, pair: pair)
         self.privacy = privacy
+        self.provenance = provenance
+        self.review = review
+        evidenceEligibility = LabEvidenceEligibility.evaluate(
+            schemaIsCurrent: true,
+            provenance: provenance,
+            review: review,
+            privacy: privacy,
+            runComplete: Self.isComplete(
+                situationCount: situationCount,
+                opportunityCount: opportunityCount,
+                plannedGenerations: plannedGenerations,
+                completedGenerations: completedGenerations
+            ),
+            evidenceDecisionPresent: true,
+            additionalReasons: (privacy.networkInference
+                ? [.unsafePrivacyContract]
+                : []) + Self.protocolMismatchReasons(
+                protocolDefinition: protocolDefinition,
+                provenance: provenance,
+                suiteDigestSHA256: suiteDigestSHA256,
+                situationCount: situationCount,
+                opportunityCount: opportunityCount,
+                plannedGenerations: plannedGenerations,
+                arm: arm,
+                execution: execution,
+                assets: assets,
+                primary: primary,
+                pair: pair,
+                gates: gates,
+                startingMachineState: startingMachineState,
+                finishingMachineState: finishingMachineState,
+                worstThermalState: worstThermalState,
+                maximumSituations: maximumSituations,
+                maximumOpportunitiesPerSituation: maximumOpportunitiesPerSituation,
+                minimumUsefulCharacters: minimumUsefulCharacters,
+                predictionTokens: predictionTokens,
+                earlyCharacterOffset: earlyCharacterOffset,
+                minimumWordCharacters: minimumWordCharacters,
+                keystrokeIntervalMilliseconds: keystrokeIntervalMilliseconds,
+                coldTemperature: coldTemperature,
+                coldSeed: coldSeed,
+                hotTemperature: hotTemperature,
+                hotSeed: hotSeed,
+                sensitivity: sensitivity
+            )
+        )
+    }
+
+    public var effectiveEvidenceEligibility: LabEvidenceEligibility {
+        let additionalReasons: [LabEvidenceIneligibilityReason]
+        if schema == Self.currentSchema,
+           let protocolDefinition,
+           let arm,
+           let maximumSituations,
+           let maximumOpportunitiesPerSituation {
+            additionalReasons = Self.protocolMismatchReasons(
+                protocolDefinition: protocolDefinition,
+                provenance: provenance,
+                suiteDigestSHA256: suiteDigestSHA256,
+                situationCount: situationCount,
+                opportunityCount: opportunityCount,
+                plannedGenerations: plannedGenerations,
+                arm: arm,
+                execution: execution,
+                assets: assets,
+                primary: primary,
+                pair: pair,
+                gates: gates,
+                startingMachineState: startingMachineState,
+                finishingMachineState: finishingMachineState,
+                worstThermalState: worstThermalState,
+                maximumSituations: maximumSituations,
+                maximumOpportunitiesPerSituation: maximumOpportunitiesPerSituation,
+                minimumUsefulCharacters: minimumUsefulCharacters,
+                predictionTokens: predictionTokens,
+                earlyCharacterOffset: earlyCharacterOffset,
+                minimumWordCharacters: minimumWordCharacters,
+                keystrokeIntervalMilliseconds: keystrokeIntervalMilliseconds,
+                coldTemperature: coldTemperature,
+                coldSeed: coldSeed,
+                hotTemperature: hotTemperature,
+                hotSeed: hotSeed,
+                sensitivity: sensitivity
+            )
+        } else {
+            additionalReasons = []
+        }
+        return LabEvidenceEligibility.evaluate(
+            schemaIsCurrent: schema == Self.currentSchema,
+            provenance: provenance,
+            review: review,
+            privacy: privacy,
+            runComplete: Self.isComplete(
+                situationCount: situationCount,
+                opportunityCount: opportunityCount,
+                plannedGenerations: plannedGenerations,
+                completedGenerations: completedGenerations
+            ),
+            evidenceDecisionPresent: evidenceEligibility != nil,
+            additionalReasons: (privacy.networkInference
+                ? [.unsafePrivacyContract]
+                : []) + additionalReasons
+        )
+    }
+
+    /// Strict decoder used at persistence/review boundaries. Codable keeps v1
+    /// fields readable; this preflight additionally refuses unknown raw-text
+    /// payload keys and local paths that Codable would otherwise ignore.
+    public static func decodeAndValidate(_ data: Data) throws -> LabEarlyStartReport {
+        try validateRawJSON(data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(Self.self, from: data).validatedForPersistence()
+    }
+
+    @discardableResult
+    public func validatedForPersistence() throws -> LabEarlyStartReport {
+        guard Self.supportedSchemas.contains(schema) else {
+            throw LabEarlyStartReportValidationError.unsupportedSchema
+        }
+        guard privacy.aggregateOnly, !privacy.rawScenarioText, !privacy.rawModelOutput,
+              !privacy.filePaths, !privacy.networkInference else {
+            throw LabEarlyStartReportValidationError.unsafePrivacyContract
+        }
+        if schema == Self.currentSchema {
+            guard protocolDefinition != nil, arm != nil, provenance != nil, review != nil,
+                  evidenceEligibility != nil, maximumSituations != nil,
+                  maximumOpportunitiesPerSituation != nil,
+                  coldTemperature != nil, coldSeed != nil else {
+                throw LabEarlyStartReportValidationError.missingDecisionGradeEnvelope
+            }
+            try provenance?.validated()
+            try review?.validated()
+            guard evidenceEligibility == effectiveEvidenceEligibility else {
+                throw LabEarlyStartReportValidationError.evidenceDecisionMismatch
+            }
+        } else if let evidenceEligibility,
+                  evidenceEligibility != effectiveEvidenceEligibility {
+            throw LabEarlyStartReportValidationError.evidenceDecisionMismatch
+        }
+        return self
+    }
+
+    public func reviewed(
+        conclusion: String,
+        status: LabReportReviewStatus,
+        at: Date = Date()
+    ) throws -> LabEarlyStartReport {
+        _ = try validatedForPersistence()
+        guard schema == Self.currentSchema,
+              status != .unreviewed,
+              let arm,
+              let protocolDefinition,
+              let provenance,
+              let maximumSituations,
+              let maximumOpportunitiesPerSituation else {
+            throw LabEarlyStartReportValidationError.missingDecisionGradeEnvelope
+        }
+        let review = try LabReportReview(
+            status: status,
+            conclusion: conclusion,
+            reviewedAt: at
+        ).validated()
+        return try LabEarlyStartReport(
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            suiteName: suiteName,
+            suiteDigestSHA256: suiteDigestSHA256,
+            situationCount: situationCount,
+            opportunityCount: opportunityCount,
+            plannedGenerations: plannedGenerations,
+            completedGenerations: completedGenerations,
+            maximumSituations: maximumSituations,
+            maximumOpportunitiesPerSituation: maximumOpportunitiesPerSituation,
+            minimumUsefulCharacters: minimumUsefulCharacters,
+            predictionTokens: predictionTokens,
+            arm: arm,
+            protocolDefinition: protocolDefinition,
+            assets: assets,
+            execution: execution,
+            startingThermalState: startingThermalState,
+            worstThermalState: worstThermalState,
+            startingMachineState: startingMachineState,
+            finishingMachineState: finishingMachineState,
+            primary: primary,
+            pair: pair,
+            sensitivity: sensitivity,
+            provenance: provenance,
+            review: review,
+            privacy: privacy
+        ).validatedForPersistence()
+    }
+
+    private static func isComplete(
+        situationCount: Int,
+        opportunityCount: Int,
+        plannedGenerations: Int,
+        completedGenerations: Int
+    ) -> Bool {
+        situationCount > 0 && opportunityCount > 0 && plannedGenerations > 0
+            && plannedGenerations == opportunityCount * 3
+            && completedGenerations == plannedGenerations
+    }
+
+    private static func protocolMismatchReasons(
+        protocolDefinition: LabEarlyStartProtocol,
+        provenance: LabReportProvenance?,
+        suiteDigestSHA256: String,
+        situationCount: Int,
+        opportunityCount: Int,
+        plannedGenerations: Int,
+        arm: LabArmConfiguration,
+        execution: LabExecutionSnapshot,
+        assets: LabAssetSnapshot,
+        primary: LabEarlyStartPrimaryMetrics,
+        pair: LabEarlyStartPairMetrics,
+        gates: LabEarlyStartGateOutcome,
+        startingMachineState: LabResearchMachineState,
+        finishingMachineState: LabResearchMachineState,
+        worstThermalState: String,
+        maximumSituations: Int,
+        maximumOpportunitiesPerSituation: Int,
+        minimumUsefulCharacters: Int,
+        predictionTokens: Int,
+        earlyCharacterOffset: Int,
+        minimumWordCharacters: Int,
+        keystrokeIntervalMilliseconds: Int,
+        coldTemperature: Double?,
+        coldSeed: Int?,
+        hotTemperature: Double,
+        hotSeed: Int,
+        sensitivity: [LabEarlyStartSensitivityPoint]
+    ) -> [LabEvidenceIneligibilityReason] {
+        let matches = protocolDefinition.isRegisteredDefinition
+            && provenance?.experiment == protocolDefinition.experimentRegistration
+            && provenance?.invocation.digestSHA256
+                == protocolDefinition.expectedInvocationDigestSHA256
+            && suiteDigestSHA256 == protocolDefinition.expectedSuiteDigestSHA256
+            && situationCount == protocolDefinition.expectedSituationCount
+            && opportunityCount == protocolDefinition.expectedOpportunityCount
+            && plannedGenerations == protocolDefinition.expectedGenerationCount
+            && primary.opportunityCount == opportunityCount
+            && gates == LabEarlyStartGateOutcome(primary: primary, pair: pair)
+            && !startingMachineState.blocksStableTiming
+            && !finishingMachineState.blocksStableTiming
+            && ["nominal", "fair"].contains(worstThermalState)
+            && arm == protocolDefinition.arm
+            && execution == protocolDefinition.execution
+            && assets.inferenceBackend == protocolDefinition.expectedInferenceBackend
+            && assets.verificationMode == protocolDefinition.expectedModelVerificationMode
+            && assets.modelIdentifier == protocolDefinition.expectedModelIdentifier
+            && assets.modelRevision == protocolDefinition.expectedModelRevision
+            && assets.modelSHA256 == protocolDefinition.expectedModelSHA256
+            && assets.helperSHA256 == protocolDefinition.expectedHelperSHA256
+            && maximumSituations == protocolDefinition.maximumSituations
+            && maximumOpportunitiesPerSituation
+                == protocolDefinition.maximumOpportunitiesPerSituation
+            && minimumUsefulCharacters == protocolDefinition.minimumUsefulCharacters
+            && predictionTokens == protocolDefinition.predictionTokens
+            && earlyCharacterOffset == protocolDefinition.earlyCharacterOffset
+            && minimumWordCharacters == protocolDefinition.minimumWordCharacters
+            && keystrokeIntervalMilliseconds
+                == protocolDefinition.keystrokeIntervalMilliseconds
+            && coldTemperature == protocolDefinition.coldTemperature
+            && coldSeed == protocolDefinition.coldSeed
+            && hotTemperature == protocolDefinition.hotTemperature
+            && hotSeed == protocolDefinition.hotSeed
+            && sensitivity.map(\.keystrokeIntervalMilliseconds)
+                == protocolDefinition.sensitivityIntervalsMilliseconds.sorted()
+        return matches ? [] : [.protocolMismatch]
+    }
+
+    private static func validateRawJSON(_ data: Data) throws {
+        let root = try JSONSerialization.jsonObject(with: data)
+        try visitJSON(root)
+    }
+
+    private static func visitJSON(_ value: Any) throws {
+        if let object = value as? [String: Any] {
+            for (key, child) in object {
+                if forbiddenRawDataKeys.contains(key.lowercased()) {
+                    throw LabEarlyStartReportValidationError.forbiddenRawData(key)
+                }
+                try visitJSON(child)
+            }
+        } else if let array = value as? [Any] {
+            for child in array { try visitJSON(child) }
+        } else if let string = value as? String {
+            let normalized = string.lowercased()
+            if normalized.contains("/users/") || normalized.contains("file://")
+                || string.contains("~/") {
+                throw LabEarlyStartReportValidationError.localPath
+            }
+        }
     }
 }
 
@@ -697,21 +1174,35 @@ public actor LabEarlyStartRunner {
         arm: LabArmConfiguration,
         execution: LabExecutionConfiguration,
         configuration: LabEarlyStartConfiguration = .init(),
+        provenance: LabReportProvenance = .unavailable(),
+        requiresRegisteredProtocol: Bool = false,
         requiresACPower: Bool = true,
         progress: @escaping ProgressHandler = { _, _, _ in }
     ) async throws -> LabEarlyStartReport {
         let configuration = try configuration.validated()
         let execution = try execution.validated()
         let arm = try arm.validated()
+        let protocolDefinition = LabEarlyStartProtocol(
+            arm: arm,
+            execution: execution,
+            configuration: configuration
+        )
+        if requiresRegisteredProtocol {
+            guard protocolDefinition.isRegisteredDefinition else {
+                throw LabEarlyStartError.protocolMismatch("the canonical manifest digest")
+            }
+            guard provenance.experiment == protocolDefinition.experimentRegistration else {
+                throw LabEarlyStartError.protocolMismatch("the hypothesis registration")
+            }
+            guard provenance.invocation.digestSHA256
+                    == protocolDefinition.expectedInvocationDigestSHA256 else {
+                throw LabEarlyStartError.protocolMismatch("the canonical invocation digest")
+            }
+        }
         let startingMachine = LabResearchMachinePreflight.inspect()
         if requiresACPower, !startingMachine.isStable(allowBattery: false) {
             throw LabEarlyStartError.notOnACPower
         }
-        let assets = try await LabAssetVerifier.shared.verify(execution)
-        guard assets.modelSHA256 == ProductionModelAsset.sha256 else {
-            throw LabEarlyStartError.unexpectedModelHash(assets.modelSHA256)
-        }
-
         var selector = arm.scenarios
         selector.partition = .development
         selector.suggestionExpectation = .speakOnly
@@ -724,29 +1215,58 @@ public actor LabEarlyStartRunner {
                 actual: scenarios.count
             )
         }
+        let suiteDigestSHA256 = try selected.digestSHA256()
+        let plans = scenarios.map { scenario in
+            let golden = scenario.expectation.goldenContinuation ?? ""
+            return (
+                scenario: scenario,
+                golden: golden,
+                cuts: LabEarlyStartPlanner.cuts(
+                    in: golden,
+                    minimumUsefulCharacters: configuration.minimumUsefulCharacters,
+                    maximumOpportunities: configuration.maximumOpportunitiesPerSituation
+                )
+            )
+        }
+        let plannedOpportunities = plans.reduce(0) { $0 + $1.cuts.count }
+        let plannedGenerations = plannedOpportunities * 3
+        guard plannedOpportunities > 0 else { throw LabEarlyStartError.noOpportunities }
+        if requiresRegisteredProtocol {
+            guard suiteDigestSHA256 == protocolDefinition.expectedSuiteDigestSHA256 else {
+                throw LabEarlyStartError.protocolMismatch("the suite digest")
+            }
+            guard scenarios.count == protocolDefinition.expectedSituationCount else {
+                throw LabEarlyStartError.protocolMismatch("the situation count")
+            }
+            guard plannedOpportunities == protocolDefinition.expectedOpportunityCount,
+                  plannedGenerations == protocolDefinition.expectedGenerationCount else {
+                throw LabEarlyStartError.protocolMismatch("the planned opportunity counts")
+            }
+        }
+
+        let assets = try await LabAssetVerifier.shared.verify(execution)
+        guard assets.modelSHA256 == ProductionModelAsset.sha256 else {
+            throw LabEarlyStartError.unexpectedModelHash(assets.modelSHA256)
+        }
+        if requiresRegisteredProtocol,
+           assets.helperSHA256 != protocolDefinition.expectedHelperSHA256 {
+            throw LabEarlyStartError.protocolMismatch("the helper digest")
+        }
 
         let startedAt = Date()
         let startingThermal = ProcessInfo.processInfo.thermalState
         var worstThermal = startingThermal
         var measurements: [LabEarlyStartMeasurement] = []
-        var plannedGenerations = 0
         let clients = try await pool.start(configuration: execution)
         defer { Task { await pool.stop() } }
         guard let client = clients.first else {
             throw LabEarlyStartError.incompleteMeasurement(expected: 1, actual: 0)
         }
 
-        for (offset, scenario) in scenarios.enumerated() {
+        for (offset, plan) in plans.enumerated() {
             try Task.checkCancellation()
-            let golden = scenario.expectation.goldenContinuation ?? ""
-            let cuts = LabEarlyStartPlanner.cuts(
-                in: golden,
-                minimumUsefulCharacters: configuration.minimumUsefulCharacters,
-                maximumOpportunities: configuration.maximumOpportunitiesPerSituation
-            )
-            plannedGenerations += cuts.count * 3
-            for cut in cuts {
-                let characters = Array(golden)
+            for cut in plan.cuts {
+                let characters = Array(plan.golden)
                 let earlyTyped = String(characters[0..<cut.cutOffset])
                 let boundaryTyped = String(
                     characters[0..<(cut.cutOffset + cut.charactersToBoundary)]
@@ -758,7 +1278,7 @@ public actor LabEarlyStartRunner {
                 // Prompt caching is disabled for this experiment, so ordering
                 // cannot leak timing between the three requests.
                 let cold = try await generate(
-                    scenario: scenario,
+                    scenario: plan.scenario,
                     typedSuffix: earlyTyped,
                     arm: arm,
                     client: client,
@@ -767,7 +1287,7 @@ public actor LabEarlyStartRunner {
                     seed: LabEarlyStartConfiguration.coldSeed
                 )
                 let hot = try await generate(
-                    scenario: scenario,
+                    scenario: plan.scenario,
                     typedSuffix: earlyTyped,
                     arm: arm,
                     client: client,
@@ -776,7 +1296,7 @@ public actor LabEarlyStartRunner {
                     seed: LabEarlyStartConfiguration.hotSeed
                 )
                 let boundary = try await generate(
-                    scenario: scenario,
+                    scenario: plan.scenario,
                     typedSuffix: boundaryTyped,
                     arm: arm,
                     client: client,
@@ -810,13 +1330,17 @@ public actor LabEarlyStartRunner {
             startedAt: startedAt,
             finishedAt: Date(),
             suiteName: selected.name,
-            suiteDigestSHA256: try selected.digestSHA256(),
+            suiteDigestSHA256: suiteDigestSHA256,
             situationCount: scenarios.count,
             opportunityCount: measurements.count,
             plannedGenerations: plannedGenerations,
             completedGenerations: completed,
+            maximumSituations: configuration.maximumSituations,
+            maximumOpportunitiesPerSituation: configuration.maximumOpportunitiesPerSituation,
             minimumUsefulCharacters: configuration.minimumUsefulCharacters,
             predictionTokens: configuration.predictionTokens,
+            arm: arm,
+            protocolDefinition: protocolDefinition,
             assets: assets,
             execution: LabExecutionSnapshot(execution),
             startingThermalState: Self.name(startingThermal),
@@ -834,7 +1358,8 @@ public actor LabEarlyStartRunner {
             sensitivity: LabEarlyStartAnalyzer.sensitivity(
                 measurements: measurements,
                 minimumUsefulCharacters: configuration.minimumUsefulCharacters
-            )
+            ),
+            provenance: provenance
         )
     }
 

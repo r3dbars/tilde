@@ -154,9 +154,11 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
-- [Q11 — Extended ordinary-silence gate](Q11-ordinary-silence-gate.md) — REGISTERED; not yet run
-- [Q10 — K=1 early-start timing falsifier](Q10-early-start-timing-falsifier.md) — IMPLEMENTING; registered and built, not yet run
-- [Q09 — Future Lattice K=16 feasibility](Q09-future-lattice-k16-feasibility.md) — REJECTED; K=16 failed diversity and added only 1.39 points over K=8
+- [Q13 — Visible-word cap 3 versus 8](Q13-visible-cap-3v8.md) — REJECTED; cap 8 triggered every registered kill clause, cap 3 remains
+- [Q12 — Scene-echo floor and grounding](Q12-scene-echo-grounding.md) — SUPPORTED on its development rule, but standard bad-suggestion and latency gates still block protected advancement
+- [Q11 — Extended ordinary-silence gate](Q11-ordinary-silence-gate.md) — SUPPORTED on development; frozen validation candidate only, with protected validation still ahead
+- [Q10 — K=1 early-start timing falsifier](Q10-early-start-timing-falsifier.md) — INCONCLUSIVE; directional lockability/compute failure, but invocation and provenance gates failed
+- [Q09 — Future Lattice K=16 feasibility](Q09-future-lattice-k16-feasibility.md) — INCONCLUSIVE; directional K=16 diversity/marginal-gain failure, but the custom report lacks F01 evidence provenance
 - [Q08 — Local prompt-cache reuse study](Q08-prompt-cache-study.md) — REJECTED; p95 gain 0.47%, below 10% target; no promotion
 - [Q07B — Fixed AC prompt-cache readiness pilot](Q07B-cache-ac-pilot.md) — readiness PASSED; superiority INCONCLUSIVE
 

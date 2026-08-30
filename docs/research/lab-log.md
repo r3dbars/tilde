@@ -28,6 +28,57 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Correct Q09's evidence status after the F01 audit
+
+- **Try:** Audit the Q09 source report and checked-in aggregate against the F01
+  provenance, review, and evidence-eligibility contract adopted before Q09 ran.
+- **Learn:** The 5,760 completed generations still give a strong directional
+  negative: K=16 added five golden matches beyond K=8 and failed the frozen
+  diversity thresholds. That remains useful triage, not a formal verdict.
+- **Fail:** Q09 is `INCONCLUSIVE`, not rejected. Its custom v1 report and public
+  aggregate omit F01's run-start provenance envelope, explicit review, and
+  persisted eligibility decision. Narrative hashes cannot be added after the
+  result to repair that evidence boundary.
+- **Where:** [Q09](../experiments/Q09-future-lattice-k16-feasibility.md), its
+  [aggregate](../experiments/Q09-aggregate-results.json), and stable ledger ID
+  `future-lattice-k16-independent-branches-rejected` now marked directional.
+- **Next:** Require an exact provenance-complete replication before treating
+  Q09 as a durable verdict; meanwhile make no 16-branch or larger-K build.
+
+## 2026-08-30 — Q10 points negative but fails its provenance gate
+
+- **Try:** Run Q10's pre-registered third-character early-start falsifier on
+  the exact frozen commit and production Gemma asset: 360 synthetic development
+  situations, 637 opportunities, and 1,911/1,911 sequential generations.
+- **Learn:** The directional result says moving one hidden request earlier
+  solved measured timing — 100% were ready and median lead was 694 ms — while
+  only 12.24% carried six useful future characters and compute reached 1.87x.
+- **Fail:** Q10 is `INCONCLUSIVE`, not rejected. Its frozen invocation digest
+  names the old helper command rather than the registered command, and the
+  custom report lacks F01's v6 run-start provenance/review envelope. The hot
+  pair's +0.78 lockability points at 3.06x compute cannot waive those defects.
+- **Where:** [Q10](../experiments/Q10-early-start-timing-falsifier.md), its
+  aggregate report; no Learning Ledger entry.
+- **Next:** Pre-register an exact, provenance-complete replication before
+  rerunning; do not start earlier, add branches, or build a live prewarm.
+
+## 2026-08-30 — F03's clean-looking slice cannot close a dirty full file
+
+- **Try:** Audit the complete text-free live count file and an inferred
+  post-install slice with the current F03 ingest and report contract.
+- **Learn:** The full file has 1,364 events and two pre-fix monotonic-retention
+  violations; the inferred later slice has 575 events, 39 accepts, 225
+  typed-through outcomes, and zero duplicate, XOR, domain, or monotonic
+  violations.
+- **Fail:** F03 remains `IMPLEMENTING`. The clean-looking slice is not
+  decision-grade because its cutoff is inferred, its build provenance is not
+  sealed in the events, and the complete source file still fails two checks.
+- **Where:** [F03](../experiments/F03-retained-outcome-ledger.md) and the
+  [on-device handoff](next-on-device.md); no event file or writing is checked in.
+- **Next:** Record a clean commit, bundle build, installed binary hash, and
+  rotation time; rotate the text-free file, type normally, and ingest the
+  entire fresh file.
+
 ## 2026-08-30 — The Q12 nomination block was the wrong exam, not lost credit
 
 - **Try:** Audit why campaign q12b reads arm-aggregate Net Keystrokes

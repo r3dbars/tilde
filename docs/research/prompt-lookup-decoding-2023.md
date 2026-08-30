@@ -10,7 +10,17 @@ Speculative decoding drafts several tokens cheaply and has the big model verify 
 
 ## Method
 
-Find n-gram matches in the current context, propose them as the continuation, verify with the main model. llama.cpp exposes this as a server flag. If the copy is wrong, verification rejects it and you pay a small waste; if it is right, you skip decode steps.
+Find n-gram matches in the current context, propose them as the continuation,
+and verify them with the main model. If the copy is wrong, verification rejects
+it and pays some wasted work; if it is right, the target can accept several
+tokens in one step.
+
+The signed Model Preview helper was inspected on 2026-08-30. Its current
+`llama-server --help` exposes `ngram-simple`, `ngram-map-k`,
+`ngram-map-k4v`, `ngram-mod`, and `ngram-cache` under `--spec-type`. The old
+`--draft` spelling has been removed in favor of the `--spec-*` family. That is
+a compatibility observation, not proof that any mode is active or faster in
+Tilde.
 
 ## Key findings
 
@@ -20,10 +30,22 @@ Find n-gram matches in the current context, propose them as the continuation, ve
 
 ## What Tilde should take from it
 
-This is a runtime experiment that does not change the generator's weights and does not need private training. It is one of the few engine papers Tilde can actually run on the owner's Mac without a new model tournament: flip the helper flag, freeze everything else, watch p95 latency and RNKS.
+This is a runtime experiment that does not change the generator's weights and
+does not need private training. Once H01 freezes visible-output semantics,
+pre-register one output-equivalent A/B on the signed helper: direct generation
+versus one supported n-gram speculation mode. Freeze everything else and report
+drafted tokens, accepted tokens, p50/p95/p99 latency, energy/thermal evidence,
+and RNKS non-inferiority. Draft acceptance proves mechanism activation, not
+user benefit.
 
-It doubles as a personalization mechanism. Personal History phrases that are already in the prompt can be drafted for free. That is adjacent to H11 (exact phrase expert) but cheaper, and it can be tried earlier as a runtime A/B once F03 exists — still one causal question, still not a Stage 3 unlock.
+Prompt repetition may make the mechanism more useful on familiar phrases, but
+that does not make it a Personal History expert. It remains an H02 runtime
+follow-up, not H19 and not a Stage 3 unlock.
 
 ## Limits and caveats
 
-Verify-reject can waste work on highly original sentences. Do not turn it on in production from this note. Do not log draft strings. Pair with the existing speculative-decoding digest; this note is the "no extra model" variant.
+Verify-reject can waste work on highly original sentences. Do not turn it on in
+production from this note. Do not log draft strings. The pinned helper and its
+flags may drift in later builds, so every registered run must re-verify the
+helper hash and accepted option names. Pair with the existing speculative-
+decoding digest; this note is the "no extra model" variant.

@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import TildeLabKit
 
@@ -110,27 +109,6 @@ extension ResearchCoordinator {
         hypothesisID: String?,
         hypothesis: String?
     ) -> LabReportProvenance {
-        let executable = Bundle.main.executableURL?.resolvingSymlinksInPath()
-            ?? URL(
-                fileURLWithPath: CommandLine.arguments[0],
-                relativeTo: URL(
-                    fileURLWithPath: FileManager.default.currentDirectoryPath,
-                    isDirectory: true
-                )
-            ).standardizedFileURL.resolvingSymlinksInPath()
-        let hardware = commandOutput("/usr/sbin/sysctl", ["-n", "hw.model"])
-        let commit = commandOutput("/usr/bin/git", ["rev-parse", "HEAD"])
-        let status = commandOutput(
-            "/usr/bin/git",
-            ["status", "--porcelain", "--untracked-files=normal"]
-        )
-        let usableCommit = commit?.isLowercaseHex(count: 40) == true ? commit : nil
-        let treeState: LabSourceTreeState
-        if usableCommit == nil || status == nil {
-            treeState = .unavailable
-        } else {
-            treeState = status!.isEmpty ? .clean : .dirty
-        }
         let experiment: LabExperimentRegistration?
         if let hypothesisID, let hypothesis {
             experiment = LabExperimentRegistration(
@@ -142,26 +120,8 @@ extension ResearchCoordinator {
         } else {
             experiment = nil
         }
-        let provenance = LabReportProvenance(
-            source: LabReportSourceProvenance(
-                gitCommitSHA: treeState == .unavailable ? nil : usableCommit,
-                treeState: treeState,
-                runnerSHA256: try? digestFile(executable)
-            ),
-            environment: LabReportEnvironmentProvenance(
-                operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                operatingSystemBuild: commandOutput("/usr/bin/sw_vers", ["-buildVersion"]),
-                hardwareClass: hardware,
-                machine: LabResearchMachinePreflight.inspect()
-            ),
-            invocation: LabReportInvocationProvenance(
-                digestSHA256: LabReportInvocationProvenance.canonicalDigest(
-                    arguments: CommandLine.arguments
-                )
-            ),
-            experiment: experiment
-        )
-        return (try? provenance.validated()) ?? .unavailable()
+        return (try? LabReportProvenanceCapture.capture(experiment: experiment))
+            ?? .unavailable()
     }
 
     private static func commandOutput(_ executable: String, _ arguments: [String]) -> String? {
@@ -182,18 +142,6 @@ extension ResearchCoordinator {
         } catch {
             return nil
         }
-    }
-
-    private static func digestFile(_ url: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        var hasher = SHA256()
-        while true {
-            let data = try handle.read(upToCount: 1_048_576) ?? Data()
-            if data.isEmpty { break }
-            hasher.update(data: data)
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     static func runManifest(
@@ -495,14 +443,6 @@ extension ResearchCoordinator {
             )
             return try value.validated()
         }
-    }
-}
-
-private extension String {
-    func isLowercaseHex(count: Int) -> Bool {
-        self.count == count
-            && range(of: "^[a-f0-9]{\(count)}$", options: .regularExpression)
-                == startIndex..<endIndex
     }
 }
 

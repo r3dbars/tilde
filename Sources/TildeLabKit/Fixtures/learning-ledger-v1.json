@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-29T15:30:00Z",
+  "updatedAt": "2026-08-30T20:49:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -108,10 +108,10 @@
       "id": "future-lattice-k16-independent-branches-rejected",
       "recordedAt": "2026-08-29T12:05:20Z",
       "area": "generator",
-      "status": "rejected",
-      "title": "Sixteen independent futures add little beyond eight and fail diversity",
-      "finding": "Q09 completed 5760 local generations on 360 synthetic development situations with nested K=1, K=4, K=8, and K=16 sets. Golden exact-prefix coverage rose from 26.94 percent at K=1 to 35.00 percent at K=4, 45.28 percent at K=8, and 46.67 percent at K=16. The second eight branches added only 5 matches, or 1.39 percentage points. At K=16 the median set had 2 distinct first-two-content-word paths and only 27.22 percent of sets had at least 4, failing the registered 50 percent diversity gate and median-4 kill threshold.",
-      "decision": "Reject 16 independently sampled futures, do not build them into the IME, and do not respond by increasing K. Most measured set-level coverage arrived by K=8, but K=4 and K=8 remain offline hypotheses rather than live candidates because readiness was 1214 and 1934 ms at p50 and no target-blind lock or retained utility was tested. Return to the ordered research queue; a future eligible test must use a smaller or genuinely diversity-producing shared generator.",
+      "status": "directional",
+      "title": "Sixteen independent futures look weak beyond eight, but Q09 lacks decision-grade provenance",
+      "finding": "Q09 completed 5760 local generations on 360 synthetic development situations with nested K=1, K=4, K=8, and K=16 sets. Golden exact-prefix coverage rose from 26.94 percent at K=1 to 35.00 percent at K=4, 45.28 percent at K=8, and 46.67 percent at K=16. The second eight branches added only 5 matches, or 1.39 percentage points. At K=16 the median set had 2 distinct first-two-content-word paths and only 27.22 percent of sets had at least 4, triggering the registered diversity kill thresholds. The custom report lacks F01 run-start provenance, explicit review, and persisted evidence eligibility, so these measurements are directional rather than a reusable formal verdict.",
+      "decision": "Withhold a formal supported or rejected decision. Treat the observed K=16 result as a conservative directional no-build signal: do not promote 16 independent futures or respond by increasing K. Most measured set-level coverage arrived by K=8, but K=4 and K=8 remain offline hypotheses because readiness was 1214 and 1934 ms at p50 and no target-blind lock or retained utility was tested. A durable verdict requires an exact provenance-complete replication; any later eligible test must use a smaller or genuinely diversity-producing shared generator.",
       "comparisonGroupID": "q09-future-lattice-k16-v1",
       "evaluationCount": 5760,
       "metrics": [
@@ -129,12 +129,13 @@
         { "kind": "pull-request", "id": "432" }
       ],
       "limitations": [
+        "The custom Future Lattice report and public aggregate lack F01 run-start provenance, explicit review, and persisted evidence eligibility; manually copied provenance claims cannot be retrofitted after the result.",
         "The synthetic exact-prefix metric measures candidate-set availability, not target-blind selection, live acceptance, or retained utility.",
         "The run used independent requests; it does not reject every possible shared-tree or speculative-decoding implementation.",
         "The battery-powered run reached fair thermal state, so latency is directional and not nominal-hardware proof.",
         "Validation and holdout remained unopened, and no production or Model Preview behavior changed."
       ],
-      "tags": ["future-lattice", "candidate-diversity", "negative-result", "offline-only", "no-promotion"]
+      "tags": ["future-lattice", "candidate-diversity", "directional-negative", "missing-provenance", "offline-only", "no-promotion"]
     },
     {
       "id": "qwen-prefix-cache-tail-target-rejected",

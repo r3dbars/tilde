@@ -7,8 +7,8 @@ honestly means, so we do not confuse a bigger model with a new question.
 
 ## The honest timeline
 
-There are two literatures. People mix them and then think the field is
-moving.
+There are three adjacent literatures. People mix them and then overstate either
+stagnation or transfer.
 
 **Shipped personal systems** peaked in 2018–2020:
 
@@ -16,9 +16,26 @@ moving.
 - Gmail Smart Compose (2019)
 - n-gram interpolation with a global neural model (2020)
 
-Those are the last papers that say: here is a real keyboard or mail
-ghost, here is how we personalized it, here is a live metric. Google did
-not publish the sequel. The product kept going. The method did not.
+Those remain the last papers that say: here is a real personal keyboard or
+prose ghost, here is how we personalized it, here is a live writing metric.
+Google did not publish the sequel. The product kept going. That specific
+published method line did not.
+
+**Personal query autocomplete did continue:**
+
+- Apple published
+  [on-device personalized query completion for email search](https://machinelearning.apple.com/research/query-auto-completion-email)
+  in 2024, with retrieval, personal features, and ranking under a device
+  budget.
+- Apple published a
+  [production search query-autocomplete system](https://machinelearning.apple.com/research/query-auto-completion)
+  in 2026, using retrieval-augmented generation and verification/reranking; its
+  controlled search experiment reported 5.44% fewer characters typed and 3.46%
+  more suggestions taken.
+
+Those are real personal-autocomplete advances and valuable priors for H03 and
+Stage 4. They predict short search queries, not the next prose a writer intends
+to author, and they do not use a system-wide IME or retained-writing outcome.
 
 **Recent papers that look like progress** are mostly not personal
 systems:
@@ -31,10 +48,10 @@ systems:
 - Sequential autocomplete (2024) and Mozannar (2023) are display-policy
   papers on research UIs or Copilot logs.
 
-So the owner's read is correct. The best *personal autocomplete
-keyboard* writeups are about seven years old. The best *recent* papers
-are either "do suggestions help a stranger copy a sentence?" or "did a
-programmer keep the ghost in the file?"
+So the narrower read is correct. The best *personal autocomplete keyboard and
+prose-writing* writeups are about seven years old. Recent search completion,
+generic suggestion HCI, and code-retention work move adjacent questions without
+answering Tilde's system-wide prose question.
 
 Commercial local Mac ghosts exist now. None of them published a
 measurement method. A product without a public ruler is not a research
