@@ -208,12 +208,14 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
 /// Pending accept whose horizons are not all known yet.
 public struct PendingRetainedWatch: Equatable, Sendable {
     public var opportunity: LiveOnlineOpportunity
+    public let startedAt: Date
     public var retentionAt5Seconds: RetainedCharacterObservation
     public var retentionAt30Seconds: RetainedCharacterObservation
     public var retentionAtSegmentClose: RetainedCharacterObservation
 
-    public init(opportunity: LiveOnlineOpportunity) {
+    public init(opportunity: LiveOnlineOpportunity, startedAt: Date? = nil) {
         self.opportunity = opportunity
+        self.startedAt = startedAt ?? opportunity.shownAt
         retentionAt5Seconds = RetainedCharacterObservation(missingness: .notYetObserved)
         retentionAt30Seconds = RetainedCharacterObservation(missingness: .notYetObserved)
         retentionAtSegmentClose = RetainedCharacterObservation(missingness: .notYetObserved)
@@ -227,12 +229,20 @@ public struct PendingRetainedWatch: Equatable, Sendable {
             && retentionAtSegmentClose.missingness != .notYetObserved
     }
 
+    public func isFiveSecondDue(at time: Date) -> Bool {
+        time.timeIntervalSince(startedAt) >= RetainedSpanWatch.fiveSecondHorizon
+    }
+
+    public func isThirtySecondDue(at time: Date) -> Bool {
+        time.timeIntervalSince(startedAt) >= RetainedSpanWatch.thirtySecondHorizon
+    }
+
     public mutating func observeFiveSeconds(snapshot: RetainedContextSnapshot?) throws {
         guard retentionAt5Seconds.missingness == .notYetObserved else { return }
         retentionAt5Seconds = try RetainedSpanWatch.observation(
             accepted: accepted,
             insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
-            snapshot: snapshot
+            snapshot: matchingSnapshot(snapshot)
         )
         if let kept = retentionAt5Seconds.retainedCharacters {
             let replaced = max(0, accepted.count - kept)
@@ -247,7 +257,7 @@ public struct PendingRetainedWatch: Equatable, Sendable {
             try RetainedSpanWatch.observation(
                 accepted: accepted,
                 insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
-                snapshot: snapshot
+                snapshot: matchingSnapshot(snapshot)
             ),
             notExceeding: retentionAt5Seconds
         )
@@ -259,7 +269,7 @@ public struct PendingRetainedWatch: Equatable, Sendable {
             try RetainedSpanWatch.observation(
                 accepted: accepted,
                 insertionLocationUTF16: opportunity.acceptedInsertionLocationUTF16,
-                snapshot: snapshot
+                snapshot: matchingSnapshot(snapshot)
             ),
             notExceeding: retentionAt30Seconds
         )
@@ -278,6 +288,13 @@ public struct PendingRetainedWatch: Equatable, Sendable {
             retentionAtSegmentClose = RetainedCharacterObservation(missingness: .privacyExcluded)
         }
         opportunity.wipeAcceptedText()
+    }
+
+    private func matchingSnapshot(
+        _ snapshot: RetainedContextSnapshot?
+    ) -> RetainedContextSnapshot? {
+        guard snapshot?.sourceDigestSHA256 == opportunity.sessionDigestSHA256 else { return nil }
+        return snapshot
     }
 
     public mutating func closeSegment(snapshot: RetainedContextSnapshot?) throws {
