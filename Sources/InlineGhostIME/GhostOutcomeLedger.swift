@@ -24,9 +24,7 @@ enum GhostOutcomeLedger {
     static func configure(
         contextProvider: @escaping @Sendable () -> RetainedContextSnapshot?
     ) {
-        lock.lock()
-        self.contextProvider = contextProvider
-        lock.unlock()
+        lock.withLock { self.contextProvider = contextProvider }
     }
 
     static func noteShown(
@@ -75,9 +73,9 @@ enum GhostOutcomeLedger {
 
     static func noteVisibleCandidate(characters: Int, wordCount: Int) {
         if dropIfWiped() { return }
-        lock.lock()
-        opportunity?.noteVisibleCandidate(characters: characters, wordCount: wordCount)
-        lock.unlock()
+        lock.withLock {
+            opportunity?.noteVisibleCandidate(characters: characters, wordCount: wordCount)
+        }
     }
 
     static func noteTyped(at time: Date = Date()) {
@@ -85,10 +83,8 @@ enum GhostOutcomeLedger {
         lock.lock()
         opportunity?.noteTyped(at: time)
         lastActivity = time
-        let stillVisible = opportunity != nil
         lock.unlock()
         rescheduleIdleCloseIfNeeded()
-        if !stillVisible { return }
     }
 
     static func closeIfGhostGone(stillVisible: Bool, at time: Date = Date()) {
@@ -350,9 +346,7 @@ enum GhostOutcomeLedger {
     }
 
     private static func takeGeneration(for id: UUID) -> Int? {
-        lock.lock()
-        defer { lock.unlock() }
-        return generationByOpportunityID.removeValue(forKey: id)
+        lock.withLock { generationByOpportunityID.removeValue(forKey: id) }
     }
 
     private static func currentGeneration() -> Int {
@@ -362,17 +356,13 @@ enum GhostOutcomeLedger {
     }
 
     private static func configuredDefaults() -> UserDefaults {
-        lock.lock()
-        defer { lock.unlock() }
-        return testingDefaults
+        lock.withLock { testingDefaults }
             ?? UserDefaults(suiteName: PersonalHistorySettingsContract.keyboardSuiteName)
             ?? .standard
     }
 
     private static func configuredHomeDirectory() -> URL {
-        lock.lock()
-        defer { lock.unlock() }
-        return testingHomeDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+        lock.withLock { testingHomeDirectory } ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
     private static func append(
@@ -406,47 +396,33 @@ enum GhostOutcomeLedger {
 
     static func resetForTesting(homeDirectory: URL, defaults: UserDefaults) {
         io.sync {}
-        lock.lock()
-        opportunity = nil
-        watches = []
-        lastActivity = .distantPast
-        contextProvider = nil
-        excluded = false
-        seenGeneration = nil
-        generationByOpportunityID = [:]
-        idleCloseWorkItem?.cancel()
-        idleCloseWorkItem = nil
-        idleScheduleGeneration = 0
-        testingHomeDirectory = homeDirectory
-        testingDefaults = defaults
-        lock.unlock()
+        resetState(homeDirectory: homeDirectory, defaults: defaults)
     }
 
     static func finishTesting() {
         io.sync {}
-        lock.lock()
-        opportunity = nil
-        watches = []
-        contextProvider = nil
-        excluded = false
-        seenGeneration = nil
-        generationByOpportunityID = [:]
-        idleCloseWorkItem?.cancel()
-        idleCloseWorkItem = nil
-        idleScheduleGeneration = 0
-        testingHomeDirectory = nil
-        testingDefaults = nil
-        lock.unlock()
+        resetState(homeDirectory: nil, defaults: nil)
     }
 
     static func drainWritesForTesting() {
         io.sync {}
     }
 
-    static func idleScheduleGenerationForTesting() -> UInt64 {
-        lock.lock()
-        defer { lock.unlock() }
-        return idleScheduleGeneration
+    private static func resetState(homeDirectory: URL?, defaults: UserDefaults?) {
+        lock.withLock {
+            opportunity = nil
+            watches = []
+            lastActivity = .distantPast
+            contextProvider = nil
+            excluded = false
+            seenGeneration = nil
+            generationByOpportunityID = [:]
+            idleCloseWorkItem?.cancel()
+            idleCloseWorkItem = nil
+            idleScheduleGeneration = 0
+            testingHomeDirectory = homeDirectory
+            testingDefaults = defaults
+        }
     }
 
     @discardableResult

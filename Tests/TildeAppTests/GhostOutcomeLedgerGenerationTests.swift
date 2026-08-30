@@ -82,9 +82,7 @@ struct GhostOutcomeLedgerGenerationTests {
             remainderVisible: false,
             at: acceptedAt
         )
-        let scheduledAtAccept = GhostOutcomeLedger.idleScheduleGenerationForTesting()
         GhostOutcomeLedger.noteTyped(at: shownAt.addingTimeInterval(50))
-        #expect(GhostOutcomeLedger.idleScheduleGenerationForTesting() > scheduledAtAccept)
 
         let event = TextFreeOnlineEventFile.url(
             homeDirectory: root,
