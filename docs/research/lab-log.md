@@ -28,6 +28,26 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Clean Preview9B package passes the pre-install proof
+
+- **Try:** Build the Preview9B app from an isolated clean checkout without
+  installing or launching it, then verify product identity, the pinned model,
+  code signatures, manifests, bundle contents, and the full fast proof.
+- **Learn:** Source `3d84b97d211021f315d87ed964899f89dc930b5c` produced build
+  2926 with the expected preview app/IME identities, the pinned Qwen asset
+  (`4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`),
+  strict valid signatures, no embedded GGUF, and 889/889 passing tests.
+- **Fail:** This is package readiness, not F03 evidence. The package was not
+  installed, the live file was not rotated, and the source freeze predates the
+  documentation commit that records the audit. The decisive run must rebuild
+  from its final clean source and seal that identity before rotation.
+- **Where:** `script/build_preview_9b.sh`; F03 retained-outcome ledger. No
+  package, event, diary, prompt, candidate, writing, or local path was checked
+  in.
+- **Next:** After the research branch is final, rebuild that exact source,
+  record its package identity, then use the owner-approved recoverable install
+  and text-free rotation procedure.
+
 ## 2026-08-30 — F03 full-file audit remains provenance-ineligible
 
 - **Try:** Audit the active preview's complete local count file with

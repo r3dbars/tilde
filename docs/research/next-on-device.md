@@ -64,6 +64,13 @@ The implementation that began on `cursor/f03-live-ruler-and-local-diary`
   violations. Its full proof passed 889 tests. It is still diagnostic because
   the installed build and events contain no sealed source commit or rotation
   run record; build 2918 and binary hashes cannot repair provenance afterward.
+- A separate clean checkout at source
+  `3d84b97d211021f315d87ed964899f89dc930b5c` reproduced Preview9B build
+  2926, verified the pinned model and strict signatures, excluded an embedded
+  GGUF, and passed 889/889 tests without installing or launching it. This
+  closes package preflight only. The decisive F03 run must rebuild from the
+  final clean source so the sealed source and installed package are the same
+  artifact lineage.
 - F03 therefore remains **IMPLEMENTING**, not supported.
 
 ## What is still missing

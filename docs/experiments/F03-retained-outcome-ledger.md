@@ -195,6 +195,32 @@ Partial installed-artifact snapshot for this diagnostic only:
 - IME SHA-256: `b956695285a762cd962881edb756e7089e82acef670a295b430b4b6724f09009`
 - helper SHA-256: `e7b0946d81c2342d0d5afd1639dcb8af444c843b4fb50cef5ceeafa302a80546`
 
+### Clean pre-install package proof
+
+An isolated clean checkout at source
+`3d84b97d211021f315d87ed964899f89dc930b5c` produced Preview9B build 2926
+without installing or launching it. The app identity, IME identity, and
+preview profile matched the intended daily-driver lane. The pinned Qwen model
+was exactly 5,629,109,312 bytes with SHA-256
+`4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`.
+Strict code-signature checks passed for every signed component, hardened
+runtime was present, no entitlements were added, no GGUF was embedded in the
+app, and the full fast proof passed 889/889 tests.
+
+Aggregate pre-install artifact snapshot:
+
+- app binary SHA-256: `9e654c0a672b6f98e419a4d7db2366139985aa9bdc639fae4bc1d2afd2331cef`
+- IME binary SHA-256: `01e487c16dc2ae4c0409914de109d7c3f345ae8138908b29c70a24c5933fbbd7`
+- helper SHA-256: `5736147adcac17fa1566233b024ae9f892f38b5e90e3784031114a4391edbf48`
+- app manifest SHA-256: `1d0afbbe7bdcb5b2d1b3ebcda446acebb07cd1579a0a589b4eb079c0f5f54fde`
+- IME manifest SHA-256: `379712a5e01b4a4da3a52120c4986e92a3ecd7a4123340a7f1aade89b93ba817`
+
+This proves only that the clean replacement package can be reproduced and is
+ready for the pre-install boundary. It does not repair build 2918's missing
+provenance and does not authorize installation or file rotation. Because a
+later documentation commit records this attempt, the decisive run must rebuild
+from the final clean source so its frozen commit and package identity match.
+
 Playing with Lab configs is discovery, not a supported F03 result.
 
 ### Follow-up
