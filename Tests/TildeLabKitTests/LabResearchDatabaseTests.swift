@@ -100,6 +100,33 @@ struct LabResearchDatabaseTests {
         #expect(try await fixture.database.summary(campaignID: fixture.campaign.id).completed == 1)
     }
 
+    @Test("Online event IDs are idempotent only for the exact text-free payload")
+    func onlineEventIdentityConflictRollsBackBatch() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.remove() }
+        let plan = fixture.onlinePlan()
+        let eventID = UUID()
+        let original = fixture.onlineEvent(id: eventID, at: 1_500, nextActionMilliseconds: 100)
+
+        let initial = try await fixture.database.recordOnlineEvents(
+            [original, original],
+            plan: plan
+        )
+        #expect(initial == LabOnlineEventIngestResult(inserted: 1, duplicates: 1))
+
+        let newEvent = fixture.onlineEvent(id: UUID(), at: 1_501, nextActionMilliseconds: 100)
+        let conflicting = fixture.onlineEvent(
+            id: eventID,
+            at: 1_500,
+            nextActionMilliseconds: 101
+        )
+        await #expect(throws: LabResearchDatabaseError.conflictingOnlineEvent) {
+            try await fixture.database.recordOnlineEvents([newEvent, conflicting], plan: plan)
+        }
+
+        #expect(try await fixture.database.onlineEvents(campaignID: fixture.campaign.id) == [original])
+    }
+
     @Test("A protected suite digest can consume holdout exactly once")
     func holdoutReceipt() async throws {
         let fixture = try await Fixture()
@@ -266,6 +293,43 @@ private final class Fixture: @unchecked Sendable {
             generationSeed: 0,
             repetition: repetition,
             blockIndex: 0
+        )
+    }
+
+    func onlinePlan() -> LabOnlineExperimentPlan {
+        LabOnlineExperimentPlan(
+            campaignID: campaign.id,
+            phase: .shadow,
+            championArmID: "champion",
+            championArmDigestSHA256: String(repeating: "1", count: 64),
+            challengerArmID: "challenger",
+            challengerArmDigestSHA256: String(repeating: "2", count: 64),
+            challengerAllocation: 0,
+            startsAt: Date(timeIntervalSince1970: 1_000),
+            endsAt: Date(timeIntervalSince1970: 2_000)
+        )
+    }
+
+    func onlineEvent(
+        id: UUID,
+        at timestamp: TimeInterval,
+        nextActionMilliseconds: Int
+    ) -> LabOnlineExperimentEvent {
+        LabOnlineExperimentEvent(
+            id: id,
+            campaignID: campaign.id,
+            occurredAt: Date(timeIntervalSince1970: timestamp),
+            sessionDigestSHA256: String(repeating: "3", count: 64),
+            variant: .hidden,
+            appCategory: .chat,
+            register: .chat,
+            boundary: .wordBoundary,
+            typingSpeedBucket: .medium,
+            safeOpportunity: true,
+            displayed: false,
+            outcome: .hidden,
+            nextActionMilliseconds: nextActionMilliseconds,
+            opportunityCharacters: 20
         )
     }
 
