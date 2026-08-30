@@ -1,8 +1,9 @@
 # Next thread: on-device F03 ingest
 
-This page is the briefing for a **new local Mac thread**. The previous
-cloud thread implemented the ruler schema. It did not watch anyone type.
-Do not restart the literature sweep. Do not change the ghost.
+This page is the briefing for the **next local Mac F03 run**. The ruler schema
+and live producer exist, and a current-file audit has seen ordinary typing. The
+remaining job is a clean, provenance-bearing full-file run. Do not restart the
+literature sweep. Do not change the ghost.
 
 How we work: [`lab-partnership.md`](lab-partnership.md).
 The attempt notebook: [`lab-log.md`](lab-log.md).
@@ -10,14 +11,16 @@ The protocol: [`docs/experiments/F03-retained-outcome-ledger.md`](../experiments
 
 ## In one sentence
 
-Tilde can see Tab. It cannot see whether those characters were still
-there later. This thread wires a quiet Mac-side counter so Lab can tell
-keep from rewrite without storing words.
+Tilde can now count keep versus rewrite without storing words; this thread
+proves that counter on one fresh, attributable file.
 
 ## What is already true (do not rediscover)
 
-- Personal keyboard papers stalled ~2018–2020. Recent work is generic
-  HCI or Copilot-on-code. See [`where-the-field-stopped.md`](where-the-field-stopped.md).
+- Personal keyboard and prose-writing papers cluster around 2018–2020. Apple
+  published personal email-search query completion in 2024 and production
+  search query completion in 2026; those are retrieval/ranking priors, not
+  prose/IME proof. See
+  [`where-the-field-stopped.md`](where-the-field-stopped.md).
 - The scientific object is the **controller**, not a newer GGUF. See
   [`scientific-program.md`](scientific-program.md).
 - Tab tracks feeling (Ziegler) and still pays for deleted junk. The
@@ -28,12 +31,13 @@ keep from rewrite without storing words.
 - A flicker shorter than 200ms is not a read
   (`SettledVisibility.minimumReadMilliseconds`).
 - Play with configs is a hunch. A decision is one change, same test,
-  frozen everything else. First live bet after F03 is supported: H01
+  frozen everything else. The first live bet after F03 is supported is H01:
   three words vs eight. Not a new model.
 
 ## What already landed on GitHub
 
-On branch `cursor/f03-live-ruler-and-local-diary` (built on PR 424):
+The implementation that began on `cursor/f03-live-ruler-and-local-diary`
+(built on PR 424) is now present in the repository:
 
 - F03 pre-registered, status **IMPLEMENTING**, not supported.
 - `tilde-lab.online-event.v3` plus the IME producer in
@@ -45,14 +49,30 @@ On branch `cursor/f03-live-ruler-and-local-diary` (built on PR 424):
 - Delete Personalization Data wipes the count file and the diary.
 - Production menu stats are still shown / accepted / words.
 
+## What the current audit proves — and does not
+
+- The complete count file has 1,364 events and two pre-fix monotonic-retention
+  violations.
+- An inferred post-install slice has 575 events, including 39 accepts and 225
+  typed-through outcomes, with zero duplicate, XOR, domain, or monotonic
+  violations.
+- That slice is diagnostic only. Its boundary comes from install timing, not
+  sealed event provenance, and the complete file is not clean.
+- F03 therefore remains **IMPLEMENTING**, not supported.
+
 ## What is still missing
 
-1. Rebuild the daily-driver IME so ordinary typing writes events.
-2. Ingest that local count file with `tilde-lab ingest-events --instrument`.
-   **Never check in events, JSONL, or any writing.**
-3. Confirm Tab-and-keep and Tab-and-rewrite look different from real use.
-4. Mark F03 **SUPPORTED** only when the protocol's promotion rule is
-   honestly met. Then stop. Do not start H01.
+1. From a clean source commit, rebuild the daily-driver IME and record the
+   commit, bundle build, installed binary hash, and rotation timestamp in the
+   local run record. The public aggregate may carry hashes and timestamps, not
+   a local path.
+2. Rotate the text-free count file. Preserve or delete the previous local audit
+   file according to the owner's data choice; never check it into Git.
+3. Type normally, then ingest the entire fresh file with
+   `tilde-lab ingest-events --instrument`. **Never check in events, JSONL, or
+   any writing.**
+4. Mark F03 **SUPPORTED** only when the full fresh file meets the protocol's
+   promotion rule. Then stop. Do not start H01 in the same attempt.
 
 `TildeApp` and `InlineGhostIME` must not depend on Tilde Lab. The
 count contract may live in `TildeCore`. Lab remains the ingest and
@@ -70,10 +90,10 @@ report owner.
 
 ## After F03 is actually supported
 
-House research list, in order: F04 (freeze scoring cheats), close or
-kill Qwen on one clean rerun, then H01 (three vs eight) as the first
-live config bet. Playing with other configs in Lab is allowed as
-discovery. Promoting them is not.
+Confirm the Learning Ledger's Stage 0 exit gate, then run H01 (three versus
+eight) as the first live config bet. F04 is already a completed foundation.
+Playing with other configs in Lab is allowed as discovery. Promoting them is
+not.
 
 ## Proof
 

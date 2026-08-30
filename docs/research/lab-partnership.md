@@ -21,9 +21,11 @@ I teach in the same voice I would use with a collaborator in the next office:
 direct, specific, and willing to say "that result would not change what I
 believe."
 
-We are trying to move a field that stalled on 2018–2019 personal keyboards.
-That happens only if the *method* is public and the *result* is identified.
-A nicer ghost that we cannot explain is not a contribution.
+We are trying to move the personal-keyboard and prose-writing line that
+clustered in 2018–2020. Adjacent search-query autocomplete kept advancing, but
+it did not answer Tilde's system-wide writing question. Progress here happens
+only if the *method* is public and the *result* is identified. A nicer ghost
+that we cannot explain is not a contribution.
 
 ## How a session should go
 
@@ -58,9 +60,9 @@ It is the first scientific object.
 
 ## What I will recommend, in order
 
-Until F03 and F04 exist, I will not recommend a new model, a learned gate, or
-a kitchen-sink "personal + scene + short + quiet" campaign. That would be
-unidentifiable.
+F04 exists. Until F03 has a clean, provenance-bearing live proof, I will not
+recommend a new model, a learned gate, or a kitchen-sink
+"personal + scene + short + quiet" campaign. That would be unidentifiable.
 
 After the ruler exists: close Qwen or kill it, then H01 (length / assertiveness)
 as the first *scientific* live question. I will teach why three versus eight
@@ -70,6 +72,28 @@ the generator held fixed.
 The flagship interaction — does a fast typist still skip when the ghost is
 personal and scene-grounded — is a *program*, not one A/B. We get there by
 stacking identified results. I will remind us of that when we get greedy.
+
+## The autoresearch loop, adapted for Tilde
+
+[Karpathy's autoresearch](https://github.com/karpathy/autoresearch) makes rapid
+progress by fixing the evaluator and time budget, changing one bounded target,
+measuring one metric, then keeping or discarding the change and logging the
+attempt. Tilde adopts that loop, not its exact training setup:
+
+1. Freeze the control, corpus/split, assets, runtime, primary metric, hard
+   gates, promotion rule, and kill rule.
+2. Change one causal lever in the currently eligible hypothesis.
+3. Run a fixed-budget machinery smoke, then a fresh campaign without resume.
+4. Review the aggregate report as supported, rejected, or inconclusive.
+5. Keep only a reusable lesson; revert or kill failed treatments, append the
+   lab log either way, and move to the next registered treatment only when the
+   stage gate permits it.
+
+The loop may autonomously screen synthetic development work. It may not open a
+sealed holdout, touch private writing, promote a production change, or compress
+several causal levers into one "winning" stack. Tilde's equivalent of a fixed
+five-minute `val_bpb` run is a registered, privacy-safe experiment budget with
+RNKS and risk gates appropriate to its stage.
 
 ## How we read papers
 

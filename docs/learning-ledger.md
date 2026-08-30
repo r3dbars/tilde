@@ -50,13 +50,15 @@ human calibration and live use remain required.
 
 ### Configuration research
 
-- A preregistered 5,760-generation Future Lattice diagnostic rejected 16
-  independently sampled futures. Exact-prefix coverage rose from 45.28% at
-  K=8 to only 46.67% at K=16; the median K=16 set had two distinct
-  first-two-content-word paths and only 27.22% had four. K=16 took 3,593 ms
-  p50 and 49.12x K=1 summed request latency in a battery-powered run that
-  reached fair thermal state. This is an offline rejection, not authorization
-  for a smaller live lattice; H15 remains locked behind the staged program.
+- A preregistered 5,760-generation Future Lattice diagnostic produced a strong
+  directional negative for 16 independently sampled futures. Exact-prefix
+  coverage rose from 45.28% at K=8 to only 46.67% at K=16; the median K=16 set
+  had two distinct first-two-content-word paths and only 27.22% had four. K=16
+  took 3,593 ms p50 and 49.12x K=1 summed request latency in a battery-powered
+  run that reached fair thermal state. The custom report omitted F01's
+  provenance/review/eligibility envelope, so the formal verdict is
+  inconclusive. It authorizes neither a 16-branch build nor a smaller live
+  lattice; H15 remains locked behind the staged program.
 - Early narrow tests repeatedly pointed toward a three-word visible cap.
 - The 90,000-evaluation Certified V2 campaign confirmed it as the best safe
   display change: human-acceptable output rose from 14.5% to 18.1%, net savings

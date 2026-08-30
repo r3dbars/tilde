@@ -1,6 +1,6 @@
 # Q09 — Future Lattice K=16 feasibility
 
-Status: REJECTED
+Status: INCONCLUSIVE
 Experiment class: generator
 Owner: Tilde research program
 Pre-registered: 2026-08-29T11:36:05Z
@@ -141,7 +141,7 @@ candidate-set hypothesis. Do not respond to failure by trying K above 16.
 
 ## Result
 
-Status: REJECTED
+Status: INCONCLUSIVE
 Completed: 2026-08-29T12:05:20Z
 
 ### Aggregate evidence
@@ -172,11 +172,19 @@ The shareable aggregate is
 
 ### Failures and limitations
 
+- **The run is not decision-grade under F01.** The source
+  `tilde-lab.future-lattice.v1` report and the checked-in public aggregate lack
+  the required run-start `LabReportProvenance`, explicit review, and persisted
+  evidence-eligibility decision. The manually copied source, runner,
+  environment, and invocation fields above are useful audit clues, but they
+  cannot be retrofitted into the machine-validated envelope after the result is
+  known. Q09 is therefore `INCONCLUSIVE`; its metrics remain directional.
 - The decisive run began on battery by explicit owner authorization. Thermal
   state moved from nominal to fair, so the latency figures are directional
   and cannot establish nominal-hardware timing.
-- The rejection does not depend on timing: the registered diversity kill rule
-  failed, and K=16 added only five golden matches beyond nested K=8.
+- The directional negative signal does not depend on timing: the registered
+  diversity kill rule fired, and K=16 added only five golden matches beyond
+  nested K=8. That does not waive the missing evidence envelope.
 - Exact synthetic-prefix coverage is an upper bound on candidate availability,
   not proof that a target-blind lock can choose the right future or that a
   writer will accept it.
@@ -188,10 +196,11 @@ The shareable aggregate is
 
 ### Decision
 
-Reject the 16-independent-future lattice. Do not build it into the IME and do
-not increase K beyond 16. The reusable signal is narrower: most measurable
-set-level coverage arrived by K=8, while the second eight branches bought only
-1.39 points and still failed to create the registered path diversity.
+Withhold a formal supported/rejected decision. Directionally, do not build the
+16-independent-future lattice into the IME and do not increase K beyond 16:
+most measured set-level coverage arrived by K=8, while the second eight
+branches bought only 1.39 points and still failed to create the registered path
+diversity. This is a conservative no-build signal, not decision-grade proof.
 
 Retain a bounded K=4/K=8 or shared-tree hypothesis for a later registered
 generator experiment, but do not promote it to live shadow timing from this
@@ -201,6 +210,7 @@ window, and a target-blind selection rule remains unproved.
 ### Durable changes
 
 - Learning Ledger entry: `future-lattice-k16-independent-branches-rejected`
+  (stable historical ID; corrected to `DIRECTIONAL`)
 - Lab log: `2026-08-29 — Push the Future Lattice to sixteen branches`
 - Regression IDs: none
 - Implementation pull request: [#432](https://github.com/r3dbars/tilde/pull/432)
@@ -208,6 +218,8 @@ window, and a target-blind selection rule remains unproved.
 
 ### Follow-up
 
-Return to the ordered research queue. If Future Lattice becomes eligible later,
-test a preregistered smaller or genuinely diversity-producing shared generator
-before any target-blind lock or real typing-window experiment.
+Return to the ordered research queue. If a durable Q09 verdict is still worth
+the compute, first run an exact provenance-complete replication; otherwise keep
+these numbers as directional triage only. Any later Future Lattice experiment
+must still preregister a smaller or genuinely diversity-producing shared
+generator before target-blind lock or real typing-window work.

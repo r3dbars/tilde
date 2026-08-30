@@ -1,6 +1,6 @@
 # Q10 — K=1 early-start timing falsifier
 
-Status: IMPLEMENTING
+Status: INCONCLUSIVE
 Experiment class: generator
 Owner: Tilde research program
 Pre-registered: 2026-08-29T15:55:00Z
@@ -301,25 +301,81 @@ the same command with `--early-start-smoke` and no output path.
 
 ## Result
 
-Status: NOT RUN
-Completed: —
+Status: INCONCLUSIVE
+Completed: 2026-08-30T20:28:54Z
 
 ### Aggregate evidence
 
-Pending the decisive run. Nothing may be written here before it completes.
+The decisive run completed all 360 development situations, 637 qualifying
+mid-word opportunities, and 1,911/1,911 planned local generations with the
+exact pinned production model. It started on AC power at nominal thermal state
+and ended at fair thermal state.
+
+- **Readiness passed:** the cold early branch was ready by the frozen 180 ms
+  next-boundary model on 637/637 opportunities (100%). It remained 100% ready
+  at the registered 120 ms fast-typing sensitivity point.
+- **Lead passed:** median lead was 694 ms (p25 391 ms, p75 833 ms), versus the
+  registered 200 ms minimum. The registered 120/240 ms sensitivity medians
+  were 454/934 ms.
+- **Exact compatibility was limited:** 250/637 branches (39.25%) remained
+  exact-prefix compatible through the next boundary.
+- **Lockability directionally failed:** only 78/637 opportunities (12.24%)
+  were ready, compatible, and carried at least six exact future characters,
+  below the registered 15% threshold.
+- **Compute missed its budget:** the treatment used 1.87x the control's decoded
+  tokens and 1.73x summed request latency, above the 1.5x token budget.
+- **Soundness passed:** 0/250 revealed branches were simulated false locks.
+- **The hot/cold pair did not rescue it:** pair lockability was 13.03%, only
+  +0.78 percentage points over cold alone, at 3.06x decoded-token compute. Hot
+  survival (73.63%) and duplication (31.40%) did not trigger the pair's kill
+  rule, but both pair promotion-interest gates failed.
+
+The aggregate-only report is
+[`Q10-aggregate-results.json`](Q10-aggregate-results.json), SHA-256
+`0cf2828103600a4aed47f60e333259eecae45e4e4da3c5916f528c195992db0d`.
+It declares no personal writing, raw prompts, raw candidates, or scenario text.
 
 ### Failures and limitations
 
-Pending.
+- **The run is not decision-grade.** The frozen invocation digest
+  `d1f4f961...` hashes the old `/Applications/Tilde.app` helper command, not
+  the registered Model Preview helper command used by the run (whose command
+  digest is `194fe26d...`). The custom `tilde-lab.early-start.v1` report also
+  lacks the v6 run-start provenance, review, and eligibility envelope required
+  by F01. Q10 declares a protocol error `INCONCLUSIVE`; a strong directional
+  result cannot waive that rule.
+- The run reached fair thermal state. That prevents nominal-hardware latency
+  claims. Readiness stayed 100% at the registered fast-typing sensitivity
+  point, while the directional lockability and decoded-token compute failures
+  do not depend on nominal latency.
+- Exact-prefix compatibility with a synthetic golden continuation is an upper
+  bound on target-blind live intent, not proof of acceptance or retained value.
+- The production cleaner suppressed 157/637 cold early outputs (24.65%). The
+  uncleaned compatibility rate was also low (33.75%), so cleaner behavior does
+  not explain away the failed lockability gate.
+- This development-only falsifier opened neither validation nor holdout and
+  made no production, Model Preview, or live-shadow change.
+- The run used clean detached source commit `f609ab6c`, macOS 26.6.2 on arm64
+  hardware class `Mac17,7`, runner binary SHA-256
+  `deb20aae778b58c5759f6af8b332083b94d94c69cd189909d47949d19940bdee`,
+  and the pre-registered suite, model, helper, and source digests.
 
 ### Decision
 
-Pending.
+Mark Q10 `INCONCLUSIVE` and withhold a reusable efficacy decision. The observed
+numbers point strongly against issuing one independent hidden branch after the
+third character: readiness passed, while compatibility, lockability, and
+compute did not. They remain directional until an exact replication binds the
+correct command, source, runner, environment, review, and eligibility state in
+the report itself.
+
+Do not start a live shadow, start earlier, or add branches from this attempt.
+The staged executable queue does not move.
 
 ### Durable changes
 
-- Learning Ledger entry: none yet; add one only if the result is reusable
-- Lab log: `2026-08-29 — Pre-register the early-start timing falsifier`
+- Learning Ledger entry: none; the run is not decision-grade
+- Lab log: `2026-08-30 — Q10 points negative but fails its provenance gate`
 - Regression IDs: none
 - Implementation pull request: [#441](https://github.com/r3dbars/tilde/pull/441)
 - Rollback: delete the development-only runner path and its CLI flags;
@@ -327,4 +383,93 @@ Pending.
 
 ### Follow-up
 
-Pending the result.
+The exact Q10 replication is registered below with the original treatment and
+thresholds, the correct invocation digest, and an F01-complete provenance
+envelope. No other efficacy knob may change. F03 remains the active foundation
+question.
+
+## Exact replication pre-registration (Q10R)
+
+Registered: 2026-08-30T20:56:06Z
+
+Q10R repeats the original 360-situation treatment exactly. It changes no
+candidate, sampler, prompt, cleaner, corpus, split, opportunity rule, timing
+model, metric, threshold, promotion rule, or kill rule. The only treatment is
+to repair the evidence path that made the first run inconclusive.
+
+- Registration ID: `Q10R`
+- Campaign ID: `2d06791d-1fd3-4d84-bfc2-0fb4b8eb1491`
+- Registered hypothesis: starting one K=1 generation after the third character
+  of a qualifying word will make at least 50% of opportunities ready at the
+  following boundary with at least 200 ms median lead, at least 15% lockable,
+  false locks below 2%, and decoded-token compute at or below 1.5x control.
+- Canonical protocol-manifest SHA-256:
+  `f01473c5de946e35b29581e6dd8c9f573f4d30ba0e6a2d774a0b5b9b0122f284`
+- Suite SHA-256:
+  `5bbc362c93e4cf1e3383b81dfe56a48a2f7c5160cc492ad4e1a00b99ddd5b46c`
+- Expected situations / opportunities / generations: `360 / 637 / 1911`
+- Production model SHA-256:
+  `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`
+- Signed Model Preview helper SHA-256:
+  `d55a40de87ff739fe0b6ab4bc7b9ee15c0d3121a47f693dc5ef0ed626d37f343`
+- Execution source: the clean implementation commit containing this protocol;
+  its exact SHA is frozen in the follow-up commit before inference and must
+  equal the run-start report provenance.
+
+The decisive argv is exactly this six-element array; shell quoting and
+redirection are not part of the digest:
+
+```text
+./.build/release/tilde-lab-runner
+--early-start-full
+--helper
+/Applications/Tilde Model Preview.app/Contents/Helpers/llama-server
+--early-start-output
+/tmp/tilde-q10r-report.json
+```
+
+Under `tilde-lab.canonical-invocation.v1`, including the exact relative argv[0]
+and output path above, its SHA-256 is
+`4a3f2ec8cbd98fb4aad338f28c92841aa6de443ab67dd261c4eb41f6e40a0cf5`.
+The historical overnight command in the original pre-registration is not the
+Q10R command. Any argv, source-tree, manifest, suite, planned-count, model, or
+helper mismatch must stop before the first inference request.
+
+Build first, then invoke the decisive process exactly:
+
+```sh
+swift build -c release --product tilde-lab-runner
+./.build/release/tilde-lab-runner \
+  --early-start-full \
+  --helper "/Applications/Tilde Model Preview.app/Contents/Helpers/llama-server" \
+  --early-start-output /tmp/tilde-q10r-report.json
+```
+
+Q10R writes `tilde-lab.early-start.v2` outside the worktree with owner-only
+permissions. The report binds the full arm and execution snapshot, immutable
+run-start provenance, aggregate metrics, privacy contract, review state, and a
+recomputed evidence-eligibility decision. It is born `unreviewed` and therefore
+ineligible; a separate review command may add only a bounded conclusion,
+status, and timestamp. Serious/critical thermal state, an incomplete run, a
+protocol/machinery hard-gate failure, or any evidence-envelope mismatch makes
+the replication inconclusive. A registered efficacy kill-rule failure is
+reviewed as rejected; a compute-only miss with every kill rule passing revises
+without promotion, exactly as the original decision table says. Fair thermal
+state remains reportable but cannot support a nominal-hardware latency claim.
+
+After inspecting the unreviewed aggregate, set `Q10R_REVIEW_STATUS` to one of
+`supported`, `rejected`, or `inconclusive`, and set
+`Q10R_REVIEW_CONCLUSION` to a privacy-safe bounded conclusion. The separate
+review rewrites only the explicit review and eligibility state:
+
+```sh
+./.build/release/tilde-lab-runner \
+  --early-start-review /tmp/tilde-q10r-report.json \
+  --review-status "$Q10R_REVIEW_STATUS" \
+  --review-conclusion "$Q10R_REVIEW_CONCLUSION" \
+  --early-start-output /tmp/tilde-q10r-report.json
+```
+
+The result will be appended only after the full run and separate review. Q10R
+remains a development-only, owner-authorized exception; it cannot unlock H15,
+start a live shadow, change Model Preview, or promote production.

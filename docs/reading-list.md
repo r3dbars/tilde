@@ -39,10 +39,14 @@ They are priors for Tilde, not proof that the same number will appear in Mail.
 
 ## Where the field actually stopped
 
-The last *shipped personal keyboard or mail-ghost* papers are Gboard (2018),
-Smart Compose (2019), and interpolation (2020). Google did not publish the
-sequel. Recent work is either generic HCI (Roy 2025, Li & Feit 2025) or Copilot
-metrics on code. Commercial local Mac ghosts exist; none published a ruler.
+Published *personal keyboard and prose-writing* methods cluster at Gboard
+(2018), Smart Compose (2019), and interpolation (2020). Personal autocomplete
+did not stop altogether: Apple published on-device personalized email-search
+query completion in 2024 and production search query completion with retrieval
+and verification in 2026. Those are strong retrieval/ranking priors, while
+recent generic HCI and Copilot work supplies interaction and retention priors.
+None proves a system-wide personal prose IME. Commercial local Mac ghosts
+exist; none published Tilde's ruler.
 
 That is the hole. No paper has a system-wide desktop IME, on-device personal
 memory, on-screen context, and retained characters counted without storing the
@@ -108,6 +112,8 @@ whole-sentence ghosts, or an edit brain because a paper exists.
 | [Comparison of Four Interruption Methods](https://doi.org/10.1207/s15327051hci1701_2) (McFarlane, 2002) | Negotiate or wait for a breakpoint; do not interrupt immediately unless delay is deadly | [mcfarlane-interruption-2002.md](research/mcfarlane-interruption-2002.md) | `local-after-F03` (H04) |
 | [Predicting Human Interruptibility with Sensors](https://doi.org/10.1145/1089733.1089735) (Fogarty et al.) | Typing is a "not now" sensor; task breakpoints are safer | [fogarty-interruptibility-2005.md](research/fogarty-interruptibility-2005.md) | `github-now` as H04 prior; no extra sensors |
 | [How We Type with Word Suggestions](https://doi.org/10.1145/3749520) (Li & Feit, 2025) | 68% of suggestion checks fail; 43.6% saw the right word and typed it anyway | [how-we-type-word-suggestions-2025.md](research/how-we-type-word-suggestions-2025.md) | `local-after-F03` (type-through-after-show) |
+| [Inkling macOS](https://github.com/dafuct/Inkling-macOS) | Open implementation uses a stricter first-token gate and top-one/top-two dominance; useful H06 baselines, not efficacy evidence | — | `parked` (H06 baseline) |
+| [Language Identification from Very Short Strings](https://machinelearning.apple.com/research/language-identification-from-very-short-strings) (Apple) | Short-prefix language uncertainty can be measured before inference; shadow it before allowing silence | — | `parked` (H07) |
 | Iqbal & Bailey, breakpoint / interruption cost papers | Safer to fire after a completed subtask than mid-burst | — | `parked` (same as H04) |
 | Horvitz BusyBody / LookOut | Learned "is this a meeting?" plus a decision to act now/later/never | — | `not-an-experiment` |
 
@@ -127,6 +133,7 @@ whole-sentence ghosts, or an edit brain because a paper exists.
 | SPACE framework (Forsgren et al.) | Felt productivity has several axes; do not let one Likert item ship a model | — | `not-an-experiment` |
 | Soukoreff & MacKenzie, text-entry metrics | WPM, MSD, KSPC — use KSPC as the human-error floor next to NKS | — | `github-now` |
 | CodeCompose metrics (Dunay et al.) | Only credit accepts shown >750 ms; keystrokes saved = accepted / typed | [multiline-code-authoring-2024.md](research/multiline-code-authoring-2024.md) | `github-now` (F04 flicker-accept) |
+| [The Secret Sharer](https://research.google/pubs/the-secret-sharer-evaluating-and-testing-unintended-memorization-in-neural-networks/) (Carlini et al.) | Synthetic canaries can detect memorization leakage without using owner writing; proposed F04 extension, not part of its completed ten cases | — | `github-now` after pre-registration |
 
 ### 3. How long / how much to show
 
@@ -163,6 +170,8 @@ whole-sentence ghosts, or an edit brain because a paper exists.
 | Smart Compose personal n-gram blend | `P = α P_personal + (1-α) P_global`; live ~6% CTR / ~10% EM; interior α (~0.4) beat "all personal" | [smart-compose-2019.md](research/smart-compose-2019.md) | `parked` (Stage 3) |
 | [Personalized interpolation](https://arxiv.org/abs/2006.05469) (Shao et al., 2020) | OOV-aware α; 80% of users improved; thin history barely helps | [personalized-interpolation-2020.md](research/personalized-interpolation-2020.md) | `parked` (Stage 3) |
 | [kNN-LM](https://arxiv.org/abs/1911.00172) (Khandelwal et al.) | Retrieval over past text helps rare personal tokens | [knn-lm-2019.md](research/knn-lm-2019.md) | `parked` (H09/H11) |
+| [Retrieval-quality-aware generation](https://aclanthology.org/2022.findings-emnlp.218/) | Retrieval confidence should affect how much evidence a generator trusts | — | `parked` (H11 after exact phrase baseline) |
+| [Adaptive retrieval](https://aclanthology.org/2021.emnlp-main.461/) | Retrieve only when the base model is uncertain enough to benefit | — | `parked` (H11/H12) |
 | [Continuous cache](https://arxiv.org/abs/1612.04426) (Grave, Joulin & Usunier) | Decaying pointer over recent hidden states; no retraining | [continuous-cache-2016.md](research/continuous-cache-2016.md) | `parked` (H10) |
 | Kuhn & De Mori, cache language models | Count-based recency before neural caches existed | — | `parked` (H10) |
 | Jurafsky & Martin, SLP ch. 3 | KN smoothing / backoff behind the Personal History table | [ngram-language-models-slp3.md](research/ngram-language-models-slp3.md) | `not-an-experiment` |
@@ -179,7 +188,7 @@ whole-sentence ghosts, or an edit brain because a paper exists.
 | [FIM](https://arxiv.org/abs/2207.14255) (Bavarian et al.) | Suffix-aware fill-in-the-middle; no NL FIM GGUF to download (checked 2026-08-15) | [fill-in-the-middle-2022.md](research/fill-in-the-middle-2022.md) | `parked` (H17 / mid-edit) |
 | InCoder; CodeLlama FIM; SantaCoder | Code FIM exists; CodeCompose used it to avoid suffix damage | — | `parked` |
 | [Speculative decoding](https://arxiv.org/abs/2211.17192) (Leviathan et al.) | Draft-and-verify; helper already can | [speculative-decoding-2022.md](research/speculative-decoding-2022.md) | `local-after-F03` (runtime flag) |
-| Prompt-lookup decoding (Saxena; llama.cpp) | Draft by copying n-grams already in the prompt; no second GGUF | [prompt-lookup-decoding-2023.md](research/prompt-lookup-decoding-2023.md) | `local-after-F03` |
+| Prompt-lookup decoding (Saxena; [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md)) | Current helper modes include simple/map/modified/cache n-gram speculation and expose accepted-versus-drafted counters; capability still needs one frozen A/B | [prompt-lookup-decoding-2023.md](research/prompt-lookup-decoding-2023.md) | `local-after-F03` (H02 follow-up) |
 | Medusa, EAGLE, Lookahead, Jacobi | Extra heads / trees for speculation | — | `parked` (new model pieces) |
 | CALM / early-exit / mixture-of-depths | Spend less compute when sure | — | `parked` |
 | [Lost in the Middle](https://arxiv.org/abs/2307.03172) (Liu et al.) | Pack fresh prefix and best scene at the edges; do not just lengthen | [lost-in-the-middle-2023.md](research/lost-in-the-middle-2023.md) | `github-now` synthetic packing tests |
@@ -217,6 +226,8 @@ whole-sentence ghosts, or an edit brain because a paper exists.
 | Smart Reply (above) | Trigger + diversity, not ghost text | [smart-reply-2016.md](research/smart-reply-2016.md) | see §1 |
 | IntelliCode Compose (above) | First whole-line IDE ghost + client trie | [intellicode-compose-2020.md](research/intellicode-compose-2020.md) | see §3 |
 | CodeCompose / multi-line (above) | Visual stability and 750 ms display floor | [multiline-code-authoring-2024.md](research/multiline-code-authoring-2024.md) | see §3 |
+| [On-device personalized email-search QAC](https://machinelearning.apple.com/research/query-auto-completion-email) (Apple, 2024) | Retrieval, personalized features, and ranking on-device; prior for H03, not prose-continuation proof | — | `parked` (H03 ablations) |
+| [Production query autocomplete](https://machinelearning.apple.com/research/query-auto-completion) (Apple, 2026) | Retrieval-augmented generation plus verification/reranking; its search A/B reported 5.44% fewer characters typed and 3.46% more suggestions taken, but it is not IME evidence | — | `parked` (Stage 4) |
 | Mozannar / Ziegler / Peng / Barke / Vaithilingam / GitHub 2025 | Copilot metric and UX cluster | see §1–§3 | see those rows |
 | Liang et al., why developers reject Copilot | Rejection taxonomy (wrong, too long, already knew) | — | `not-an-experiment` |
 | Weisz, Sarkar, Prather, other Copilot HCI | More over-reliance and trust calibration | — | `not-an-experiment` |

@@ -1,7 +1,7 @@
 {
   "schema": "tilde-lab.future-lattice.public-aggregate.v1",
   "experimentID": "Q09",
-  "status": "rejected",
+  "status": "inconclusive",
   "completedAt": "2026-08-29T12:05:20Z",
   "suite": {
     "name": "Tilde Certified Corpus V2 1000 - Development",
@@ -43,6 +43,7 @@
   "decision": {
     "promotionRulePassed": false,
     "killRuleTriggered": true,
-    "reason": "K=16 failed the registered diversity gate and kill threshold; its nested gain over K=8 was 5 of 360 situations."
+    "decisionGrade": false,
+    "reason": "The directional metrics triggered the registered diversity kill rule, but the custom source report lacks F01 run-start provenance, explicit review, and a persisted evidence-eligibility decision."
   }
 }

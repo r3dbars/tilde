@@ -19,7 +19,7 @@ struct LabLearningLedgerTests {
         })
         #expect(snapshot.entries.contains {
             $0.id == "future-lattice-k16-independent-branches-rejected"
-                && $0.status == .rejected
+                && $0.status == .directional
                 && $0.evaluationCount == 5760
         })
         #expect(snapshot.entries.contains {

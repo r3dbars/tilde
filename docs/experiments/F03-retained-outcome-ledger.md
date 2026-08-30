@@ -158,14 +158,28 @@ v2 decode, and aggregate coverage fields are implemented with fixtures. The
 Mac-side producer is now wired: IME writes text-free counts next to a local
 word diary, Delete Personalization Data wipes both, and
 `tilde-lab ingest-events --instrument` plus `online-report` can show keep
-versus rewrite. Live events from ordinary typing on this Mac are still
-missing, so the promotion rule is not met.
+versus rewrite.
+
+A current-file audit found 1,364 live events and two monotonic-retention
+violations, both from before the installed clamp. An inferred post-install
+slice contains 575 events, including 39 accepts and 225 typed-through outcomes,
+with zero duplicate, XOR, domain, or monotonic violations. Accepted-horizon
+coverage in that slice is 34/39 at five seconds, 12/39 at 30 seconds, and 39/39
+at segment close; the missing observations are explicit rather than coerced to
+zero.
+
+This does not support F03. The slice boundary is inferred from install timing,
+the installed build has no sealed source revision in the event provenance, and
+the complete count file still contains the two earlier violations. A clean,
+provenance-bearing full-file run is still required by the promotion rule.
 
 Playing with Lab configs is discovery, not a supported F03 result.
 
 ### Follow-up
 
-Rebuild the daily-driver IME, ingest the local count file from real
-typing, and do not check events in. If supported: F04 (freeze scoring
-cheats as tests), then close Qwen, then H01 as the first live scientific
-question with RNKS as the primary metric.
+From a clean source commit, rebuild the daily-driver IME and record the commit,
+bundle build, installed binary hash, and rotation time in the local run record.
+Then rotate the text-free count file, type normally, and ingest the entire fresh
+file without checking events in. Mark F03 supported only if that attributable
+full file passes the registered gates. F04 is already a completed foundation;
+H01 remains locked until F03 and the Stage 0 exit gate are honestly closed.

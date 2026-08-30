@@ -189,6 +189,7 @@ public enum LabEvidenceIneligibilityReason: String, Codable, CaseIterable, Senda
     case machineStateUnavailable = "machine-state-unavailable"
     case invocationUnavailable = "invocation-unavailable"
     case hypothesisUnregistered = "hypothesis-unregistered"
+    case protocolMismatch = "protocol-mismatch"
     case unsafePrivacyContract = "unsafe-privacy-contract"
     case incompleteRun = "incomplete-run"
     case reviewPending = "review-pending"
@@ -228,8 +229,48 @@ public struct LabEvidenceEligibility: Codable, Equatable, Sendable {
     public let reasons: [LabEvidenceIneligibilityReason]
 
     public init(reasons: [LabEvidenceIneligibilityReason]) {
-        self.reasons = reasons
-        eligible = reasons.isEmpty
+        self.reasons = Array(Set(reasons)).sorted { $0.rawValue < $1.rawValue }
+        eligible = self.reasons.isEmpty
+    }
+
+    /// Shared fail-closed policy for every decision-grade Lab report shape.
+    /// A custom aggregate report must meet the same provenance, privacy,
+    /// completeness, and explicit-review boundary as the canonical run report.
+    public static func evaluate(
+        schemaIsCurrent: Bool,
+        provenance: LabReportProvenance?,
+        review: LabReportReview?,
+        privacy: LabPrivacyContract,
+        runComplete: Bool,
+        evidenceDecisionPresent: Bool,
+        additionalReasons: [LabEvidenceIneligibilityReason] = []
+    ) -> LabEvidenceEligibility {
+        var reasons = additionalReasons
+        if !schemaIsCurrent {
+            reasons.append(.legacyReportSchema)
+        } else if !evidenceDecisionPresent {
+            reasons.append(.evidenceDecisionMissing)
+        }
+        if let provenance {
+            reasons.append(contentsOf: provenance.ineligibilityReasons)
+        } else {
+            reasons.append(.missingProvenance)
+        }
+        if !privacy.aggregateOnly || privacy.rawScenarioText || privacy.rawModelOutput
+            || privacy.filePaths {
+            reasons.append(.unsafePrivacyContract)
+        }
+        if !runComplete { reasons.append(.incompleteRun) }
+        guard let review else {
+            reasons.append(.reviewPending)
+            return LabEvidenceEligibility(reasons: reasons)
+        }
+        if (try? review.validated()) == nil {
+            reasons.append(.reviewInvalid)
+        } else if review.status == .unreviewed {
+            reasons.append(.reviewPending)
+        }
+        return LabEvidenceEligibility(reasons: reasons)
     }
 }
 
@@ -406,36 +447,14 @@ public extension LabRunReport {
         metrics: LabAggregateMetrics,
         evidenceDecisionPresent: Bool
     ) -> LabEvidenceEligibility {
-        var reasons: [LabEvidenceIneligibilityReason] = []
-        if schema != Self.currentSchema {
-            reasons.append(.legacyReportSchema)
-        } else if !evidenceDecisionPresent {
-            reasons.append(.evidenceDecisionMissing)
-        }
-        if let provenance {
-            reasons.append(contentsOf: provenance.ineligibilityReasons)
-        } else {
-            reasons.append(.missingProvenance)
-        }
-        if !privacy.aggregateOnly || privacy.rawScenarioText || privacy.rawModelOutput
-            || privacy.filePaths {
-            reasons.append(.unsafePrivacyContract)
-        }
-        if !metrics.complete { reasons.append(.incompleteRun) }
-        guard let review else {
-            reasons.append(.reviewPending)
-            return LabEvidenceEligibility(reasons: Array(Set(reasons)).sorted {
-                $0.rawValue < $1.rawValue
-            })
-        }
-        if (try? review.validated()) == nil {
-            reasons.append(.reviewInvalid)
-        } else if review.status == .unreviewed {
-            reasons.append(.reviewPending)
-        }
-        return LabEvidenceEligibility(reasons: Array(Set(reasons)).sorted {
-            $0.rawValue < $1.rawValue
-        })
+        LabEvidenceEligibility.evaluate(
+            schemaIsCurrent: schema == Self.currentSchema,
+            provenance: provenance,
+            review: review,
+            privacy: privacy,
+            runComplete: metrics.complete,
+            evidenceDecisionPresent: evidenceDecisionPresent
+        )
     }
 
     @discardableResult

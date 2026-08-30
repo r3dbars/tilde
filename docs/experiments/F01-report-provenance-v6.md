@@ -137,6 +137,13 @@ running further decision-grade experiments.
   +875 net lines. Its separate repository-boundary check passed. The normal
   blocking fast proof remains the applicable pre-merge gate; this mismatch is
   recorded rather than hidden or bypassed in the script.
+- 2026-08-30: Q09 and Q10 later introduced custom aggregate report structs
+  outside `LabRunReport` and accidentally bypassed this contract. The audit
+  corrected both historical verdicts to inconclusive, extracted one shared
+  run-start capture and eligibility evaluator, and required the Q10 replication
+  report to persist the same provenance, review, and fail-closed eligibility
+  state. F01 remains the supported contract; the custom paths were a regression,
+  not permission to retrofit old results.
 
 ## Result
 
