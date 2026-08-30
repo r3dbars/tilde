@@ -375,6 +375,10 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         if observedRetentions.contains(where: { $0 > acceptedCharacters }) {
             throw LabOnlineExperimentError.invalidEvent
         }
+        if let retained = retentionAt5Seconds.retainedCharacters,
+           replacedCharactersWithin5Seconds != acceptedCharacters - retained {
+            throw LabOnlineExperimentError.invalidEvent
+        }
         if let five = retentionAt5Seconds.retainedCharacters,
            let thirty = retentionAt30Seconds.retainedCharacters,
            thirty > five {
@@ -758,6 +762,9 @@ public enum LabOnlineExperimentAnalyzer {
         }
         let safe = events.filter(\.safeOpportunity)
         let shown = safe.filter(\.displayed)
+        let accepted = shown.filter {
+            $0.outcome == .acceptedAll || $0.outcome == .acceptedWord
+        }
         let acceptedAll = shown.count { $0.outcome == .acceptedAll }
         let acceptedWord = shown.count { $0.outcome == .acceptedWord }
         let corrected = shown.count { $0.outcome == .corrected }
@@ -837,16 +844,16 @@ public enum LabOnlineExperimentAnalyzer {
             },
             settledReads: shown.count { SettledVisibility.countsAsRead($0.settledVisibleMilliseconds) },
             retentionAt5Seconds: LabRetentionAccounting.report(
-                safe,
+                accepted,
                 horizon: \.retentionAt5Seconds,
                 replacedAtHorizon: { $0.replacedCharactersWithin5Seconds }
             ),
             retentionAt30Seconds: LabRetentionAccounting.report(
-                safe,
+                accepted,
                 horizon: \.retentionAt30Seconds
             ),
             retentionAtSegmentClose: LabRetentionAccounting.report(
-                safe,
+                accepted,
                 horizon: \.retentionAtSegmentClose
             )
         )

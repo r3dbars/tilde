@@ -180,10 +180,10 @@ extension ResearchCoordinator {
                     ResearchConsole.line("    acceptance when shown: \(arm.report.acceptanceRateWhenShown.formatted(.percent.precision(.fractionLength(1))))")
                     ResearchConsole.line("    typed-through: \(arm.report.typedThrough)")
                     ResearchConsole.line(
-                        "    retention 30s: \(arm.report.retentionAt30Seconds.observedEvents) observed / \(arm.report.retentionAt30Seconds.missingEvents) missing, net \(arm.report.retentionAt30Seconds.netRetainedCharacters)"
+                        "    accepted retention 30s: \(arm.report.retentionAt30Seconds.observedEvents) observed / \(arm.report.retentionAt30Seconds.missingEvents) missing, net \(arm.report.retentionAt30Seconds.netRetainedCharacters)"
                     )
                     ResearchConsole.line(
-                        "    retention segment: \(arm.report.retentionAtSegmentClose.observedEvents) observed / \(arm.report.retentionAtSegmentClose.missingEvents) missing, net \(arm.report.retentionAtSegmentClose.netRetainedCharacters)"
+                        "    accepted retention segment: \(arm.report.retentionAtSegmentClose.observedEvents) observed / \(arm.report.retentionAtSegmentClose.missingEvents) missing, net \(arm.report.retentionAtSegmentClose.netRetainedCharacters)"
                     )
                 }
                 ResearchConsole.line("  arms are event tags, not proof: H01 is not started.")
@@ -204,13 +204,13 @@ extension ResearchCoordinator {
             ResearchConsole.line("  typed-through: \(report.typedThrough)")
             ResearchConsole.line("  flicker accepts (not counted as reads): \(report.flickerAccepts)")
             ResearchConsole.line(
-                "  retention 5s: \(report.retentionAt5Seconds.observedEvents) observed / \(report.retentionAt5Seconds.missingEvents) missing, net \(report.retentionAt5Seconds.netRetainedCharacters)"
+                "  accepted retention 5s: \(report.retentionAt5Seconds.observedEvents) observed / \(report.retentionAt5Seconds.missingEvents) missing, net \(report.retentionAt5Seconds.netRetainedCharacters)"
             )
             ResearchConsole.line(
-                "  retention 30s: \(report.retentionAt30Seconds.observedEvents) observed / \(report.retentionAt30Seconds.missingEvents) missing, net \(report.retentionAt30Seconds.netRetainedCharacters)"
+                "  accepted retention 30s: \(report.retentionAt30Seconds.observedEvents) observed / \(report.retentionAt30Seconds.missingEvents) missing, net \(report.retentionAt30Seconds.netRetainedCharacters)"
             )
             ResearchConsole.line(
-                "  retention segment: \(report.retentionAtSegmentClose.observedEvents) observed / \(report.retentionAtSegmentClose.missingEvents) missing, net \(report.retentionAtSegmentClose.netRetainedCharacters)"
+                "  accepted retention segment: \(report.retentionAtSegmentClose.observedEvents) observed / \(report.retentionAtSegmentClose.missingEvents) missing, net \(report.retentionAtSegmentClose.netRetainedCharacters)"
             )
             ResearchConsole.line("  net time saved / 1,000 chars: \(report.netTimeSavedPer1000Characters.formatted(.number.precision(.fractionLength(1)))) ms")
             if let calibration = report.confidenceCalibration {

@@ -131,6 +131,42 @@ struct LabRetainedOutcomeTests {
         }
     }
 
+    @Test("Retention coverage is measured over accepted spans only")
+    func retentionCoverageExcludesNonAccepts() throws {
+        let missing = try retainedEvent(
+            accepted: 10,
+            five: RetainedCharacterObservation(missingness: .observerStopped),
+            thirty: RetainedCharacterObservation(missingness: .observerStopped),
+            segment: RetainedCharacterObservation(missingness: .observerStopped)
+        )
+        let ignored = try (0..<99).map { _ in
+            try retainedEvent(
+                outcome: .ignored,
+                accepted: 0,
+                displayed: true,
+                settledVisible: 250
+            )
+        }
+        let report = try LabOnlineExperimentAnalyzer.analyze([missing] + ignored)
+        #expect(report.retentionAt5Seconds.observedEvents == 0)
+        #expect(report.retentionAt5Seconds.missingEvents == 1)
+        #expect(report.retentionAt30Seconds.observedEvents == 0)
+        #expect(report.retentionAt30Seconds.missingEvents == 1)
+        #expect(report.retentionAtSegmentClose.observedEvents == 0)
+        #expect(report.retentionAtSegmentClose.missingEvents == 1)
+    }
+
+    @Test("Observed five-second retention reconciles with replacement count")
+    func observedFiveSecondRetentionMustReconcile() throws {
+        #expect(throws: LabOnlineExperimentError.invalidEvent) {
+            try retainedEvent(
+                accepted: 10,
+                replacedWithin5s: 1,
+                five: try RetainedCharacterObservation(retainedCharacters: 8)
+            ).validated(for: plan())
+        }
+    }
+
     @Test("Every observed retention horizon is bounded by accepted characters")
     func everyObservedHorizonIsBoundedByAcceptance() throws {
         #expect(throws: LabOnlineExperimentError.invalidEvent) {
