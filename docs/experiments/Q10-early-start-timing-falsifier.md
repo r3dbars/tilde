@@ -526,7 +526,7 @@ paths, or network inference.
 - Learning Ledger entry: `early-start-third-character-k1-rejected`
 - Lab log: `2026-08-30 — Q10R rejects third-character K=1 early start`
 - Regression IDs: none; no production behavior changed
-- Implementation pull request: this research branch's review
+- Implementation pull request: [#459](https://github.com/r3dbars/tilde/pull/459)
 - Rollback: remove the development-only Q10 runner/review path and aggregate;
   the shipped product is unchanged
 
