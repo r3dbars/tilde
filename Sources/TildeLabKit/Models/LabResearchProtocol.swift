@@ -51,6 +51,21 @@ public enum LabPrimaryResearchMetric: String, Codable, CaseIterable, Sendable {
     case expectedUtility = "expected-utility"
     case oracleNetKeystrokeSavings = "oracle-net-keystroke-savings"
     case precisionWhenShown = "precision-when-shown"
+    /// The bad-when-shown paired difference. Display-policy campaigns decide
+    /// which candidates are shown; they do not change which characters match
+    /// the recorded future, so exact-path keystroke credit and the latency-gated
+    /// utility proxy can both be flat by construction while harm-when-shown
+    /// moves. Registering this metric lets such a campaign be judged on the
+    /// effect it can actually produce, without weakening any hard gate.
+    case badWhenShown = "bad-when-shown"
+
+    /// True when a decrease is the improvement. The paired comparator orients
+    /// the registered primary estimate so that positive always means better.
+    public var lowerIsBetter: Bool { self == .badWhenShown }
+
+    public var title: String {
+        rawValue.split(separator: "-").map(String.init).joined(separator: " ")
+    }
 }
 
 /// A narrow non-promotional exception for the corpus falsification proof. It

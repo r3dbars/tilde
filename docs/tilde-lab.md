@@ -177,6 +177,39 @@ per-seed results and the worst seed, protected slice deltas, and Wilson upper
 bounds for rare harm. A diagnostic cleaner can explain a failure but can never
 promote. Rank alone is never a promotion rule.
 
+### Registered primary metric
+
+Every campaign pre-registers the one paired difference its promotion rule is
+applied to, with `--primary-metric` on `init`:
+
+| Metric | Meaning | Direction |
+| --- | --- | --- |
+| `expected-utility` | the latency-gated time-value proxy, in milliseconds per 1,000 baseline characters | higher is better |
+| `oracle-net-keystroke-savings` | the Net Keystrokes Saved rate — the same ledger the arm aggregate reports | higher is better |
+| `precision-when-shown` | useful share of displays | higher is better |
+| `bad-when-shown` | harmful share of displays | lower is better |
+
+`bad-when-shown` is the default for the `display-policy` class and the reason
+that default exists: a display experiment changes which candidates are shown,
+not which characters match the recorded future, so exact-path keystroke credit
+and the expected-utility proxy can both be flat for it by construction. The
+comparator orients the registered metric so a positive estimate always means
+an improvement, and applies the protected-slice guard to the same metric. This
+is a choice of exam, never a discount: the hard gates, the keystroke ledger,
+and the harm ceiling are unchanged, and the metric is frozen before the result
+is known like every other registered control.
+
+Expected utility is a *proxy*, not the mission. It scores a display only when
+that display's recorded first token beats the registered stable-word deadline
+(400 ms by default). A high-throughput Lab matrix — many workers and slots,
+declared quality-only with no latency claims — records almost no display inside
+that deadline, so its expected utility collapses to a near-constant and every
+paired difference reads 0.00 [0.00, 0.00] with every root a tie. That is the
+instrument saying "this run carries no timing evidence", not the treatment
+saying "no effect". `compare` prints the registered metric first and the
+utility, net-keystroke, and harm differences beneath it so the two can never be
+read as the same number again.
+
 The default generator recipe is the exact 4 × 2 temperature/token-budget
 factorial (0, 0.05, 0.10, 0.15 × 20 or 12 tokens). `qmc`, balanced successive
 halving, constrained Pareto selection, and adaptive local search are available
@@ -929,6 +962,15 @@ also match the recorded future can earn actual keystroke credit. One
 acceptance key is subtracted from every accepted segment; recorded correction
 costs and wrong or unwanted dismissal costs are also subtracted. The result is
 shown as both a percentage and saved keystrokes per 1,000 baseline characters.
+
+Exact-path-only keystroke credit is one definition, not two. The arm aggregate
+and the paired comparator's `oracle-net-keystroke-savings` read the same
+per-case ledger, so a recovered acceptable alternative earns identical credit —
+quality credit, no keystroke credit — in both. Neither view is the looser
+number. A campaign whose displays are mostly accepted alternatives should
+expect a small keystroke difference and register a metric that matches what it
+changed; it must not read a flat `Δ utility` as a flat keystroke result, since
+those are different quantities.
 
 Every loss is also classified as capture, extraction, scene attribution,
 intent, wording, display, length, timing, or interaction. These buckets are
