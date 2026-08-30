@@ -186,54 +186,22 @@ public enum LabOutputJudge {
             .contains(where: { $0.contains(normalizedCandidate) })
     }
 
-    private static func containsUnsupportedFact(
+    /// The grounding rule itself lives in `TildeCore.FactualGroundingPolicy`
+    /// so the Lab judge and the live completion path cannot drift apart.
+    /// The judge keeps ownership of *when* to apply it; the rule is shared.
+    static func containsUnsupportedFact(
         _ candidate: String,
         typedContext: String,
         scene: ScreenScene.Scene?,
         mode: LabFactualGroundingMode
     ) -> Bool {
-        let source = ([typedContext]
-            + (scene?.conversationTurns.map(\.text) ?? [])
-            + (scene?.referenceSnippets ?? []))
-            .joined(separator: " ")
-        let allowed = factualAnchors(in: source, mode: mode, dropsLeadingCapital: false)
-        let offered = factualAnchors(in: candidate, mode: mode, dropsLeadingCapital: true)
-        return !offered.isSubset(of: allowed)
+        FactualGroundingPolicy.containsUnsupportedFact(
+            candidate,
+            typedContext: typedContext,
+            scene: scene,
+            mode: mode.groundingMode
+        )
     }
-
-    private static func factualAnchors(
-        in text: String,
-        mode: LabFactualGroundingMode,
-        dropsLeadingCapital: Bool
-    ) -> Set<String> {
-        let tokens = text.split { !$0.isLetter && !$0.isNumber && $0 != "@" }
-        var result = Set<String>()
-        for (index, tokenValue) in tokens.enumerated() {
-            let token = String(tokenValue)
-            let folded = token.lowercased()
-            let hasDigit = token.contains(where: \.isNumber)
-            let isCapitalized = token.first?.isUppercase == true && !(dropsLeadingCapital && index == 0)
-            let isKnownFactWord = factWords.contains(folded)
-            let isEmailish = token.contains("@")
-            if hasDigit || isEmailish || isKnownFactWord || isCapitalized {
-                if !ignoredCapitalizedWords.contains(folded) { result.insert(folded) }
-            } else if mode == .allAnchors, token.count >= 7 {
-                result.insert(folded)
-            }
-        }
-        return result
-    }
-
-    private static let factWords: Set<String> = [
-        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-        "january", "february", "march", "april", "may", "june", "july", "august",
-        "september", "october", "november", "december", "today", "tomorrow", "yesterday",
-        "am", "pm", "noon", "midnight",
-    ]
-
-    private static let ignoredCapitalizedWords: Set<String> = [
-        "i", "yes", "no", "okay", "ok", "thanks", "thank", "sure", "sounds", "sorry",
-    ]
 
     private static func normalized(_ text: String) -> String {
         text.lowercased()
