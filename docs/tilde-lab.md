@@ -365,7 +365,9 @@ search order, never as evidence.
 
 After a passing holdout, `shadow`, `dogfood`, and `soak` create sticky local
 plans. `ingest-events` accepts a closed text-free JSONL schema; raw text fields
-are structurally rejected. v3 events also carry typed-through, settled-visible
+are structurally rejected. A file is validated and committed atomically, and
+the CLI reports inserted rows separately from duplicate IDs. v3 events also
+carry typed-through, settled-visible
 time, and retained-character counts or missingness at 5s, 30s, and segment
 close. `online-report` prints coverage and missingness at those horizons,
 typed-through, flicker accepts, realized accepted characters, edits/undoes,

@@ -770,7 +770,21 @@ struct LabResearchV2Tests {
         ))
         try await database.saveOnlinePlan(shadow)
         #expect(try await database.onlinePlan(campaignID: campaignID) == shadow)
-        try await database.recordOnlineEvent(hidden, plan: shadow)
+        let invalidLaterEvent = onlineEvent(
+            campaignID: campaignID,
+            at: 2_001,
+            variant: .hidden,
+            displayed: false,
+            outcome: .hidden,
+            nextAction: 100
+        )
+        await #expect(throws: LabOnlineExperimentError.invalidEvent) {
+            try await database.recordOnlineEvents([hidden, invalidLaterEvent], plan: shadow)
+        }
+        #expect(try await database.onlineEvents(campaignID: campaignID).isEmpty)
+
+        let ingest = try await database.recordOnlineEvents([hidden, hidden], plan: shadow)
+        #expect(ingest == LabOnlineEventIngestResult(inserted: 1, duplicates: 1))
         #expect(try await database.onlineEvents(campaignID: campaignID) == [hidden])
         try await database.deleteOnlineEvents(campaignID: campaignID)
         #expect(try await database.onlineEvents(campaignID: campaignID).isEmpty)
