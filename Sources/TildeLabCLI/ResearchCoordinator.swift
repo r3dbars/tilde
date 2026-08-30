@@ -70,6 +70,7 @@ enum ResearchCoordinator {
           --policy heuristic|external-command
           --decision-command /absolute/policy-command [--decision-argument VALUE]
           --decision-batch-size 1..100  --decision-workers 1..16
+          --skip-failed-batches 0..50
           --helper PATH --model-file PATH --workers 1 --slots 1
           --output simulated-typist.json [--json]
         The external command reads one text-free JSON feature object on stdin
@@ -80,6 +81,13 @@ enum ResearchCoordinator {
         Batches only ever group moments from different persona/scenario pairs.
         Decision workers above 1 resolve that many batches at once; decisions
         are still applied in batch order, so the aggregates do not change.
+        --skip-failed-batches N (external-command policy only) lets that many
+        failed batches abandon the sessions they held instead of aborting the
+        run. Abandoned sessions are excluded from every persona aggregate, and
+        the report and this summary carry the skipped, abandoned-session, and
+        abandoned-moment counts. Exceeding N still aborts. The report also
+        records the model identity, revision, and asset digests behind the
+        candidates.
         """,
         "advance-search": "Usage: tilde-lab advance-search --campaign CAMPAIGN.json --stage halving|adaptive [--candidates 8] [--output CHILD.json]",
         "nominate": "Usage: tilde-lab nominate --campaign CAMPAIGN.json [--top 3] --output validation-plan.json",
