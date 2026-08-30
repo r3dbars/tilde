@@ -23,6 +23,7 @@ enum ResearchCoordinator {
         case "dogfood": try await configureOnline(arguments, phase: .dogfood)
         case "soak": try await configureOnline(arguments, phase: .soak)
         case "ingest-events": try await ingestEvents(arguments)
+        case "f03-closeout": try f03Closeout(arguments)
         case "online-report": try await onlineReport(arguments)
         case "confidence-report": try await confidenceReport(arguments)
         case "soak-report": try await soakReport(arguments)
@@ -107,7 +108,16 @@ enum ResearchCoordinator {
         "shadow": "Usage: tilde-lab shadow --campaign CAMPAIGN.json --candidate ID --holdout-plan PLAN.json [--days 3] [--database PATH]",
         "dogfood": "Usage: tilde-lab dogfood --campaign CAMPAIGN.json --challenger ID --holdout-plan PLAN.json [--champion ID] [--allocation 0.10] [--holdback 0.10] [--days 7]",
         "soak": "Usage: tilde-lab soak --campaign CAMPAIGN.json --candidate ID --holdout-plan PLAN.json [--champion ID] [--hours 4] [--minimum-events 100] [--database PATH]",
-        "ingest-events": "Usage: tilde-lab ingest-events (--instrument | --campaign CAMPAIGN.json) [--input events.jsonl] [--database PATH]",
+        "ingest-events": """
+        Usage: tilde-lab ingest-events (--instrument | --campaign CAMPAIGN.json) --input events.jsonl [--database PATH]
+          --instrument ingest is diagnostic only and always requires an explicit input.
+          It cannot support F03; use `tilde-lab f03-closeout` for decision-grade evidence.
+        """,
+        "f03-closeout": """
+        Usage: tilde-lab f03-closeout --receipt receipt.json --output closeout.json
+          Securely closes the receipt-selected Preview9B Outcome Ledger into one
+          path-free aggregate report. The output is never overwritten.
+        """,
         "online-report": "Usage: tilde-lab online-report (--instrument | --campaign CAMPAIGN.json) [--database PATH] [--by-arm] [--json]",
         "confidence-report": "Usage: tilde-lab confidence-report --campaign CAMPAIGN.json [--database PATH] [--output report.json] [--json]",
         "soak-report": "Usage: tilde-lab soak-report --campaign CAMPAIGN.json [--database PATH] [--json]",
