@@ -144,6 +144,7 @@ struct CLIArguments {
       dogfood                 create a sticky controlled local dogfood plan
       soak                    create a bounded four-hour/overnight stability plan
       ingest-events           ingest strict text-free JSONL online events
+      f03-closeout            seal one aggregate-only decision-grade F03 run
       online-report           summarize retention coverage, typed-through, acceptance, and attention tax
       confidence-report       fit chronological text-free acceptance calibration
       soak-report             enforce duration, reliability, insertion, egress, and p99 gates

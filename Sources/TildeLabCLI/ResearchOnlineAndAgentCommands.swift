@@ -106,11 +106,8 @@ extension ResearchCoordinator {
             if arguments.value("campaign") != nil {
                 throw ResearchCLIError.usage(help(for: "ingest-events"))
             }
-            if let path = arguments.value("input") {
-                input = URL(fileURLWithPath: path.expandedResearchPath).standardizedFileURL
-            } else {
-                input = LabInstrumentCampaign.defaultEventURL()
-            }
+            let path = try arguments.requiredValue("input")
+            input = URL(fileURLWithPath: path.expandedResearchPath).standardizedFileURL
         } else {
             _ = try campaignFromOption(arguments)
             input = URL(fileURLWithPath: try arguments.requiredValue("input")
@@ -151,8 +148,36 @@ extension ResearchCoordinator {
             plan = existing
         }
         let result = try await database.recordOnlineEvents(decoded, plan: plan)
+        if arguments.hasFlag("instrument") {
+            ResearchConsole.line(
+                "Diagnostic-only instrument ingest: inserted \(result.inserted) events; skipped \(result.duplicates) duplicate IDs."
+            )
+            ResearchConsole.line("This database ingest cannot support F03; use f03-closeout.")
+        } else {
+            ResearchConsole.line(
+                "Inserted \(result.inserted) text-free local events; skipped \(result.duplicates) duplicate IDs."
+            )
+        }
+    }
+
+    static func f03Closeout(_ arguments: CLIArguments) throws {
+        try arguments.assertAllowed(options: ["receipt", "output"])
+        guard arguments.positionals.isEmpty else {
+            throw ResearchCLIError.usage(help(for: "f03-closeout"))
+        }
+        let receipt = URL(
+            fileURLWithPath: try arguments.requiredValue("receipt").expandedResearchPath
+        ).standardizedFileURL
+        let output = URL(
+            fileURLWithPath: try arguments.requiredValue("output").expandedResearchPath
+        ).standardizedFileURL
+        let report = try LabF03Closeout.capture(receiptURL: receipt, outputURL: output)
+        ResearchConsole.line("Wrote aggregate-only, path-free F03 closeout report.")
         ResearchConsole.line(
-            "Inserted \(result.inserted) text-free local events; skipped \(result.duplicates) duplicate IDs."
+            "  decision-grade eligible: \(report.decisionGradeEligible ? "yes" : "no")"
+        )
+        ResearchConsole.line(
+            "  blockers: \(report.blockers.isEmpty ? "none" : report.blockers.map(\.rawValue).joined(separator: ", "))"
         )
     }
 
