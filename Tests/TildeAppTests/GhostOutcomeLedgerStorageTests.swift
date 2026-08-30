@@ -30,6 +30,21 @@ struct GhostOutcomeLedgerStorageTests {
         #expect(try String(contentsOf: target, encoding: .utf8) == "sentinel\n")
     }
 
+    @Test("Outcome appends reject a hard-linked leaf without touching its target")
+    func rejectsHardLinkedLeaf() throws {
+        let root = temporaryRoot()
+        let directory = root.appendingPathComponent("Outcome Ledger", isDirectory: true)
+        let target = root.appendingPathComponent("sentinel.jsonl")
+        let link = directory.appendingPathComponent("events.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("sentinel\n".utf8).write(to: target)
+        try FileManager.default.linkItem(at: target, to: link)
+
+        #expect(!GhostOutcomeLedger.appendOwnerOnly(Data("event\n".utf8), to: link))
+        #expect(try String(contentsOf: target, encoding: .utf8) == "sentinel\n")
+    }
+
     @Test("Outcome appends reject a symbolic-link parent")
     func rejectsSymlinkParent() throws {
         let root = temporaryRoot()
