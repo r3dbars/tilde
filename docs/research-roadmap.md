@@ -331,6 +331,17 @@ next-action delay, repeated rejection, and missed shadow opportunities.
 **Kill if:** the cooldown consistently hides the next genuinely useful
 suggestion.
 
+**Measurement prerequisite:** the 2026-08-30 static harness audit found that
+the production outcome lifecycle begins in `recordOutcomeShown`, after the
+`.shown` effect, and `LiveOnlineOpportunity.finishedEvent` consequently records
+only generated, displayed opportunities. That is correct for F03's visible
+retention ruler, but it cannot count upstream silence, skipped inference,
+unavailable generation, or cooldown-suppressed opportunities. Before H04 is
+pre-registered, add one aggregate-only request lifecycle with a fixed,
+text-free reason-code allowlist and shadow missed-opportunity counts. Do not
+alter F03's frozen event or suggestion behavior to do this, and do not treat
+the new denominator as a result.
+
 ### Stage 1 exit gate
 
 Freeze one live-proven length policy, one generation-stop rule, one context
