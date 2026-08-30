@@ -126,6 +126,16 @@ public struct LabResearchWorkSummary: Codable, Equatable, Sendable {
     public var total: Int { pending + running + completed + failed }
 }
 
+public struct LabOnlineEventIngestResult: Equatable, Sendable {
+    public let inserted: Int
+    public let duplicates: Int
+
+    public init(inserted: Int, duplicates: Int) {
+        self.inserted = inserted
+        self.duplicates = duplicates
+    }
+}
+
 public struct LabDurableExecutionContext: Sendable {
     public let database: LabResearchDatabase
     public let campaignID: UUID
@@ -1148,21 +1158,31 @@ public actor LabResearchDatabase {
         _ event: LabOnlineExperimentEvent,
         plan: LabOnlineExperimentPlan
     ) throws {
-        try event.validated(for: plan)
-        let bytes = try encoder.encode(event)
-        try withStatement(
-            """
-            INSERT INTO online_event(id, campaign_id, event_json, occurred_at)
-            VALUES(?, ?, ?, ?)
-            ON CONFLICT(id) DO NOTHING
-            """
-        ) { statement in
-            try bind(event.id.uuidString.lowercased(), at: 1, in: statement)
-            try bind(event.campaignID.uuidString.lowercased(), at: 2, in: statement)
-            try bind(bytes, at: 3, in: statement)
-            sqlite3_bind_double(statement, 4, event.occurredAt.timeIntervalSince1970)
-            try stepDone(statement)
+        _ = try recordOnlineEvents([event], plan: plan)
+    }
+
+    /// Validates the entire file before opening a transaction, then commits all
+    /// new rows together. A malformed later line can never leave a valid prefix
+    /// behind, and duplicate IDs are reported instead of being called ingested.
+    public func recordOnlineEvents(
+        _ events: [LabOnlineExperimentEvent],
+        plan: LabOnlineExperimentPlan
+    ) throws -> LabOnlineEventIngestResult {
+        let prepared = try events.map { event in
+            try event.validated(for: plan)
+            return (event, try encoder.encode(event))
         }
+        let inserted = try transaction {
+            var inserted = 0
+            for (event, bytes) in prepared {
+                inserted += try insertOnlineEvent(event, bytes: bytes)
+            }
+            return inserted
+        }
+        return LabOnlineEventIngestResult(
+            inserted: inserted,
+            duplicates: events.count - inserted
+        )
     }
 
     public func onlineEvents(campaignID: UUID) throws -> [LabOnlineExperimentEvent] {
@@ -1183,6 +1203,21 @@ public actor LabResearchDatabase {
             }
         }
         return result
+    }
+
+    private func insertOnlineEvent(_ event: LabOnlineExperimentEvent, bytes: Data) throws -> Int {
+        try withStatementReturningChanges(
+            """
+            INSERT INTO online_event(id, campaign_id, event_json, occurred_at)
+            VALUES(?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+            """
+        ) { statement in
+            try bind(event.id.uuidString.lowercased(), at: 1, in: statement)
+            try bind(event.campaignID.uuidString.lowercased(), at: 2, in: statement)
+            try bind(bytes, at: 3, in: statement)
+            sqlite3_bind_double(statement, 4, event.occurredAt.timeIntervalSince1970)
+        }
     }
 
     public func deleteOnlineEvents(campaignID: UUID) throws {

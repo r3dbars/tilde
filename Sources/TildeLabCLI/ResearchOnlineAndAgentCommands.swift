@@ -150,12 +150,10 @@ extension ResearchCoordinator {
             }
             plan = existing
         }
-        var accepted = 0
-        for event in decoded {
-            try await database.recordOnlineEvent(event, plan: plan)
-            accepted += 1
-        }
-        ResearchConsole.line("Ingested \(accepted) text-free local events.")
+        let result = try await database.recordOnlineEvents(decoded, plan: plan)
+        ResearchConsole.line(
+            "Inserted \(result.inserted) text-free local events; skipped \(result.duplicates) duplicate IDs."
+        )
     }
 
     static func onlineReport(_ arguments: CLIArguments) async throws {
