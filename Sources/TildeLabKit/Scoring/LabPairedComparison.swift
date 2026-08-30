@@ -203,6 +203,13 @@ public struct LabPairedComparisonReport: Codable, Equatable, Sendable {
     public let hardGateFailures: [String]
     public let rareEventBounds: [String: LabRareEventBound]
     public let decision: LabPromotionDecision
+    /// The pre-registered metric the decision was actually taken on, and that
+    /// metric's improvement-oriented estimate (positive always means better).
+    /// Both are optional so comparisons saved before this field existed still
+    /// decode; a nil pair means the report predates the record and was decided
+    /// on `deltaExpectedUtility`.
+    public let primaryMetric: LabPrimaryResearchMetric?
+    public let deltaPrimaryMetric: LabEstimate?
 
     public init(
         baselineReportID: UUID,
@@ -229,7 +236,9 @@ public struct LabPairedComparisonReport: Codable, Equatable, Sendable {
         worstSeed: LabSeedComparison?,
         hardGateFailures: [String],
         rareEventBounds: [String: LabRareEventBound],
-        decision: LabPromotionDecision
+        decision: LabPromotionDecision,
+        primaryMetric: LabPrimaryResearchMetric? = nil,
+        deltaPrimaryMetric: LabEstimate? = nil
     ) {
         schema = Self.currentSchema
         self.baselineReportID = baselineReportID
@@ -257,6 +266,8 @@ public struct LabPairedComparisonReport: Codable, Equatable, Sendable {
         self.hardGateFailures = hardGateFailures
         self.rareEventBounds = rareEventBounds
         self.decision = decision
+        self.primaryMetric = primaryMetric
+        self.deltaPrimaryMetric = deltaPrimaryMetric
     }
 }
 
@@ -338,6 +349,14 @@ public enum LabPairedComparison {
         let oracleEstimate = estimate(observed.oracleNetKSS, samples.map(\.oracleNetKSS))
         let precisionEstimate = estimate(observed.precisionWhenShown, samples.map(\.precisionWhenShown))
         let badEstimate = estimate(observed.badWhenShown, samples.map(\.badWhenShown))
+        // Improvement-oriented view of the harm difference: a fall in
+        // bad-when-shown is a positive effect, so the same promotion rule
+        // (probability positive, lower bound above the minimum effect) reads
+        // correctly without special-casing the sign at every call site.
+        let badImprovementEstimate = estimate(
+            -observed.badWhenShown,
+            samples.map { -$0.badWhenShown }
+        )
         let lateEstimate = estimate(observed.lateRate, samples.map(\.lateRate))
         let latencyEstimate = estimate(observed.p95Latency, samples.map(\.p95Latency))
 
@@ -345,7 +364,10 @@ public enum LabPairedComparison {
         var ties = 0
         var losses = 0
         for root in rootIDs {
-            let delta = metricDeltas(roots[root]!, utility: utility).expectedUtility
+            let delta = orientedRootDelta(
+                metricDeltas(roots[root]!, utility: utility),
+                metric: primaryMetric
+            )
             if abs(delta) < 0.000_001 { ties += 1 }
             else if delta > 0 { wins += 1 }
             else { losses += 1 }
@@ -364,8 +386,10 @@ public enum LabPairedComparison {
                 deltaLateRate: delta.lateRate
             )
         }.sorted { lhs, rhs in
-            if lhs.deltaExpectedUtility == rhs.deltaExpectedUtility { return lhs.slice < rhs.slice }
-            return lhs.deltaExpectedUtility < rhs.deltaExpectedUtility
+            let left = orientedSliceDelta(lhs, metric: primaryMetric)
+            let right = orientedSliceDelta(rhs, metric: primaryMetric)
+            if left == right { return lhs.slice < rhs.slice }
+            return left < right
         }
         let seedComparisons = Dictionary(grouping: pairs) { $0.candidate.generationSeed }
             .map { seed, values -> LabSeedComparison in
@@ -399,6 +423,7 @@ public enum LabPairedComparison {
         case .expectedUtility: primary = expectedEstimate
         case .oracleNetKeystrokeSavings: primary = oracleEstimate
         case .precisionWhenShown: primary = precisionEstimate
+        case .badWhenShown: primary = badImprovementEstimate
         }
         let probabilityPass = primary.probabilityPositive >= promotionRule.minimumProbabilityPositive
         let effectPass = phase == .discovery
@@ -406,7 +431,8 @@ public enum LabPairedComparison {
         let riskPass = badEstimate.upper95 <= promotionRule.maximumBadWhenShownIncrease
         let latencyPass = latencyEstimate.upper95 <= promotionRule.latencyNoninferiorityMilliseconds
         let slicePass = slices.allSatisfy {
-            $0.deltaExpectedUtility >= -promotionRule.maximumProtectedSliceRegression
+            orientedSliceDelta($0, metric: primaryMetric)
+                >= -promotionRule.maximumProtectedSliceRegression
         }
         let decision: LabPromotionDecision
         if !failures.isEmpty || !riskPass || !latencyPass || !slicePass {
@@ -442,8 +468,38 @@ public enum LabPairedComparison {
             worstSeed: worstSeed,
             hardGateFailures: failures,
             rareEventBounds: rareEventBounds(candidate.cases),
-            decision: decision
+            decision: decision,
+            primaryMetric: primaryMetric,
+            deltaPrimaryMetric: primary
         )
+    }
+
+    /// The registered primary metric, oriented so positive is an improvement.
+    /// Only `bad-when-shown` needs its own root and slice view; the other
+    /// metrics keep the historical expected-utility root ledger so existing
+    /// comparisons stay comparable.
+    private static func orientedRootDelta(
+        _ delta: MetricVector,
+        metric: LabPrimaryResearchMetric
+    ) -> Double {
+        switch metric {
+        case .expectedUtility, .oracleNetKeystrokeSavings, .precisionWhenShown:
+            delta.expectedUtility
+        case .badWhenShown:
+            -delta.badWhenShown
+        }
+    }
+
+    private static func orientedSliceDelta(
+        _ slice: LabSliceComparison,
+        metric: LabPrimaryResearchMetric
+    ) -> Double {
+        switch metric {
+        case .expectedUtility, .oracleNetKeystrokeSavings, .precisionWhenShown:
+            slice.deltaExpectedUtility
+        case .badWhenShown:
+            -slice.deltaBadWhenShown
+        }
     }
 
     /// Replays stricter confidence thresholds over observations for which a

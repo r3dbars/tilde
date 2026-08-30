@@ -28,6 +28,49 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — The Q12 nomination block was the wrong exam, not lost credit
+
+- **Try:** Audit why campaign q12b reads arm-aggregate Net Keystrokes
+  Saved 11.2% → 19.8% with useful displays 473 → 765 while
+  `compare --paired-bootstrap` reports Δ utility 0.00 [0.00, 0.00] and
+  `nominate` refuses, by reading the scoring and paired code and
+  recomputing both quantities from the read-only campaign reports.
+- **Learn:** The Q12 record's guess was wrong and the truth is simpler.
+  Both views read one keystroke ledger: the arm aggregate's
+  `netKeystrokeSavingsRate` and the comparator's `deltaOracleNetKSS` are
+  the same per-case field, and that difference does move (+8.63 points,
+  95% CI [6.71, 10.60], P(>0)=1.00, reproducing 3053/27222 → 5403/27222
+  exactly). "Δ utility" is a different quantity — the latency-gated
+  expected-utility proxy — and it scores a display only when that
+  display's first token beats the 400 ms stable-word deadline. In this
+  8×2-worker throughput run, registered quality-only with no latency
+  claims, exactly 1 of 1,800 paired observations clears 400 ms, and it is
+  the same unwanted case in all three arms, so expected utility is the
+  identical constant −8.0817 ms/1,000 chars everywhere and every one of
+  600 roots ties. Exact-path-only keystroke credit is documented and
+  applied identically in both paths, so it is by design, not the bug.
+  Fixed the real defect: display-policy campaigns were registered on a
+  metric their class cannot move by construction. `bad-when-shown` is now
+  a registrable primary metric, oriented so positive means better, with a
+  class-appropriate protected-slice guard, and it is the display-policy
+  default; `compare` now prints the registered metric first.
+- **Fail:** This does not unblock q12b. That campaign registered
+  expected-utility before the run, and its candidate reports also carry
+  `bad-suggestion-gate` and `latency-gate` hard-gate failures (9.4% bad
+  on the completed set, p95 far past 1,000 ms), so its decision would
+  stay `reject` under any primary metric. Q12's nominations remain
+  governed by its own registered rules; a paired promotion needs a newly
+  registered campaign. The Q12 record's "Honest nuances" claim of a
+  credit divergence between the two views was mistaken and is corrected
+  in place.
+- **Where:** [`Q12`](../experiments/Q12-scene-echo-grounding.md);
+  `Sources/TildeLabKit/Scoring/LabPairedComparison.swift`;
+  [`docs/tilde-lab.md`](../tilde-lab.md) registered-primary-metric and
+  keystroke-accounting sections; branch
+  `claude/paired-utility-credit-audit`.
+- **Next:** Register the Q12 validation campaign on `bad-when-shown` with
+  a suite and runtime whose hard gates can actually pass.
+
 ## 2026-08-30 — Cross-instrument staircase: the tuned stack quadruples simulated value
 
 - **Try:** Rerun the persona simulator with the Q12-nominated arm on both

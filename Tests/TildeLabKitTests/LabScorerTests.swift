@@ -92,6 +92,49 @@ struct LabScorerTests {
         #expect(result.outcome == .wrong)
     }
 
+    /// The 2026-08-30 audit of the Q12 nomination block. An acceptable
+    /// alternative earns human-acceptable quality credit and no exact-path
+    /// keystroke credit, and the arm aggregate and the paired comparator must
+    /// read that one ledger identically — neither may be the looser number.
+    @Test("Acceptable alternatives earn the same credit in the aggregate and the paired view")
+    func acceptableAlternativeCreditIsOneDefinition() {
+        let alternative = LabScenario(
+            id: "reply.alternative",
+            category: "reply.commit",
+            typedContext: "I can ",
+            expectation: LabExpectation(
+                shouldSuggest: true,
+                goldenContinuation: "send the budget before noon",
+                acceptableContinuations: ["get you the budget by midday"]
+            )
+        )
+        let accepted = LabScorer.score(
+            scenario: alternative,
+            repetition: 0,
+            suggestion: "get you the budget",
+            latencyMilliseconds: 120,
+            firstTokenMilliseconds: 120
+        )
+        #expect(accepted.outcome == .useful)
+        #expect(accepted.answerMatchKind == .acceptableAlternative)
+        #expect(accepted.grossKeystrokesSaved == 0)
+        #expect(accepted.netKeystrokesSaved == 0)
+
+        let exact = LabScorer.score(
+            scenario: scenario(),
+            repetition: 0,
+            suggestion: " revised budget before noon",
+            latencyMilliseconds: 120,
+            firstTokenMilliseconds: 120
+        )
+        let cases = [accepted, exact]
+        let aggregate = LabScorer.aggregate(cases, elapsedSeconds: 1)
+        let paired = LabSelectivePredictionMetrics(cases: cases)
+        #expect(aggregate.netKeystrokeSavingsRate == paired.oracleNetKeystrokeSavingsRate)
+        #expect(aggregate.netKeystrokesSaved == exact.netKeystrokesSaved)
+        #expect(aggregate.useful == 2)
+    }
+
     @Test("Speaking in a silence case is unwanted")
     func unwantedSuggestion() {
         let quiet = LabScenario(
