@@ -57,6 +57,9 @@ it stays.
 
 How to push that without lying: digest
 [`docs/research/where-the-field-stopped.md`](research/where-the-field-stopped.md).
+The dated [2026-08-30 frontier-prior refresh](research/frontier-priors-2026-08-30.md)
+maps twenty newer uncertainty, memory, routing, latency, and IMKit priors onto
+the frozen portfolio without making them executable.
 The scientific stance (wrong objective, learn the controller, identify the
 Roy interaction) is
 [`docs/research/scientific-program.md`](research/scientific-program.md).

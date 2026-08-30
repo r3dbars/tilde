@@ -28,6 +28,40 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Adversarial F03 audit falsifies five parts of the ruler
+
+- **Try:** Attack the retained-outcome producer, validator, storage, ingest,
+  and report with overlapping clocks, caret movement, cross-field snapshots,
+  nonaccept-heavy coverage, wipes, link redirection, and conflicting IDs.
+- **Learn:** Decision-grade retention needs a watch-start clock, exact
+  insertion-range and source binding, fail-closed truncated observations,
+  accepted-only coverage, atomic identity-aware ingest, and writes bound to
+  the current wipe generation.
+- **Fail:** The earlier clean-looking 374-event file cannot support F03: its
+  installed source and rotation are unsealed, the old report denominator was
+  mislabeled, and the real IMKit host matrix remains unautomated.
+- **Where:** commits `2a786e1f` through `86951467`; F03 retained-outcome
+  ledger; PR 459. No event, diary, prompt, candidate, writing, or local path
+  was checked in.
+- **Next:** Make build/install/rotation provenance enforceable and pass the
+  structural gate before requesting an owner-approved fresh run.
+
+## 2026-08-30 — Twenty frontier priors sharpen the map, not the queue
+
+- **Try:** Recheck current primary autocomplete, uncertainty, memory,
+  latency, editing, macOS IMKit, and open-source cotyping work, then state one
+  falsifier and kill rule for each of twenty transfer theories.
+- **Learn:** The strongest near-term leverage is still measurement, silence,
+  timing, routing, and real-host interaction truth; larger or more numerous
+  model branches rank behind those controls.
+- **Fail:** None of the sources is direct evidence for personal system-wide
+  macOS prose, and current AX-overlay projects cannot validate Tilde's IMKit
+  insertion path. No locked H01–H18 stage became executable.
+- **Where:** `docs/research/frontier-priors-2026-08-30.md`; primary paper,
+  Apple, Microsoft, GitHub, and Apple InputMethodKit links there.
+- **Next:** Stay on F03; use the host-risk matrix as a required proof surface,
+  not a competing experiment.
+
 ## 2026-08-30 — Harness audit finds the missing silence denominator
 
 - **Try:** Trace the production outcome lifecycle from IME effects through the

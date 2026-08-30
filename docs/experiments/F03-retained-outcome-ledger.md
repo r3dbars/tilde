@@ -183,15 +183,16 @@ the installed build has no sealed source revision in the event provenance, and
 the complete count file still contains the two earlier violations. A clean,
 provenance-bearing full-file run is still required by the promotion rule.
 
-A second on-device audit on 2026-08-30 examined the active `Tilde 9B Preview`
-identity's complete file in an isolated Lab database. All 340 v3 events decoded
-and ingested: 6 accepted-all, 33 accepted-word, 143 typed-through, and 158
+A later on-device audit on 2026-08-30 examined the active `Tilde 9B Preview`
+identity's complete file in an isolated Lab database. All 374 v3 events decoded
+and ingested: 6 accepted-all, 35 accepted-word, 148 typed-through, and 185
 ignored. There were zero malformed lines, unknown or raw-text keys, duplicate
-IDs, domain violations, or monotonic-retention violations. Five-second
-retention was observed for 331 events with 9 explicit missing observations;
-30-second retention was 17 observed / 323 missing, and segment retention was
-39 / 301. The separate 39-row word diary was rejected by count ingest as
-required. The F03/v2/privacy tests and the complete 889-test proof passed.
+IDs, domain violations, cross-field violations, or monotonic-retention
+violations. Correctly using accepted spans as the retention denominator gives
+31 observed / 10 explicit missing observations at five seconds, 17 / 24 at 30
+seconds, and 41 / 0 at segment close. The aggregate net retained counts were
+217, 11, and 62 respectively. The separate word diary failed closed at count
+ingest as required. These are diagnostic aggregates, not a result.
 
 That clean structure is still not decision-grade provenance. The signed
 preview bundle is build 2918, but neither the installed binaries nor the event

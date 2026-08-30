@@ -27,3 +27,6 @@ keep-or-kill [autoresearch loop](lab-partnership.md#the-autoresearch-loop-adapte
 is adapted there without weakening privacy or promotion gates. The next local
 session is the clean, provenance-bearing F03 run:
 [`next-on-device.md`](next-on-device.md).
+The dated [frontier-prior refresh](frontier-priors-2026-08-30.md) maps twenty
+newer transfer priors and a real-host IMKit matrix onto that frozen program;
+it is a research map, not a result or queue change.
