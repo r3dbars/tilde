@@ -615,11 +615,12 @@ public struct LabAttentionTaxEstimate: Codable, Equatable, Sendable {
 }
 
 public struct LabOnlineExperimentReport: Codable, Equatable, Sendable {
-    public static let currentSchema = "tilde-lab.online-report.v3"
+    public static let currentSchema = "tilde-lab.online-report.v4"
 
     public let schema: String
     public let campaignID: UUID
     public let events: Int
+    public let eventSchemaCounts: [String: Int]
     public let safeOpportunities: Int
     public let displayed: Int
     public let acceptedAll: Int
@@ -799,6 +800,7 @@ public enum LabOnlineExperimentAnalyzer {
             schema: LabOnlineExperimentReport.currentSchema,
             campaignID: campaignID,
             events: events.count,
+            eventSchemaCounts: Dictionary(grouping: events, by: \.schema).mapValues(\.count),
             safeOpportunities: safe.count,
             displayed: shown.count,
             acceptedAll: acceptedAll,

@@ -102,6 +102,8 @@ missingness reason, and never both as if they were the same fact.
 ### Hard gates
 
 - No prompt, candidate, screen, field, or personal text is representable.
+- A decisive fresh file contains only the current v3 event schema; reports
+  expose v2/v3 counts instead of hiding legacy rows in a total.
 - Production insertion path stays IMKit; this event does not write text.
 - A missing horizon is never coerced to zero retained characters.
 - Retention is counted only at the original accepted insertion range. A
