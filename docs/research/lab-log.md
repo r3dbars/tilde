@@ -28,6 +28,70 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Q12's nominated filters go live in the isolated 9B preview
+
+- **Try:** Take Q12's two nominated display-policy settings — scene-echo
+  minimum characters 10 → 24 (word floor unchanged) and names-and-numbers
+  factual grounding on — out of the Lab judge and into the live completion
+  path for `TildeProductProfile.preview9B` only, routed through
+  profile-computed properties beside `completionTemperature` and
+  `maximumVisibleWords`, so the owner can dogfood the arm the campaign
+  measured instead of only reading its numbers.
+- **Learn:** The product had a scene-echo rejection
+  (`TildeCore.SceneEchoPolicy`, applied twice in `LlamaCompletionEngine` —
+  once on the final, once on every streamed partial) but no factual filter
+  at all; grounding existed only inside `LabOutputJudge`. Rather than write
+  a second copy, the rule moved down into
+  `TildeCore.FactualGroundingPolicy` and the judge now calls it, which is
+  what makes "the preview runs the nominated arm" a checkable claim rather
+  than a hopeful one — a parity suite over a shared fixture set fails if the
+  two ever disagree. Applying grounding to the streamed partial as well as
+  the final mattered: the partial is the text the writer actually sees
+  first, so a filter that only judged the final would have shown the
+  invented number and then withdrawn it.
+- **Fail:** No live evidence yet — this is wiring, not a result, and an
+  isolated preview is explicitly not promotion. The settings remain frozen
+  validation candidates selected on the development partition; production,
+  the 26B preview, and the Model Preview daily driver are byte-identical in
+  behavior and pinned there by regression assertions. Whatever the preview
+  produces in use is dogfood that must clear the three-judges rule, and it
+  cannot substitute for the protected validation path Q12 still owes.
+- **Where:** [`Q12`](../experiments/Q12-scene-echo-grounding.md) § Follow-up;
+  `Sources/TildeCore/Suggestions/FactualGroundingPolicy.swift`;
+  `Sources/TildeCore/Suggestions/SceneEchoPolicy.swift`;
+  `Sources/TildeCore/Runtime/TildeProductProfile.swift`;
+  `Sources/TildeApp/Runtime/LlamaCompletionEngine.swift`.
+- **Next:** Dogfood the 9B preview and see whether the recovered short
+  fact-carrying displays feel useful in real typing, or merely more frequent.
+
+## 2026-08-29 — First full-scale simulated persona run lands in 38 minutes
+
+- **Try:** Run the simulated typist over the full replying-v2 speak-expected
+  set (240 qualifying scenarios × 5 personas, ~5,000 displays) with Luna as
+  the external decision brain — 12 concurrent workers, batch size 25 —
+  after the 16-worker probe passed clean and two full-throttle attempts
+  taught their lessons.
+- **Learn:** Wrong-when-shown is strikingly uniform across personas
+  (60.0–61.7%) while acceptance varies persona-to-persona (4.4–6.7%) —
+  suggestion quality failure is generator/policy-side, not
+  audience-dependent, which is consistent with the mining sweep's chronic
+  list. Simulated acceptance rates bracket the owner's live 7.7%.
+  Operational ceilings measured today: Luna holds 25-moment batches and 12
+  concurrent calls with hardened retries; Grok's loop detector rejects
+  large repetitive batches and its lane was benched pending an engine
+  skip-a-failed-batch mode; 16 concurrent calls per provider is over the
+  reliability line for long runs.
+- **Fail:** Grok's second-opinion column is missing, so no inter-brain
+  agreement map exists at this scale yet. The abort-on-one-bad-batch
+  failure semantics killed two full runs; a counted skip mode (no silent
+  caps — dropped batches must be reported) is the needed engine change.
+  All numbers remain discovery-grade: uncalibrated personas, legacy suite,
+  permanently fenced.
+- **Where:** issue #437; report in owner-local scratch state; engine
+  concurrency from PR #445; Q11 earlier today for the campaign-side result.
+- **Next:** Add the counted skip-failed-batch mode, rerun with Grok, and
+  score inter-brain agreement before any screening use.
+
 ## 2026-08-30 — The simulated typist can run the arm a campaign nominated
 
 - **Try:** `simulate-typist` built its own fixed baseline arm internally, so
@@ -245,6 +309,148 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
   GitHub issue #443; Q11 registration above is the first consequence.
 - **Next:** After Q11, register the scene-echo precision + grounding
   question — the mining sweep's top recommendation.
+
+## 2026-08-30 — Q12 supported, Q13 rejected: the filters were the fix; the cap was not
+
+- **Try:** Run the registered Q12 (scene-echo floor 10→24 crossed with
+  names-and-numbers grounding) and, at the owner's direction, Q13 (visible
+  cap 3 vs 8 on the winning arm), each as clean paired campaigns.
+- **Learn:** Q12 confirmed the offline replay to ±1 display: useful 473→765
+  (+62%) at unchanged bad displays from the echo retune alone, and 35
+  wrongs removed free by grounding; bad-when-shown 30.2%→18.2%, net
+  keystrokes saved 11%→20%. Both arms nominated as validation candidates.
+  Q13 answered the cap question emphatically the other way: cap-8 halved
+  useful (766→396), tripled bad-when-shown (18.1%→48.9%), and halved NKS —
+  the 3-word cap is what keeps only the reliable head of each generation
+  visible. First Q12 run was correctly flagged dirty-source-tree (an
+  uncommitted registration) and preserved as non-promotable; the clean
+  rerun matched it exactly.
+- **Fail:** The generic paired-utility comparator scored Δ0.00 while arm
+  aggregates doubled NKS — its keystroke-credit definition ignores
+  recovered acceptable-alternative displays and needs its own
+  investigation before anything leans on it. All results remain
+  development-grade nominations; protected validation and live proof are
+  still ahead.
+- **Where:** [Q12](../experiments/Q12-scene-echo-grounding.md),
+  [Q13](../experiments/Q13-visible-cap-3v8.md); campaigns 177E07E5 and
+  2C57D9F3 (owner-local).
+- **Next:** Protected validation for the echo-24-grounded candidate, and
+  the comparator credit-definition audit as a small instrument question.
+
+## 2026-08-30 — The floor's cause found: our own filters eat the facts
+
+- **Try:** Re-judge Q11's 1,110 cached raw Qwen candidates offline under
+  variant judgment configurations (no inference, Lab state read from a
+  copy; replay reproduces the shipped report exactly) to decide whether
+  the fact-free floor is model-side, prompt-side, or filter-side.
+- **Learn:** The withholding story reverses: 66% of raw candidates
+  already satisfy every required term and 75% carry a scene anchor. The
+  scene-echo detector killed 304 candidates and every single one was a
+  fact-carrier — its floor (3 words / 10 chars) sits exactly on the
+  3-word display cap, so short correct verbatim answers are
+  indistinguishable from echo. Offline: retuning echo to 10→24 characters
+  alone yields +292 useful (+62%) with zero measured cost on any slice;
+  adding names-and-numbers grounding removes 32 wrong for free; stacked,
+  bad-when-shown falls 30.1%→18.1% and useful rises 473→765. A third
+  mechanism: reply.commit.delivery loses its fact to the 3-word
+  truncation (fact present in every wrong shown raw). Genuine model-side
+  factlessness is only ~10% of opportunities (acknowledge.delay,
+  contradiction.latest-fact raws carry no anchor). The visible-text form
+  of "no fact, no ghost" is destructive (−56% useful); only the
+  raw-candidate form is viable, scoped and sequenced after the filter
+  fixes. Longer visible windows are not the fix (words 4–6 add 61–148
+  wrong).
+- **Fail:** Development-grade offline re-judgment of one arm on the dev
+  suite; the ~60% persona-sim floor is a different instrument, so
+  30.1%→18.1% is directional for it, not a substitution. Yesterday's
+  "withholding, not forgetting" mechanism entry overstated the
+  model-side share; this entry supersedes its emphasis.
+- **Where:** rig in owner-local scratch; issues #447 (reframed) and #448
+  (deprioritized); scene-echo thresholds in LabGenerationControls;
+  detector in LabOutputJudge.
+- **Next:** Register the two-factor display-policy experiment — scene-echo
+  minimum characters 10→24 crossed with names-and-numbers grounding — as
+  Q12, ahead of everything else in the queue.
+
+## 2026-08-30 — Three-way model portrait: size loses again
+
+- **Try:** Complete the fair same-judge persona comparison with Gemma 4
+  26B A4B Q4_K_M alongside production Gemma E2B and Qwen 9B.
+- **Learn:** The 26B came last: ~67% wrong-when-shown (vs ~61/60),
+  accepts and retained value at or below the tiny production model.
+  Third independent confirmation that parameter count does not predict
+  quality in this stack (ledger `model-size-and-quantization` called it
+  months ago). Qwen 9B remains the only generator materially above
+  production, and active-parameter count (~4B in the MoE) tracks the
+  outcome better than total size.
+- **Fail:** Registered prediction missed again (called it between E2B and
+  9B; it landed below E2B) — 1-for-6 on model predictions across the
+  night. Discovery-grade, uncalibrated personas, fenced.
+- **Where:** owner-local simulated reports; fair-rerun entry above for
+  method; prompt/filter deep-dive running as the follow-up.
+- **Next:** The generator-side fix hunt moves to the prompt scaffold and
+  filter pipeline, which would lift every model including the shippable
+  small one.
+
+## 2026-08-30 — The shared floor autopsy: withholding, not forgetting
+
+- **Try:** Cross-examine Q11's fresh Qwen per-case labels (1,800
+  silence-gate-off cases) against 71 config-matched Gemma v4 reports
+  (~78k shown cases, same certified suite) to pinpoint what the two
+  models' chronic failures share, signature by signature.
+- **Learn:** The floor is deterministic, not stochastic: per scenario the
+  outcome is uniformly all-wrong or all-useful across every seed,
+  temperature, and sampler ever tried — an argmax property, which is why
+  the entire sampler-sweep era moved nothing. Both models share three
+  signatures with matching proportions: fluent continuations carrying no
+  fact at all (off-path from word 1; the largest bucket, and the same
+  mechanism as the ordinary-silence over-triggering), correct first word
+  then a generic swerve at the entity slot (89–95% of commit.delivery
+  failures in BOTH models), and genuine stale-fact import confined almost
+  entirely to reply.correct.time. The "loses the newest fact" framing was
+  mostly wrong — the shared disease is base-model generic-continuation
+  bias: the required entity is a low-prior token and pretraining prefers
+  the safe filler even when the fact is present in the prompt (the
+  fact-anchor prompt arms left all five categories at 100% bad while only
+  moving exactMatchAt1). Scale only changes which categories the fact
+  happens to win; the objective is the disease.
+- **Fail:** requiredTermsSatisfied is necessary-not-sufficient (false on
+  most useful three-word prefixes too), so it can gate but never score.
+  The mechanism ranking is offline and interpretive; no registered
+  experiment has yet tested the implied interventions.
+- **Where:** Q11 campaign store and Runs archive (owner-only, aggregate
+  analysis); intervention candidates filed as GitHub issues; earlier
+  chronic-failure sweep entry below for the category-level view.
+- **Next:** Register the required-term-aware quiet gate ("no fact, no
+  ghost") as the display-policy question after scene-echo precision, and
+  hold entity-slot constrained decoding behind it.
+
+## 2026-08-30 — Fair rerun: the judge bug hid Qwen's real advantage
+
+- **Try:** After discovering that a persona-brief rule ("dismissed twice =
+  stopped reading") cascaded against Qwen's longer suggestion style, remove
+  the rule and rerun both generators with byte-identical judges over the
+  same 240 scenarios and five personas.
+- **Learn:** Three results. (1) The ~60% wrong-when-shown floor is
+  model-independent for the third time — it survived the judge fix too.
+  (2) The rigged run's verdict inverted: judged fairly, Qwen delivers
+  roughly 2–3x the retained-character value (persona range 6.1–10.2% vs
+  Gemma's 2.5–4.4%), with 2.5x longer accepted spans — but pays a ~25%
+  correction tax on accepted characters, draws ~5x the active dismissals,
+  and surfaces half the moments. Quieter, richer, more annoying when
+  wrong, and still slower to generate. (3) Absolute simulated rates moved
+  substantially when one judge sentence changed, so only same-judge paired
+  comparisons mean anything; cross-run absolute numbers are not comparable.
+- **Fail:** The first Qwen comparison shipped to chat with an instrument
+  artifact that suppressed the very effect it was measuring; caught by an
+  owner "are you sure?" and a totals audit, not by the harness. Session
+  abandonment mechanics (dismissal cooldowns eating half of Qwen's
+  moments) remain a confound the skip-mode-era engine should surface
+  explicitly. All numbers stay discovery-grade and fenced.
+- **Where:** issue #437; owner-local reports; skip-mode + model provenance
+  in PR #446 were built the same night from these failures.
+- **Next:** Once calibrated personas exist, rerun this pair as the
+  simulator's first ranking-agreement exercise against live evidence.
 
 ## 2026-08-30 — Batch the simulated typist's decisions across sessions
 
