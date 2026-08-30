@@ -28,6 +28,40 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Cross-instrument staircase: the tuned stack quadruples simulated value
+
+- **Try:** Rerun the persona simulator with the Q12-nominated arm on both
+  generators via the new --arm-file (Luna judging, 16 workers), with an
+  untuned anchor, to corroborate the campaign result on a second
+  instrument; wire the same tuned arm into the isolated 9B preview for
+  live owner trial.
+- **Learn:** The corroboration is emphatic and staircase-shaped. Qwen 9B
+  simulated retained value: 7.5% (old sim defaults, cap 8) → 17.9%
+  (cap 3 + confidence) → 30.5% (plus echo-24 and grounding), with accepts
+  5.1%→26.9%; tuned E2B reached 7.3% (junk halved to 31%) — the filters
+  lift the small model to untuned-Qwen value, and unlock 4x on Qwen,
+  whose verbatim fact-carrying completions were exactly what the old echo
+  floor executed. The cap-3-beats-cap-8 result reproduced independently
+  on this instrument. The tuned preview is installed and serving the
+  owner live (first ~138 real requests, p50 ~364 ms end-to-end).
+- **Fail:** Three honest dents. The "anchor" run was a config mismatch
+  (campaign control arm, not the prior sim baseline), so it became an
+  accidental cap experiment rather than a replication — logged as a
+  design slip that produced a useful staircase. The Grok judge column is
+  postponed: batch mode trips Cursor's loop detector (batch-5 probe: 6/10
+  fail), and single-moment mode exceeds the engine's fixed 20s external
+  deadline — a configurable --decision-timeout is the missing feature.
+  Parallel simulator processes fight over the model-server port and one
+  dies; serial execution is the rule until ports are per-run. All sim
+  numbers remain uncalibrated and fenced; the live preview is an isolated
+  identity, not a promotion.
+- **Where:** matrix reports (owner-local scratch); PRs #449/#450/#451;
+  [Q12](../experiments/Q12-scene-echo-grounding.md) follow-up notes the
+  preview wiring; wrong-rate attack workflow running in a peer session.
+- **Next:** Owner's live verdict on the tuned preview, protected
+  validation for the Q12 candidates, and a --decision-timeout flag so the
+  Grok column can complete.
+
 ## 2026-08-30 — Q12's nominated filters go live in the isolated 9B preview
 
 - **Try:** Take Q12's two nominated display-policy settings — scene-echo
