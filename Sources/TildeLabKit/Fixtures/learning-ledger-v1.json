@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-30T20:49:00Z",
+  "updatedAt": "2026-08-30T21:08:45Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -104,6 +104,46 @@
     }
   ],
   "entries": [
+    {
+      "id": "early-start-third-character-k1-rejected",
+      "recordedAt": "2026-08-30T21:08:45Z",
+      "area": "timing",
+      "status": "rejected",
+      "title": "Third-character K=1 early start is ready in time but not lockable enough",
+      "finding": "Q10R was a clean, complete, registered, eligible, and explicitly reviewed local replication. It completed 1911 of 1911 generations across 360 synthetic development situations and 637 opportunities. Starting one K=1 generation after the third character was ready by the following boundary on 637 of 637 opportunities, with 689 milliseconds median lead and zero simulated false locks, but only 78 of 637 opportunities were lockable: 12.2448979592 percent versus the registered 15 percent gate. Decoded-token compute was 1.8692756037 times control versus the 1.5 maximum, and request latency was 1.7421521121 times control.",
+      "decision": "Reject this exact third-character K=1 early-start policy. Do not promote it, retune its registered gates after seeing the result, or let readiness and lead mask the lockability failure. The compute miss independently blocks promotion, while lockability below 15 percent supplies the registered efficacy rejection. Any later early-compute mechanism needs a separate registration and must improve usable continuation coverage rather than merely begin sooner; this result does not authorize a production change.",
+      "comparisonGroupID": "q10r-early-start-k1-v1",
+      "evaluationCount": 1911,
+      "metrics": [
+        { "subjectID": "Q10R", "key": "situations", "value": 360, "unit": "situations" },
+        { "subjectID": "Q10R", "key": "opportunities", "value": 637, "unit": "opportunities" },
+        { "subjectID": "Q10R", "key": "planned-generations", "value": 1911, "unit": "generations" },
+        { "subjectID": "Q10R", "key": "completed-generations", "value": 1911, "unit": "generations" },
+        { "subjectID": "early-start", "key": "ready-by-boundary", "value": 100, "unit": "percent" },
+        { "subjectID": "early-start", "key": "median-lead", "value": 689, "unit": "milliseconds" },
+        { "subjectID": "early-start", "key": "lockable-opportunities", "value": 78, "unit": "opportunities" },
+        { "subjectID": "early-start", "key": "lockable-rate", "value": 12.2448979592, "unit": "percent" },
+        { "subjectID": "registered-gate", "key": "minimum-lockable-rate", "value": 15, "unit": "percent" },
+        { "subjectID": "early-start", "key": "simulated-false-lock-rate", "value": 0, "unit": "percent" },
+        { "subjectID": "early-start", "key": "decoded-token-compute-multiple", "value": 1.8692756037, "unit": "times" },
+        { "subjectID": "registered-gate", "key": "maximum-decoded-token-compute-multiple", "value": 1.5, "unit": "times" },
+        { "subjectID": "early-start", "key": "request-latency-multiple", "value": 1.7421521121, "unit": "times" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q10-early-start-timing-falsifier.md" },
+        { "kind": "documentation", "id": "docs/experiments/Q10R-aggregate-results.json" },
+        { "kind": "campaign", "id": "2d06791d-1fd3-4d84-bfc2-0fb4b8eb1491" },
+        { "kind": "git-commit", "id": "78df853ff6a39a90b1e7b02cb22ebb545264ef59" },
+        { "kind": "artifact-sha256", "id": "0dead997418b0b38ff0c2d4988094a72c3054d416427e9a7430f098e63be4b83" }
+      ],
+      "limitations": [
+        "The corpus is synthetic, development-only, and speak-only; this does not establish live acceptance or retained utility.",
+        "The run began at nominal thermal state and finished at fair, so absolute request latency is not nominal-hardware proof. Readiness remained 100 percent and lockability remained 12.2448979592 percent at the registered 120, 180, and 240 millisecond typing sensitivities, so the fair finish does not erase the lockability rejection.",
+        "The result rejects one third-character K=1 implementation, not every early-compute offset, shared-tree generator, or speculative-decoding design.",
+        "Validation and holdout remained unopened, and no production or Model Preview behavior changed."
+      ],
+      "tags": ["early-start", "third-character", "K1", "timing", "negative-result", "decision-grade", "offline-only", "no-promotion"]
+    },
     {
       "id": "future-lattice-k16-independent-branches-rejected",
       "recordedAt": "2026-08-29T12:05:20Z",
