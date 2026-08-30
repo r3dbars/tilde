@@ -11,6 +11,9 @@ public enum PersonalHistorySettingsContract {
     /// Bumped by Delete Personalization Data so the IME drops in-flight watches
     /// and will not recreate the count file or diary after a wipe.
     public static let outcomeLedgerGenerationKey = "OutcomeLedgerGeneration"
+    public static func outcomeLedgerWriteCountsKey(_ generation: Int) -> String {
+        "OutcomeLedgerWriteCounts.\(generation)"
+    }
 }
 
 public enum PersonalHistoryEventSource: String, Codable, Equatable, Sendable {
