@@ -172,7 +172,13 @@ extension ResearchCoordinator {
             fileURLWithPath: try arguments.requiredValue("output").expandedResearchPath
         ).standardizedFileURL
         let report = try LabF03Closeout.capture(receiptURL: receipt, outputURL: output)
-        ResearchConsole.line("Wrote aggregate-only, path-free F03 closeout report.")
+        if report.blockers.contains(.terminalPublicationIndeterminate) {
+            ResearchConsole.line(
+                "Terminal generation sealed, but report publication is indeterminate; do not use the output as evidence."
+            )
+        } else {
+            ResearchConsole.line("Wrote aggregate-only, path-free F03 closeout report.")
+        }
         ResearchConsole.line(
             "  decision-grade eligible: \(report.decisionGradeEligible ? "yes" : "no")"
         )
