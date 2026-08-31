@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-30T21:08:45Z",
+  "updatedAt": "2026-08-30T23:45:49Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -104,6 +104,30 @@
     }
   ],
   "entries": [
+    {
+      "id": "f03-receipt-bound-terminal-closeout",
+      "recordedAt": "2026-08-30T23:31:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "F03 evidence must close one receipt-bound terminal generation",
+      "finding": "A clean package receipt, a structurally valid event file, write counters, and a generic Lab aggregate can each be truthful while still describing different Preview9B installs, generations, or moments. Asynchronous writes and a concurrent rotation make a row count especially easy to misattribute unless the producer publishes a terminal acknowledgement and analysis holds the rotation lock.",
+      "decision": "Decision-grade F03 closeout must bind the clean local receipt to the canonical clean-commit content-manifest digest, the v2 Apple identity over the signed Xcode seal and exact in-bundle SwiftPM/driver/compiler/linker/libtool/archiver/SDK inputs with the Xcode namespace pinned across invocation, approved helper-input SHA/team, still-installed app/IME/helper binaries, independently exact-matching app/IME Info.plists including the sealed runner, strict signatures, and registered model; the current wipe generation; zero dropped writes; attempted equals written equals exact file rows; a flush acknowledgement after the final event; one current schema and instrument campaign; stopped preview processes including moved matching executables; and one exclusive aggregate-only path-free v2 output created only after generation advance and event-file sealing. Accounting/flush and every installed/process/maintenance/event identity gate must exact-match again immediately before the report's no-replace commit. Generic instrument ingest stays diagnostic and cannot support F03.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/F03-retained-outcome-ledger.md" },
+        { "kind": "documentation", "id": "docs/research/lab-log.md" },
+        { "kind": "source-file", "id": "Sources/TildeLabKit/Models/LabF03Closeout.swift" },
+        { "kind": "test", "id": "Tests/TildeLabKitTests/LabF03CloseoutTests.swift" }
+      ],
+      "limitations": [
+        "The installed build 2918 predates the receipt and cannot be upgraded into attributable evidence after the fact.",
+        "Synthetic closeout and security fixtures prove the ruler, not live retained utility. No owner-approved guarded F03 install or ledger rotation has run for a receipt-bound generation, so F03 remains implementing and later stages stay locked.",
+        "The F03 receipt binds the registered installed Qwen model, but standalone preview bundle plists do not yet embed a canonical per-profile model-manifest digest; do not generalize this receipt-bound proof to every preview package."
+      ],
+      "tags": ["f03", "provenance", "retention", "write-accounting", "on-device", "no-promotion"]
+    },
     {
       "id": "early-start-third-character-k1-rejected",
       "recordedAt": "2026-08-30T21:08:45Z",
@@ -1246,11 +1270,11 @@
     {
       "id": "retained-outcome-ledger-v2",
       "priority": 3,
-      "status": "ready-foundation",
+      "status": "implementing-foundation",
       "question": "Can Tilde measure whether accepted text remains useful without retaining the text itself?",
       "hypothesis": "Five-second, 30-second, and segment-close retained-character outcomes will distinguish durable value from temporary Tab presses while preserving the aggregate-only boundary.",
-      "nextExperiment": "Extend the existing text-free online event and analyzer with retention horizons, typed-through outcomes, policy-hidden state, missing-retention reasons, recent intervention count, and aggregate coverage reporting.",
-      "successCriteria": "Every eligible live outcome is representable without text, retention missingness is explicit, deletion remains complete, privacy validation rejects raw-data keys, and RNKS can be reported at all three horizons.",
+      "nextExperiment": "From one final clean commit, pass package and transaction proof, then wait for an owner-approved Preview9B maintenance window and explicit archive/delete choice. Type normally in the receipt-bound generation and run terminal f03-closeout without checking any receipt, event file, or writing into Git.",
+      "successCriteria": "Every shown live outcome is representable without text, retention missingness is explicit, deletion remains complete, privacy validation rejects raw-data keys, and RNKS can be reported at all three horizons. Upstream silence remains a separate pre-H04 measurement prerequisite.",
       "dependencies": ["staged-research-program-v1"]
     },
     {

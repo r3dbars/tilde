@@ -10,8 +10,8 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 45)
-        #expect(snapshot.currentLearnings.count == 38)
+        #expect(snapshot.entries.count == 46)
+        #expect(snapshot.currentLearnings.count == 39)
         #expect(snapshot.archivedLearnings.count == 7)
         let earlyStart = try #require(snapshot.entries.first {
             $0.id == "early-start-third-character-k1-rejected"

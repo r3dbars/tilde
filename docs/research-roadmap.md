@@ -54,13 +54,14 @@ calibration, interaction evidence, and soak gates. Rebuilding those systems
 would be wasted motion.
 
 The main remaining evidence gap is a clean live outcome run. The v3 event and
-three retention horizons exist, but the current 1,364-event count file contains
-two pre-fix monotonic-retention violations. An inferred post-install slice has
-575 events, including 39 accepts and 225 typed-through outcomes, with zero
-structural or monotonic violations. That slice is useful diagnostic evidence,
-not a decision-grade result: its cutoff is inferred and it is not a clean,
-provenance-bearing full file. Until a fresh run makes the loop trustworthy, a
-learned Control Brain would still optimize an incompletely proven target.
+three retention horizons exist, but an earlier 1,364-row diagnostic snapshot
+contained two pre-fix monotonic-retention violations. Its inferred post-install
+slice had 575 events, including 39 accepts and 225 typed-through outcomes, with
+zero structural or monotonic violations. A distinct later build-2918 snapshot
+had 374 structurally valid rows. Neither is a decision-grade result: neither
+file has a receipt-bound clean source and rotation generation, and their counts
+must not be combined. Until a fresh run makes the loop trustworthy, a learned
+Control Brain would still optimize an incompletely proven target.
 
 ## Corrections and boundaries from the repository audit
 
@@ -70,7 +71,7 @@ learned Control Brain would still optimize an incompletely proven target.
 | Cache candidates and replay policies | Synthetic raw candidates are already cached locally | Reuse it for synthetic policy work; never put private prompts or candidates in that cache or in Git |
 | Make Screen Memory optional or bypass it | Current product policy requires Screen Memory and answers with silence when unavailable | Test context quality and routing, not an opt-out product path |
 | Use Accessibility or overlays to insert text | Tilde is an IMKit input method | Keep all presentation and insertion in IMKit; Accessibility may only read screen text under the Screen Memory covenant |
-| Change the production model while testing policy | Production is pinned to Gemma 4 E2B; Qwen 9B is an isolated preview | Finish the bounded Qwen question, then freeze the generator during policy experiments |
+| Change the production model while testing policy | Production is pinned to Gemma 4 E2B; Q04 rejected the bounded Qwen candidate | Keep that Qwen question closed; freeze production Gemma during policy experiments unless a separately authorized protocol says otherwise |
 | Train continually on private writing | Personal writing is explicit, local, encrypted, and user-controlled | Prefer counts, caches, retrieval, and calibration; no private text leaves the device for training or evaluation |
 | Treat acceptance as ground truth | Tilde records acceptance but not durable retention horizons | Add retained outcomes before fitting a decision policy |
 | Try every promising mechanism | The Tilde Lab CLI enforces one experiment class per campaign | Run one causal question at a time and unlock later stages only after exit gates pass |
@@ -187,12 +188,14 @@ file must never be presented as progress.
 ### F03 — Extend the text-free Outcome Ledger
 
 Extend `LabOnlineExperimentEvent` rather than creating a parallel store. At a
-minimum record, without text:
+minimum record, without text, for every ghost that reaches `.shown`:
 
-- eligible, generated, displayed, and policy-hidden state;
+- generated and displayed state; upstream eligible, skipped, unavailable, and
+  policy-hidden requests remain outside F03;
 - candidate source and length buckets;
-- accepted-all, accepted-word, typed-through, dismissed, corrected, undone,
-  and unavailable outcomes;
+- accepted-all, accepted-word, typed-through, dismissed, corrected, and undone
+  outcomes; hidden/unavailable remain schema compatibility, not live F03
+  coverage;
 - retained characters at five seconds, 30 seconds, and segment close;
 - time to next authored action, generation, and first stable word;
 - app category, register, cursor boundary, typing-speed bucket, scene quality,
@@ -204,12 +207,19 @@ The event must remain local, deletable, aggregate-reportable, and incapable of
 containing prompt, candidate, screen, field, recipient, document, or personal
 text.
 
-Current audit: the complete 1,364-event file contains two pre-fix monotonic
-violations. The inferred post-install slice contains 575 events, 39 accepts,
-and 225 typed-through outcomes with zero violations, but it cannot support F03
-because neither the cutoff nor the build is sealed in a clean full-file run.
-Rebuild with provenance, archive and rotate the text-free count file, type
-normally, then ingest the entire fresh file.
+An earlier 2026-08-30 diagnostic snapshot had 1,364 rows with two pre-fix
+monotonic violations; its inferred post-install slice had 575 events, 39
+accepts, and 225 typed-through outcomes with zero violations. A distinct later
+snapshot of the then-active build-2918 file had 374 structurally valid rows,
+including 41 accepts and 148 typed-through outcomes. Neither snapshot has a
+sealed source/rotation generation, and their counts must not be combined. For
+the decisive run, build one clean receipt-bound Preview9B generation only after
+the owner approves the exact maintenance window and archive/delete choice.
+After normal typing, publish a terminal IME flush, stop the exact preview
+processes, and run receipt-bound `f03-closeout` over the entire fresh file.
+Generic ingest remains diagnostic. Only a `tilde-lab.f03-closeout.v2` artifact
+created after generation advance and event-file sealing can be eligible; its
+receipt must exact-match both signed plists and the v2 Apple toolchain identity.
 
 ### F04 — Freeze permanent regressions
 
@@ -234,17 +244,16 @@ Stage 1 opens only when:
   the frozen production control; and
 - no checked-in artifact contains private text or a local path.
 
-## Close the existing Qwen question
+## The bounded Qwen question is closed
 
-Qwen 9B is already an installed, isolated experiment. Do not abandon the work,
-but do not let it consume the program.
+Q04 completed a clean reviewed replication and rejected God v1 advancement.
+The old protected-validation and 200/500/1,000 live-checkpoint plan below is
+superseded and must not run:
 
-1. Freeze God v1 and run protected validation against its exact baseline.
-2. Open holdout only if every hard gate passes.
-3. Treat existing live counters as directional. After F03, collect the
-   registered 200/500/1,000 retained-outcome checkpoints.
-4. Either promote Qwen to a continuing preview candidate or reject it. Do not
-   start another broad model or quantization sweep until this decision closes.
+- do not run protected validation or open holdout for God v1;
+- do not launch new God v1 live checkpoints; and
+- require separate owner authorization and a new preregistration for any
+  future Qwen candidate or broad model/quantization sweep.
 
 The policy roadmap below uses production Gemma 4 E2B unless a separately
 approved experiment explicitly freezes another generator. This prevents model
