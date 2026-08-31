@@ -28,6 +28,325 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-08-30 — Wrap audit closes five concurrency gaps and preserves one follow-up
+
+- **Try:** Stop expanding the theory map and run one final independent audit of
+  terminal publication, maintenance-lock namespace, concurrent preview builds,
+  sealed-runner execution, and external-model verification.
+- **Learn:** A post-rename failure must preserve the terminal generation but
+  return an explicitly ineligible publication; the shared lock and Outcome
+  Ledger must stay under one held support-directory identity; fixed `dist`
+  outputs require one exclusive assembly lock; owner-approved F03 must execute
+  the archived runner whose digest was signed; and model hashing must reject an
+  in-place change even when inode and byte count stay constant.
+- **Fail:** All five gaps existed in the preceding implementation and now have
+  fail-closed checks or adversarial coverage. One lower-priority provenance gap
+  remains: the signed app/IME plists bind source, toolchain, helper, and runner,
+  while the F03 receipt binds the installed model; the signed bundles do not yet
+  carry a direct canonical model-manifest digest for every preview/profile.
+  Do not generalize F03's receipt-bound model proof into a claim about every
+  standalone preview package.
+- **Where:** `LabF03Closeout`; all preview builders;
+  `script/source_provenance.sh`; 28/28 focused closeout tests; 937/937 Swift
+  tests; source-provenance and F03 transaction selftests; both ordinary and
+  structural `proof.sh fast` stacks green, with production Swift net -3 lines
+  against `origin/main`.
+- **Next:** Keep F03 implementing; add signed per-profile model manifests before
+  treating standalone preview provenance as complete, then request the separate
+  owner-approved live maintenance window.
+
+## 2026-08-30 — Second terminal audit closes five late-race gaps
+
+- **Try:** Independently red-team the already hardened closeout at the exact
+  counter snapshot, installed-identity check, report rename, and Xcode/tool
+  resolution boundaries, then inject mutations at each former gap.
+- **Learn:** The old generation must advance before its authoritative
+  accounting/flush read and those values must be read again at the report's
+  commit gate; stopped processes, installed identity, maintenance state, and
+  the held event snapshot also need one final pre-rename check. The exclusive
+  report rename is the unambiguous success boundary. Toolchain capture must
+  reject arbitrary writable ancestors and out-of-bundle tools while pinning
+  the standard `/Applications` directory plus Xcode bundle identity across
+  every compiler invocation.
+- **Fail:** The audit found a stale old-generation accounting race, an
+  installed-identity replacement window, an ambiguous post-rename error, an
+  unchecked Xcode ancestor, and a shell forwarding bug that omitted additional
+  build tools from descendant validation. All now fail closed under the stated
+  threat model; coordinated malicious same-UID replacement remains explicitly
+  outside that model. No app, IME, model, Outcome Ledger, receipt, or owner
+  writing changed.
+- **Where:** `LabF03Closeout`; `script/source_provenance.sh`; 27/27 focused
+  closeout tests; F03 transaction selftest; source-provenance toolchain and
+  atomic-publication selftest.
+- **Next:** Run the complete Swift and structural proof stacks over this exact
+  tree before committing the implementation and research record.
+
+## 2026-08-30 — Fourth frontier pass adds twelve locked falsifiers
+
+- **Try:** Audit current llama.cpp runtime reports, Apple IMKit/language/power
+  contracts, Gemma context architecture, and primary interaction/calibration
+  research against every existing Q/F/H question, then discard duplicates.
+- **Learn:** The sharpest unproven refinements are compute-reclaiming
+  cancellation, cache-to-policy parity, an explicit probability-evidence
+  contract, causal scene-support scoring, local-window scene placement,
+  language-aware dictionary completion, undo-coherent IMKit acceptance,
+  contention scheduling, and graceful thermal degradation. Summoned completion,
+  effort-weighted utility, and cautious text-free adaptation require future
+  owner or stage authorization.
+- **Fail:** Dependency issues are risk reports, not Tilde failures; none was
+  tested against a registered Tilde corpus in this attempt. Per-user quietness,
+  context placement, and thermal routing were rejected as standalone stages
+  because they fit H06, H03, and H07. No result, queue, Ledger, or product
+  policy changed.
+- **Where:** the fourth-pass section of
+  `docs/research/frontier-priors-2026-08-30.md`, with primary-source links and
+  a falsifier/kill boundary for each item.
+- **Next:** Keep F03 as the sole active causal question; after its exit gate,
+  use the existing ordered portfolio rather than launching these in parallel.
+
+## 2026-08-30 — Final adversarial closeout audit removes six false-evidence paths
+
+- **Try:** Treat the signed app, IME, receipt, closeout report, toolchain
+  identity, stopped-process check, and every bundle transition as separately
+  forgeable or raceable, then add hostile fixtures for mismatched plists,
+  fabricated receipts, preterminal reports, publication failure, destination
+  collision, moved executables, and tool substitution.
+- **Learn:** An attributable terminal report must be created only after the
+  generation advances and the old event file is sealed; the app and IME must
+  independently exact-match every receipt-linked field including the runner;
+  a published report must survive post-rename failure; application transitions
+  need descriptor-held no-follow exclusive renames; and the Apple identity
+  must bind the signed Xcode seal plus the exact SwiftPM, driver, compiler,
+  linker, libtool, archiver, and SDK inputs. The stricter artifact is now
+  `tilde-lab.f03-closeout.v2`.
+- **Fail:** The audit found two critical, two high, and two medium ways the
+  earlier contract could overstate attribution or terminality. The first
+  process-enumeration fix also overfailed on one stable unrelated pathless
+  owner process; restricting pathless/signature probes to potential Tilde,
+  InlineGhostIME, and llama-server executable names removed that false block.
+  No real maintenance transaction or live retained-outcome run occurred.
+- **Where:** `LabF03Closeout`; `script/source_provenance.sh`;
+  `script/f03_preview_run.sh`; all three preview builders; 25/25 focused
+  closeout tests; 934/934 full Swift tests; source-provenance and F03
+  transaction selftests.
+- **Next:** Commit and prove the frozen contract, then make one clean
+  build-only Preview9B package; owner-approved install, rotation, and prior-file
+  archive/delete remain a separate explicit decision.
+
+## 2026-08-30 — Exact helper bytes survive the signed diagnostic package
+
+- **Try:** Red-team the package and closeout boundary, stop re-signing the
+  already approved helper, hash the bytes actually copied, bind safe bundle
+  root modes, and rebuild the full Preview9B app against the registered helper
+  and Qwen model while the installed previews kept running.
+- **Learn:** Outer app signing can preserve a valid nested helper byte-for-byte.
+  The rebuilt diagnostic app, IME, and helper all verify under `XG6WL66WUQ`;
+  its helper SHA-256 equals both the approved input and installed helper
+  (`e7b0946d81c2342d0d5afd1639dcb8af444c843b4fb50cef5ceeafa302a80546`),
+  every portable source/toolchain/helper field round-trips, no GGUF is
+  embedded, and the bundle manifest is
+  `8dfb95b2e0d208d929e3121b8fa48d04b3b1f4dc49a7f2c5b6bdf3826a010178`.
+  Ports 17875 and 17876 remained owned by their original helper processes.
+- **Fail:** The earlier packaging path re-signed the nested helper and changed
+  its digest after recording the input digest. This build fixes and exercises
+  that contradiction, but remains intentionally dirty/diagnostic and is not
+  F03 evidence. No app install, Outcome Ledger rotation, receipt, or writing
+  inspection occurred.
+- **Where:** `script/source_provenance.sh`; all three preview builders;
+  `script/f03_preview_run.sh`; source and transaction selftests; 22/22 F03
+  closeout tests; diagnostic bundle manifest above.
+- **Next:** Commit the audited contract, build the same package from that exact
+  clean commit, and keep owner-data maintenance behind explicit approval.
+
+## 2026-08-30 — Diagnostic package catches the Swift-driver boundary
+
+- **Try:** Bind clean source archives, Apple/Xcode/Swift/SDK identity, and the
+  approved helper-input SHA-256/team into both preview bundles, then run the
+  real Preview9B build-only path against the exact installed helper and model.
+- **Learn:** Invoking the signed `swift-frontend` bytes directly is not the
+  SwiftPM driver contract; the first package attempt rejected `--package-path`,
+  `--scratch-path`, and `--product`. Resolving the `swift` driver through the
+  captured Xcode toolchain fixed the boundary. The rerun built both release
+  products, verified helper shape, signed app/IME/helper under `XG6WL66WUQ`,
+  round-tripped all portable provenance fields, and produced a diagnostic
+  bundle manifest without changing installed apps or models.
+- **Fail:** The first real build failed before packaging and the successful
+  rerun was deliberately `diagnostic` because the research changes were still
+  uncommitted. It cannot become F03 evidence, and no install/rotation/receipt
+  maintenance transaction ran.
+- **Where:** `script/source_provenance.sh`; the three preview builders;
+  `script/f03_preview_run.sh`; source/runner shell selftests; 17/17 focused
+  closeout tests; diagnostic bundle manifest
+  `a1f97c1c1510654d2b9c1beb72a680460d0a740b6e6b523b71254b50a511e9cb`.
+- **Next:** Commit the frozen contract, rerun the same path from the exact clean
+  commit, and keep owner-data maintenance blocked.
+
+## 2026-08-30 — Third source audit bounds five mechanisms and one cache diagnostic
+
+- **Try:** Inspect commit-pinned public source for cotabby, Pretype, KeyType,
+  and LokalBot, then run one isolated aggregate-only Luna contrast between the
+  Preview9B helper's default four-slot mode and
+  `--parallel 1 --cache-ram 0 --no-cache-idle-slots` without touching product
+  ports or retaining prompts or outputs.
+- **Learn:** Five mechanisms deserve only bounded same-corpus tests: resolved
+  opportunity accounting, exact-prefix outcome/policy reconciliation,
+  deadline-relative latency, Unicode word acceptance, and one-sequence KV
+  reuse. Tilde's core field-state stale guards are already strong. In the
+  synthetic cache check, both arms completed 40/40; default p50/p95/max was
+  `324/1080/1114 ms`, control was `332/1009/1462 ms`, and 8/8 repeated prompts
+  matched after foreign churn with zero foreign-marker hits, zero cross-case
+  response-hash replays, and an identical aggregate response digest.
+- **Fail:** This unregistered bounded diagnostic did not reproduce cache
+  contamination or stale completion. Latency/cache benefit remains unresolved,
+  other workloads remain untested, AX-overlay architecture cannot transfer to
+  Tilde, and no mechanism became production evidence or unlocked H01–H18.
+- **Where:** `docs/research/frontier-priors-2026-08-30.md`; competitor commits
+  `d73a18582ae657dea23c742bf7ca46d87f3a05b8`,
+  `a2db5f8cd2706911e84e51a4e2b4f058c60c0dbc`,
+  `21df2cc1f5271d3712d567e3c2491ac09174caf3`, and
+  `b21a657a0a5ca1fe2bcfa74c0e579395272c59ce`; CotabbyInference
+  `7574a21516c65fc31f5cf8ef7380a03412eed480`; Preview9B helper
+  `0.2.0-dev` commit `2115b73`, SHA-256
+  `e7b0946d81c2342d0d5afd1639dcb8af444c843b4fb50cef5ceeafa302a80546`.
+  The exact pinned Qwen 9B model SHA-256 was
+  `4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`.
+  Isolated ports 54053 and 54105 were closed; product ports 17875 and 17876
+  were untouched. No persisted runtime flag, queue, Ledger, or production
+  policy changed. Luna task `01a05523-ed76-7481-ad88-91faaaf25fff`.
+- **Next:** Keep F03 first; only after its exit gate may the owner separately
+  authorize one frozen same-corpus mechanism test.
+
+## 2026-08-30 — Crash audit makes the F03 transaction fail closed
+
+- **Try:** Interrupt every install, IME handoff, generation bump, event
+  rotation, receipt publication, and cleanup phase; attack the same paths with
+  FIFO, link, ownership, mode, stale-journal, PID-reuse, and receipt races.
+- **Learn:** Recovery intent must be fsynced before the first mutation, each
+  mutation needs an intent phase, and the durable final receipt is the only
+  commit point. Before that point, a verified rollback may relaunch the old
+  app; after it, cleanup may continue but evidence must not be rolled back.
+- **Fail:** Automatic crash recovery is deliberately not claimed. SIGKILL can
+  leave an owner-only journal that blocks all later runs until owner-reviewed
+  manual recovery; backup bundles are not independently hash-sealed, and a
+  compromised same-UID process remains outside the threat model. No real
+  maintenance transaction ran.
+- **Where:** `script/f03_preview_run.sh` temp-only crash/journal/receipt
+  selftests and the shell-producer to Swift-consumer compatibility test.
+- **Next:** Bind raw Git, helper input, archive content, and Apple toolchain
+  identity before calling the package lineage decision-grade.
+
+## 2026-08-30 — Protocol audit narrows F03 to what the IME can observe
+
+- **Try:** Cross-check the amended F03 record, Learning Ledger, roadmap,
+  on-device handoff, frontier map, and Luna audit against the actual
+  post-`.shown` producer lifecycle and canonical queue.
+- **Learn:** F03 can establish retained utility and missingness only for shown
+  ghosts. Upstream eligibility, skipped inference, runtime unavailability,
+  filtering, and cooldown silence require the separate aggregate-only request
+  lifecycle before H04. Receipt, terminal flush, and stopped-process rules are
+  defensible only as a dated pre-result protocol amendment, not as if they were
+  frozen on August 27.
+- **Fail:** The prior prose overclaimed live opportunity coverage, retroactively
+  placed later closeout discoveries inside the original preregistration,
+  conflated two diagnostic snapshots, and left obsolete Qwen execution steps in
+  the roadmap. No eligible live result existed, so no verdict changed.
+- **Where:** F03 protocol amendment timestamp `2026-08-30T23:45:49Z`;
+  `docs/research-roadmap.md`; Ledger entry
+  `f03-receipt-bound-terminal-closeout`; and the post-show lifecycle fixtures.
+- **Next:** Finish the commit-bound crash-safe runner and exact receipt schema;
+  do not collect the decisive file until that frozen contract passes proof.
+
+## 2026-08-30 — Second frontier pass narrows the highest-leverage unknowns
+
+- **Try:** Re-rank the twenty falsifiable transfer theories after the F03
+  lifecycle, provenance, Luna, and closeout audits, using current primary
+  papers and source-level macOS implementations rather than candidate novelty.
+- **Learn:** The top unresolved leverage is a complete opportunity denominator,
+  typed-through versus intervention separation, stable-exposure eligibility,
+  deadline-relative latency, byte-stable context, typed-suffix anchor reuse,
+  and real-host IMKit capability truth. These are measurement and control
+  questions, not evidence for a larger model.
+- **Fail:** No reviewed live F03 result exists, so the pass cannot authorize a
+  second causal question, unlock H01-H18, promote synthetic host coverage, or
+  reopen neural current-word completion.
+- **Where:** [`frontier-priors-2026-08-30.md`](frontier-priors-2026-08-30.md),
+  including primary paper and GitHub links. No source, stage, or product policy
+  changed.
+- **Next:** Finish one attributable terminal F03 run; before H04, freeze the
+  aggregate-only upstream opportunity contract.
+
+## 2026-08-30 — Luna rejects proxy claims as real-IME proof
+
+- **Try:** Run a separate read-only Luna audit against the installed Preview9B
+  using only aggregate-safe TIS, process, socket, signature, bundle, and Git
+  metadata. Do not call the app's status path because it re-registers the input
+  source; do not read event or diary contents.
+- **Learn:** A standalone Carbon query saw exactly one Preview9B input source,
+  enabled, selectable, and currently selected. The app, its direct helper on the
+  profile-specific port, and the installed IME formed one signed-team process
+  chain, but the installed bundle was build 2918 while the audited branch would
+  build 2947. The Scene Host directly drives an `NSTextView`; it does not pass
+  through TIS, `IMKServer`, or `GhostInputController`. Likewise, a
+  `suggestion-served` diagnostic proves a request, not visible marked text or
+  acceptance. Installed presence, Scene Host success, request service, code
+  signing, and a declared editor matrix are therefore not substitutes for real
+  IMKit interaction proof.
+- **Fail:** No owner-authorized TextEdit/browser interaction was performed, and
+  the old installed build cannot prove the current source. This audit closes no
+  compatibility or F03 gate.
+- **Where:** Read-only Luna task `01a054ee-de6a-7912-8e94-f1e91038e21c`
+  (`Luna: audit on-device F03 proof`) against branch commit `ffb2491d`;
+  `Sources/TildeLab/Views/LabInteractionHostView.swift`;
+  `Sources/InlineGhostIME/GhostInputController.swift`; and the app
+  compatibility runbook. No sanitized real-host artifact was produced, so this
+  remains an audit attempt rather than interaction evidence.
+- **Next:** Keep F03 first. After an attributable run, require a separate
+  owner-triggered marked-text/Tab/Escape/focus/commit pass per real host family.
+
+## 2026-08-30 — F03 closeout exposes the last mixed-run loopholes
+
+- **Try:** Treat a clean install receipt, event JSONL, preferences, and a Lab
+  aggregate as four hostile inputs and ask whether they can be joined into one
+  attributable terminal run without reading or publishing writing.
+- **Learn:** A clean receipt alone is insufficient. A replacement Preview9B can
+  reuse a live file, generic instrument ingest can silently target a different
+  profile, an asynchronous writer can outlive the observed row count, and a
+  second rotation can race analysis. Decision-grade closeout therefore needs
+  the rotation lock, exact installed-byte/signing/model revalidation, a current
+  generation, zero dropped writes, attempted = written = rows, a post-event
+  flush acknowledgement, one current schema/campaign, stopped processes, and
+  an exclusive path-free output.
+- **Fail:** The existing build 2918 file still has no historical receipt and
+  cannot be upgraded into evidence after the fact. No installed app, process,
+  preference, model, diary, or Outcome Ledger was changed; F03 remains
+  **IMPLEMENTING**.
+- **Where:** `LabF03Closeout`, `tilde-lab f03-closeout`, the Preview9B guarded
+  runner, and their synthetic security/identity/accounting fixtures.
+- **Next:** Finish the clean package and transaction proof, then wait for the
+  owner's explicit maintenance window and archive/delete choice.
+
+## 2026-08-30 — F03 source-to-run provenance becomes executable
+
+- **Try:** Audit the Preview9B source, package, app, IME, install, rotation,
+  and local receipt chain, then turn each missing attribution link into a
+  fail-closed build or transaction gate.
+- **Learn:** Decision-grade preview lineage needs clean-source refusal,
+  identical commit/tree/worktree identity inside both signed bundles,
+  pre/post-signing source checks, exact old-process shutdown, recoverable app
+  and IME swaps, generation-aware locked rotation, and a path-free atomic
+  receipt that verifies installed bytes and provenance.
+- **Fail:** No installed app, IME, model store, Outcome Ledger, diary, process,
+  or preference was changed. The guarded maintenance transaction remains
+  intentionally unexecuted until the owner approves an exact window and the
+  final branch is clean, so F03 is still unsupported.
+- **Where:** `script/source_provenance.sh`, `script/build_preview_9b.sh`,
+  `script/f03_preview_run.sh`, and the F03 on-device handoff. Self-tests cover
+  dirty/untracked/mid-build source changes, path-free receipts, locked
+  rotation, symlink/hard-link refusal, bundle rollback, generation restoration
+  planning, and installed-plist mismatch refusal.
+- **Next:** Pass the final package/full proof from one clean commit, then ask
+  the owner for the single guarded install/rotation window.
+
 ## 2026-08-30 — Adversarial F03 audit falsifies five parts of the ruler
 
 - **Try:** Attack the retained-outcome producer, validator, storage, ingest,
