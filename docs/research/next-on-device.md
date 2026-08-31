@@ -45,25 +45,27 @@ The implementation that began on `cursor/f03-live-ruler-and-local-diary`
 - Shared count contract in
   `Sources/TildeCore/Policy/RetainedCharacterObservation.swift`.
 - A second local word diary. Lab ingest rejects `acceptedText`.
-- `tilde-lab ingest-events --instrument` and `online-report --instrument`.
+- `tilde-lab ingest-events --instrument` and `online-report --instrument` for
+  diagnostics only; receipt-bound `f03-closeout` is the decision-grade path.
 - Delete Personalization Data wipes the count file and the diary.
 - Production menu stats are still shown / accepted / words.
 
 ## What the current audit proves — and does not
 
-- The complete count file has 1,364 events and two pre-fix monotonic-retention
-  violations.
-- An inferred post-install slice has 575 events, including 39 accepts and 225
+- An earlier 2026-08-30 diagnostic snapshot recorded at commit `78df853f` had
+  1,364 rows spanning pre-fix history and two monotonic-retention violations.
+  Its inferred post-install slice had 575 events, including 39 accepts and 225
   typed-through outcomes, with zero duplicate, XOR, domain, or monotonic
   violations.
 - That slice is diagnostic only. Its boundary comes from install timing, not
   sealed event provenance, and the complete file is not clean.
-- A later full-file audit of the active `Tilde 9B Preview` identity found
-  340/340 structurally valid v3 events, including 39 accepts and 143
-  typed-through outcomes, with zero privacy, duplicate, domain, or monotonic
-  violations. Its full proof passed 889 tests. It is still diagnostic because
-  the installed build and events contain no sealed source commit or rotation
-  run record; build 2918 and binary hashes cannot repair provenance afterward.
+- A distinct later 2026-08-30 snapshot recorded at commit `d3bc71d5` examined
+  the then-active `Tilde 9B Preview` build-2918 file and found 374/374
+  structurally valid v3 events, including 41 accepts and 148 typed-through
+  outcomes, with zero privacy, duplicate, domain, or monotonic violations. It
+  is still diagnostic because the installed build and events contain no sealed
+  source commit or rotation run record. It is not the 1,364-row snapshot; never
+  combine their counts or call them one campaign.
 - A separate clean checkout at source
   `3d84b97d211021f315d87ed964899f89dc930b5c` reproduced Preview9B build
   2926, verified the pinned model and strict signatures, excluded an embedded
@@ -81,11 +83,93 @@ The implementation that began on `cursor/f03-live-ruler-and-local-diary`
    a local path.
 2. Rotate the text-free count file. Preserve or delete the previous local audit
    file according to the owner's data choice; never check it into Git.
-3. Type normally, then ingest the entire fresh file with
-   `tilde-lab ingest-events --instrument`. **Never check in events, JSONL, or
-   any writing.**
-4. Mark F03 **SUPPORTED** only when the full fresh file meets the protocol's
-   promotion rule. Then stop. Do not start H01 in the same attempt.
+3. Type normally, deactivate the IME to publish the terminal write/flush
+   snapshot, stop the exact Preview9B app, helper, and IME processes, then run
+   `tilde-lab f03-closeout --receipt ... --output ...`. **Never check in the
+   receipt, events, JSONL, or any writing.** Only the aggregate, path-free
+   closeout report may be reviewed for publication.
+4. Mark F03 **SUPPORTED** only when that full-file report is decision-grade
+   eligible and meets the protocol's promotion rule. Then stop. Do not start
+   H01 in the same attempt.
+
+## Enforced source-to-run handoff
+
+The Preview9B builder now makes the provenance boundary executable instead of
+leaving it to a notebook:
+
+- a decision-grade build refuses any tracked, staged, deleted, or untracked
+  source change;
+- `--diagnostic-dirty-source` is the only dirty-tree escape hatch, and labels
+  both the app and IME `diagnostic` so they cannot become F03 evidence;
+- both signed bundles carry the exact Git commit, Git tree, canonical
+  clean-commit path/mode/length/content manifest SHA-256, clean/dirty
+  state, sealed runner identity, the v2 toolchain/SDK identity over the signed
+  Xcode seal and exact SwiftPM/driver/compiler/linker/libtool/archiver/SDK
+  inputs, approved helper-input SHA-256/team, and evidence class; both plists
+  must independently exact-match those receipt-linked fields;
+- decision-grade compilation reads a private read-only archive of that commit,
+  not mutable worktree bytes, and the builder rechecks both source and
+  toolchain around compiler and signing operations; toolchain capture rejects
+  out-of-bundle build tools and pins the selected Xcode namespace identity
+  across each invocation; and
+- assembly into fixed `dist` bundle names is serialized, and the owner-approved
+  transaction executes the retained archived runner whose digest is embedded;
+- build-only preview packaging verifies model inputs but does not seed or
+  chmod the owner's installed model store.
+
+Do **not** run the maintenance command below merely because it is documented.
+It requires the owner's explicit approval for that exact install/rotation
+window and an explicit choice for the previous text-free file:
+
+```bash
+./script/build_preview_9b.sh \
+  --helper "/Applications/Tilde 9B Preview.app/Contents/Helpers/llama-server" \
+  --helper-sha256 e7b0946d81c2342d0d5afd1639dcb8af444c843b4fb50cef5ceeafa302a80546 \
+  --helper-team XG6WL66WUQ \
+  --owner-approved-f03-run \
+  --previous-ledger archive
+```
+
+Use `delete` instead of `archive` only when the owner explicitly chooses
+deletion. The guarded path verifies clean app/IME lineage and signatures,
+replaces only Preview9B, lets the app perform its existing atomic IME update,
+stops the exact preview processes, bumps the wipe generation, rotates only
+`events.jsonl` under an exclusive lock, relaunches the exact packaged helper,
+and atomically writes an owner-only, path-free local receipt. A failure rolls
+back the prior app, IME, Outcome Ledger generation, and ledger when safe, and
+leaves owner-only recovery material.
+The local word diary is never moved or read. An archived prior event file stays
+local beside the receipt and must never enter Git.
+
+The receipt closes source/package/install/rotation attribution; it is not an
+outcome. After the owner confirms Preview9B is the active input source, ordinary
+typing still has to produce a complete fresh file that passes F03's registered
+gates.
+
+The closeout command holds the same global maintenance lock, re-verifies the
+current installed package, signing team, and model against that receipt, reads
+the complete owner-only event file, joins its exact row count and digest to the
+current generation's attempted/written/dropped and terminal flush snapshot,
+requires the preview processes to remain stopped, and creates one new
+aggregate-only report. An eligible closeout atomically advances to a fresh
+generation and renames the sealed event file to
+`events.closed-<runID>.jsonl` before releasing writers; publication failure
+restores the prior name/generation or fails closed for manual recovery. Generic
+instrument ingest cannot substitute for it. The published artifact is
+`tilde-lab.f03-closeout.v2`; an in-memory pre-seal analysis is explicitly
+ineligible and cannot be written as the terminal result. Old-generation
+accounting/flush state is read after generation advance and checked again at
+the report's no-replace commit boundary, together with stopped processes,
+installed identity, maintenance state, and the held event snapshot.
+The maintenance lock and Outcome Ledger are opened below the same held support
+directory identity. If final-path or durability checks fail after report
+rename, the generation remains sealed and the returned report carries
+`terminal-publication-indeterminate`, so it cannot advance F03.
+
+The receipt directly binds the registered Qwen model. The signed bundle itself
+does not yet embed a canonical per-profile model-manifest digest; add that
+before using these safeguards to claim complete standalone provenance for the
+other preview profiles.
 
 `TildeApp` and `InlineGhostIME` must not depend on Tilde Lab. The
 count contract may live in `TildeCore`. Lab remains the ingest and
