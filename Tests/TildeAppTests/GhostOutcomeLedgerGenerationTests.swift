@@ -57,6 +57,84 @@ struct GhostOutcomeLedgerGenerationTests {
         ])
     }
 
+    @Test("Segment close followed by acknowledged flush seals an accepted watch")
+    func deactivationSequenceSealsAcceptedWatch() throws {
+        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+            .appendingPathComponent("tilde-deactivation-\(UUID().uuidString)", isDirectory: true)
+        let suite = "tilde.test.outcome-deactivation.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer {
+            GhostOutcomeLedger.finishTesting()
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let digest = TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "synthetic-session")
+        GhostOutcomeLedger.resetForTesting(homeDirectory: root, defaults: defaults)
+        GhostOutcomeLedger.configure {
+            RetainedContextSnapshot(
+                text: "word",
+                utf16StartLocation: 0,
+                caretLocation: 4,
+                sourceDigestSHA256: digest
+            )
+        }
+        GhostOutcomeLedger.noteShown(
+            sessionIdentifier: "synthetic-session",
+            bundleIdentifier: "com.example.Editor",
+            candidateCharacters: 4,
+            candidateWordCount: 1,
+            opportunityCharacters: 12,
+            precedingCharacter: " ",
+            excluded: false,
+            at: Date(timeIntervalSince1970: 1_000)
+        )
+        GhostOutcomeLedger.noteAccepted(
+            "word",
+            kind: .all,
+            insertionLocationUTF16: 0,
+            remainderVisible: false,
+            at: Date(timeIntervalSince1970: 1_001)
+        )
+        let closeSegment = {
+            GhostOutcomeLedger.closeSegment(at: Date(timeIntervalSince1970: 1_002))
+        }
+        if Thread.isMainThread {
+            closeSegment()
+        } else {
+            DispatchQueue.main.sync(execute: closeSegment)
+        }
+        GhostOutcomeLedger.flush(
+            acknowledge: true,
+            at: Date(timeIntervalSince1970: 1_003)
+        )
+
+        let eventURL = TextFreeOnlineEventFile.url(
+            homeDirectory: root,
+            supportDirectoryName: TildeProductProfile.current.supportDirectoryName
+        )
+        let lines = try Data(contentsOf: eventURL).split(separator: 0x0A)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let event = try decoder.decode(TextFreeOnlineEvent.self, from: Data(try #require(lines.first)))
+        #expect(lines.count == 1)
+        #expect(event.outcome == "accepted-all")
+        #expect(event.retentionAt5Seconds.missingness == .segmentClosedEarly)
+        #expect(event.retentionAt30Seconds.missingness == .segmentClosedEarly)
+        #expect(event.retentionAtSegmentClose.retainedCharacters == 4)
+        #expect(defaults.dictionary(
+            forKey: PersonalHistorySettingsContract.outcomeLedgerWriteCountsKey(0)
+        ) as? [String: Int] == [
+            "attempted": 1,
+            "written": 1,
+            "flushedAttempted": 1,
+            "flushedWritten": 1,
+            "flushedDropped": 0,
+            "flushedAtMilliseconds": 1_003_000,
+        ])
+    }
+
     @Test("A failed event append is counted without touching the redirected target")
     func failedAppendIsCounted() throws {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
