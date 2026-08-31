@@ -259,6 +259,151 @@ This third pass is documentation, not promotion. F03 remains the active causal
 question, H01–H18 remain locked, and neither the executable queue nor Learning
 Ledger changes.
 
+## Fourth-pass runtime, interaction, and control refinements — 2026-08-30
+
+A final overlap audit searched for mechanisms that the first twenty theories,
+Q08/Q09/Q12/Q13, and H01–H18 do not already answer. These are protocol
+refinements or owner-gated portfolio candidates, not executable work. Risk
+reports from dependencies identify what to falsify; they are not evidence that
+Tilde's pinned helper has the reported behavior.
+
+### Highest-priority refinements
+
+1. **Cancellation must reclaim compute, not only suppress stale UI.** Current
+   llama.cpp [issue 24496](https://github.com/ggml-org/llama.cpp/issues/24496)
+   reports that a disconnected client can leave generation occupying a slot;
+   the server exposes slot and decode state in its
+   [documented endpoints](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+   On the pinned helper and public synthetic prompts, cancel before the first
+   token, after the first token, and after the first stable word, then
+   immediately submit request B. Require request A to stop decoding within one
+   scheduler quantum, B p95 within 5% of an idle-slot baseline, zero stale
+   display, and bounded energy. Fold this into H02/H15 only after F03; the
+   existing field/request guards prove stale-output safety, not capacity
+   reclamation.
+2. **Cache reuse needs decision parity, not just text parity.** llama.cpp's
+   [server documentation](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
+   warns that cache reuse and batch geometry need not produce bit-identical
+   logits; current [issue 19034](https://github.com/ggml-org/llama.cpp/issues/19034)
+   and earlier [issue 7594](https://github.com/ggml-org/llama.cpp/issues/7594)
+   report related greedy/cache divergence. Compare cold/no-cache, first-cache,
+   repeated-cache, and foreign-slot-churn arms on identical public prompts and
+   registered batch settings. Require zero token, visible-output, cleaner,
+   fact-filter, confidence-bucket, or show/silence flips, with probability
+   drift no larger than repeated-cold noise. Q08 and the Luna diagnostic did
+   not establish parity through Tilde's downstream policy boundary.
+3. **Probability evidence itself needs a frozen contract.** The same server
+   documentation distinguishes raw `n_probs` from `post_sampling_probs`.
+   Replay fixed public cases with top-N depths 1, 5, 20, and 100 and both
+   probability surfaces. Compare entropy/margin convergence, ECE, Brier score,
+   risk-coverage, payload/latency, and final show/silence disagreements. Select
+   the smallest N only if disagreement is at most 0.5 percentage points and
+   registered calibration bounds hold. Q05/Q06's selected-token mean does not
+   prove that future H06 receives sufficient probability evidence.
+4. **Measure the scene's causal contribution to the same candidate.**
+   [Context-Aware Decoding](https://aclanthology.org/2024.naacl-short.69/) and
+   its [official implementation](https://github.com/xhan77/context-aware-decoding)
+   motivate scoring one frozen candidate under typed-plus-scene and typed-only
+   context. First teacher-force existing candidates across fresh, stale,
+   wrong, irrelevant, literal, and paraphrased scenes; do not add a second
+   visible generation path. The scene-support delta must improve held-out
+   factual risk-coverage at equal display budget, with zero protected
+   name/number leakage and acceptable p95/energy overhead. This sharpens H03;
+   Q12's literal-echo filter answers a different question.
+5. **Select and place scene facts inside Gemma's local window.** The official
+   [Gemma 4 E2B model card](https://huggingface.co/google/gemma-4-E2B),
+   [technical report](https://arxiv.org/abs/2607.02770),
+   [LongLLMLingua paper](https://aclanthology.org/2024.acl-long.91/), and
+   [reference code](https://github.com/microsoft/LLMLingua) motivate an equal-
+   byte H03 comparison between recency packing, query-aware extractive line
+   selection, and position permutations near `Continuation:`. Hold facts,
+   source, freshness, and token budget fixed. Kill on any redaction or typed-
+   context regression, stale/injection harm, selector overhead beyond the
+   first-stable-word budget, or no supported-usefulness gain.
+
+### Product-proof and runtime refinements
+
+6. **The deterministic current-word layer should be language aware.** Apple's
+   [`NSSpellChecker`](https://developer.apple.com/documentation/appkit/nsspellchecker),
+   [completion API](https://developer.apple.com/documentation/appkit/nsspellchecker/completions%28forpartialwordrange%3Ain%3Alanguage%3Ainspelldocumentwithtag%3A%29),
+   [preferred languages](https://developer.apple.com/documentation/appkit/nsspellchecker/userpreferredlanguages),
+   [per-word language detection](https://developer.apple.com/documentation/appkit/nsspellchecker/language%28forwordrange%3Ain%3Aorthography%3A%29),
+   and Apple's [short-string language-identification research](https://machinelearning.apple.com/research/language-identification-from-very-short-strings)
+   support comparing Tilde's hard-coded English call with OS-selected and
+   conservatively detected language arms. Use public multilingual prefixes and
+   real hosts. Require fewer wrong-language/invalid-prefix suggestions outside
+   English, zero English or latency regression, and silence for ambiguous
+   short prefixes. H07's neural skip does not test this separate dictionary
+   layer.
+7. **Acceptance must be one undo-coherent native transaction.** Apple's
+   [`unmarkText`](https://developer.apple.com/documentation/appkit/nstextinputclient/unmarktext%28%29),
+   [`insertText`](https://developer.apple.com/documentation/appkit/nstextinputclient/inserttext%28_%3Areplacementrange%3A%29),
+   and [`breakUndoCoalescing`](https://developer.apple.com/documentation/appkit/nstextview/breakundocoalescing%28%29)
+   contracts motivate a real-IMKit host matrix for full/word acceptance,
+   punctuation, middle caret, selection, and a remaining ghost. For every
+   case, accept, undo once, then redo once. One undo must remove exactly the
+   accepted suffix without touching authored text; one redo must restore it;
+   zero duplicate insertion or stranded marked text is allowed. F03's
+   aggregate `undone` outcome cannot substitute for this interaction proof.
+8. **Foreground contention may need explicit scheduling/QoS policy.** The
+   llama.cpp [server controls](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
+   and Apple's [macOS QoS guidance](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/PrioritizeWorkAtTheTaskLevel.html)
+   support a future H15 test under controlled compile, video, and mixed load.
+   Freeze model, prompt, and slot settings; compare key-callback p99,
+   first-stable-word p50/p95/p99, deadline hit rate, host responsiveness,
+   energy, and thermals. Promote only a material deadline improvement with
+   zero key-loop regression and bounded energy/thermal cost.
+9. **Thermal and power pressure should degrade to deterministic help or
+   silence.** Apple's [thermal guidance](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/RespondToThermalStateChanges.html),
+   [`ProcessInfo`](https://developer.apple.com/documentation/foundation/processinfo),
+   and [Low Power Mode API](https://developer.apple.com/documentation/foundation/processinfo/islowpowermodeenabled)
+   motivate a future H07 arm where nominal state permits neural inference and
+   serious/critical or low-power state uses exact dictionary/personal matches
+   or silence. Require zero late/stale ghosts or key-latency regression and
+   better energy/recovery behavior; never display a lower-quality neural
+   candidate merely because the machine is throttled.
+
+### Owner-gated portfolio candidates
+
+10. **A conservative automatic lane may coexist with an explicit longer
+    completion shortcut.** Microsoft's
+    [efficient-invocation guideline](https://www.microsoft.com/en-us/haxtoolkit/guideline/support-efficient-invocation/)
+    and [phrase-versus-word autocomplete study](https://www.microsoft.com/en-us/research/publication/suggesting-phrases-vs-predicting-words-mobile-text-composition/)
+    motivate comparing automatic-only with automatic-plus-summon using the
+    same frozen generator. Measure automatic interruptions, invoked retention,
+    RNKS/time saved, correction/undo, discoverability, and host shortcut
+    conflicts. Require unchanged automatic risk and meaningful retained
+    invoked utility. This is outside H04/H08's automatic-only boundary and
+    needs owner approval before entering the portfolio.
+11. **Utility may be typing effort saved rather than characters retained.** A
+    [large-scale query-autocomplete interaction study](https://www.microsoft.com/en-us/research/publication/on-user-interactions-with-query-auto-completion/)
+    motivates comparing RNKS length with predicted milliseconds or physical
+    key effort saved, using only local aggregate timing buckets. Require
+    incremental prediction of stable-final time and lower time-to-finish at the
+    same bad-display rate; reject on keyboard-layout transfer or calibration
+    failure. This can refine H04 after the opportunity funnel is complete.
+12. **Any on-device adaptation must be cautious, text free, and reversible.**
+    [Sequential decision-making for personalized autocompletion](https://arxiv.org/abs/2403.15502)
+    and Microsoft's [cautious-adaptation guideline](https://www.microsoft.com/en-us/haxtoolkit/guideline/update-and-adapt-cautiously/)
+    motivate, only after a global H06 gate passes, a shadow device-local
+    interruption intercept with a frozen baseline, minimum sample size,
+    hysteresis, and exact rollback. Require chronological cross-app/week gain,
+    no oscillation or worst-slice regression, no visible random exploration,
+    and no retained text. This is the lowest-confidence refinement because it
+    partially overlaps H05/H06.
+
+Explicit non-additions: per-user quietness is an H06 parameterization, Gemma
+positioning belongs inside H03, and thermal routing belongs inside H07. Do not
+add a new speculative-decoding or model-swap theory: existing priors already
+cover draftless speculation/KV sharing, while a new draft model or training
+asset conflicts with the fixed-Gemma production contract. The server's
+documented `t_max_predict_ms` activates only after a newline, so it is not a
+true hard autocomplete deadline for Tilde's newline-stopping request shape.
+
+This fourth pass changes neither stage nor queue. F03 remains the only active
+causal question; every item above stays locked until its existing dependency
+and promotion gates are satisfied or the owner explicitly amends the program.
+
 ## Boundary decisions
 
 - This review does not reopen Q09's strong directional negative on 16
