@@ -96,7 +96,7 @@ Two timescales, one frozen world model:
 
 | Layer | What it is | What it may learn from | When |
 | --- | --- | --- | --- |
-| Generator | Pinned Gemma 4 E2B | Nothing from the owner | Frozen except the open Qwen close |
+| Generator | Selected pinned Gemma 4 E2B or Qwen 3.5 9B | Nothing from the owner | Frozen within each experiment |
 | Lexical memory | Counts, cache, exact phrases | Local accepted writing, user-controlled | Stage 3, locked |
 | Controller | Show / hide / skip / length | Text-free outcomes | Stage 2, after the ruler and cheap bets |
 | Context packer | What to put at the prompt edges | Source quality, not extra tokens | H03, locked until F03 |

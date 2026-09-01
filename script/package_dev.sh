@@ -30,8 +30,9 @@ script/package_app.sh; this lane never produces a release artifact.
 Dev inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
   --llama-sha256 SHA256     Human-reviewed SHA-256 pin for the helper bytes.
-The Gemma 4 E2B model is never embedded. The installed dev app uses the same
-verified Application Support download flow as production.
+The selectable Gemma 4 E2B and Qwen 3.5 9B models are never embedded. The
+installed dev app uses the same verified Application Support download flow as
+production.
 
 Options:
   --version VERSION         Base version (default: 0.1.0). The bundle always
@@ -66,7 +67,7 @@ while (($#)); do
       esac
       shift
       ;;
-    --model|--model-sha256|--proof-model|--proof-model-sha256)
+    --model|--model-sha256|--proof-model|--proof-model-sha256|--proof-gemma-model|--proof-gemma-model-sha256|--proof-qwen-model|--proof-qwen-model-sha256)
       echo "package_dev.sh does not accept model inputs; the model is downloaded outside the app" >&2
       exit 2
       ;;

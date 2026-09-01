@@ -76,6 +76,7 @@ final class StatusMenuHost: NSObject {
     private var pauseItem: NSMenuItem?
     private var setupOrTildeItem: NSMenuItem?
     private var modelPickerItem: NSMenuItem?
+    private var productionModelChoiceItems: [TildeModelChoice: NSMenuItem] = [:]
     private var modelChoiceItems: [PreviewModelChoice: NSMenuItem] = [:]
     private var h01Item: NSMenuItem?
 
@@ -98,7 +99,19 @@ final class StatusMenuHost: NSObject {
         todayItem = addAction(to: menu, "0 words with Tilde today", #selector(openYourTilde(_:)))
         menu.addItem(.separator())
 
-        if TildeProductProfile.current == .modelPreview {
+        if TildeProductProfile.current == .production {
+            let picker = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
+            let submenu = NSMenu(title: "Model")
+            for choice in TildeModelChoice.allCases {
+                let choiceItem = addAction(to: submenu, choice.displayName, #selector(selectModel(_:)))
+                choiceItem.representedObject = choice.rawValue
+                productionModelChoiceItems[choice] = choiceItem
+            }
+            picker.submenu = submenu
+            menu.addItem(picker)
+            modelPickerItem = picker
+            menu.addItem(.separator())
+        } else if TildeProductProfile.current == .modelPreview {
             let picker = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
             let submenu = NSMenu(title: "Model")
             for choice in PreviewModelChoice.allCases {
@@ -144,7 +157,7 @@ final class StatusMenuHost: NSObject {
             wordsToday: TildeStats.todayWordsAccepted()
         )
         statusLineItem?.title = switch TildeProductProfile.current {
-        case .production: presentation.status
+        case .production: "\(appDelegate.selectedProductionModel()?.shortName ?? "Gemma E2B") · \(presentation.status)"
         case .preview26B: "26B Preview · \(presentation.status)"
         case .preview9B: "9B Preview · \(presentation.status)"
         case .modelPreview: "\(appDelegate.selectedPreviewModel()?.shortName ?? "Model Preview") · \(presentation.status)"
@@ -153,7 +166,12 @@ final class StatusMenuHost: NSObject {
         pauseItem?.title = presentation.primaryAction ?? ""
         pauseItem?.isHidden = presentation.primaryAction == nil
         setupOrTildeItem?.title = "Open \(TildeProductProfile.current.displayName)"
-        if let active = appDelegate.selectedPreviewModel() {
+        if let active = appDelegate.selectedProductionModel() {
+            modelPickerItem?.title = "Model: \(active.shortName)"
+            for (choice, item) in productionModelChoiceItems {
+                item.state = choice == active ? .on : .off
+            }
+        } else if let active = appDelegate.selectedPreviewModel() {
             modelPickerItem?.title = "Model: \(active.shortName)"
             for (choice, item) in modelChoiceItems {
                 item.state = choice == active ? .on : .off
@@ -204,9 +222,13 @@ final class StatusMenuHost: NSObject {
     }
 
     @objc private func selectModel(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let choice = PreviewModelChoice(rawValue: rawValue) else { return }
-        appDelegate?.selectPreviewModel(choice)
+        guard let rawValue = sender.representedObject as? String else { return }
+        if TildeProductProfile.current == .production,
+           let choice = TildeModelChoice(rawValue: rawValue) {
+            appDelegate?.selectProductionModel(choice)
+        } else if let choice = PreviewModelChoice(rawValue: rawValue) {
+            appDelegate?.selectPreviewModel(choice)
+        }
     }
 
     func showTilde() {

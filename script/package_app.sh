@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Single release driver: test, build, stage, sign, exercise, notarize, staple,
 # package, and checksum a Tilde release. The GGUF is never embedded in the app;
-# --proof-model is a proof-only preseed used by the isolated runtime lane.
+# Both --proof-*-model inputs are proof-only preseeds used by isolated runtime lanes.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,37 +9,46 @@ cd "$ROOT_DIR"
 
 LLAMA_SERVER=""
 LLAMA_SHA256=""
-PROOF_MODEL=""
-PROOF_MODEL_SHA256="389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
+PROOF_GEMMA_MODEL=""
+PROOF_GEMMA_MODEL_SHA256="389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
+PROOF_QWEN_MODEL=""
+PROOF_QWEN_MODEL_SHA256="4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2"
 SIGN_IDENTITY=""
 NOTARY_PROFILE=""
 VERSION="0.1.0"
 BUILD_NUMBER=""
 VERIFY_INPUTS_ONLY=0
 
-MODEL_REVISION="3762686d74ff8db6c98f8d3c389f56fbdf994d5a"
-MODEL_FILENAME="gemma-4-E2B.Q4_K_M.gguf"
-MODEL_BYTES=3427861984
-MODEL_SHA256="389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
-MODEL_URL="https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/${MODEL_REVISION}/${MODEL_FILENAME}"
+GEMMA_MODEL_REVISION="3762686d74ff8db6c98f8d3c389f56fbdf994d5a"
+GEMMA_MODEL_FILENAME="gemma-4-E2B.Q4_K_M.gguf"
+GEMMA_MODEL_BYTES=3427861984
+GEMMA_MODEL_SHA256="389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2"
+GEMMA_MODEL_URL="https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/${GEMMA_MODEL_REVISION}/${GEMMA_MODEL_FILENAME}"
+QWEN_MODEL_REVISION="ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6"
+QWEN_MODEL_FILENAME="Qwen3.5-9B-Base.Q4_K_M.gguf"
+QWEN_MODEL_BYTES=5629109312
+QWEN_MODEL_SHA256="4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2"
+QWEN_MODEL_URL="https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/${QWEN_MODEL_REVISION}/${QWEN_MODEL_FILENAME}"
 
 usage() {
   cat <<'EOF'
 Usage: script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
-  --proof-model PATH [--proof-model-sha256 SHA256] --build-number NUMBER \
+  --proof-gemma-model PATH --proof-qwen-model PATH --build-number NUMBER \
   --notary-profile PROFILE [options]
        script/package_app.sh --llama-server PATH --llama-sha256 SHA256 \
-  --proof-model PATH [--proof-model-sha256 SHA256] --verify-inputs-only
+  --proof-gemma-model PATH --proof-qwen-model PATH --verify-inputs-only
 
 Release inputs:
   --llama-server PATH       Static llama-server with system-only dependencies.
   --llama-sha256 SHA256     Human-reviewed SHA-256 pin for the helper bytes.
-  --proof-model PATH        Preseeded Gemma 4 E2B GGUF for release proof only;
+  --proof-gemma-model PATH  Preseeded Gemma 4 E2B GGUF for release proof only;
                             it is copied to isolated external model storage and
                             never copied into Tilde.app.
-  --proof-model-sha256 SHA256
-                            Optional assertion of the pinned proof-model hash;
-                            it must equal the fixed pin shown below.
+  --proof-gemma-model-sha256 SHA256
+                            Optional assertion of the fixed Gemma pin.
+  --proof-qwen-model PATH   Preseeded Qwen 3.5 9B GGUF for release proof only.
+  --proof-qwen-model-sha256 SHA256
+                            Optional assertion of the fixed Qwen pin.
 
 Full release only:
   --notary-profile PROFILE  Stored notarytool keychain profile.
@@ -59,24 +68,27 @@ over loopback, redaction redacts or fails closed), Apple notarization,
 stapling, and Gatekeeper
 assessment all pass. The proof may append privacy-safe diagnostics but leaves
 the daily driver and input method untouched.
-The production app downloads this exact immutable model URL during its separate
-first-run asset phase; no user-derived request data is sent during that phase:
+The production app may download either exact immutable model URL during its
+separate user-selected asset phase; no user-derived request data is sent:
 https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf
-The model pin is SHA-256 389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2 and exactly 3427861984 bytes.
+https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf
+Both exact byte counts and SHA-256 pins are verified below.
 Shape checks and matching hashes do not establish input provenance; the release
-operator remains responsible for reviewing where the helper and model came from.
+operator remains responsible for reviewing where the helper and models came from.
 EOF
 }
 
 while (($#)); do
   case "$1" in
-    --llama-server|--llama-sha256|--proof-model|--proof-model-sha256|--notary-profile|--sign-identity|--version|--build-number)
+    --llama-server|--llama-sha256|--proof-gemma-model|--proof-gemma-model-sha256|--proof-qwen-model|--proof-qwen-model-sha256|--notary-profile|--sign-identity|--version|--build-number)
       [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 2; }
       case "$1" in
         --llama-server) LLAMA_SERVER="$2" ;;
         --llama-sha256) LLAMA_SHA256="$2" ;;
-        --proof-model) PROOF_MODEL="$2" ;;
-        --proof-model-sha256) PROOF_MODEL_SHA256="$2" ;;
+        --proof-gemma-model) PROOF_GEMMA_MODEL="$2" ;;
+        --proof-gemma-model-sha256) PROOF_GEMMA_MODEL_SHA256="$2" ;;
+        --proof-qwen-model) PROOF_QWEN_MODEL="$2" ;;
+        --proof-qwen-model-sha256) PROOF_QWEN_MODEL_SHA256="$2" ;;
         --notary-profile) NOTARY_PROFILE="$2" ;;
         --sign-identity) SIGN_IDENTITY="$2" ;;
         --version) VERSION="$2" ;;
@@ -87,8 +99,8 @@ while (($#)); do
     --verify-inputs-only)
       VERIFY_INPUTS_ONLY=1
       ;;
-    --model|--model-sha256)
-      echo "$1 is obsolete: releases use the explicit proof-only --proof-model input" >&2
+    --model|--model-sha256|--proof-model|--proof-model-sha256)
+      echo "$1 is obsolete: releases require explicit Gemma and Qwen proof-model inputs" >&2
       exit 2
       ;;
     -h|--help)
@@ -128,26 +140,38 @@ verify_sha256() {
 
 [[ -f "$LLAMA_SERVER" ]] || { echo "missing --llama-server file: $LLAMA_SERVER" >&2; exit 2; }
 [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server is not executable: $LLAMA_SERVER" >&2; exit 2; }
-[[ -n "$PROOF_MODEL" ]] || { echo "--proof-model is required; release proof must be preseeded explicitly" >&2; exit 2; }
-[[ -s "$PROOF_MODEL" ]] || { echo "missing --proof-model file: $PROOF_MODEL" >&2; exit 2; }
-[[ "$(basename "$PROOF_MODEL")" == "$MODEL_FILENAME" ]] \
-  || { echo "--proof-model must be named $MODEL_FILENAME" >&2; exit 2; }
-PROOF_MODEL_SHA256="$(normalize_sha256 --proof-model-sha256 "$PROOF_MODEL_SHA256")"
-[[ "$PROOF_MODEL_SHA256" == "$MODEL_SHA256" ]] \
-  || { echo "--proof-model-sha256 must match the pinned Gemma 4 E2B SHA-256 $MODEL_SHA256" >&2; exit 2; }
-PROOF_MODEL_BYTES="$(/usr/bin/stat -f '%z' "$PROOF_MODEL" 2>/dev/null || true)"
-[[ "$PROOF_MODEL_BYTES" == "$MODEL_BYTES" ]] \
-  || { echo "proof model size mismatch: expected $MODEL_BYTES bytes, got ${PROOF_MODEL_BYTES:-unknown}" >&2; exit 1; }
-./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_MODEL"
+[[ -s "$PROOF_GEMMA_MODEL" ]] || { echo "missing --proof-gemma-model file: $PROOF_GEMMA_MODEL" >&2; exit 2; }
+[[ -s "$PROOF_QWEN_MODEL" ]] || { echo "missing --proof-qwen-model file: $PROOF_QWEN_MODEL" >&2; exit 2; }
+[[ "$(basename "$PROOF_GEMMA_MODEL")" == "$GEMMA_MODEL_FILENAME" ]] \
+  || { echo "--proof-gemma-model must be named $GEMMA_MODEL_FILENAME" >&2; exit 2; }
+[[ "$(basename "$PROOF_QWEN_MODEL")" == "$QWEN_MODEL_FILENAME" ]] \
+  || { echo "--proof-qwen-model must be named $QWEN_MODEL_FILENAME" >&2; exit 2; }
+PROOF_GEMMA_MODEL_SHA256="$(normalize_sha256 --proof-gemma-model-sha256 "$PROOF_GEMMA_MODEL_SHA256")"
+PROOF_QWEN_MODEL_SHA256="$(normalize_sha256 --proof-qwen-model-sha256 "$PROOF_QWEN_MODEL_SHA256")"
+[[ "$PROOF_GEMMA_MODEL_SHA256" == "$GEMMA_MODEL_SHA256" ]] \
+  || { echo "Gemma proof-model SHA-256 must match $GEMMA_MODEL_SHA256" >&2; exit 2; }
+[[ "$PROOF_QWEN_MODEL_SHA256" == "$QWEN_MODEL_SHA256" ]] \
+  || { echo "Qwen proof-model SHA-256 must match $QWEN_MODEL_SHA256" >&2; exit 2; }
+PROOF_GEMMA_MODEL_BYTES="$(/usr/bin/stat -f '%z' "$PROOF_GEMMA_MODEL" 2>/dev/null || true)"
+PROOF_QWEN_MODEL_BYTES="$(/usr/bin/stat -f '%z' "$PROOF_QWEN_MODEL" 2>/dev/null || true)"
+[[ "$PROOF_GEMMA_MODEL_BYTES" == "$GEMMA_MODEL_BYTES" ]] \
+  || { echo "Gemma proof-model size mismatch: expected $GEMMA_MODEL_BYTES, got ${PROOF_GEMMA_MODEL_BYTES:-unknown}" >&2; exit 1; }
+[[ "$PROOF_QWEN_MODEL_BYTES" == "$QWEN_MODEL_BYTES" ]] \
+  || { echo "Qwen proof-model size mismatch: expected $QWEN_MODEL_BYTES, got ${PROOF_QWEN_MODEL_BYTES:-unknown}" >&2; exit 1; }
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_GEMMA_MODEL"
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_QWEN_MODEL"
 LLAMA_SHA256="$(normalize_sha256 --llama-sha256 "$LLAMA_SHA256")"
 
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
-verify_sha256 "proof-only Gemma 4 E2B model" "$PROOF_MODEL" "$MODEL_SHA256"
+verify_sha256 "proof-only Gemma 4 E2B model" "$PROOF_GEMMA_MODEL" "$GEMMA_MODEL_SHA256"
+verify_sha256 "proof-only Qwen 3.5 9B model" "$PROOF_QWEN_MODEL" "$QWEN_MODEL_SHA256"
 
 if [[ "$VERIFY_INPUTS_ONLY" == "1" ]]; then
-  echo "Release helper shape and proof-only Gemma 4 E2B model pin passed."
-  echo "Model revision: $MODEL_REVISION"
-  echo "Model URL: $MODEL_URL"
+  echo "Release helper shape and both proof-only model pins passed."
+  echo "Gemma revision: $GEMMA_MODEL_REVISION"
+  echo "Gemma URL: $GEMMA_MODEL_URL"
+  echo "Qwen revision: $QWEN_MODEL_REVISION"
+  echo "Qwen URL: $QWEN_MODEL_URL"
   echo "Input provenance remains a human review boundary."
   echo "No build, signing, notarization, or upload performed."
   exit 0
@@ -174,8 +198,11 @@ xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --output-format js
 APP="$ROOT_DIR/dist/Tilde.app"
 IME="$ROOT_DIR/dist/InlineGhostIME.app"
 PROOF_DIR="$ROOT_DIR/dist/release-proof"
-PROOF_MODEL_DIRECTORY="$PROOF_DIR/model-store/gemma-4-e2b-q4km"
-PROOF_MODEL_PATH="$PROOF_MODEL_DIRECTORY/model.gguf"
+PROOF_MODEL_ROOT="$PROOF_DIR/model-store"
+PROOF_GEMMA_DIRECTORY="$PROOF_MODEL_ROOT/gemma-4-e2b-q4km"
+PROOF_GEMMA_PATH="$PROOF_GEMMA_DIRECTORY/model.gguf"
+PROOF_QWEN_DIRECTORY="$PROOF_MODEL_ROOT/qwen3.5-9b-base-q4km"
+PROOF_QWEN_PATH="$PROOF_QWEN_DIRECTORY/model.gguf"
 NOTARY_ZIP="$ROOT_DIR/dist/Tilde-notarize.zip"
 STAGING_DMG="$ROOT_DIR/dist/Tilde-notarize.dmg"
 FINAL_ZIP="$ROOT_DIR/dist/Tilde.zip"
@@ -193,7 +220,7 @@ cleanup() {
       || echo "warning: exact release-proof candidate cleanup failed" >&2
   fi
   unset TILDE_MODEL_DIRECTORY
-  [[ -z "${PROOF_MODEL_DIRECTORY:-}" ]] || rm -rf "$(dirname "$PROOF_MODEL_DIRECTORY")"
+  [[ -z "${PROOF_MODEL_ROOT:-}" ]] || rm -rf "$PROOF_MODEL_ROOT"
   [[ -z "$DMG_SOURCE" ]] || rm -rf "$DMG_SOURCE"
 }
 trap cleanup EXIT
@@ -234,7 +261,8 @@ echo "==> building packaged input method"
   --sign-identity "$SIGN_IDENTITY"
 
 echo "==> staging app-owned runtime and input method (model remains external)"
-./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_MODEL"
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_GEMMA_MODEL"
+./script/check_app_bundle.sh --release-inputs "$LLAMA_SERVER" "$PROOF_QWEN_MODEL"
 verify_sha256 "llama-server input" "$LLAMA_SERVER" "$LLAMA_SHA256"
 mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Library" "$APP/Contents/Resources"
 cp "$LLAMA_SERVER" "$APP/Contents/Helpers/llama-server"
@@ -257,25 +285,40 @@ codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
 record "$PROOF_DIR/codesign-verify.txt" codesign --verify --deep --strict --verbose=2 "$APP"
 ./script/check_app_bundle.sh --release "$APP"
 
-echo "==> exercising the exact packaged helper without touching the input method"
-mkdir -p "$PROOF_MODEL_DIRECTORY"
-cp "$PROOF_MODEL" "$PROOF_MODEL_PATH"
-chmod 600 "$PROOF_MODEL_PATH"
-verify_sha256 "isolated proof model" "$PROOF_MODEL_PATH" "$MODEL_SHA256"
-export TILDE_MODEL_DIRECTORY="$PROOF_DIR/model-store"
-export TILDE_RELEASE_PROOF_STIMULUS_OUT="$PROOF_DIR/screen-memory-stimulus.json"
+echo "==> exercising both selectable models with the exact packaged helper"
+mkdir -p "$PROOF_GEMMA_DIRECTORY" "$PROOF_QWEN_DIRECTORY"
+cp "$PROOF_GEMMA_MODEL" "$PROOF_GEMMA_PATH"
+cp "$PROOF_QWEN_MODEL" "$PROOF_QWEN_PATH"
+chmod 600 "$PROOF_GEMMA_PATH" "$PROOF_QWEN_PATH"
+verify_sha256 "isolated Gemma proof model" "$PROOF_GEMMA_PATH" "$GEMMA_MODEL_SHA256"
+verify_sha256 "isolated Qwen proof model" "$PROOF_QWEN_PATH" "$QWEN_MODEL_SHA256"
+export TILDE_MODEL_DIRECTORY="$PROOF_MODEL_ROOT"
 RELEASE_PROOF_ACTIVE=1
-./script/restart_app.sh --release-proof
-python3 script/check_runtime_network_egress.py \
-  --app-binary "$APP/Contents/MacOS/Tilde" \
-  --port 17873 \
-  --model-path "$PROOF_MODEL_PATH" \
-  --synthetic-helper-proof \
-  --stimulus-proof "$PROOF_DIR/screen-memory-stimulus.json" \
-  --proof-out "$PROOF_DIR/runtime-socket-observation.json"
-./script/restart_app.sh --release-proof --cleanup
+
+for proof_choice in gemma-4-e2b-q4km qwen-3.5-9b-base-q4km; do
+  if [[ "$proof_choice" == "gemma-4-e2b-q4km" ]]; then
+    proof_label="gemma-e2b"
+    proof_path="$PROOF_GEMMA_PATH"
+  else
+    proof_label="qwen-9b"
+    proof_path="$PROOF_QWEN_PATH"
+  fi
+  export TILDE_RELEASE_PROOF_MODEL="$proof_choice"
+  export TILDE_RELEASE_PROOF_STIMULUS_OUT="$PROOF_DIR/screen-memory-stimulus-$proof_label.json"
+  ./script/restart_app.sh --release-proof
+  python3 script/check_runtime_network_egress.py \
+    --app-binary "$APP/Contents/MacOS/Tilde" \
+    --port 17873 \
+    --model-path "$proof_path" \
+    --synthetic-helper-proof \
+    --stimulus-proof "$TILDE_RELEASE_PROOF_STIMULUS_OUT" \
+    --proof-out "$PROOF_DIR/runtime-socket-observation-$proof_label.json"
+  ./script/restart_app.sh --release-proof --cleanup
+done
+
 RELEASE_PROOF_ACTIVE=0
 unset TILDE_MODEL_DIRECTORY
+unset TILDE_RELEASE_PROOF_MODEL
 unset TILDE_RELEASE_PROOF_STIMULUS_OUT
 
 echo "==> notarizing and stapling the app"

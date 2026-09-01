@@ -106,8 +106,8 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         }
     }
 
-    /// Lab-promoted completion controls remain isolated to the experimental
-    /// 9B preview until they have enough real-world evidence for production.
+    /// Qwen's validated completion controls are shared by its official model
+    /// choice and the isolated 9B preview identity.
     public var completionTemperature: Double {
         switch self {
         case .preview9B: 0.10
@@ -127,7 +127,7 @@ public enum TildeProductProfile: String, Equatable, Sendable {
     /// candidate: at the shipped floor of 10 the detector coincides with a
     /// short visible-word cap and kills correct short verbatim answers. The
     /// word floor is unchanged — only the character floor was measured.
-    /// Live in the isolated 9B preview only; this is not promotion.
+    /// Shared by the official Qwen choice and the isolated 9B preview.
     public var sceneEchoMinimumWords: Int {
         SceneEchoPolicy.defaultMinimumWords
     }
@@ -140,9 +140,9 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         }
     }
 
-    /// Q12's second nominated candidate: refuse a suggestion that asserts a
+    /// Q12's second quality gate: refuse a suggestion that asserts a
     /// number, address, date, or name the writer never typed and the scene
-    /// never showed. Off everywhere but the isolated 9B preview.
+    /// never showed. Applied to the official Qwen choice and 9B preview.
     public var factualGrounding: FactualGroundingPolicy.Mode {
         switch self {
         case .preview9B: .numbersAndNames
