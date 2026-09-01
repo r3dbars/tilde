@@ -183,9 +183,9 @@ enum GhostBrainClient {
             var pid: pid_t = 0
             var length = socklen_t(MemoryLayout<pid_t>.size)
             guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 else { return false }
-            guard let peer = Self.identity(pid: pid),
+            guard let peer = Self.cachedIdentity(pid: pid),
                   peer.identifier == TildeProductProfile.current.appBundleIdentifier,
-                  let own = Self.identity(pid: getpid()) else { return false }
+                  let own = Self.cachedIdentity(pid: getpid()) else { return false }
 #if DEBUG
             if let ownTeam = own.team, let peerTeam = peer.team {
                 return ownTeam == peerTeam
@@ -199,7 +199,31 @@ enum GhostBrainClient {
 #endif
         }
 
-        private static func identity(pid: pid_t) -> (identifier: String, team: String?)? {
+        /// Two Security-framework identity resolutions (the app's and our
+        /// own) ran on every completion request — per typed word — and were
+        /// the largest fixed cost on the socket. A live process instance
+        /// cannot change its code, so the answer is remembered per (pid,
+        /// kernel start time); see `ProcessPeerIdentityCache`. When the
+        /// start time cannot be read the identity is resolved uncached,
+        /// exactly as before.
+        private static let identityCache = ProcessPeerIdentityCache<CodeSigningIdentity>()
+
+        private static func cachedIdentity(pid: pid_t) -> CodeSigningIdentity? {
+            identityCache.identity(for: processKey(pid: pid)) { identity(pid: pid) }
+        }
+
+        private static func processKey(pid: pid_t) -> ProcessIdentityKey? {
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+            return ProcessIdentityKey(
+                pid: pid,
+                startedAtSeconds: Int64(info.pbi_start_tvsec),
+                startedAtMicroseconds: Int64(info.pbi_start_tvusec)
+            )
+        }
+
+        private static func identity(pid: pid_t) -> CodeSigningIdentity? {
             var code: SecCode?
             let attributes = [kSecGuestAttributePid: pid] as CFDictionary
             guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess,
@@ -216,7 +240,10 @@ enum GhostBrainClient {
             ) == errSecSuccess,
                   let values = information as? [CFString: Any],
                   let identifier = values[kSecCodeInfoIdentifier] as? String else { return nil }
-            return (identifier, values[kSecCodeInfoTeamIdentifier] as? String)
+            return CodeSigningIdentity(
+                identifier: identifier,
+                team: values[kSecCodeInfoTeamIdentifier] as? String
+            )
         }
 
         private func write(_ data: Data) -> Bool {
