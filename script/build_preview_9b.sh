@@ -119,7 +119,9 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 [[ "$(defaults read "$CONTENTS/Info" CFBundleIdentifier)" == "$APP_ID" ]]
 [[ "$(defaults read "$IME/Contents/Info" CFBundleIdentifier)" == "$IME_ID" ]]
 
-MODEL_TARGET="$HOME/Library/Application Support/$APP_NAME/Models/qwen3.5-9b-base-q4km-preview/model.gguf"
+# The 9B profile resolves the official Qwen descriptor since PR #460, so the
+# app looks for its model under that identifier, not the old "-preview" one.
+MODEL_TARGET="$HOME/Library/Application Support/$APP_NAME/Models/qwen3.5-9b-base-q4km/model.gguf"
 mkdir -p "$(dirname "$MODEL_TARGET")"
 chmod 700 "$HOME/Library/Application Support/$APP_NAME" \
   "$HOME/Library/Application Support/$APP_NAME/Models" \
