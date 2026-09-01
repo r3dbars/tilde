@@ -65,6 +65,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// covenant). `nil` means "no personal serving available" (release-
     /// proof mode and tests).
     private let personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)?
+    private let productProfile: TildeProductProfile
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
@@ -88,6 +89,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         )
     ) {
         self.runtime = runtime
+        self.productProfile = productProfile
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL, productProfile: productProfile)
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
@@ -316,7 +318,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             if let reason = SceneSuggestionPolicy.suppressionReason(
                 scene: scene,
-                textBeforeCursor: completionRequest.context
+                textBeforeCursor: completionRequest.context,
+                options: self.productProfile.sceneSuggestionOptions
             ) {
                 _ = Self.write(.silence, to: connection)
                 DiagnosticsLog.shared.record(

@@ -305,6 +305,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if ready { prewarmer.noteHelperReady() } else { prewarmer.noteHelperUnavailable() }
             }
             if llamaServerHost.snapshot == .ready { prewarmer.noteHelperReady() }
+            // Exact screen text: the Accessibility reader beats OCR on both
+            // precision and latency and is tried first, but nothing ever asked
+            // for the permission, so every install ran OCR. Ask once; the
+            // menu line can ask again. Reading only, under the Screen Memory
+            // covenant; there is no insertion path.
+            if TildeSettings().screenMemoryEnabled,
+               !AccessibilityPermission.isGranted(),
+               !TildeSettings().accessibilityRequested {
+                requestAccessibilityAccess()
+            }
         } else if launchMode == .releaseProof
             && ProcessInfo.processInfo.environment["TILDE_SCREEN_MEMORY_DEV"] == "1"
         {
@@ -619,6 +629,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func openScreenRecordingSettings() {
         NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
+    }
+
+    /// Shows the system Accessibility prompt (which also lists Tilde in the
+    /// Accessibility pane) and records that it was asked. Count-only
+    /// diagnostic: whether access is held, never what was read.
+    func requestAccessibilityAccess() {
+        let settings = TildeSettings()
+        settings.accessibilityRequested = true
+        let granted = AccessibilityPermission.request()
+        DiagnosticsLog.shared.record(
+            "accessibility-permission",
+            metadata: ["outcome": granted ? "granted" : "requested"]
+        )
+    }
+
+    func openAccessibilitySettings() {
+        NSWorkspace.shared.open(AccessibilityPermission.systemSettingsURL)
     }
 
     func retrySetup() {

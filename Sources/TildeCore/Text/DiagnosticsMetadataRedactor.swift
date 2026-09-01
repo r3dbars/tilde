@@ -21,6 +21,8 @@ public enum DiagnosticsMetadataRedactor {
         // The 2026-08-16 first-launch Screen Recording permission prompt's
         // outcome vocabulary from the setup permission flow.
         "requested", "settings-opened", "dismissed",
+        // `accessibility-permission` (exact screen text): held or only asked.
+        "granted",
         // `ScreenScene.Mode`'s raw values, logged by the `scene-classified`
         // diagnostic (`ScreenCaptureService.freshScene`) so a classification
         // is never opaque — mode only, never any of the OCR'd text itself.

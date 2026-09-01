@@ -106,7 +106,8 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let cleaner = visibleCleaner(forExperimentArm: experimentArm)
         if let reason = SceneSuggestionPolicy.suppressionReason(
             scene: scene,
-            textBeforeCursor: textBeforeCursor
+            textBeforeCursor: textBeforeCursor,
+            options: productProfile.sceneSuggestionOptions
         ) {
             diagnostics.record(
                 "suggestion-suppressed",
@@ -118,7 +119,8 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
             register: register,
-            scene: scene
+            scene: scene,
+            includesWindowTitle: productProfile.includesWindowTitleInScene
         )
         guard !recipe.prompt.isEmpty else { return nil }
 
