@@ -178,6 +178,36 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         return (remaining / sceneBudgetQuantum) * sceneBudgetQuantum
     }
 
+    /// The granularity at which a bounded text window's *start* may move.
+    /// Shared with the input method's context read, so the field text the
+    /// keyboard sends and the tail this composer keeps both shift in the
+    /// same steps. Same value as the scene quantum: one prefill per quantum
+    /// of typing is the deal the whole prompt cache is built around.
+    public static let contextWindowQuantum = sceneBudgetQuantum
+
+    /// Start offset of a window of at most `limit` characters ending at
+    /// `end`, rounded *up* to a multiple of `quantum` once the window has to
+    /// cut anything. Rounding up keeps the window inside its limit (never
+    /// more than `limit` characters, never fewer than `limit - quantum + 1`)
+    /// and holds the start still for a run of keystrokes: without this the
+    /// window slides one character per keystroke, which moves every byte of
+    /// the prompt behind the scaffold and forces a full re-prefill for the
+    /// rest of the compose session. Limits of a quantum or less pass
+    /// through untouched; there is no cached prefix worth protecting there.
+    public static func stableWindowStart(end: Int, limit: Int, quantum: Int = contextWindowQuantum) -> Int {
+        let start = max(0, end - limit)
+        guard start > 0, quantum > 1, limit > quantum else { return start }
+        let rounded = ((start + quantum - 1) / quantum) * quantum
+        return min(rounded, end)
+    }
+
+    /// `text.suffix(budget)` with a quantized start; see `stableWindowStart`.
+    static func stableFieldTail(_ text: String, budget: Int) -> String {
+        let start = stableWindowStart(end: text.count, limit: budget)
+        guard start > 0 else { return text }
+        return String(text.dropFirst(start))
+    }
+
     /// `register` selects the scaffold voice from the host app's identity.
     /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
     /// 2a) — `nil` (no capture, capture disabled/no-permission, or stale)
@@ -212,7 +242,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         // history yields. For non-reply scenes, behavior remains field-first.
         let replyReserve = Self.replySceneReserve(for: scene, totalBudget: totalBudget)
         let fieldBudget = max(1, totalBudget - replyReserve)
-        let trimmed = String(fullTrimmed.suffix(fieldBudget))
+        let trimmed = Self.stableFieldTail(fullTrimmed, budget: fieldBudget)
 
         let remainingForScene = max(0, totalBudget - trimmed.count)
         let sceneBudget = min(
