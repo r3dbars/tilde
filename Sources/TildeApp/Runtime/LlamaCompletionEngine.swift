@@ -155,6 +155,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         var firstTokenMilliseconds: Int?
         var firstPartialMilliseconds: Int?
+        var stoppedAtCap = false
         let content = try await withTaskCancellationHandler {
             var rawOutput = ""
             var lastPartialVisibleText = ""
@@ -182,14 +183,33 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                     // llama.cpp emits token deltas. Always append: a repeated
                     // token can legitimately equal the text so far (" is" + " is").
                     rawOutput += piece
-                    if StableStreamPrefix.mayAdvanceBoundary(piece),
-                       let partial = stablePartial(rawOutput, recipe: recipe, textBeforeCursor: textBeforeCursor, scene: scene, cleaner: cleaner),
-                       partial.visibleText != lastPartialVisibleText {
-                        if firstPartialMilliseconds == nil {
-                            firstPartialMilliseconds = Self.milliseconds(since: startedAt)
+                    if StableStreamPrefix.mayAdvanceBoundary(piece) {
+                        let stable = stablePartial(
+                            rawOutput,
+                            recipe: recipe,
+                            textBeforeCursor: textBeforeCursor,
+                            scene: scene,
+                            cleaner: cleaner
+                        )
+                        if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
+                            if firstPartialMilliseconds == nil {
+                                firstPartialMilliseconds = Self.milliseconds(since: startedAt)
+                            }
+                            lastPartialVisibleText = partial.visibleText
+                            onPartialSuggestion(partial)
                         }
-                        lastPartialVisibleText = partial.visibleText
-                        onPartialSuggestion(partial)
+                        // Everything the display cap can show has arrived, or
+                        // the output is already rejected for a reason later
+                        // tokens cannot undo. Stop the helper decoding tokens
+                        // that can never reach the screen: on the 3-word Qwen
+                        // profile that is more than half of every request's
+                        // decode budget, and the single slot is freed for the
+                        // next word that much sooner.
+                        if stable.settled {
+                            stoppedAtCap = true
+                            stream.cancel()
+                            break
+                        }
                     }
                 }
                 if frame.stop == true { break }
@@ -235,6 +255,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         if let firstPartialMilliseconds {
             timing["firstPartialMilliseconds"] = String(firstPartialMilliseconds)
         }
+        timing["stoppedAtCap"] = String(stoppedAtCap)
         diagnostics.record("llama-completion-timing", metadata: timing)
         return suggestion
     }
@@ -256,23 +277,34 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     /// A partial is the cleaned continuation cut back to its last complete
     /// word. It goes through the same cleaner as the final, so anything the
     /// final would reject outright is never shown early either.
+    ///
+    /// `settled` reports the cleaner's verdict on whether more raw output
+    /// could still change the visible text (see `CompletionCleanOutcome`). It
+    /// is independent of whether a partial is shown: an echo- or
+    /// grounding-rejected prefix still settles once the cap has bitten,
+    /// because the final pass judges the same capped text.
     private func stablePartial(
         _ rawOutput: String,
         recipe: RawContinuationPrompt,
         textBeforeCursor: String,
         scene: ScreenScene.Scene?,
         cleaner: CompletionOutputCleaner
-    ) -> CompletionSuggestion? {
-        guard let cleaned = cleaner.cleanWithReason(
+    ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
+        let outcome = cleaner.clean(
             recipe.normalizedContinuation(rawOutput),
             after: textBeforeCursor
-        ).suggestion else { return nil }
+        )
+        guard let cleaned = outcome.result.suggestion else {
+            return (nil, outcome.visibleTextIsSettled)
+        }
         guard !SceneEchoPolicy.isEcho(
             cleaned.visibleText,
             scene: scene,
             profile: productProfile
-        ) else { return nil }
-        guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else { return nil }
+        ) else { return (nil, outcome.visibleTextIsSettled) }
+        guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else {
+            return (nil, outcome.visibleTextIsSettled)
+        }
         // The partial is what the writer actually sees first, so it must clear
         // the same grounding bar as the final — judged on the revealed prefix,
         // which is the text that would assert the fact.
@@ -281,8 +313,8 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             typedContext: textBeforeCursor,
             scene: scene,
             mode: productProfile.factualGrounding
-        ) else { return nil }
-        return CompletionSuggestion(text: prefix)
+        ) else { return (nil, outcome.visibleTextIsSettled) }
+        return (CompletionSuggestion(text: prefix), outcome.visibleTextIsSettled)
     }
 
     static func promptByAddingIntentFutures(

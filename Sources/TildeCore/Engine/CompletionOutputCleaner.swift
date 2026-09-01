@@ -25,6 +25,25 @@ public enum CompletionCleanResult: Sendable {
     }
 }
 
+/// A cleaning result plus whether more raw output could still change it.
+///
+/// The display cap has a prefix property: once the continuation already
+/// holds more words than the visible word cap, or more characters than the
+/// character cap, every later token lands past the cut and cannot move the
+/// visible text. A streaming caller can stop paying for those tokens.
+/// `visibleTextIsSettled` is also true for the two rejections that later
+/// tokens cannot undo: an unsafe scalar anywhere in the output, and a
+/// context replay, which only ever gains n-grams as the output grows.
+public struct CompletionCleanOutcome: Sendable {
+    public let result: CompletionCleanResult
+    public let visibleTextIsSettled: Bool
+
+    public init(result: CompletionCleanResult, visibleTextIsSettled: Bool) {
+        self.result = result
+        self.visibleTextIsSettled = visibleTextIsSettled
+    }
+}
+
 /// Lab-selectable cleanup behavior. Production call sites use `.production`;
 /// experimental callers can ablate individual judgment rules without
 /// weakening unsafe-character rejection or changing the shipping defaults.
@@ -84,8 +103,21 @@ public struct CompletionOutputCleaner: Sendable {
         _ rawOutput: String,
         after textBeforeCursor: String?
     ) -> CompletionCleanResult {
+        clean(rawOutput, after: textBeforeCursor).result
+    }
+
+    /// `cleanWithReason` plus the settlement bit a streaming caller needs to
+    /// decide whether the helper should keep decoding. See
+    /// `CompletionCleanOutcome`.
+    public func clean(
+        _ rawOutput: String,
+        after textBeforeCursor: String?
+    ) -> CompletionCleanOutcome {
         guard !containsUnsafeCharacter(rawOutput) else {
-            return .rejected(.unsafeHiddenOrControlCharacter)
+            return CompletionCleanOutcome(
+                result: .rejected(.unsafeHiddenOrControlCharacter),
+                visibleTextIsSettled: true
+            )
         }
 
         var candidate = rawOutput
@@ -94,14 +126,14 @@ public struct CompletionOutputCleaner: Sendable {
             .components(separatedBy: .newlines)[0]
         candidate = unwrapped(candidate)
 
-        guard !candidate.isEmpty else { return .rejected(.emptyOutput) }
-        guard !isNoSuggestion(candidate) else { return .rejected(.noSuggestionSentinel) }
+        guard !candidate.isEmpty else { return .unsettled(.rejected(.emptyOutput)) }
+        guard !isNoSuggestion(candidate) else { return .unsettled(.rejected(.noSuggestionSentinel)) }
 
         candidate = unwrapped(strippingAnswerLabel(from: candidate))
-        guard !candidate.isEmpty else { return .rejected(.emptyOutput) }
-        guard !isNoSuggestion(candidate) else { return .rejected(.noSuggestionSentinel) }
+        guard !candidate.isEmpty else { return .unsettled(.rejected(.emptyOutput)) }
+        guard !isNoSuggestion(candidate) else { return .unsettled(.rejected(.noSuggestionSentinel)) }
         if policy.rejectsPromptInstructionEcho, isInstructionLeak(candidate) {
-            return .rejected(.promptInstructionEcho)
+            return .unsettled(.rejected(.promptInstructionEcho))
         }
 
         var continuation = candidate.first?.isWhitespace == true ? candidate : " " + candidate
@@ -117,30 +149,53 @@ public struct CompletionOutputCleaner: Sendable {
             )
         }
         guard !continuation.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return .rejected(.emptyAfterPrefixTrimming)
+            return .unsettled(.rejected(.emptyAfterPrefixTrimming))
         }
         if policy.rejectsContextReplay,
            textBeforeCursor != nil,
            replaysContext(continuation, contextWords: contextWords) {
-            return .rejected(.replaysContext)
+            return CompletionCleanOutcome(
+                result: .rejected(.replaysContext),
+                visibleTextIsSettled: true
+            )
         }
 
         if policy.trimsSelfRepetition {
             let deduped = trimmingSelfRepetition(continuation)
             if deduped != continuation {
                 guard deduped.contains(where: { $0.isLetter || $0.isNumber }) else {
-                    return .rejected(.repeatsItself)
+                    return .unsettled(.rejected(.repeatsItself))
                 }
                 continuation = deduped
             }
         }
 
-        return .accepted(CompletionSuggestion(
-            text: continuation,
-            maxVisibleWords: maxVisibleWords,
-            maxVisibleCharacters: maxVisibleCharacters,
-            repairsDanglingTail: policy.repairsDanglingTail
-        ))
+        return CompletionCleanOutcome(
+            result: .accepted(CompletionSuggestion(
+                text: continuation,
+                maxVisibleWords: maxVisibleWords,
+                maxVisibleCharacters: maxVisibleCharacters,
+                repairsDanglingTail: policy.repairsDanglingTail
+            )),
+            visibleTextIsSettled: capHasBitten(continuation)
+        )
+    }
+
+    /// True once the display cap has cut `continuation` somewhere later
+    /// tokens cannot reach: strictly more words than the word cap, or a
+    /// word-capped text strictly longer than the character cap. Both are
+    /// exactly the predicates `CompletionSuggestion.cappedText` applies, so a
+    /// caller that stops decoding here sees the same visible text the final
+    /// cleaning pass would have produced from a longer output. Equality is
+    /// deliberately not enough: at exactly the cap the last word may still be
+    /// growing, and at exactly the character limit the next character decides
+    /// whether the cut lands on a whitespace boundary.
+    private func capHasBitten(_ continuation: String) -> Bool {
+        if wordRanges(in: continuation).count > maxVisibleWords { return true }
+        let characterLimit = maxVisibleCharacters
+            ?? CompletionSuggestion.defaultMaxVisibleCharacters(forVisibleWords: maxVisibleWords)
+        let wordCapped = CompletionSuggestion.acceptedPrefix(in: continuation, wordLimit: maxVisibleWords)
+        return wordCapped.count > characterLimit
     }
 
     private func unwrapped(_ text: String) -> String {
@@ -421,5 +476,12 @@ public struct CompletionOutputCleaner: Sendable {
 
     private func normalized(_ word: String) -> String {
         word.trimmingCharacters(in: .punctuationCharacters).lowercased()
+    }
+}
+
+private extension CompletionCleanOutcome {
+    /// A result later tokens could still change.
+    static func unsettled(_ result: CompletionCleanResult) -> CompletionCleanOutcome {
+        CompletionCleanOutcome(result: result, visibleTextIsSettled: false)
     }
 }
