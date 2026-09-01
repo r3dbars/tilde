@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TildeCore
 
 @MainActor
 final class TildeSetupWindowController: NSWindowController, NSWindowDelegate {
@@ -8,7 +9,7 @@ final class TildeSetupWindowController: NSWindowController, NSWindowDelegate {
     init(appDelegate: AppDelegate) {
         model = TildeSetupViewModel(appDelegate: appDelegate)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 510),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -42,6 +43,7 @@ private final class TildeSetupViewModel: ObservableObject {
     @Published private(set) var modelState: ModelState = .checking
     @Published private(set) var finishingSetup = false
     @Published private(set) var showInputSourceFallback = false
+    @Published private(set) var selectedProductionModel: TildeModelChoice?
 
     private weak var appDelegate: AppDelegate?
     private var timer: Timer?
@@ -55,6 +57,8 @@ private final class TildeSetupViewModel: ObservableObject {
     }
 
     var screenRecordingWasRequested: Bool { TildeSettings().screenRecordingRequested }
+
+    var showsProductionModelPicker: Bool { TildeProductProfile.current == .production }
 
     var modelDescription: String {
         appDelegate?.modelDescription() ?? "Gemma 4 E2B · about 3.43 GB"
@@ -75,7 +79,7 @@ private final class TildeSetupViewModel: ObservableObject {
         case .checking, .missing:
             return TildeModelProgress(
                 title: "Preparing download",
-                detail: "3.43 GB · one time only",
+                detail: "\(modelDescription) · one time only",
                 fraction: nil
             )
         case let .downloading(receivedBytes, totalBytes):
@@ -120,6 +124,7 @@ private final class TildeSetupViewModel: ObservableObject {
         guard !finishingSetup else { return }
         let permissionGranted = ScreenRecordingPermission.isGranted()
         modelState = appDelegate?.modelState() ?? .missing
+        selectedProductionModel = appDelegate?.selectedProductionModel()
         state = appDelegate?.setupState() ?? .recoverableError(.runtime)
         let canSelectInputSource = state == .needsInputSourceSelection
         if canSelectInputSource, !attemptedInputSourceSelection {
@@ -174,6 +179,12 @@ private final class TildeSetupViewModel: ObservableObject {
             break
         }
     }
+
+    func selectProductionModel(_ choice: TildeModelChoice) {
+        guard showsProductionModelPicker, choice != selectedProductionModel else { return }
+        selectedProductionModel = choice
+        appDelegate?.selectProductionModel(choice)
+    }
 }
 
 private struct TildeModelProgress {
@@ -222,6 +233,32 @@ private struct TildeSetupView: View {
                 }
             }
 
+            if model.showsProductionModelPicker {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Local model")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Picker("Local model", selection: Binding(
+                        get: { model.selectedProductionModel ?? .gemma4E2B },
+                        set: { model.selectProductionModel($0) }
+                    )) {
+                        ForEach(TildeModelChoice.allCases, id: \.self) { choice in
+                            Text(choice.shortName).tag(choice)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+
+                    if let choice = model.selectedProductionModel {
+                        Text("\(choice.displayName) · \(choice.approximateSize) · \(choice.resourceGuidance)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: 390)
+                .padding(.top, 18)
+            }
+
             Spacer(minLength: 22)
 
             if !model.isBusy {
@@ -266,7 +303,7 @@ private struct TildeSetupView: View {
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
-        .frame(width: 500, height: 430)
+        .frame(width: 500, height: 510)
     }
 
     private var headline: String {
@@ -334,7 +371,7 @@ private struct TildeSetupView: View {
         case .offline:
             return "Tilde couldn’t reach the model host. Check your connection and try again."
         case .insufficientDiskSpace:
-            return "Tilde needs about 3.43 GB of free space for Gemma 4 E2B. Free space, then try again."
+            return "Tilde needs enough free space for \(model.modelDescription). Free space, then try again."
         case .serverRejectedRequest:
             return "The model host rejected the download. Try again in a moment."
         case .checksumMismatch:

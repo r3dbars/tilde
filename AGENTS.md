@@ -11,8 +11,9 @@ safer, or simpler.
 - Privacy is a hard requirement. Tilde may retain writing locally when it
   provides direct user benefit. Personal writing data remains on the user's
   device, is controlled by the user, and is never transmitted for inference,
-  analytics, or training. The only setup-time network request is the fixed,
-  immutable Gemma 4 E2B model asset; it carries no user-derived request data.
+  analytics, or training. Setup-time network requests are limited to the
+  user-selected fixed, immutable Gemma 4 E2B or Qwen 3.5 9B model asset; they
+  carry no user-derived request data.
   Never print personal writing data in logs or scripts.
 - The product is the input method. Render with IMKit marked text in the focused
   app; do not add an Accessibility/overlay insertion path. Reading screen
@@ -20,14 +21,14 @@ safer, or simpler.
   Memory covenant and gates as OCR — it is a faster, exact source of the
   same on-device, memory-only data, never an insertion mechanism.
 - Inference is app-owned. The signed `llama-server` helper remains inside the
-  app, while the pinned Gemma 4 E2B GGUF is downloaded once into external,
-  app-owned storage and verified before use. Users must not install Ollama,
+  app, while the selected pinned GGUF is downloaded into external, app-owned
+  storage and verified before use. Users must not install Ollama,
   llama.cpp, Python, or a separate model server.
 - Screen Memory covenant (supersedes the old blanket OCR/Screen Recording
   ban; 2026-08-16 owner directive made Screen Memory required, not opt-in):
   Tilde may capture on-device screen text under these non-negotiables —
   on-device only, no cloud, and no user-derived network egress; the only
-  permitted network phase is the fixed model-asset download. The release
+  permitted network phase is the selected fixed model-asset download. The release
   egress proof runs a packaged capture/redaction stimulus inside the
   observed release-proof process — a synthetic conversation is classified,
   carried into the scene-bearing prompt, completed over loopback, and
@@ -53,11 +54,16 @@ safer, or simpler.
 - Show app, helper, and model status in the menu, and record input-method and
   runtime failures in privacy-safe diagnostics.
 
-The only production model is Gemma 4 E2B Q4_K_M: revision
+The official app offers exactly two production models. Gemma 4 E2B Q4_K_M is
+the lower-resource default: revision
 `3762686d74ff8db6c98f8d3c389f56fbdf994d5a`, file
 `gemma-4-E2B.Q4_K_M.gguf`, exactly `3427861984` bytes, SHA-256
-`389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`. The
-first-run asset phase may request only the matching immutable Hugging Face
+`389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`.
+Qwen 3.5 9B Base Q4_K_M is the higher-resource option: revision
+`ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6`, file
+`Qwen3.5-9B-Base.Q4_K_M.gguf`, exactly `5629109312` bytes, SHA-256
+`4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`.
+The asset phase may request only the selected matching immutable Hugging Face
 resolve URL; it must never include user text or screen content.
 
 ## Architecture
@@ -136,9 +142,9 @@ resolve URL; it must never include user text or screen content.
   `./script/package_app.sh --help`
 
 The release driver's no-embedded-GGUF bundle check, helper/IME signatures,
-external proof-model preseed, runtime, signing, notarization, Gatekeeper, and
+external Gemma and Qwen proof-model preseeds, runtime, signing, notarization, Gatekeeper, and
 post-download open-socket observation lanes are blocking. The model download is
-a separate first-run phase restricted to the one immutable Hugging Face URL and
+a separate selected-model phase restricted to the two immutable Hugging Face URLs and
 does not carry user-derived data. Open-socket observation is not packet capture.
 Keep deterministic proof separate from manual editor compatibility proof.
 

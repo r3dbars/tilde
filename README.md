@@ -43,18 +43,24 @@ Tilde ships as a small signed package:
    Unix socket.
 3. The app runs its signed `llama-server` helper as a child process. Users do
    not install or run a model server.
-4. On first run, `ModelManager` downloads one pinned Gemma 4 E2B GGUF to
-   Tilde's external app-support storage, verifies its exact size and SHA-256,
-   and starts the helper only with that verified path. The GGUF is never part
-   of `Tilde.app`.
+4. `ModelManager` downloads the selected pinned model to Tilde's external
+   app-support storage, verifies its exact size and SHA-256, and starts the
+   helper only with that verified path. Gemma 4 E2B is the lower-resource
+   default; Qwen 3.5 9B is the higher-resource option. GGUF files are never
+   part of `Tilde.app`.
 
-The only model asset is `gemma-4-E2B.Q4_K_M.gguf` at exactly 3,427,861,984
-bytes (SHA-256
-`389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`). The
-download uses this immutable revision URL and no model picker or Hugging Face
-login:
+The official picker offers exactly two immutable assets and requires no
+Hugging Face login:
 
 `https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
+
+- 3,427,861,984 bytes; SHA-256
+  `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`
+
+`https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf`
+
+- 5,629,109,312 bytes; SHA-256
+  `4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`
 
 Completion requests and unaccepted model output stay in memory. When the user
 explicitly enables Personal History, the input method asynchronously sends the
@@ -109,10 +115,10 @@ both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles,
 which cannot exercise the authenticated app-to-IME runtime.
 `script/proof.sh fast` is the pre-merge gate.
 `script/package_app.sh` is the single manual release driver. It requires the
-helper hash and an explicitly named `--proof-model` preseed. That model is
-checked against the Gemma 4 E2B revision, byte count, and SHA-256 above, copied
+helper hash and explicitly named Gemma and Qwen proof-model preseeds. Both are
+checked against their revisions, byte counts, and SHA-256 pins above, copied
 only into isolated external proof storage, and never into the signed app. The
-driver then blocks on bundle shape, helper/IME signatures, runtime health,
+driver exercises both selections and then blocks on bundle shape, helper/IME signatures, runtime health,
 steady-state open-socket observation, notarization, Gatekeeper checks, and a
 32 MiB hard cap on the signed app artifact. Run
 `./script/package_app.sh --help` for the full command. The pins must come from

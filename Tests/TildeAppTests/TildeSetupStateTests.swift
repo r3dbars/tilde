@@ -26,6 +26,18 @@ struct TildeSetupStateTests {
         #expect(resolve(input: .selected) == .ready)
     }
 
+    @Test("Missing-model setup reports the selected model's exact size")
+    func selectedModelSize() {
+        #expect(resolve(
+            input: .selected,
+            model: .missing,
+            selectedModelBytes: 5_629_109_312
+        ) == .downloadingModel(
+            receivedBytes: 0,
+            totalBytes: 5_629_109_312
+        ))
+    }
+
     @Test("Installation, runtime, and socket failures are recoverable")
     func failures() {
         #expect(resolve(install: .failed) == .recoverableError(.keyboard))
@@ -48,7 +60,8 @@ struct TildeSetupStateTests {
         runtime: LlamaRuntimeSnapshot = .ready,
         socket: Bool = true,
         model: ModelState = .ready(URL(fileURLWithPath: "/tmp/gemma-4-e2b.gguf")),
-        requireInitialSelection: Bool = true
+        requireInitialSelection: Bool = true,
+        selectedModelBytes: Int64 = TildeSetupState.gemma4E2BApproximateBytes
     ) -> TildeSetupState {
         TildeSetupState.resolve(
             keyboardInstallResult: install,
@@ -57,7 +70,8 @@ struct TildeSetupStateTests {
             runtime: runtime,
             socketAvailable: socket,
             model: model,
-            requireInitialInputSourceSelection: requireInitialSelection
+            requireInitialInputSourceSelection: requireInitialSelection,
+            selectedModelBytes: selectedModelBytes
         )
     }
 }

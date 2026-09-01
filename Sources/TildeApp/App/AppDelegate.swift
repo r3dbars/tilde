@@ -62,7 +62,9 @@ enum TildeInvocation: Equatable {
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let launchMode: TildeLaunchMode
+    private let activeProductionModel: TildeModelChoice?
     private let activePreviewModel: PreviewModelChoice?
+    private let completionProductProfile: TildeProductProfile
     private let modelManager: ModelManager
     private let llamaServerHost: LlamaServerProcessHost
     private lazy var personalHistoryController = PersonalHistoryController()
@@ -112,7 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onScreenMemoryEvent: Self.screenMemoryEventHandler(for: screenCaptureService),
         suggestionsGate: Self.suggestionsGate,
         personalSuggestionsGate: Self.personalSuggestionsGate,
-        personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController)
+        personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController),
+        productProfile: completionProductProfile
     )
 
     /// Personalization has one product-level choice. When local Personal
@@ -238,10 +241,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     init(launchMode: TildeLaunchMode = .production) {
         self.launchMode = launchMode
         let profile = TildeProductProfile.current
+        let activeProductionModel = profile == .production
+            ? (launchMode == .releaseProof
+                ? TildeModelSelection.releaseProofChoice(environment: ProcessInfo.processInfo.environment)
+                : TildeModelSelection.choice(for: profile))
+            : nil
         let activePreviewModel = PreviewModelSelection.choice(for: profile)
+        self.activeProductionModel = activeProductionModel
         self.activePreviewModel = activePreviewModel
+        self.completionProductProfile = TildeModelSelection.completionProfile(
+            for: profile,
+            productionChoice: activeProductionModel
+        )
         let modelManager = ModelManager(
-            descriptor: PreviewModelSelection.descriptor(for: profile)
+            descriptor: TildeModelSelection.descriptor(
+                for: profile,
+                productionChoice: activeProductionModel
+            )
         )
         self.modelManager = modelManager
         self.llamaServerHost = LlamaServerProcessHost(
@@ -493,14 +509,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// rule — the app may fail, but never silently. The personal/generic
     /// distinction surfaces the worst silent failure (identity loss).
     func engineStatusLine() -> String {
+        let modelName = activeModelShortName
         switch modelManager.state {
         case .checking, .missing:
-            return "Model: Gemma 4 E2B (checking…)"
+            return "Model: \(modelName) (checking…)"
         case let .downloading(receivedBytes, totalBytes):
             let percent = totalBytes > 0 ? Int((Double(receivedBytes) / Double(totalBytes)) * 100) : 0
-            return "Model: Gemma 4 E2B (downloading \(min(100, max(0, percent)))%)"
+            return "Model: \(modelName) (downloading \(min(100, max(0, percent)))%)"
         case .verifying:
-            return "Model: Gemma 4 E2B (checking download…)"
+            return "Model: \(modelName) (checking download…)"
         case let .failed(failure):
             return "⚠️ Model: \(Self.modelFailureMenuDescription(failure))"
         case .ready:
@@ -509,7 +526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath) else {
             return "⚠️ Brain socket missing — quit and reopen"
         }
-        return llamaServerHost.snapshot.menuLine
+        return llamaServerHost.snapshot.menuLine(modelName: modelName)
     }
 
     func applicationState(now: Date = Date()) -> TildeApplicationState {
@@ -535,7 +552,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runtime: llamaServerHost.snapshot,
             socketAvailable: FileManager.default.fileExists(atPath: GhostBrainServerHost.socketPath),
             model: modelManager.state,
-            requireInitialInputSourceSelection: TildeSettings().setupVersion < TildeSettings.currentSetupVersion
+            requireInitialInputSourceSelection: TildeSettings().setupVersion < TildeSettings.currentSetupVersion,
+            selectedModelBytes: modelManager.descriptor.expectedBytes
         )
     }
 
@@ -602,8 +620,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func modelState() -> ModelState { modelManager.state }
 
     func modelDescription() -> String {
+        if let activeProductionModel {
+            return "\(activeProductionModel.displayName) · \(activeProductionModel.approximateSize)"
+        }
         guard let activePreviewModel else { return "Gemma 4 E2B · 3.43 GB" }
         return "\(activePreviewModel.displayName) · \(activePreviewModel.approximateSize)"
+    }
+
+    private var activeModelShortName: String {
+        activeProductionModel?.shortName ?? activePreviewModel?.shortName ?? "Gemma E2B"
+    }
+
+    func selectedProductionModel() -> TildeModelChoice? { activeProductionModel }
+
+    func selectProductionModel(_ choice: TildeModelChoice) {
+        guard TildeProductProfile.current == .production,
+              launchMode == .production,
+              choice != activeProductionModel else { return }
+        TildeModelSelection.persist(choice)
+        DiagnosticsLog.shared.record("model-selected", metadata: ["model": choice.rawValue])
+        _ = relaunchAfterCurrentProcessExits(failureEvent: "model-relaunch-failed")
     }
 
     func selectedPreviewModel() -> PreviewModelChoice? { activePreviewModel }

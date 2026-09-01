@@ -82,15 +82,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
         onScreenMemoryEvent: (@Sendable (ScreenMemoryInputEvent) -> Void)? = nil,
         suggestionsGate: (@Sendable () -> Bool)? = nil,
         personalSuggestionsGate: (@Sendable () -> Bool)? = nil,
-        personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil
+        personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil,
+        productProfile: TildeProductProfile = PreviewModelSelection.completionProfile(
+            for: TildeProductProfile.current
+        )
     ) {
         self.runtime = runtime
-        self.engine = LlamaCompletionEngine(
-            baseURL: runtime.baseURL,
-            productProfile: PreviewModelSelection.completionProfile(
-                for: TildeProductProfile.current
-            )
-        )
+        self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL, productProfile: productProfile)
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
         self.targetProvider = targetProvider

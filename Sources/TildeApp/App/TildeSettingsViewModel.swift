@@ -54,6 +54,7 @@ final class TildeSettingsViewModel: ObservableObject {
     @Published private(set) var screenMemoryEnabled = true
     @Published private(set) var screenRecordingGranted = false
     @Published private(set) var personalizationEnabled = false
+    @Published private(set) var selectedProductionModel: TildeModelChoice?
     @Published private(set) var selectedPreviewModel: PreviewModelChoice?
     @Published private(set) var hasLocalOCREvaluationSamples = false
     @Published private(set) var localOCREvaluationData = "No samples"
@@ -88,6 +89,10 @@ final class TildeSettingsViewModel: ObservableObject {
 
     var showsPreviewModelPicker: Bool {
         TildeProductProfile.current == .modelPreview
+    }
+
+    var showsProductionModelPicker: Bool {
+        TildeProductProfile.current == .production
     }
 
     var simpleStatusText: String {
@@ -130,6 +135,7 @@ final class TildeSettingsViewModel: ObservableObject {
         screenMemoryEnabled = settings.screenMemoryEnabled
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
         personalizationEnabled = personalHistory.isEnabled
+        selectedProductionModel = appDelegate?.selectedProductionModel()
         selectedPreviewModel = appDelegate?.selectedPreviewModel()
         Task { [weak self] in
             await self?.refreshLocalOCREvaluationSummary()
@@ -194,6 +200,13 @@ final class TildeSettingsViewModel: ObservableObject {
         selectedPreviewModel = choice
         message = "Switching to \(choice.shortName)…"
         appDelegate?.selectPreviewModel(choice)
+    }
+
+    func setProductionModel(_ choice: TildeModelChoice) {
+        guard showsProductionModelPicker, choice != selectedProductionModel else { return }
+        selectedProductionModel = choice
+        message = "Switching to \(choice.shortName)…"
+        appDelegate?.selectProductionModel(choice)
     }
 
     func setLaunchAtLoginEnabled(_ enabled: Bool) {
