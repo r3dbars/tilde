@@ -50,7 +50,7 @@ struct ModelDescriptor: Equatable, Sendable {
         URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(fileName)")!
     }
 
-    /// The one model shipped by this Tilde release.
+    /// The default lightweight model supported by this Tilde release.
     static let gemma4E2BQ4KM = ModelDescriptor(
         identifier: ProductionModelAsset.identifier,
         version: ProductionModelAsset.revision,
@@ -75,15 +75,17 @@ struct ModelDescriptor: Equatable, Sendable {
         sha256: PreviewModelAsset.sha256
     )
 
-    static let qwen35B9BQ4KMPreview = ModelDescriptor(
-        identifier: Qwen9BPreviewModelAsset.identifier,
-        version: Qwen9BPreviewModelAsset.revision,
-        repository: Qwen9BPreviewModelAsset.repository,
-        revision: Qwen9BPreviewModelAsset.revision,
-        fileName: Qwen9BPreviewModelAsset.fileName,
-        expectedBytes: Qwen9BPreviewModelAsset.expectedBytes,
-        sha256: Qwen9BPreviewModelAsset.sha256
+    static let qwen35B9BQ4KM = ModelDescriptor(
+        identifier: Qwen9BModelAsset.identifier,
+        version: Qwen9BModelAsset.revision,
+        repository: Qwen9BModelAsset.repository,
+        revision: Qwen9BModelAsset.revision,
+        fileName: Qwen9BModelAsset.fileName,
+        expectedBytes: Qwen9BModelAsset.expectedBytes,
+        sha256: Qwen9BModelAsset.sha256
     )
+
+    static let qwen35B9BQ4KMPreview = qwen35B9BQ4KM
 
     private static func isSHA256(_ value: String) -> Bool {
         value.utf8.count == 64 && value.utf8.allSatisfy { byte in
@@ -303,9 +305,13 @@ final class ModelManager: @unchecked Sendable {
 
     static var defaultDescriptor: ModelDescriptor {
         switch TildeProductProfile.current {
-        case .production: .gemma4E2BQ4KM
+        case .production:
+            TildeModelSelection.descriptor(
+                for: .production,
+                productionChoice: TildeModelSelection.choice(for: .production)
+            )
         case .preview26B: .gemma426BA4BQ4KMPreview
-        case .preview9B: .qwen35B9BQ4KMPreview
+        case .preview9B: .qwen35B9BQ4KM
         case .modelPreview: PreviewModelSelection.descriptor(for: .modelPreview)
         }
     }

@@ -1,6 +1,18 @@
 # Model lessons
 
 Durable, measured findings about Tilde's model and evaluation. Newest first.
+
+## 2026-09-01 — Official Tilde makes Gemma E2B and Qwen 9B selectable
+
+The owner authorized the already-isolated Qwen 3.5 9B Q4_K_M path as an
+official higher-resource option beside the existing Gemma 4 E2B Q4_K_M
+default. This is a product choice, not a claim that the incomplete live
+promotion evidence became conclusive. Qwen keeps the measured preview controls:
+12 generated tokens, temperature 0.10, three visible words, the 24-character
+scene-echo floor, and names-and-numbers factual grounding. Both assets remain
+immutable, external, locally inferred, independently verified, and covered by
+the packaged release proof. Switching the selection restarts only Tilde's
+app-owned helper; it does not create another app or input-method identity.
 Add an entry only with numbers behind it; superseded entries get corrected, not
 deleted.
 

@@ -37,7 +37,7 @@ extension ResearchCoordinator {
         if !experimental, let requestedIdentifier,
            requestedIdentifier != LabResearchModelConfiguration().identifier {
             throw ResearchCLIError.usage(
-                "Alternate Lab models require --experimental-model; Tilde production remains pinned to Gemma 4 E2B."
+                "Alternate Lab models require --experimental-model; official Tilde remains pinned to its selectable Gemma 4 E2B and Qwen 3.5 9B assets."
             )
         }
         var configuration = LabResearchModelConfiguration()

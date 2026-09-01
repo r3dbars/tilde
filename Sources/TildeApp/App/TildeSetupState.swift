@@ -20,9 +20,8 @@ enum TildeSetupState: Equatable {
     case ready
     case recoverableError(TildeSetupRepairTarget)
 
-    /// Gemma 4 E2B is the only model downloaded by this release. The exact
-    /// byte count belongs to the signed descriptor; this rounded value keeps
-    /// the setup copy useful while `ModelState` is still checking the asset.
+    /// Conservative fallback for callers that do not yet know the selected
+    /// descriptor. The app passes the exact selected-model byte count.
     static let gemma4E2BApproximateBytes: Int64 = 3_430_000_000
 
     static func resolve(
@@ -32,7 +31,8 @@ enum TildeSetupState: Equatable {
         runtime: LlamaRuntimeSnapshot,
         socketAvailable: Bool,
         model: ModelState,
-        requireInitialInputSourceSelection: Bool = true
+        requireInitialInputSourceSelection: Bool = true,
+        selectedModelBytes: Int64 = gemma4E2BApproximateBytes
     ) -> Self {
         guard let keyboardInstallResult else { return .installingKeyboard }
         if keyboardInstallResult == .failed { return .recoverableError(.keyboard) }
@@ -45,7 +45,7 @@ enum TildeSetupState: Equatable {
         case .checking, .missing:
             return .downloadingModel(
                 receivedBytes: 0,
-                totalBytes: gemma4E2BApproximateBytes
+                totalBytes: selectedModelBytes
             )
         case let .downloading(receivedBytes, totalBytes):
             return .downloadingModel(receivedBytes: receivedBytes, totalBytes: totalBytes)

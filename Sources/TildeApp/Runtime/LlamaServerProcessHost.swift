@@ -21,9 +21,13 @@ enum LlamaRuntimeSnapshot: Equatable, Sendable {
     case retrying(FailureReason), failed(FailureReason)
 
     var menuLine: String {
+        menuLine(modelName: "Gemma")
+    }
+
+    func menuLine(modelName: String) -> String {
         switch self {
-        case .starting: "Engine: Gemma (starting…)"
-        case .ready: "Engine: Gemma (ready)"
+        case .starting: "Engine: \(modelName) (starting…)"
+        case .ready: "Engine: \(modelName) (ready)"
         case let .retrying(reason): "⚠️ \(reason.menuDescription) — retrying"
         case let .failed(reason): "⚠️ \(reason.menuDescription)"
         }

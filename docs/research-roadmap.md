@@ -60,7 +60,7 @@ trustworthy, a learned Control Brain would optimize an incomplete target.
 | Cache candidates and replay policies | Synthetic raw candidates are already cached locally | Reuse it for synthetic policy work; never put private prompts or candidates in that cache or in Git |
 | Make Screen Memory optional or bypass it | Current product policy requires Screen Memory and answers with silence when unavailable | Test context quality and routing, not an opt-out product path |
 | Use Accessibility or overlays to insert text | Tilde is an IMKit input method | Keep all presentation and insertion in IMKit; Accessibility may only read screen text under the Screen Memory covenant |
-| Change the production model while testing policy | Production is pinned to Gemma 4 E2B; Qwen 9B is an isolated preview | Finish the bounded Qwen question, then freeze the generator during policy experiments |
+| Change the selected production model while testing policy | Production offers pinned Gemma E2B and Qwen 9B options | Freeze one exact selected generator during policy experiments |
 | Train continually on private writing | Personal writing is explicit, local, encrypted, and user-controlled | Prefer counts, caches, retrieval, and calibration; no private text leaves the device for training or evaluation |
 | Treat acceptance as ground truth | Tilde records acceptance but not durable retention horizons | Add retained outcomes before fitting a decision policy |
 | Try every promising mechanism | The Tilde Lab CLI enforces one experiment class per campaign | Run one causal question at a time and unlock later stages only after exit gates pass |
@@ -182,8 +182,8 @@ but do not let it consume the program.
 4. Either promote Qwen to a continuing preview candidate or reject it. Do not
    start another broad model or quantization sweep until this decision closes.
 
-The policy roadmap below uses production Gemma 4 E2B unless a separately
-approved experiment explicitly freezes another generator. This prevents model
+The policy roadmap below uses the production-default Gemma 4 E2B unless a
+separately approved experiment explicitly freezes Qwen 9B. This prevents model
 quality from masquerading as a policy effect.
 
 ## Stage 1 — Test the cheap, isolated product bets
