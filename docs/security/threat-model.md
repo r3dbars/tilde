@@ -14,7 +14,8 @@ Tilde has two signed user-facing processes and one signed helper child:
   renders marked-text suggestions, commits accepted text, and—only when the
   user enables Personal History—buffers bounded history events in memory.
 - The Tilde app receives bounded context over an owner-only Unix socket, runs
-  the verified Gemma 4 E2B GGUF from external app-support storage, returns
+  the selected verified Gemma 4 E2B or Qwen 3.5 9B GGUF from external
+  app-support storage, returns
   suggestions, and exclusively owns the local Personal History store and
   paired personal next-word shadow.
 - The bundled `llama-server` helper is a localhost-only child of the Tilde app.
@@ -105,8 +106,8 @@ identity are out of scope.
 - Suggestions are marked text and become committed text only after explicit
   acceptance. There is no clipboard or cross-app synthetic insertion path.
 - Distributed builds contain the signed helper but never embed a GGUF. During a
-  separate first-run asset phase, ModelManager downloads only the immutable
-  Gemma 4 E2B revision URL below. It sends no user-derived request data, stores
+  separate selected-model asset phase, ModelManager downloads only one of the
+  two immutable revision URLs below. It sends no user-derived request data, stores
   partial bytes outside the app bundle, verifies the exact filename, size, and
   SHA-256, and installs atomically. A failed or mismatched download is not
   eligible for runtime use; there is no remote inference fallback.
@@ -115,15 +116,20 @@ identity are out of scope.
 
   The fixed descriptor is 3,427,861,984 bytes with SHA-256
   `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`.
+
+  `https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf`
+
+  The fixed descriptor is 5,629,109,312 bytes with SHA-256
+  `4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`.
 - Before using the external model, the app strictly validates its signed bundle,
   nested code, and ModelManager seal. Before every prompt, it rechecks that the
   localhost listener belongs to its exact helper child. Local HTTP requests use
   an ephemeral session with caches, cookies, credentials, and proxies disabled.
 - The release driver verifies bundle structure, runtime ownership, signing,
   notarization, Gatekeeper assessment, and observed open sockets. Release
-  proof accepts a named `--proof-model` preseed only; it copies that file into
-  isolated external storage, never into `Tilde.app`, and passes the exact model
-  path to the helper. The post-download steady-state egress lane rejects every
+  proof requires named Gemma and Qwen preseeds; it copies both into isolated
+  external storage, never into `Tilde.app`, and passes each exact model path to
+  a separate helper proof. The post-download steady-state egress lane rejects every
   non-loopback socket; it does not claim to prove the separate HTTPS download
   phase or packet-level traffic.
 
@@ -246,11 +252,11 @@ Residual risks, stated honestly:
 
 Run `./script/proof.sh fast` for every change. Before release, run
 `./script/package_app.sh` with the reviewed helper hash and an explicitly named
-`--proof-model` preseed matching the Gemma 4 E2B revision, exact size, and
-SHA-256 pin. Require all bundle, runtime, signing, notarization, Gatekeeper,
+Gemma and Qwen proof-model preseeds matching both revisions, exact sizes, and
+SHA-256 pins. Require all bundle, runtime, signing, notarization, Gatekeeper,
 and steady-state socket-observation lanes to pass. File-shape checks and
 matching hashes do not prove provenance; the operator must review the source of
-both inputs. The egress lane sends a fixed synthetic prompt directly to the
+all three inputs. The egress lane sends a fixed synthetic prompt directly to the
 helper after the separate first-run download phase; its isolated proof mode
 observes only the exact app and helper on a dedicated port and confirms the
 helper inherited an unlinked, verified APFS snapshot descriptor from the app.

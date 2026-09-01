@@ -90,6 +90,18 @@ struct ModelManagerTests {
         #expect(descriptor.downloadURL.absoluteString == "https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf")
     }
 
+    @Test("The signed descriptor pins the official Qwen 3.5 9B Q4_K_M bytes")
+    func pinnedQwenDescriptor() {
+        let descriptor = ModelDescriptor.qwen35B9BQ4KM
+        #expect(descriptor.identifier == "qwen3.5-9b-base-q4km")
+        #expect(descriptor.repository == "mradermacher/Qwen3.5-9B-Base-GGUF")
+        #expect(descriptor.revision == "ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6")
+        #expect(descriptor.fileName == "Qwen3.5-9B-Base.Q4_K_M.gguf")
+        #expect(descriptor.expectedBytes == 5_629_109_312)
+        #expect(descriptor.sha256 == "4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2")
+        #expect(descriptor.downloadURL.absoluteString == "https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf")
+    }
+
     @Test("Download redirects stay inside the fixed HTTPS model host and CDN")
     func downloadHostPolicy() throws {
         #expect(ModelDownloadNetworkPolicy.allows(try #require(URL(string: "https://huggingface.co/model"))))

@@ -109,7 +109,23 @@ private struct TildeSettingsView: View {
                     }
                 }
 
-                if model.showsPreviewModelPicker {
+                if model.showsProductionModelPicker {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Picker("Model", selection: Binding(
+                            get: { model.selectedProductionModel ?? .gemma4E2B },
+                            set: { model.setProductionModel($0) }
+                        )) {
+                            ForEach(TildeModelChoice.allCases, id: \.self) { choice in
+                                Text("\(choice.displayName) — \(choice.resourceGuidance)").tag(choice)
+                            }
+                        }
+
+                        Text("Changing models restarts Tilde. Downloaded models stay on this Mac so you can switch back without downloading again.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if model.showsPreviewModelPicker {
                     VStack(alignment: .leading, spacing: 5) {
                         Picker("Model", selection: Binding(
                             get: { model.selectedPreviewModel ?? .qwen35B9B },

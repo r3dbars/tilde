@@ -663,9 +663,9 @@ preview use only:
 | Total p95, one worker | 545 ms | **515 ms** |
 
 Every factual, sensitive-scene, and scene-echo protection remained enabled.
-The consolidated **Tilde Model Preview** applies these controls only while its
-selected model is Qwen 9B; production Tilde remains pinned to Gemma 4 E2B and
-unchanged.
+The official Tilde app applies these controls only while its selected model is
+Qwen 9B. Gemma 4 E2B remains the lower-resource default with its established
+production controls; changing models never changes the app or IME identity.
 
 Two large apparent wins were rejected rather than promoted. One- and two-word
 caps fell below the default three-word scene-echo threshold, so their scores

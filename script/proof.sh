@@ -31,7 +31,7 @@
 #                           Development-only Tilde Lab changes may leave it at zero.
 #
 # The signed/notarized release path lives in script/package_app.sh. Release
-# proof pre-seeds one pinned Gemma 4 E2B model outside the app; it never permits
+# proof pre-seeds both pinned selectable models outside the app; it never permits
 # a GGUF to be embedded in the signed bundle. The post-download runtime lane
 # remains loopback-only and does not exercise the separate HTTPS asset phase.
 set -uo pipefail
@@ -163,12 +163,16 @@ check_live_latency_budget() {
 check_release_contract() {
   local help
   help="$(bash script/package_app.sh --help)"
-  grep -F -- '--proof-model PATH' <<<"$help" >/dev/null \
-    || { echo "release driver does not expose explicit --proof-model input" >&2; return 1; }
+  grep -F -- '--proof-gemma-model PATH' <<<"$help" >/dev/null \
+    || { echo "release driver does not expose explicit Gemma proof input" >&2; return 1; }
+  grep -F -- '--proof-qwen-model PATH' <<<"$help" >/dev/null \
+    || { echo "release driver does not expose explicit Qwen proof input" >&2; return 1; }
   grep -F -- 'never copied into Tilde.app' <<<"$help" >/dev/null \
     || { echo "release driver does not state that the proof model is external" >&2; return 1; }
   grep -F -- 'gemma-4-E2B.Q4_K_M.gguf' <<<"$help" >/dev/null \
     || { echo "release driver does not identify the pinned Gemma 4 E2B file" >&2; return 1; }
+  grep -F -- 'Qwen3.5-9B-Base.Q4_K_M.gguf' <<<"$help" >/dev/null \
+    || { echo "release driver does not identify the pinned Qwen 9B file" >&2; return 1; }
   grep -F -- 'capture/redaction' <<<"$help" >/dev/null \
     || { echo "release driver does not describe the Screen Memory capture/redaction stimulus" >&2; return 1; }
 }
