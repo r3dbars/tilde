@@ -341,6 +341,62 @@ struct ModelManagerTests {
         #expect(manager.verifiedInstalledModelFile() == nil)
     }
 
+    @Test("Runtime handoff hashes unchanged bytes once per process")
+    func runtimeHandoffCachesFullHash() async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanup() }
+        let manager = manager(fixture: fixture, transport: StubTransport([]))
+        try FileManager.default.createDirectory(at: manager.modelDirectory, withIntermediateDirectories: true)
+        try fixture.data.write(to: manager.modelURL)
+        _ = manager.start()
+        await manager.waitUntilSettled()
+        let afterInstall = manager.fullVerificationCount
+
+        let first = manager.verifiedInstalledModelFile()
+        #expect(first != nil)
+        #expect(manager.fullVerificationCount == afterInstall + 1)
+        try? first?.handle.close()
+
+        // A helper restart: same bytes, same inode, no new hash.
+        let second = manager.verifiedInstalledModelFile()
+        #expect(second != nil)
+        #expect(manager.fullVerificationCount == afterInstall + 1)
+        try second?.handle.seek(toOffset: 0)
+        #expect(try second?.handle.readToEnd() == fixture.data)
+        try? second?.handle.close()
+
+        // Rewriting the identical bytes in place moves the modification and
+        // change times, which is enough to force the hash again.
+        try fixture.data.write(to: manager.modelURL)
+        let third = manager.verifiedInstalledModelFile()
+        #expect(third != nil)
+        #expect(manager.fullVerificationCount == afterInstall + 2)
+        try? third?.handle.close()
+    }
+
+    @Test("A same-size in-place edit after a cached verification is caught by the hash")
+    func runtimeHandoffCacheCannotMaskAnEdit() async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanup() }
+        let manager = manager(fixture: fixture, transport: StubTransport([]))
+        try FileManager.default.createDirectory(at: manager.modelDirectory, withIntermediateDirectories: true)
+        try fixture.data.write(to: manager.modelURL)
+        _ = manager.start()
+        await manager.waitUntilSettled()
+        let verified = manager.verifiedInstalledModelFile()
+        #expect(verified != nil)
+        try? verified?.handle.close()
+        let hashesBefore = manager.fullVerificationCount
+
+        let handle = try FileHandle(forWritingTo: manager.modelURL)
+        try handle.seek(toOffset: UInt64(fixture.data.count - 1))
+        try handle.write(contentsOf: Data([fixture.data.last! &+ 1]))
+        try handle.close()
+
+        #expect(manager.verifiedInstalledModelFile() == nil)
+        #expect(manager.fullVerificationCount == hashesBefore + 1)
+    }
+
     @Test("A mismatched range response is rejected and the partial remains resumable")
     func rejectsMismatchedRange() async throws {
         let fixture = Fixture()
