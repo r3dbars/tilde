@@ -58,6 +58,11 @@ DEFAULT_BUDGETS = Path(__file__).resolve().with_name("latency_budgets.json")
 DEFAULT_MIN_SAMPLES = 50
 TIMING_FIELDS = (
     "totalMilliseconds",
+    # Streaming split on llama-completion-timing: the two numbers that
+    # describe felt speed. Recorded since 2026-08 but never reported, so a
+    # first-word regression could not trip anything.
+    "firstTokenMilliseconds",
+    "firstPartialMilliseconds",
     "duration_ms",
     "milliseconds",
     "ocrMilliseconds",

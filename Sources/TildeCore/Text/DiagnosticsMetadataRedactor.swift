@@ -78,7 +78,10 @@ public enum DiagnosticsMetadataRedactor {
              // first complete-word partial, whole milliseconds, no text.
              "firstTokenMilliseconds", "firstPartialMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
-        case "willRestart", "firstInstall":
+        case "willRestart", "firstInstall",
+             // `llama-completion-timing`: whether the stream was cut once the
+             // display cap had settled the visible text. A bare flag, no text.
+             "stoppedAtCap":
             safe = value == "true" || value == "false"
         case "reason", "status", "mode", "source", "kind", "outcome", "ocrScope":
             safe = enumValues.contains(value)
