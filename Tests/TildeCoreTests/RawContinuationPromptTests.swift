@@ -419,6 +419,39 @@ struct ScreenContextPromptAssemblyTests {
         #expect(sceneBlock(in: a.prompt).count > sceneBlock(in: b.prompt).count)
     }
 
+    @Test("One more typed character past the field budget keeps the field tail's start, so the cached prefix survives")
+    func fieldTailStartIsQuantized() {
+        // With a reply reserve the field budget is under 3,000, so a 2,990-
+        // character field is already being cut. Before quantization the cut
+        // moved one character per keystroke; now it moves once per quantum.
+        let pattern = (0..<3_000).map { String($0 % 10) }.joined()
+        let a = RawContinuationPrompt(textBeforeCursor: String(pattern.prefix(2_990)), scene: replyingScene)
+        let b = RawContinuationPrompt(textBeforeCursor: String(pattern.prefix(2_991)), scene: replyingScene)
+
+        let fieldA = liveFieldText(in: a.prompt)
+        let fieldB = liveFieldText(in: b.prompt)
+        #expect(!fieldA.isEmpty)
+        #expect(fieldB == fieldA + String(pattern[pattern.index(pattern.startIndex, offsetBy: 2_990)]))
+        #expect(sceneBlock(in: a.prompt) == sceneBlock(in: b.prompt))
+    }
+
+    @Test("A window start rounds up to the quantum and never overspends the limit")
+    func stableWindowStartRoundsUp() {
+        #expect(RawContinuationPrompt.stableWindowStart(end: 3_000, limit: 3_000) == 0)
+        #expect(RawContinuationPrompt.stableWindowStart(end: 3_001, limit: 3_000) == 250)
+        #expect(RawContinuationPrompt.stableWindowStart(end: 3_250, limit: 3_000) == 250)
+        #expect(RawContinuationPrompt.stableWindowStart(end: 3_251, limit: 3_000) == 500)
+        // Limits of a quantum or less pass through: nothing cached to protect.
+        #expect(RawContinuationPrompt.stableWindowStart(end: 500, limit: 200) == 300)
+        for end in stride(from: 3_001, through: 6_000, by: 7) {
+            let start = RawContinuationPrompt.stableWindowStart(end: end, limit: 3_000)
+            let length = end - start
+            #expect(length <= 3_000)
+            #expect(length > 3_000 - RawContinuationPrompt.contextWindowQuantum)
+            #expect(start.isMultiple(of: RawContinuationPrompt.contextWindowQuantum))
+        }
+    }
+
     @Test("Quantization floors and never rounds up, so the shared budget cannot be overspent")
     func stableSceneBudgetOnlyEverFloors() {
         #expect(RawContinuationPrompt.stableSceneBudget(2_000) == 2_000)
