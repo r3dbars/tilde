@@ -329,17 +329,44 @@ final class ModelManager: @unchecked Sendable {
     /// Revalidates the exact bytes at the runtime handoff. A prior `.ready`
     /// state is not enough because the external file can be replaced after the
     /// manager's initial check.
+    ///
+    /// The full SHA-256 of the model (3.4–5.6 GB, seconds of I/O and one
+    /// saturated core) runs once per process for a given set of bytes. The
+    /// clone is still taken every time, and the source's content fingerprint
+    /// (inode, size, modification, change, and creation times, read under
+    /// the directory lock on the descriptor the clone is made from) must
+    /// equal the one recorded at the last full verification in this process.
+    /// Any in-place write or replacement moves the fingerprint and forces the
+    /// full hash again; the size and magic checks still run on every handoff.
+    /// The cache lives in memory only and is dropped whenever the manager
+    /// leaves `.ready`, so an install, delete, or re-download always hashes.
+    /// What this removes is the re-hash on every helper restart.
     func verifiedInstalledModelFile() -> VerifiedModelFile? {
-        guard state.isReady,
-              let handle = SecureLocalStorage.openUnlinkedCloneForReading(at: modelURL)
-        else { return nil }
-        guard (try? verifyModel(from: handle)) == .valid else {
+        guard state.isReady else { return nil }
+        var fingerprint: SecureLocalStorage.FileContentFingerprint?
+        guard let handle = SecureLocalStorage.openUnlinkedCloneForReading(
+            at: modelURL,
+            fingerprint: &fingerprint
+        ) else { return nil }
+        let previouslyVerified = stateQueue.sync { verifiedFingerprint }
+        let result: VerificationResult?
+        if let fingerprint, fingerprint == previouslyVerified {
+            result = try? verifyModelShape(from: handle)
+        } else {
+            result = try? verifyModel(from: handle)
+        }
+        guard result == .valid else {
+            stateQueue.sync { verifiedFingerprint = nil }
             try? handle.close()
             return nil
         }
+        stateQueue.sync { verifiedFingerprint = fingerprint }
         try? handle.seek(toOffset: 0)
         return VerifiedModelFile(url: modelURL, handle: handle)
     }
+
+    /// Number of full content hashes this manager has computed; tests only.
+    var fullVerificationCount: Int { stateQueue.sync { fullVerifications } }
 
     private let transport: any ModelDownloadTransport
     private let callbackQueue: DispatchQueue
@@ -351,6 +378,8 @@ final class ModelManager: @unchecked Sendable {
     private var stateStorage: ModelState = .checking
     private var activeTask: Task<Void, Never>?
     private var activeGeneration: UInt64 = 0
+    private var verifiedFingerprint: SecureLocalStorage.FileContentFingerprint?
+    private var fullVerifications = 0
 
     init(
         descriptor: ModelDescriptor = ModelManager.defaultDescriptor,
@@ -676,6 +705,19 @@ final class ModelManager: @unchecked Sendable {
     }
 
     private func verifyModel(from handle: FileHandle) throws -> VerificationResult {
+        let shape = try verifyModelShape(from: handle)
+        guard shape == .valid else { return shape }
+        try handle.seek(toOffset: 0)
+        stateQueue.sync { fullVerifications += 1 }
+        let digest = try sha256(from: handle)
+        return digest == descriptor.sha256.lowercased() ? .valid : .checksumMismatch
+    }
+
+    /// The cheap half of `verifyModel`: a regular file of exactly the expected
+    /// size that opens with the GGUF magic. Never a substitute for the hash on
+    /// its own; the handoff uses it alone only for bytes this process has
+    /// already hashed.
+    private func verifyModelShape(from handle: FileHandle) throws -> VerificationResult {
         var info = stat()
         guard fstat(handle.fileDescriptor, &info) == 0,
               info.st_mode & S_IFMT == S_IFREG,
@@ -683,9 +725,7 @@ final class ModelManager: @unchecked Sendable {
         try handle.seek(toOffset: 0)
         guard let bytes = try handle.read(upToCount: 4),
               bytes == Data([0x47, 0x47, 0x55, 0x46]) else { return .invalid }
-        try handle.seek(toOffset: 0)
-        let digest = try sha256(from: handle)
-        return digest == descriptor.sha256.lowercased() ? .valid : .checksumMismatch
+        return .valid
     }
 
     private func sha256(from handle: FileHandle) throws -> String {
@@ -785,6 +825,7 @@ final class ModelManager: @unchecked Sendable {
         let callbacks: (StateHandler?, ProgressHandler?) = stateQueue.sync {
             if let generation, generation != activeGeneration { return (nil, nil) }
             stateStorage = state
+            if !state.isReady { verifiedFingerprint = nil }
             return (stateHandler, progressHandler)
         }
         guard callbacks.0 != nil || callbacks.1 != nil else { return }
