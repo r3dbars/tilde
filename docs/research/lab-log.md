@@ -28,6 +28,45 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-01 — Four output-identical speed changes, ahead of any live number
+
+- **Try:** Audit the production request path end to end (IME, socket,
+  engine, helper launch, prompt composer) for fixed costs that a fast
+  generator pays on every word, then ship the four that change no visible
+  text: cut the helper stream once the display cap has settled the visible
+  text; remember peer code-signing identities per live process instance
+  instead of resolving two per typed word on each side of the socket;
+  prewarm the frontmost app's register scaffold into the helper's slot and
+  quantize the context window start so a long field stops invalidating
+  the prompt prefix every keystroke; hash the installed model once per
+  process instead of on every helper restart.
+- **Learn:** Gemma's 91 ms p50 is mostly not the model. The largest fixed
+  costs sat around it: the per-word signature handshake (budgeted at
+  250 ms p99 on its own), a 200 ms reveal floor in Chromium hosts, and
+  the Qwen profile decoding 12 tokens for a 3-word ghost. The stream cut
+  needs no guess at a token budget because the cleaner already knows the
+  cap has bitten; parity holds because the final pass runs on the same
+  capped text, with one deliberate exception: a rejection that depended
+  only on text past the cap used to silence a suggestion for a reason the
+  writer could never see, and no longer does.
+- **Fail:** No number yet. The Qwen 9B live tail (416 ms p99 on 148
+  completions, over the 400 ms budget) is the thing this is meant to move
+  and it has not been re-measured; the reveal-floor change is deliberately
+  not included because it needs the real-host matrix, not a parity test.
+  The structural proof lane rejects the branch on net shipped LOC (+548)
+  because it adds two small runtime types; the plain pre-merge lane passes.
+- **Where:** branch `claude/tilde-autocomplete-strategy-c88fd9`;
+  `Sources/TildeApp/Runtime/LlamaCompletionEngine.swift`,
+  `Sources/TildeCore/Engine/CompletionOutputCleaner.swift`,
+  `Sources/TildeCore/Runtime/ProcessPeerIdentityCache.swift`,
+  `Sources/TildeApp/Runtime/ScaffoldPrewarmer.swift`,
+  `Sources/TildeApp/Runtime/ModelManager.swift`;
+  `script/latency_report.py` now reports first-token and first-partial.
+- **Next:** Dogfood the rebuilt 9B preview past 200 completions and read
+  `llama-completion-timing` p50/p95/p99 and `ghost-handshake-timing`
+  against the 148-completion snapshot before treating any of this as a
+  speed result.
+
 ## 2026-08-30 — The Q12 nomination block was the wrong exam, not lost credit
 
 - **Try:** Audit why campaign q12b reads arm-aggregate Net Keystrokes
