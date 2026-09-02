@@ -44,7 +44,8 @@ in your browser. It has four fake apps with a card telling you what to type.
 
 **The real thing:** [download the latest release](https://github.com/r3dbars/tilde/releases/latest).
 You need an Apple Silicon Mac on macOS 26 or newer and about 3.5 GB of disk
-for the model, which the app downloads on first run.
+for the model, which the app downloads on first run. 8 GB of memory is enough
+for the default Gemma model. The optional Qwen 9B model wants 16 GB or more.
 
 1. Open the DMG and drag Tilde to Applications, then open it.
 2. Turn the Tilde keyboard on when the app asks (it opens System Settings for you).
@@ -64,6 +65,26 @@ This is an open beta and my daily keyboard. It is not finished.
   keyboard text that way. Native apps like Mail and Messages show grey.
 - It has been tested in the apps I use, which is a shorter list than the apps
   you use.
+
+## Uninstall
+
+1. Quit Tilde from the menu bar.
+2. In System Settings, go to Keyboard, then Input Sources, and remove Tilde.
+3. Drag Tilde out of Applications.
+
+That stops everything. To also delete the model and any data Tilde kept on
+your Mac, remove these folders:
+
+```
+~/Library/Input Methods/InlineGhostIME.app
+~/Library/Application Support/Tilde
+~/Library/Logs/Tilde
+~/Library/Preferences/bar.r3d.tilde.plist
+~/Library/Preferences/bar.r3d.inputmethod.InlineGhost.plist
+```
+
+The first Application Support folder holds the model download and, if you
+turned it on, your Personal History. Nothing else on your Mac is touched.
 
 ## For the curious
 
