@@ -102,6 +102,44 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         experimentArm: String? = nil,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
+        try await decide(
+            textBeforeCursor: textBeforeCursor,
+            appBundleIdentifier: appBundleIdentifier,
+            scene: scene,
+            experimentArm: experimentArm,
+            onPartialSuggestion: onPartialSuggestion
+        ).suggestion
+    }
+
+    /// One request's answer and the reason behind it: what the writer may
+    /// be shown, why not when nothing, whether the model produced text at
+    /// all, and how long it took. The socket host turns this into the
+    /// response receipt; `suggestion(...)` above keeps the plain shape.
+    struct Decision: Sendable {
+        let suggestion: CompletionSuggestion?
+        let reason: SuggestionDecisionReason
+        let generated: Bool
+        let generatorMilliseconds: Int?
+        let firstStableWordMilliseconds: Int?
+
+        static func silent(_ reason: SuggestionDecisionReason) -> Decision {
+            Decision(
+                suggestion: nil,
+                reason: reason,
+                generated: false,
+                generatorMilliseconds: nil,
+                firstStableWordMilliseconds: nil
+            )
+        }
+    }
+
+    func decide(
+        textBeforeCursor: String,
+        appBundleIdentifier: String?,
+        scene: ScreenScene.Scene?,
+        experimentArm: String? = nil,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> Decision {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let cleaner = visibleCleaner(forExperimentArm: experimentArm)
         if let reason = SceneSuggestionPolicy.suppressionReason(
@@ -113,7 +151,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 "suggestion-suppressed",
                 metadata: ["reason": reason.rawValue]
             )
-            return nil
+            return .silent(SuggestionDecisionReason(scene: reason))
         }
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
@@ -122,7 +160,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             scene: scene,
             includesWindowTitle: productProfile.includesWindowTitleInScene
         )
-        guard !recipe.prompt.isEmpty else { return nil }
+        guard !recipe.prompt.isEmpty else { return .silent(.emptyPrompt) }
 
         let prompt = Self.promptByAddingIntentFutures(
             to: recipe.prompt,
@@ -226,10 +264,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
         var suggestion = clean.suggestion
         var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
+        var decisionReason: SuggestionDecisionReason = clean.rejectionReason.map(
+            SuggestionDecisionReason.init(cleaner:)
+        ) ?? .shown
         if let candidate = suggestion,
            SceneEchoPolicy.isEcho(candidate.visibleText, scene: scene, profile: productProfile) {
             suggestion = nil
             rejectionReason = "replaysScene"
+            decisionReason = .sceneEcho
         }
         if let candidate = suggestion,
            FactualGroundingPolicy.containsUnsupportedFact(
@@ -240,6 +282,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
            ) {
             suggestion = nil
             rejectionReason = "unsupportedFact"
+            decisionReason = .unsupportedFact
         }
 
         if suggestion == nil, !content.isEmpty, let reason = rejectionReason {
@@ -259,7 +302,13 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         }
         timing["stoppedAtCap"] = String(stoppedAtCap)
         diagnostics.record("llama-completion-timing", metadata: timing)
-        return suggestion
+        return Decision(
+            suggestion: suggestion,
+            reason: decisionReason,
+            generated: !content.isEmpty,
+            generatorMilliseconds: Self.milliseconds(since: startedAt),
+            firstStableWordMilliseconds: firstPartialMilliseconds
+        )
     }
 
     /// The chat register gets no hint: on the 2026-08-23 synthetic eval the

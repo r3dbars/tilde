@@ -52,6 +52,46 @@ struct LlamaCompletionStreamingTests {
         #expect(StreamingURLProtocol.probe.wasStopped)
     }
 
+    @Test("A decision names its reason: shown with timings, or empty output with none generated")
+    func decisionCarriesReasonAndTimings() async throws {
+        let served = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: FixedFrameTransport(lines: [
+                #"data: {"content":" pretty"}"#,
+                #"data: {"content":" good "}"#,
+                #"data: {"stop":true,"tokens_predicted":2,"stopped_word":true}"#,
+            ])
+        )
+        let decision = try await served.decide(
+            textBeforeCursor: "That was ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil,
+            onPartialSuggestion: { _ in }
+        )
+        #expect(decision.reason == .shown)
+        #expect(decision.generated)
+        #expect(decision.suggestion?.visibleText.contains("pretty") == true)
+        #expect(decision.generatorMilliseconds != nil)
+
+        let empty = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: FixedFrameTransport(lines: [
+                #"data: {"stop":true,"tokens_predicted":0,"stopped_eos":true}"#,
+            ])
+        )
+        let silent = try await empty.decide(
+            textBeforeCursor: "That was ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil,
+            onPartialSuggestion: { _ in }
+        )
+        #expect(silent.suggestion == nil)
+        #expect(silent.reason == .emptyOutput)
+        #expect(!silent.generated)
+    }
+
     @Test("Packaged llama delta frames preserve repeated tokens")
     func repeatedDeltaTokensAreAppended() async throws {
         let transport = FixedFrameTransport(lines: [

@@ -18,6 +18,109 @@ enum GhostOutcomeLedger {
     /// Writing volume between ghosts; see `OpportunityCharacterMeter`.
     private static var meter = OpportunityCharacterMeter()
 
+    /// An eligible opportunity the keyboard has asked the app about and not
+    /// yet resolved. It becomes a shown opportunity or a silent event; a
+    /// newer one arriving first closes it as superseded.
+    private struct PendingOpportunity {
+        let id: UUID
+        let openedAt: Date
+        let sessionDigestSHA256: String
+        let variant: String
+        let hostRegister: ContinuationRegister
+        let boundary: String
+    }
+
+    private static var pending: PendingOpportunity?
+
+    /// The keyboard is about to ask the app. From here the opportunity ends
+    /// exactly once: shown, or silent with a terminal reason.
+    static func noteOpportunityOpened(
+        id: UUID,
+        sessionIdentifier: String,
+        hostRegister: ContinuationRegister,
+        precedingCharacter: Character?,
+        excluded: Bool,
+        variant: String = "champion",
+        at time: Date = Date()
+    ) {
+        _ = dropIfWiped()
+        noteOpportunityEnded(
+            id: pending?.id,
+            reason: .supersededByTyping,
+            receipt: nil,
+            deadlineMissed: true,
+            at: time
+        )
+        lock.lock()
+        self.excluded = excluded
+        guard !excluded else {
+            pending = nil
+            meter.reset()
+            lock.unlock()
+            return
+        }
+        pending = PendingOpportunity(
+            id: id,
+            openedAt: time,
+            sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: sessionIdentifier),
+            variant: variant,
+            hostRegister: hostRegister,
+            boundary: TextFreeCursorBoundary.from(precedingCharacter: precedingCharacter).rawValue
+        )
+        lock.unlock()
+    }
+
+    /// The opportunity ended without a ghost. A `nil` or stale `id` is a
+    /// no-op, so every path that might have ended it may say so safely.
+    /// `receipt` fields are `nil` for an app older than the receipt and for
+    /// the keyboard's own verdicts; nothing is guessed in their place.
+    static func noteOpportunityEnded(
+        id: UUID?,
+        reason: SuggestionDecisionReason,
+        receipt: GhostDecisionReceipt?,
+        deadlineMissed: Bool,
+        at time: Date = Date()
+    ) {
+        guard let id else { return }
+        lock.lock()
+        guard let open = pending, open.id == id, !excluded else {
+            lock.unlock()
+            return
+        }
+        pending = nil
+        let opportunityCharacters = meter.takeForOpportunity()
+        lastActivity = time
+        lock.unlock()
+        let register = receipt?.register ?? open.hostRegister
+        let elapsed = Int((max(0, time.timeIntervalSince(open.openedAt)) * 1_000).rounded())
+        guard let event = try? TextFreeOnlineEvent.silent(
+            id: open.id,
+            occurredAt: open.openedAt,
+            sessionDigestSHA256: open.sessionDigestSHA256,
+            variant: open.variant,
+            appCategory: TextFreeAppCategory.from(register: register).rawValue,
+            register: register.rawValue,
+            boundary: open.boundary,
+            reason: receipt?.reason ?? reason,
+            generated: receipt?.generated ?? false,
+            deadlineMissed: deadlineMissed,
+            generatorMilliseconds: receipt?.generatorMilliseconds,
+            firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds,
+            nextActionMilliseconds: min(300_000, elapsed),
+            opportunityCharacters: opportunityCharacters
+        ) else { return }
+        let diary = LocalOutcomeDiaryEntry(
+            id: event.id,
+            recordedAt: event.occurredAt,
+            outcome: event.outcome,
+            acceptedText: "",
+            five: event.retentionAt5Seconds,
+            thirty: event.retentionAt30Seconds,
+            segment: event.retentionAtSegmentClose
+        )
+        append(event: event, diary: diary)
+    }
+
     static func configure(contextProvider: @escaping @Sendable () -> String?) {
         lock.lock()
         self.contextProvider = contextProvider
@@ -28,7 +131,11 @@ enum GhostOutcomeLedger {
     /// `register` and `source` are the app's receipt for this ghost (or the
     /// dictionary path's own values); the ledger never derives a register
     /// from the host bundle.
+    /// `opportunityID` is the pending opportunity this ghost answers, so the
+    /// shown event keeps the id the request carried; a dictionary ghost has
+    /// no pending opportunity and mints its own.
     static func noteShown(
+        opportunityID: UUID?,
         sessionIdentifier: String,
         register: ContinuationRegister,
         source: TextFreeCandidateSource,
@@ -37,6 +144,7 @@ enum GhostOutcomeLedger {
         precedingCharacter: Character?,
         excluded: Bool,
         variant: String = "champion",
+        receipt: GhostDecisionReceipt? = nil,
         at time: Date = Date()
     ) {
         _ = dropIfWiped()
@@ -45,13 +153,27 @@ enum GhostOutcomeLedger {
         self.excluded = excluded
         guard !excluded else {
             opportunity = nil
+            pending = nil
             meter.reset()
             lastActivity = time
             lock.unlock()
             return
         }
+        let answered = pending.flatMap { open in open.id == opportunityID ? open : nil }
+        // A ghost for a different opportunity than the pending one means the
+        // pending one was answered by something else first; it is closed as
+        // superseded rather than left to dangle.
+        if let stale = pending, answered == nil {
+            lock.unlock()
+            noteOpportunityEnded(
+                id: stale.id, reason: .supersededByTyping, receipt: nil, deadlineMissed: true, at: time
+            )
+            lock.lock()
+        }
+        pending = nil
         let opportunityCharacters = meter.takeForOpportunity()
         opportunity = LiveOnlineOpportunity(
+            id: answered?.id ?? UUID(),
             shownAt: time,
             sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(
                 sessionIdentifier: sessionIdentifier
@@ -64,7 +186,9 @@ enum GhostOutcomeLedger {
             candidateCharacters: candidateCharacters,
             candidateWordCount: candidateWordCount,
             candidateSource: source,
-            opportunityCharacters: opportunityCharacters
+            opportunityCharacters: opportunityCharacters,
+            generatorMilliseconds: receipt?.generatorMilliseconds,
+            firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds
         )
         lastActivity = time
         lock.unlock()
@@ -120,6 +244,7 @@ enum GhostOutcomeLedger {
     static func markPrivacyExcluded() {
         lock.lock()
         excluded = true
+        pending = nil
         meter.reset()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
@@ -293,6 +418,7 @@ enum GhostOutcomeLedger {
         guard seenGeneration != current else { return false }
         seenGeneration = current
         opportunity = nil
+        pending = nil
         watches = []
         meter.reset()
         excluded = true

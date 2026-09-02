@@ -253,8 +253,14 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 ])
             }
             self.onCompletionActivity?()
+            let opportunityID = completionRequest.opportunityID
             guard await self.runtime.isReadyForCompletion() else {
-                _ = Self.write(.unavailable, to: connection)
+                _ = Self.write(
+                    GhostBrainResponse.unavailable.stamped(
+                        opportunityID: opportunityID, reason: .runtimeUnavailable, generated: false
+                    ),
+                    to: connection
+                )
                 return
             }
             // All-or-nothing gate (2026-08-16 owner directive): `.silence`,
@@ -267,7 +273,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // completion already produces, so the IME does nothing special
             // and nothing gets logged as a failure.
             guard self.suggestionsGate?() ?? true else {
-                _ = Self.write(.silence, to: connection)
+                _ = Self.write(.silence(reason: .suggestionsPaused, opportunityID: opportunityID), to: connection)
                 return
             }
 
@@ -276,7 +282,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 completionRequest.fieldSessionIdentifier
             )
             if self.targetProvider != nil, expectedTarget == nil {
-                _ = Self.write(.silence, to: connection)
+                _ = Self.write(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
             let targetIsCurrent: @Sendable () -> Bool = { [targetProvider = self.targetProvider] in
@@ -297,7 +303,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 expectedTarget
             )
             guard targetIsCurrent() else {
-                _ = Self.write(.silence, to: connection)
+                _ = Self.write(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
 
@@ -312,7 +318,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // completion. Count-only diagnostic: never the matched category
             // or any scene text, only that suppression happened.
             if SensitiveScenePolicy.isSensitive(scene: scene) {
-                _ = Self.write(.silence, to: connection)
+                _ = Self.write(.silence(reason: .sensitiveScene, opportunityID: opportunityID), to: connection)
                 DiagnosticsLog.shared.record("suggestion-suppressed", metadata: ["reason": "sensitive-scene"])
                 return
             }
@@ -321,7 +327,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 textBeforeCursor: completionRequest.context,
                 options: self.productProfile.sceneSuggestionOptions
             ) {
-                _ = Self.write(.silence, to: connection)
+                _ = Self.write(
+                    .silence(reason: SuggestionDecisionReason(scene: reason), opportunityID: opportunityID),
+                    to: connection
+                )
                 DiagnosticsLog.shared.record(
                     "suggestion-suppressed",
                     metadata: ["reason": reason.rawValue]
@@ -354,7 +363,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 targetIsCurrent: targetIsCurrent
             )
             let completion = Task {
-                try await self.engine.suggestion(
+                try await self.engine.decide(
                     textBeforeCursor: completionRequest.context,
                     appBundleIdentifier: completionRequest.app,
                     scene: scene,
@@ -402,7 +411,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             guard !completion.isCancelled else { return }
             guard targetIsCurrent() else {
-                _ = Self.write(.silence, to: connection)
+                _ = Self.write(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
 
@@ -410,8 +419,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let servedMetadata: [String: String]?
             var source: PersonalSuggestionSource?
             switch result {
-            case let .success(suggestion):
-                let baseText = suggestion.map {
+            case let .success(decision):
+                let baseText = decision.suggestion.map {
                     String($0.visibleText.drop(while: \Character.isWhitespace))
                 } ?? ""
                 var text = baseText
@@ -423,10 +432,22 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     text = applied.text
                     source = applied.source
                 }
-                response = .suggestion(
+                // The receipt names the engine's reason when nothing is
+                // served; a base candidate the personal layer emptied is
+                // an empty output, not a policy verdict the engine reached.
+                let reason: SuggestionDecisionReason = text.isEmpty
+                    ? (decision.suggestion == nil ? decision.reason : .emptyOutput)
+                    : .shown
+                response = GhostBrainResponse.suggestion(
                     text,
                     register: register,
                     source: TextFreeCandidateSource(personal: source)
+                ).stamped(
+                    opportunityID: opportunityID,
+                    reason: reason,
+                    generated: decision.generated,
+                    generatorMilliseconds: decision.generatorMilliseconds,
+                    firstStableWordMilliseconds: decision.firstStableWordMilliseconds
                 )
                 servedMetadata = text.isEmpty ? nil : Self.servedMetadata(
                     app: completionRequest.app,
@@ -435,7 +456,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 )
             case let .failure(error):
                 self.runtime.reportCompletionFailure()
-                response = (error as? URLError)?.code == .timedOut ? .timeout : .error
+                let timedOut = (error as? URLError)?.code == .timedOut
+                response = (timedOut ? GhostBrainResponse.timeout : .error).stamped(
+                    opportunityID: opportunityID,
+                    reason: timedOut ? .timeout : .protocolError,
+                    generated: false
+                )
                 servedMetadata = nil
             }
             if Self.write(response, to: connection), let servedMetadata {

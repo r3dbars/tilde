@@ -395,6 +395,32 @@ Four rules of the live ledger, fixed 2026-09-02 so its reports can be trusted:
   name, and a production event cannot gain a field without the contract test
   and this list changing with it.
 
+A fifth rule, the flight recorder (2026-09-02): every eligible opportunity
+ends with exactly one terminal reason, shown or not. An opportunity is a
+model request — the caret at a word or punctuation boundary with a request
+about to leave the keyboard; the dictionary path runs no model and is
+recorded only when it shows something. The keyboard mints a random
+`opportunityID`, the app echoes it on every response line together with a
+receipt (`reason`, `generated`, `generatorMilliseconds`,
+`firstStableWordMilliseconds`, `register`, `source`), and the keyboard
+writes one event per opportunity: displayed with the outcome it earned, or
+undisplayed with `guardReason` from `SuggestionDecisionReason`:
+
+| Decided by | Reasons |
+| --- | --- |
+| App, before inference | `runtime-unavailable`, `suggestions-paused`, `field-target-lost`, `sensitive-scene`, the eight scene-gate reasons (`non-actionable-scene`, `complete-sentence-scene`, …), `empty-prompt` |
+| App, after inference | `empty-output`, `no-suggestion`, `unsafe-character`, `prompt-leak`, `prefix-replay`, `context-replay`, `self-repetition`, `scene-echo`, `unsupported-fact`, `timeout`, `protocol-error` |
+| Keyboard | `superseded-by-typing` (the answer, or the request, lost to the next keystroke; `deadlineMissed` is set), `not-at-growing-edge` (text after the caret) |
+
+`generated` says whether the model produced text at all, so "the model
+spoke and a policy hid it" (`generated`, `policyHidden`) is distinct from
+"the model had nothing" and from "a gate stopped inference". `outcome` is
+`unavailable` for the three could-not-answer reasons and `hidden` for the
+rest. Silent events carry no candidate, no accepted characters, and the
+same zero-then-pending retention shape as a shown-and-ignored ghost, so a
+missing horizon is never a zero. `online-report` already counts hidden and
+unavailable events, deadline misses, and failures by reason.
+
 A soak requires sustained active duration, enough events, p99 first-stable-word
 at or below one second, zero crashes, timeouts, wrong insertions, committed-text
 corruption, or network egress, and explicit exercise of network denial, memory

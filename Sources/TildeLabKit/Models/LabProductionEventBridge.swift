@@ -23,6 +23,15 @@ extension LabOnlineExperimentEvent {
               let production = TextFreeCandidateSource(rawValue: event.candidateSourceBucket),
               let lengthBucket = LabCandidateLengthBucket(rawValue: event.candidateLengthBucket)
         else { throw LabOnlineExperimentError.invalidEvent }
+        let guardReason: LabDecisionReason?
+        if let raw = event.guardReason {
+            guard let known = LabDecisionReason(rawValue: raw) else {
+                throw LabOnlineExperimentError.invalidEvent
+            }
+            guardReason = known
+        } else {
+            guardReason = nil
+        }
         self.init(
             id: event.id,
             campaignID: event.campaignID,
@@ -39,9 +48,12 @@ extension LabOnlineExperimentEvent {
             acceptedCharacters: event.acceptedCharacters,
             replacedCharactersWithin5Seconds: event.replacedCharactersWithin5Seconds,
             nextActionMilliseconds: event.nextActionMilliseconds,
+            generatorMilliseconds: event.generatorMilliseconds,
+            firstStableWordMilliseconds: event.firstStableWordMilliseconds,
             deadlineMissed: event.deadlineMissed,
             candidateCharacters: event.candidateCharacters,
             championDisagreed: event.championDisagreed,
+            guardReason: guardReason,
             crashed: event.crashed,
             timedOut: event.timedOut,
             opportunityCharacters: event.opportunityCharacters,

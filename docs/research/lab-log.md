@@ -28,6 +28,50 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — The flight recorder: every model opportunity now ends with a reason
+
+- **Try:** Close the biggest hole the outside review named: the ledger
+  only began when a ghost became visible, so Tilde could not say why it
+  stayed quiet. Give every eligible opportunity (a model request at a
+  word or punctuation boundary) a random id the keyboard mints; have the
+  app echo it on every response line with a decision receipt — the
+  `SuggestionDecisionReason` it reached, whether the model produced any
+  text, model time, time to first stable word — and have the keyboard
+  write exactly one text-free event per opportunity: shown, or silent
+  with `guardReason`.
+- **Learn:** One vocabulary covers the whole funnel without inventing
+  anything: the app's pre-inference gates (runtime, paused, target lost,
+  sensitive scene, the eight scene reasons, empty prompt), its
+  post-inference verdicts (the cleaner's seven rejections, scene echo,
+  unsupported fact, empty output, timeout, protocol error), and the
+  keyboard's own two (superseded by typing with `deadlineMissed`, not at
+  the growing edge). Raw values match the Lab's `LabDecisionReason` where
+  they overlap, so live lines bridge untranslated and `online-report`
+  already slices hidden, unavailable, deadline-missed, and failures by
+  reason. `generated` separates "the model spoke and a policy hid it"
+  from "the model had nothing" from "a gate stopped inference", which is
+  the question Q11–Q13 could only answer in the Lab. The engine returns a
+  `Decision` and the old `suggestion(...)` shape stays as a wrapper, so
+  the streaming and stream-cut tests did not move.
+- **Fail:** Nothing is measured yet; the first honest quiet-rate number
+  needs a day of typing on the build that ships this. Dictionary lookups
+  that find nothing are deliberately not opportunities (no model, no gate,
+  one per keystroke), so the funnel explains model silence, not every
+  silent keystroke. A partial that shows before the final carries no
+  timings on the shown event. The keyboard's `not-at-growing-edge` and
+  `superseded-by-typing` reasons are its own reading of the field, not the
+  app's, and the interaction split brain is still unfixed.
+- **Where:** `Sources/TildeCore/Policy/SuggestionDecisionReason.swift`,
+  `TextFreeOnlineEvent.silent(...)`, `GhostBrainWire.swift` (request
+  `opportunityID`, response receipt, `stamped`, `silence(reason:)`);
+  `LlamaCompletionEngine.decide`; `GhostBrainServerHost.swift`;
+  `GhostOutcomeLedger.noteOpportunityOpened/Ended`,
+  `GhostInputController.openOpportunity/endOpenOpportunity`;
+  `LabProductionEventBridge.swift`; `docs/tilde-lab.md` "fifth rule".
+- **Next:** Install, type for a day, run `tilde-lab online-report
+  --instrument`, and read the quiet rate by reason before touching any
+  gate. Then the profile split with one configuration digest per request.
+
 ## 2026-09-02 — Paired same-day anchor: the campaign gates buy precision with silence, not value
 
 - **Try:** Rerun the simulated typist on the same 240 scenarios, five
