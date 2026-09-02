@@ -12,7 +12,15 @@ struct ProfileSceneOptionsTests {
             #expect(profile.sceneSuggestionOptions == .production)
             #expect(!profile.includesWindowTitleInScene)
             #expect(!profile.chainsCompletionAfterAccept)
+            #expect(profile.calmRevealDelays == .production)
+            #expect(!profile.requestsAfterPunctuation)
         }
+    }
+
+    @Test("The 9B preview trials the shorter calm floor and punctuation boundaries")
+    func preview9BRevealAndPunctuation() {
+        #expect(TildeProductProfile.preview9B.calmRevealDelays == .preview)
+        #expect(TildeProductProfile.preview9B.requestsAfterPunctuation)
     }
 
     @Test("Only the 9B preview chains a new request after a consumed accept")
