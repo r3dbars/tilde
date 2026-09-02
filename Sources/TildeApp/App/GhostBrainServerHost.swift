@@ -366,14 +366,23 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 scene: scene,
                 hostBundleIdentifier: completionRequest.app
             )
-            let personalPredictionTask: Task<PersonalNextWordPrediction?, Never>? = {
+            // The provider resolves the race itself when it finishes, so every
+            // waiter (the streaming gate, the terminal await) registers with
+            // the race and can be released by its own deadline; nothing is
+            // ever left blocked on the provider's task.
+            let personalRace: PersonalLookupRace? = {
                 guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
                     return nil
                 }
                 let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
                 guard !tailWords.isEmpty else { return nil }
-                return Task { await provider(tailWords, completionRequest.app) }
+                return PersonalLookupRace()
             }()
+            let personalPredictionTask: Task<Void, Never>? = personalRace.map { race in
+                let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
+                let provider = self.personalNextWordProvider!
+                return Task { race.resolve(await provider(tailWords, completionRequest.app)) }
+            }
             // Stream stable complete-word prefixes to peers that asked for
             // them. A personal prediction may replace the base ghost's first
             // word, so when one is actually racing the sink holds the first
@@ -386,6 +395,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 holdingForPersonal: personalPredictionTask != nil,
                 register: register,
                 midWordContext: midWordContext,
+                opportunityID: opportunityID,
                 holdDeadlineNanoseconds: Self.personalStreamHoldNanoseconds,
                 targetIsCurrent: targetIsCurrent,
                 write: { response in
@@ -398,18 +408,20 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     appBundleIdentifier: completionRequest.app,
                     scene: scene,
                     experimentArm: completionRequest.experimentArm,
-                    onPartialSuggestion: { partials.send($0) }
+                    onPartialSuggestion: { partials.send($0, firstStableWordMilliseconds: $1) }
                 )
             }
             partials.onWriteFailure = { completion.cancel() }
-            // The sink and `awaitPersonalPrediction` below share the one
-            // lookup task: awaiting a task's value twice is safe, and the
-            // gate must learn the answer as soon as it exists rather than
-            // after generation finishes.
-            let personalObserver: Task<Void, Never>? = personalPredictionTask.map { task in
+            // The gate must learn the answer as soon as it exists rather than
+            // after generation finishes; its waiter is released by the same
+            // deadline the terminal await uses.
+            let personalObserver: Task<Void, Never>? = personalRace.map { race in
                 Task { [weak partials] in
-                    let prediction = await task.value
-                    partials?.resolvePersonal(prediction)
+                    if case let .predicted(prediction) = await race.value(
+                        deadlineNanoseconds: Self.personalPredictionDeadlineNanoseconds
+                    ) {
+                        partials?.resolvePersonal(prediction)
+                    }
                 }
             }
             let disconnect = DispatchSource.makeReadSource(
@@ -433,7 +445,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let personalPrediction: PersonalNextWordPrediction?
             switch result {
             case .success:
-                personalPrediction = await Self.awaitPersonalPrediction(personalPredictionTask)
+                personalPrediction = await Self.awaitPersonalPrediction(personalRace)
             case .failure:
                 // This result is about to become an error/timeout response
                 // and the personal prediction would be discarded either
@@ -568,7 +580,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// nothing" apart from "the deadline fired first" — both read as `nil`
     /// — so the race itself has to report which branch won, not just the
     /// value it produced.
-    private enum PersonalLookupRaceResult {
+    enum PersonalLookupRaceResult {
         case predicted(PersonalNextWordPrediction?)
         case timedOut
     }
@@ -579,13 +591,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// unchanged. Internal, not private, so `waitedMilliseconds`/`outcome`
     /// can be proven directly without a live socket.
     static func awaitPersonalPrediction(
-        _ task: Task<PersonalNextWordPrediction?, Never>?,
+        _ race: PersonalLookupRace?,
         now: @Sendable () -> Date = Date.init,
         diagnostics: @Sendable (String, [String: String]) -> Void = { event, metadata in
             DiagnosticsLog.shared.record(event, metadata: metadata)
         }
     ) async -> PersonalNextWordPrediction? {
-        guard let task else {
+        guard let race else {
             // No provider, the gate was off, or the context had no tail
             // words — no race ever ran, so `waitedMilliseconds` is exactly
             // 0, not "however long the caller happened to take to get here".
@@ -593,20 +605,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             return nil
         }
         let waitStartedAt = now()
-        // A one-shot race, not a task group: a group's exit awaits every
-        // child, and the child awaiting `task.value` cannot return until the
-        // provider does, which is the very wait the deadline exists to bound.
-        // Whichever side resumes first wins; the loser's task is simply
-        // never awaited, and the provider is told to stop.
-        let raceResult = await withCheckedContinuation { (continuation: CheckedContinuation<PersonalLookupRaceResult, Never>) in
-            let once = OnceResume(continuation)
-            Task { once.resume(.predicted(await task.value)) }
-            Task {
-                try? await Task.sleep(nanoseconds: personalPredictionDeadlineNanoseconds)
-                once.resume(.timedOut)
-            }
-        }
-        task.cancel()
+        let raceResult = await race.value(deadlineNanoseconds: personalPredictionDeadlineNanoseconds)
         let waitedMilliseconds = milliseconds(from: waitStartedAt, to: now())
         let prediction: PersonalNextWordPrediction?
         let outcome: String
@@ -635,21 +634,54 @@ final class GhostBrainServerHost: @unchecked Sendable {
         midWord ? visibleText : String(visibleText.drop(while: \Character.isWhitespace))
     }
 
-    /// Resumes a continuation exactly once, whichever racer arrives first.
-    private final class OnceResume: @unchecked Sendable {
+    /// The personal lookup as a race every interested party can join and
+    /// leave on its own clock. The provider resolves it once when it
+    /// finishes; each waiter registers a continuation and a deadline, and
+    /// is resumed by whichever comes first — the answer, or its own
+    /// deadline. A waiter that times out is removed, so a slow provider
+    /// leaves nothing suspended behind it. `internal` for tests.
+    final class PersonalLookupRace: @unchecked Sendable {
         private let lock = NSLock()
-        private var continuation: CheckedContinuation<PersonalLookupRaceResult, Never>?
+        private var result: PersonalLookupRaceResult?
+        private var waiters: [UUID: CheckedContinuation<PersonalLookupRaceResult, Never>] = [:]
 
-        init(_ continuation: CheckedContinuation<PersonalLookupRaceResult, Never>) {
-            self.continuation = continuation
+        init() {}
+
+        /// The provider's one answer. Later calls are ignored.
+        func resolve(_ prediction: PersonalNextWordPrediction?) {
+            let released: [CheckedContinuation<PersonalLookupRaceResult, Never>] = lock.withLock {
+                guard result == nil else { return [] }
+                result = .predicted(prediction)
+                defer { waiters.removeAll() }
+                return Array(waiters.values)
+            }
+            for waiter in released { waiter.resume(returning: .predicted(prediction)) }
         }
 
-        func resume(_ result: PersonalLookupRaceResult) {
-            let pending: CheckedContinuation<PersonalLookupRaceResult, Never>? = lock.withLock {
-                defer { continuation = nil }
-                return continuation
+        func value(deadlineNanoseconds: UInt64) async -> PersonalLookupRaceResult {
+            let ticket = UUID()
+            return await withCheckedContinuation { continuation in
+                let immediate: PersonalLookupRaceResult? = lock.withLock {
+                    if let result { return result }
+                    waiters[ticket] = continuation
+                    return nil
+                }
+                if let immediate {
+                    continuation.resume(returning: immediate)
+                    return
+                }
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: deadlineNanoseconds)
+                    self?.timeOut(ticket)
+                }
             }
-            pending?.resume(returning: result)
+        }
+
+        private func timeOut(_ ticket: UUID) {
+            let waiter: CheckedContinuation<PersonalLookupRaceResult, Never>? = lock.withLock {
+                waiters.removeValue(forKey: ticket)
+            }
+            waiter?.resume(returning: .timedOut)
         }
     }
 
@@ -827,6 +859,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private let enabled: Bool
         private let register: ContinuationRegister
         private let midWordContext: Bool
+        private let opportunityID: String?
+        private var firstStableWordMilliseconds: Int?
         private let holdDeadlineNanoseconds: UInt64
         private let targetIsCurrent: @Sendable () -> Bool
         private let write: @Sendable (GhostBrainResponse) -> Bool
@@ -847,6 +881,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             holdingForPersonal: Bool,
             register: ContinuationRegister,
             midWordContext: Bool = false,
+            opportunityID: String? = nil,
             holdDeadlineNanoseconds: UInt64,
             targetIsCurrent: @escaping @Sendable () -> Bool,
             write: @escaping @Sendable (GhostBrainResponse) -> Bool
@@ -854,6 +889,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             self.enabled = enabled
             self.register = register
             self.midWordContext = midWordContext
+            self.opportunityID = opportunityID
             self.holdDeadlineNanoseconds = holdDeadlineNanoseconds
             self.targetIsCurrent = targetIsCurrent
             self.write = write
@@ -872,8 +908,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
         /// honour the base ghost whenever this is true.
         var didStream: Bool { lock.withLock { wroteAnything } }
 
-        func send(_ partial: CompletionSuggestion) {
+        func send(_ partial: CompletionSuggestion, firstStableWordMilliseconds: Int? = nil) {
             guard enabled else { return }
+            lock.withLock {
+                if self.firstStableWordMilliseconds == nil { self.firstStableWordMilliseconds = firstStableWordMilliseconds }
+            }
             guard targetIsCurrent() else {
                 lock.withLock {
                     guard !failed else { return }
@@ -991,7 +1030,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
         private func writeLocked(_ text: String) {
             guard !failed else { return }
-            if write(GhostBrainResponse.partial(text, register: register)) {
+            if write(GhostBrainResponse.partial(
+                text,
+                register: register,
+                opportunityID: opportunityID,
+                firstStableWordMilliseconds: firstStableWordMilliseconds
+            )) {
                 wroteAnything = true
             } else {
                 failed = true

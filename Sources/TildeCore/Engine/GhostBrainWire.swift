@@ -277,13 +277,20 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
     /// Streamed prefixes precede personal arbitration, and a stream is only
     /// ever enabled when personal serving is off, so a partial is always the
     /// base model's own text.
-    public static func partial(_ text: String, register: ContinuationRegister? = nil) -> Self {
+    public static func partial(
+        _ text: String,
+        register: ContinuationRegister? = nil,
+        opportunityID: String? = nil,
+        firstStableWordMilliseconds: Int? = nil
+    ) -> Self {
         Self(
             outcome: .suggestion,
             suggestion: text,
             final: false,
             register: register?.rawValue,
-            source: register == nil ? nil : TextFreeCandidateSource.baseModel.rawValue
+            source: register == nil ? nil : TextFreeCandidateSource.baseModel.rawValue,
+            opportunityID: opportunityID,
+            firstStableWordMilliseconds: firstStableWordMilliseconds
         )
     }
 

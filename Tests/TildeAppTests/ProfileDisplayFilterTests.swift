@@ -114,7 +114,7 @@ struct ProfileDisplayFilterTests {
             textBeforeCursor: "The meeting is at 4pm and I'll ",
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
-            onPartialSuggestion: { partials.append($0.visibleText) }
+            onPartialSuggestion: { partial, _ in partials.append(partial.visibleText) }
         )
         #expect(!partials.values.contains { $0.contains("5pm") })
     }

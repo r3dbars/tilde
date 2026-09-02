@@ -67,7 +67,7 @@ struct LlamaCompletionStreamingTests {
             textBeforeCursor: "That was ",
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
         #expect(decision.reason == .shown)
         #expect(decision.generated)
@@ -85,7 +85,7 @@ struct LlamaCompletionStreamingTests {
             textBeforeCursor: "That was ",
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
         #expect(silent.suggestion == nil)
         #expect(silent.reason == .emptyOutput)
@@ -135,7 +135,7 @@ struct LlamaCompletionStreamingTests {
             textBeforeCursor: "Let's meet ",
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
-            onPartialSuggestion: { partials.append($0.visibleText) }
+            onPartialSuggestion: { partial, _ in partials.append(partial.visibleText) }
         )
         #expect(partials.values == ["at", "at 10:30", "at 10:30 tomorrow"])
         #expect(final?.visibleText == "at 10:30 tomorrow morning")

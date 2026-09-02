@@ -56,7 +56,7 @@ struct H01HarnessWiringTests {
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
             experimentArm: H01Arm.b.rawValue,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
         let words = suggestion?.visibleText.split(whereSeparator: \Character.isWhitespace) ?? []
         #expect(words.count > 3)
@@ -82,7 +82,7 @@ struct H01HarnessWiringTests {
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
             experimentArm: H01Arm.b.rawValue,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
         let words = suggestion?.visibleText.split(whereSeparator: \Character.isWhitespace) ?? []
         #expect(words.count > 3)
@@ -98,7 +98,7 @@ struct H01HarnessWiringTests {
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
             experimentArm: H01Arm.b.rawValue,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
         #expect(treatment?.visibleText == "one two three")
 
@@ -107,7 +107,7 @@ struct H01HarnessWiringTests {
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
             experimentArm: H01Arm.a.rawValue,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
         let controlWords = control?.visibleText
             .split(whereSeparator: \Character.isWhitespace) ?? []
