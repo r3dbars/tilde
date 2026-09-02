@@ -137,6 +137,9 @@ final class GhostInputController: IMKInputController {
     /// The app's receipt for the ghost most recently handed to the reducer,
     /// read back by `recordOutcomeShown` when the `.shown` effect fires.
     private var presentedProvenance: (ticket: InlineSuggestionTicket, provenance: GhostProvenance)?
+    /// The eligible opportunity the keyboard has asked the app about and
+    /// not yet shown or closed. Every path that ends it says why, once.
+    private var openOpportunity: (ticket: InlineSuggestionTicket, id: UUID)?
     private var screenMemoryTypingTask: Task<Void, Never>?
     private var calmRevealByBundle = [String: Bool]()
 
@@ -381,7 +384,12 @@ final class GhostInputController: IMKInputController {
             register: ContinuationRegister.from(bundleIdentifier: field.bundleIdentifier),
             source: .unknownLegacy
         )
+        let answered = openOpportunity.flatMap { open in
+            open.ticket == state.visibleTicket ? open : nil
+        }
+        if answered != nil { openOpportunity = nil }
         GhostOutcomeLedger.noteShown(
+            opportunityID: answered?.id,
             sessionIdentifier: suggestionSessionIdentifier,
             register: provenance.register,
             source: provenance.source,
@@ -389,7 +397,49 @@ final class GhostInputController: IMKInputController {
             candidateWordCount: state.visibleText.split(whereSeparator: \Character.isWhitespace).count,
             precedingCharacter: context.last,
             excluded: false,
+            variant: h01SessionArm()?.eventVariant ?? "champion",
+            receipt: provenance.receipt
+        )
+    }
+
+    /// An eligible opportunity: the caret sits at a request boundary and a
+    /// model request is about to go out. Opens exactly one pending record.
+    private func openOpportunity(
+        ticket: InlineSuggestionTicket,
+        context: String,
+        field: FieldSnapshot
+    ) -> UUID? {
+        endOpenOpportunity(.supersededByTyping, deadlineMissed: true)
+        guard !Self.isOutcomeExcluded(bundleIdentifier: field.bundleIdentifier) else { return nil }
+        let id = UUID()
+        openOpportunity = (ticket, id)
+        GhostOutcomeLedger.noteOpportunityOpened(
+            id: id,
+            sessionIdentifier: suggestionSessionIdentifier,
+            hostRegister: ContinuationRegister.from(bundleIdentifier: field.bundleIdentifier),
+            precedingCharacter: context.last,
+            excluded: false,
             variant: h01SessionArm()?.eventVariant ?? "champion"
+        )
+        return id
+    }
+
+    /// Ends the open opportunity without a ghost. With `ticket`, only the
+    /// opportunity for that request is ended; a stale caller is a no-op.
+    /// Main thread only, like every other touch of controller state.
+    private func endOpenOpportunity(
+        _ reason: SuggestionDecisionReason,
+        ticket: InlineSuggestionTicket? = nil,
+        receipt: GhostDecisionReceipt? = nil,
+        deadlineMissed: Bool = false
+    ) {
+        guard let open = openOpportunity, ticket == nil || open.ticket == ticket else { return }
+        openOpportunity = nil
+        GhostOutcomeLedger.noteOpportunityEnded(
+            id: open.id,
+            reason: reason,
+            receipt: receipt,
+            deadlineMissed: deadlineMissed
         )
     }
 
@@ -861,6 +911,16 @@ final class GhostInputController: IMKInputController {
         }
         let context = contextBeforeCaret(client, selection: field.selection)
         let trailingText = trailingTextAfterCaret(client, selection: field.selection)
+        let requestTicket = ticket(context: context, field: field)
+        // A model request is the unit the flight recorder explains. The
+        // dictionary path (a letter under the caret) runs no model and is
+        // recorded only when it shows something.
+        let eligible = context.last?.isLetter != true
+            && RawContinuationPrompt.endsAtRequestBoundary(
+                context,
+                allowingPunctuation: Self.requestsAfterPunctuation
+            )
+        let opportunityID = eligible ? openOpportunity(ticket: requestTicket, context: context, field: field) : nil
         guard SuggestionActivationPolicy.allowsSuggestions(
             afterUserTyped: typedFallback,
             trailingTextAfterCaret: trailingText
@@ -870,6 +930,7 @@ final class GhostInputController: IMKInputController {
                     "chain-bailed reason=activation trailingChars=\(trailingText.count, privacy: .public)"
                 )
             }
+            endOpenOpportunity(.notAtGrowingEdge, ticket: requestTicket)
             dismiss(client)
             return
         }
@@ -877,7 +938,6 @@ final class GhostInputController: IMKInputController {
             let tail = context.last.map { $0.isWhitespace ? "whitespace" : ($0.isLetter ? "letter" : "other") } ?? "empty"
             Self.chainLogger.info("chain-request tail=\(tail, privacy: .public)")
         }
-        let requestTicket = ticket(context: context, field: field)
         apply(state.reduce(.awaitSuggestion(requestTicket)), to: client)
 
         if context.last?.isLetter == true {
@@ -896,15 +956,13 @@ final class GhostInputController: IMKInputController {
                     provenance: provenance
                 )
             }
-        } else if RawContinuationPrompt.endsAtRequestBoundary(
-            context,
-            allowingPunctuation: Self.requestsAfterPunctuation
-        ) {
+        } else if eligible {
             requestPhrase(
                 bundleIdentifier: field.bundleIdentifier,
                 context: context,
                 ticket: requestTicket,
-                revealNotBefore: revealNotBefore
+                revealNotBefore: revealNotBefore,
+                opportunityID: opportunityID
             )
         }
     }
@@ -966,7 +1024,8 @@ final class GhostInputController: IMKInputController {
         bundleIdentifier: String,
         context: String,
         ticket requestTicket: InlineSuggestionTicket,
-        revealNotBefore: Date
+        revealNotBefore: Date,
+        opportunityID: UUID?
     ) {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
@@ -985,6 +1044,7 @@ final class GhostInputController: IMKInputController {
                 app: bundle,
                 fieldSessionIdentifier: fieldSessionIdentifier,
                 experimentArm: experimentArm,
+                opportunityID: opportunityID?.uuidString,
                 onPartial: { [weak self] partial in
                     // Called on the socket worker; the ticket check in
                     // `present` is what discards a partial that arrives late.
@@ -1001,6 +1061,7 @@ final class GhostInputController: IMKInputController {
             )
             guard !Task.isCancelled else { return }
             Self.logRoundTrip(startedAt: startedAt, outcome: result.outcome)
+            let receipt = GhostDecisionReceipt(result)
             switch result.outcome {
             case .suggestion:
                 if let text = result.suggestion {
@@ -1011,15 +1072,27 @@ final class GhostInputController: IMKInputController {
                         provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier)
                     )
                 } else {
+                    await MainActor.run { self?.endOpenOpportunity(.emptyOutput, ticket: requestTicket, receipt: receipt) }
                     await self?.settle(ticket: requestTicket)
                 }
             case .unavailable:
+                await MainActor.run { self?.endOpenOpportunity(.runtimeUnavailable, ticket: requestTicket, receipt: receipt) }
                 await self?.settle(ticket: requestTicket)
                 Self.summonBrainIfNeeded()
             case .error, .timeout, .invalidRequest:
+                await MainActor.run {
+                    self?.endOpenOpportunity(
+                        result.outcome == .timeout ? .timeout : .protocolError,
+                        ticket: requestTicket,
+                        receipt: receipt
+                    )
+                }
                 await self?.settle(ticket: requestTicket)
                 GhostStats.recordFailure(result.outcome)
             case .silence, .recorded:
+                // The app's reason rides on the receipt; a pre-receipt app
+                // leaves only "no suggestion".
+                await MainActor.run { self?.endOpenOpportunity(.noSuggestion, ticket: requestTicket, receipt: receipt) }
                 await self?.settle(ticket: requestTicket)
             }
         }
@@ -1040,12 +1113,21 @@ final class GhostInputController: IMKInputController {
         let field = fieldSnapshot(liveClient)
         let currentContext = contextBeforeCaret(liveClient, selection: field.selection)
         guard ticket(context: currentContext, field: field) == requestTicket else {
+            // The answer exists but the writer moved on before it could be
+            // shown: generated, and too late.
+            endOpenOpportunity(
+                .supersededByTyping,
+                ticket: requestTicket,
+                receipt: provenance.receipt,
+                deadlineMissed: true
+            )
             apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
             return
         }
         guard SuggestionActivationPolicy.isAtGrowingEdge(
             trailingTextAfterCaret: trailingTextAfterCaret(liveClient, selection: field.selection)
         ) else {
+            endOpenOpportunity(.notAtGrowingEdge, ticket: requestTicket, receipt: provenance.receipt)
             dismiss(liveClient)
             return
         }
@@ -1095,6 +1177,7 @@ final class GhostInputController: IMKInputController {
     }
 
     private func cancelPendingWork() {
+        endOpenOpportunity(.supersededByTyping, deadlineMissed: true)
         scheduleRevision += 1
         revealTask?.cancel()
         revealTask = nil

@@ -55,7 +55,12 @@ served and a real candidate source, and `opportunityCharacters` is the
 writing authored since the previous ghost. Events written before it carry
 the host-bundle register, `unknown` source, and the bounded-context
 length, so a register, source, or per-1,000-character slice must be cut at
-that build; retention and outcome fields are comparable across it. The
+that build; retention and outcome fields are comparable across it. From
+the same day the ledger also records every silent model opportunity with a
+terminal reason (the flight recorder, `docs/tilde-lab.md` "fifth rule"), so
+`online-report --instrument` can say how often Tilde was quiet and why;
+before it, silence left no event at all, and a shown-only ledger must not
+be read as "Tilde spoke at every opportunity". The
 dated read behind all of it is
 [`platform-audit-2026-09-01.md`](platform-audit-2026-09-01.md); the
 attempts are in [`lab-log.md`](lab-log.md).
