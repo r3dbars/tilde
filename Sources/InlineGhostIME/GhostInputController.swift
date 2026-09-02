@@ -28,6 +28,18 @@ final class GhostInputController: IMKInputController {
         subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "suggestion-latency"
     )
+    /// Chained-accept outcomes, reason codes only, never text.
+    private static let chainLogger = Logger(
+        subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
+        category: "chained-accept"
+    )
+    /// Electron/Chromium hosts update the caret and document length
+    /// asynchronously after `insertText`. A chained request that reads the
+    /// field immediately after an accept sees the pre-insert caret, judges
+    /// the just-inserted ghost as trailing text, and bails at the growing-
+    /// edge check. Keystroke requests never hit this because the next key
+    /// arrives after the host has caught up.
+    private static let chainedCalmSettleNanoseconds: UInt64 = 90_000_000
 
     struct SlowKeyTiming {
         let totalMilliseconds: Int
@@ -775,14 +787,28 @@ final class GhostInputController: IMKInputController {
         )
         // Yield only until the key callback returns; there is no timing
         // sleep before inference. Only marked-text presentation waits for
-        // the calm-caret window in Chromium/Electron editors.
+        // the calm-caret window in Chromium/Electron editors. The one
+        // exception is a chained request in such a host, which must let the
+        // host commit the accepted text before the field is read at all.
+        let settleBeforeReading = chained && usesCalmReveal(for: expectedBundle)
         Task { @MainActor [weak self] in
+            if settleBeforeReading {
+                try? await Task.sleep(nanoseconds: Self.chainedCalmSettleNanoseconds)
+            }
             guard let self,
                   self.scheduleRevision == revision,
                   let liveClient = self.client(),
-                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
+                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else {
+                if chained { Self.chainLogger.info("chain-bailed reason=superseded") }
+                return
+            }
             self.updateSuggestion(for: liveClient, revealNotBefore: revealNotBefore)
         }
+    }
+
+    /// Whether the current schedule is the one a consumed accept chained.
+    private var isChainedSchedule: Bool {
+        chainedRequestRevision == scheduleRevision
     }
 
     /// Chromium browsers and Electron apps render marked-text carets at the
@@ -811,6 +837,7 @@ final class GhostInputController: IMKInputController {
         let field = fieldSnapshot(client)
         let selection = field.selection
         guard selection.location != NSNotFound, selection.length == 0 else {
+            if isChainedSchedule { Self.chainLogger.info("chain-bailed reason=selection") }
             breakHistorySegment()
             dismiss(client)
             resetFallback()
@@ -822,8 +849,17 @@ final class GhostInputController: IMKInputController {
             afterUserTyped: typedFallback,
             trailingTextAfterCaret: trailingText
         ) else {
+            if isChainedSchedule {
+                Self.chainLogger.info(
+                    "chain-bailed reason=activation trailingChars=\(trailingText.count, privacy: .public)"
+                )
+            }
             dismiss(client)
             return
+        }
+        if isChainedSchedule {
+            let tail = context.last.map { $0.isWhitespace ? "whitespace" : ($0.isLetter ? "letter" : "other") } ?? "empty"
+            Self.chainLogger.info("chain-request tail=\(tail, privacy: .public)")
         }
         let requestTicket = ticket(context: context, field: field)
         apply(state.reduce(.awaitSuggestion(requestTicket)), to: client)
