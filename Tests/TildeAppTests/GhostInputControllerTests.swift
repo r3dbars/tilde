@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 @testable import InlineGhostIME
+@testable import TildeCore
 
 @Suite("Ghost input controller")
 struct GhostInputControllerTests {
@@ -114,5 +115,80 @@ struct GhostInputControllerTests {
                 secureInput: true
             )
         )
+    }
+}
+
+/// Where a request may start, and what the flight recorder files it under.
+/// The fifth rule of the live ledger: an opportunity is a model request, and
+/// every eligible one ends with exactly one terminal reason.
+@Suite("Request opportunities")
+struct GhostInputControllerOpportunityTests {
+    private func boundary(
+        _ context: String,
+        punctuation: Bool = false,
+        midWord: Bool = false
+    ) -> TextFreeCursorBoundary? {
+        GhostInputController.opportunityBoundary(
+            context: context,
+            allowsPunctuation: punctuation,
+            allowsMidWordContinuation: midWord
+        )
+    }
+
+    @Test("Production asks only at word boundaries")
+    func productionAsksAtWordBoundaries() {
+        #expect(boundary("see you ") == .wordBoundary)
+        #expect(boundary("that works. ") == .wordBoundary)
+        // A letter under the caret is the dictionary's business alone: no
+        // model request, so no opportunity to explain.
+        #expect(boundary("I am wri") == nil)
+        #expect(boundary("one thing,") == nil)
+        #expect(boundary("") == nil)
+    }
+
+    @Test("A mid-word request is an eligible opportunity, recorded as mid-word")
+    func midWordIsAnEligibleOpportunity() {
+        #expect(boundary("I am wri", midWord: true) == .midWord)
+        // The character before the caret is what the ledger files the
+        // opportunity under (`TextFreeCursorBoundary.from`), so the two
+        // cannot drift apart.
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: "I am wri".last) == .midWord)
+    }
+
+    @Test("Mid-word keeps the dictionary's floor and does not fire on a pasted blob")
+    func midWordKeepsTheSharedBounds() {
+        // Two letters is what the system dictionary already refuses to
+        // complete; the model is not asked earlier than that.
+        #expect(boundary("since we", midWord: true) == nil)
+        #expect(GhostInputController.dictionarySuffix(
+            for: "we",
+            candidates: ["week", "went"]
+        ).isEmpty)
+        #expect(boundary("key \(String(repeating: "a", count: 64))", midWord: true) == nil)
+    }
+
+    @Test("Only the mid-word path is throttled, and by more than a fast typist's keystroke")
+    func onlyMidWordIsThrottled() {
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .wordBoundary) == 0)
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .sentenceBoundary) == 0)
+        #expect(GhostInputController.requestThrottleNanoseconds(for: nil) == 0)
+        let throttle = GhostInputController.requestThrottleNanoseconds(for: .midWord)
+        // A fast typist lands roughly ten characters a second. The wait has
+        // to outlast that gap, or a burst still spends one request a letter.
+        #expect(throttle >= 100_000_000)
+        // And stay short enough that a pause still gets an answer promptly.
+        #expect(throttle <= 250_000_000)
+    }
+
+    @Test("The two permissions are independent doors")
+    func permissionsAreIndependent() {
+        #expect(boundary("one thing,", punctuation: true) == .wordBoundary)
+        #expect(boundary("that works.", punctuation: true) == .sentenceBoundary)
+        #expect(boundary("one thing,", midWord: true) == nil)
+        #expect(boundary("I am wri", punctuation: true) == nil)
+        // Both on: each still answers only for its own caret.
+        #expect(boundary("I am wri", punctuation: true, midWord: true) == .midWord)
+        #expect(boundary("one thing,", punctuation: true, midWord: true) == .wordBoundary)
+        #expect(boundary("see you ", punctuation: true, midWord: true) == .wordBoundary)
     }
 }

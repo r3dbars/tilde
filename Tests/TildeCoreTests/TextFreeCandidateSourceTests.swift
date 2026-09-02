@@ -99,3 +99,27 @@ struct TextFreeCandidateSourceTests {
         return try opportunity.eventWithoutAcceptedSpan()
     }
 }
+
+/// `boundary` on a live event answers "where was the caret", and the flight
+/// recorder's two 9B-preview trials — requests after punctuation and requests
+/// mid-word — must not land on the same answer.
+@Suite("Text-free cursor boundary")
+struct TextFreeCursorBoundaryTests {
+    @Test("Only letters are mid-word")
+    func onlyLettersAreMidWord() {
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: "i") == .midWord)
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: " ") == .wordBoundary)
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: "\n") == .wordBoundary)
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: nil) == .wordBoundary)
+    }
+
+    @Test("A finished clause is a boundary, not a word the writer is inside")
+    func clausePunctuationIsABoundary() {
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: ".") == .sentenceBoundary)
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: "!") == .sentenceBoundary)
+        #expect(TextFreeCursorBoundary.from(precedingCharacter: "?") == .sentenceBoundary)
+        for mark in RawContinuationPrompt.requestPunctuation where !".!?".contains(mark) {
+            #expect(TextFreeCursorBoundary.from(precedingCharacter: mark) == .wordBoundary)
+        }
+    }
+}

@@ -33,6 +33,109 @@ struct RawContinuationPromptTests {
     }
 }
 
+/// Mid-word continuation (`InteractionPolicy.requestsMidWordContinuation`):
+/// the model is asked to finish the word under the caret, so the prompt has
+/// to say which word that is.
+@Suite("Raw continuation prompt: partial words")
+struct RawContinuationPromptPartialWordTests {
+    @Test("A partial word seeds the continuation line instead of dangling on the text line")
+    func partialWordSeedsContinuation() {
+        let prompt = RawContinuationPrompt(textBeforeCursor: "I am wri")
+        #expect(prompt.partialWordToComplete == "wri")
+        #expect(prompt.prompt.hasSuffix("Text: I am\nContinuation: wri"))
+        #expect(!prompt.contextEndedInWhitespace)
+    }
+
+    @Test("A partial word with no finished words before it still asks for a completion")
+    func partialWordAlone() {
+        let prompt = RawContinuationPrompt(textBeforeCursor: "tomo")
+        #expect(prompt.partialWordToComplete == "tomo")
+        // No stray trailing space on an empty Text line.
+        #expect(prompt.prompt.hasSuffix("Text:\nContinuation: tomo"))
+    }
+
+    @Test("Boundaries and short partials keep today's prompt, byte for byte")
+    func boundariesAreUntouched() {
+        let afterSpace = RawContinuationPrompt(textBeforeCursor: "I am ")
+        #expect(afterSpace.partialWordToComplete.isEmpty)
+        #expect(afterSpace.prompt.hasSuffix("Text: I am\nContinuation:"))
+
+        // Below the shared floor there is not enough of a word to guess at,
+        // and the wire would not have accepted the request either.
+        let tooShort = RawContinuationPrompt(textBeforeCursor: "since we")
+        #expect(tooShort.partialWordToComplete.isEmpty)
+        #expect(tooShort.prompt.hasSuffix("Text: since we\nContinuation:"))
+
+        let afterPunctuation = RawContinuationPrompt(textBeforeCursor: "one thing,")
+        #expect(afterPunctuation.partialWordToComplete.isEmpty)
+        #expect(afterPunctuation.prompt.hasSuffix("Text: one thing,\nContinuation:"))
+    }
+
+    @Test("Normalization re-attaches the seed, so the cleaner sees a completion that repeats the partial")
+    func normalizationReattachesTheSeed() {
+        let prompt = RawContinuationPrompt(textBeforeCursor: "I am wri")
+        #expect(prompt.normalizedContinuation("ting the report") == "writing the report")
+        #expect(prompt.normalizedContinuation("ting the report\nand more") == "writing the report")
+        // A model that restates the word it was seeded with is not doubled:
+        // "wriwriting" is the one thing mid-word must never put on screen.
+        #expect(prompt.normalizedContinuation("writing the report") == "writing the report")
+        // Nothing came back: the seed alone, which the cleaner rejects rather
+        // than showing the writer their own letters again.
+        #expect(prompt.normalizedContinuation("") == "wri")
+    }
+
+    @Test("The mid-word predicate is the shared floor both processes read")
+    func midWordPredicate() {
+        #expect(RawContinuationPrompt.minimumMidWordPartialLetters == 3)
+        #expect(RawContinuationPrompt.partialWord(in: "I am wri") == "wri")
+        #expect(RawContinuationPrompt.partialWord(in: "I am ").isEmpty)
+        #expect(RawContinuationPrompt.partialWord(in: "one thing,").isEmpty)
+        #expect(RawContinuationPrompt.endsMidWord("I am wri"))
+        #expect(!RawContinuationPrompt.endsMidWord("since we"))
+        #expect(!RawContinuationPrompt.endsMidWord("I am "))
+        #expect(!RawContinuationPrompt.endsMidWord(""))
+        // Exactly one of the two can be true of any text.
+        for text in ["I am wri", "since we ", "one thing,", "", "a"] {
+            let boundary = RawContinuationPrompt.endsAtRequestBoundary(text, allowingPunctuation: true)
+            #expect(!(boundary && RawContinuationPrompt.endsMidWord(text)))
+        }
+    }
+}
+
+/// The mid-word contract that matters to the writer: whatever the model says,
+/// what lands on screen must complete the word under the caret and never
+/// re-type the letters already there.
+@Suite("Mid-word cleaning")
+struct MidWordCleaningTests {
+    private func ghost(context: String, rawOutput: String) -> String? {
+        let prompt = RawContinuationPrompt(textBeforeCursor: context)
+        let cleaner = CompletionOutputCleaner()
+        return cleaner.cleanWithReason(
+            prompt.normalizedContinuation(rawOutput),
+            after: context
+        ).suggestion?.visibleText
+    }
+
+    @Test("A completion that repeats the partial is trimmed back to the missing suffix")
+    func repeatedPartialIsTrimmed() {
+        #expect(ghost(context: "I am wri", rawOutput: "ting the report") == "ting the report")
+        // Same answer whether the model repeated the partial or not: a model
+        // that ignores the seed and writes the whole word lands identically.
+        #expect(ghost(context: "I am wri", rawOutput: "writing the report") == "ting the report")
+    }
+
+    @Test("A model that treats the partial as finished opens the next word with its own space")
+    func finishedPartialOpensNextWord() {
+        #expect(ghost(context: "I saw the", rawOutput: " best part of it") == " best part of it")
+    }
+
+    @Test("An empty answer is silence, never the writer's own letters echoed back")
+    func emptyAnswerIsSilence() {
+        #expect(ghost(context: "I am wri", rawOutput: "") == nil)
+        #expect(ghost(context: "I am wri", rawOutput: "ting") == "ting")
+    }
+}
+
 @Suite("Continuation register")
 struct ContinuationRegisterTests {
     @Test("Bundle identity maps to the right register")

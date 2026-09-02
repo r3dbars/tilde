@@ -55,6 +55,22 @@ public enum ContinuationRegister: String, Sendable {
 public struct RawContinuationPrompt: Equatable, Sendable {
     public let prompt: String
     public let contextEndedInWhitespace: Bool
+    /// The unfinished word the caret sits inside, when this prompt asks the
+    /// model to *finish* it rather than to open a new one. Empty for every
+    /// word- or punctuation-boundary prompt, which is every prompt the
+    /// conservative interaction policy can produce.
+    ///
+    /// A partial word cannot simply be left dangling on the `Text:` line: the
+    /// scaffold's examples all continue after a space, so the model answers a
+    /// truncated word by starting the next one ("I am wri" -> " a lot"), which
+    /// glues into "I am wria lot". Instead the `Text:` line carries the
+    /// finished words and the `Continuation:` line is seeded with the partial,
+    /// so the model continues the word it can see it is in the middle of.
+    /// `normalizedContinuation` puts the seed back on the front of the raw
+    /// output, which hands the cleaner exactly the shape it already knows how
+    /// to trim (`CompletionOutputCleaner.trimTypedPrefix`'s partial-word
+    /// branch: "wri" + "writing the report" -> "ting the report").
+    public let partialWordToComplete: String
 
     /// Whether `text` ends at a word boundary — the same predicate that
     /// produces `contextEndedInWhitespace` above, exposed statically so
@@ -76,6 +92,37 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     public static func endsAtRequestBoundary(_ text: String, allowingPunctuation: Bool) -> Bool {
         guard let last = text.last else { return false }
         return last.isWhitespace || (allowingPunctuation && requestPunctuation.contains(last))
+    }
+
+    /// The fewest letters an unfinished word must already have before either
+    /// predictor will guess at it. Below this a partial carries almost no
+    /// signal and the guess is noise; it is the same floor the system
+    /// dictionary's completion has always used, kept in one place so the
+    /// keyboard, the wire, and the prompt cannot disagree about which
+    /// contexts are mid-word requests.
+    public static let minimumMidWordPartialLetters = 3
+
+    /// And the most. A run of letters this long is not a word somebody is
+    /// part-way through typing — it is a base64 blob, a hash, a pasted
+    /// identifier. Neither predictor can finish one (the system dictionary
+    /// returns nothing for it either), and lifting it onto the
+    /// `Continuation:` line would spend the prompt's budget on noise, so a
+    /// context ending in one is simply not a mid-word request.
+    public static let maximumMidWordPartialLetters = 24
+
+    /// The unfinished word at the end of `text` — its trailing run of
+    /// letters. Empty when the text ends at a boundary.
+    public static func partialWord(in text: String) -> String {
+        String(text.reversed().prefix(while: \.isLetter).reversed())
+    }
+
+    /// Whether `text` ends inside a word far enough in, and not so far in
+    /// that it stopped being a word, to be worth asking about. This is the
+    /// mid-word counterpart of `endsAtRequestBoundary`: no text can satisfy
+    /// both.
+    public static func endsMidWord(_ text: String) -> Bool {
+        let letters = partialWord(in: text).count
+        return letters >= minimumMidWordPartialLetters && letters <= maximumMidWordPartialLetters
     }
 
     public static func scaffold(for register: ContinuationRegister) -> String {
@@ -247,6 +294,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         contextEndedInWhitespace = fullTrimmed.count != fullTail.count
 
         if fullTrimmed.isEmpty {
+            partialWordToComplete = ""
             prompt = ""
             return
         }
@@ -257,6 +305,18 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         let replyReserve = Self.replySceneReserve(for: scene, totalBudget: totalBudget)
         let fieldBudget = max(1, totalBudget - replyReserve)
         let trimmed = Self.stableFieldTail(fullTrimmed, budget: fieldBudget)
+
+        // The caret is inside a word only when nothing was trimmed off the
+        // end, and only a partial within the shared bounds is worth seeding —
+        // so every prompt that exists today keeps its exact bytes. Judged on
+        // the untruncated tail and then required to have survived the context
+        // budget whole, so a truncation cannot manufacture a short "word" out
+        // of the tail of something much longer.
+        let candidatePartial = contextEndedInWhitespace ? "" : Self.partialWord(in: fullTrimmed)
+        let partial = Self.endsMidWord(fullTrimmed) && trimmed.hasSuffix(candidatePartial)
+            ? candidatePartial
+            : ""
+        partialWordToComplete = partial
 
         let remainingForScene = max(0, totalBudget - trimmed.count)
         let sceneBudget = min(
@@ -269,7 +329,16 @@ public struct RawContinuationPrompt: Equatable, Sendable {
             includesWindowTitle: includesWindowTitle
         )
 
-        prompt = Self.scaffold(for: register) + sceneBlock + "Text: " + trimmed + "\nContinuation:"
+        // Mid-word: the finished words go on the `Text:` line and the
+        // unfinished one seeds `Continuation:`, so the model is completing a
+        // word rather than opening one. See `partialWordToComplete`.
+        let head = String(trimmed.dropLast(partial.count))
+        let headTrimmed = String(head.reversed().drop(while: { $0.isWhitespace }).reversed())
+        let textLine = partial.isEmpty
+            ? "Text: " + trimmed
+            : (headTrimmed.isEmpty ? "Text:" : "Text: " + headTrimmed)
+        let continuationLine = partial.isEmpty ? "\nContinuation:" : "\nContinuation: " + partial
+        prompt = Self.scaffold(for: register) + sceneBlock + textLine + continuationLine
     }
 
     /// Renders the classified scene into the prompt shape the plan
@@ -452,8 +521,18 @@ public struct RawContinuationPrompt: Equatable, Sendable {
 
     /// Normalizes a raw model continuation against the original context: strips
     /// the model's separating space when the user already typed one, cuts at
-    /// the first newline (raw mode can run on), and trims token-limit cutoffs
-    /// so the ghost never dangles mid-clause.
+    /// the first newline (raw mode can run on), re-attaches a seeded partial
+    /// word, and trims token-limit cutoffs so the ghost never dangles
+    /// mid-clause.
+    ///
+    /// Re-attaching is what keeps the mid-word path inside the machinery that
+    /// already exists: everything downstream (the cleaner, the display cap,
+    /// the streaming prefix) is handed a continuation that starts by repeating
+    /// the partial word, and the cleaner's prefix trimming turns that back
+    /// into the suffix the writer still has to type. A raw output that is
+    /// empty leaves just the partial, which the cleaner rejects as
+    /// `emptyAfterPrefixTrimming` — silence, never a ghost that re-types what
+    /// is already on screen.
     public func normalizedContinuation(_ rawOutput: String) -> String {
         var text = rawOutput
         if let newline = text.firstIndex(where: \.isNewline) {
@@ -462,7 +541,26 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         if contextEndedInWhitespace {
             text = String(text.drop(while: { $0 == " " }))
         }
+        text = Self.restoringPartialWord(partialWordToComplete, to: text)
         return Self.repairDanglingTail(text)
+    }
+
+    /// Puts a seeded partial word back on the front of a raw continuation, so
+    /// everything downstream is handed the same shape whichever way the model
+    /// answered the seed.
+    ///
+    /// Seeded with "wri", a raw model continues the token stream and returns
+    /// the suffix ("ting the report"); but a model can also restate the word
+    /// it was seeded with ("writing the report"), and a model that reads the
+    /// partial as already finished returns a new word (" best part"). Only
+    /// the first needs the seed put back — hence the prefix test, which is
+    /// simply "does this already start with the word it has to complete".
+    /// Doubling it would put the writer's own letters back on screen
+    /// ("wriwriting"), which is the one outcome mid-word must never produce.
+    static func restoringPartialWord(_ partial: String, to text: String) -> String {
+        guard !partial.isEmpty,
+              !text.lowercased().hasPrefix(partial.lowercased()) else { return text }
+        return partial + text
     }
 
     /// Apply this to raw output and to the display-capped suggestion: a cap can
