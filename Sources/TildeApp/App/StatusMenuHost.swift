@@ -13,8 +13,17 @@ final class StatusMenuHost: NSObject {
         static func make(
             state: TildeApplicationState,
             model: ModelState,
-            wordsToday: Int
+            wordsToday: Int,
+            ledger: OutcomeLedgerSummary = .empty,
+            screenAccessGranted: Bool = true
         ) -> Self {
+            /// Value first: keystrokes saved and the honest held-back count,
+            /// falling back to the words line until the ledger has evidence.
+            let today = OutcomeLedgerPresentation.menuDetail(
+                summary: ledger,
+                wordsToday: wordsToday,
+                screenAccessGranted: screenAccessGranted
+            )
             if state.requiresUserAttention {
                 return Self(
                     status: "Tilde Needs Attention",
@@ -44,13 +53,13 @@ final class StatusMenuHost: NSObject {
             case .ready:
                 return Self(
                     status: "Tilde is Ready",
-                    detail: "\(wordsToday.formatted()) words with Tilde today",
+                    detail: today,
                     primaryAction: "Pause for 1 Hour"
                 )
             case .paused, .disabled:
                 return Self(
                     status: "Tilde is Paused",
-                    detail: "\(wordsToday.formatted()) words with Tilde today",
+                    detail: today,
                     primaryAction: "Resume Tilde"
                 )
             case .needsKeyboard, .needsPermission, .recoverableError:
@@ -82,6 +91,14 @@ final class StatusMenuHost: NSObject {
     private var h01Item: NSMenuItem?
 
     private var tildeWindow: TildeSettingsWindowController?
+
+    /// Last aggregate read of the text-free outcome ledger. The menu renders
+    /// from this cache; the read itself never runs on the main thread.
+    private var ledger = OutcomeLedgerSummary.empty
+    private var ledgerLoad: Task<Void, Never>?
+    private var ledgerLoadedAt: Date?
+    /// A menu opened twice in a few seconds should not re-read the file.
+    private static let ledgerRefreshInterval: TimeInterval = 5
 
     init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
         self.appDelegate = appDelegate
@@ -153,10 +170,13 @@ final class StatusMenuHost: NSObject {
     func refresh() {
         guard let appDelegate else { return }
         let state = appDelegate.applicationState()
+        refreshLedgerIfStale()
         let presentation = Presentation.make(
             state: state,
             model: appDelegate.modelState(),
-            wordsToday: TildeStats.todayWordsAccepted()
+            wordsToday: TildeStats.todayWordsAccepted(),
+            ledger: ledger,
+            screenAccessGranted: screenAccessGranted
         )
         statusLineItem?.title = switch TildeProductProfile.current {
         case .production: "\(appDelegate.selectedProductionModel()?.shortName ?? "Gemma E2B") · \(presentation.status)"
@@ -189,6 +209,28 @@ final class StatusMenuHost: NSObject {
 
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
+    }
+
+    /// Suggesting at all needs Screen Memory on and the OS permission granted.
+    private var screenAccessGranted: Bool {
+        settings.screenMemoryEnabled && ScreenRecordingPermission.isGranted()
+    }
+
+    private func refreshLedgerIfStale() {
+        guard ledgerLoad == nil else { return }
+        if let ledgerLoadedAt,
+           Date().timeIntervalSince(ledgerLoadedAt) < Self.ledgerRefreshInterval {
+            return
+        }
+        let url = TildeLocalOutcomeStores.eventURL()
+        ledgerLoad = Task { [weak self] in
+            let summary = await OutcomeLedgerReader.summary(url: url)
+            guard let self else { return }
+            self.ledger = summary
+            self.ledgerLoadedAt = Date()
+            self.ledgerLoad = nil
+            self.refresh()
+        }
     }
 
     @objc private func togglePause(_ sender: Any?) {

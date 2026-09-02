@@ -13,20 +13,35 @@ final class YourTildeViewModel: ObservableObject {
         baselineAccuracy: nil
     )
 
+    /// Value first: what Tilde saved, kept, and chose not to say today.
+    @Published private(set) var ledger = OutcomeLedgerSummary.empty
+    @Published private(set) var screenAccessGranted = true
+
     private let personalHistory: PersonalHistoryController
+    private let ledgerURL: URL
     private var refreshGeneration: UInt64 = 0
 
-    init(personalHistory: PersonalHistoryController) {
+    init(
+        personalHistory: PersonalHistoryController,
+        ledgerURL: URL = TildeLocalOutcomeStores.eventURL()
+    ) {
         self.personalHistory = personalHistory
+        self.ledgerURL = ledgerURL
     }
 
     func refresh() {
         refreshGeneration &+= 1
         let generation = refreshGeneration
+        let url = ledgerURL
+        let access = TildeSettings().screenMemoryEnabled && ScreenRecordingPermission.isGranted()
         Task { [weak self, personalHistory] in
             let next = await TildeProgress.snapshot(personalHistory: personalHistory)
+            // Reads the tail of the text-free ledger off the main thread.
+            let ledger = await OutcomeLedgerReader.summary(url: url)
             guard let self, generation == self.refreshGeneration, !Task.isCancelled else { return }
             self.snapshot = next
+            self.ledger = ledger
+            self.screenAccessGranted = access
         }
     }
 }
@@ -37,18 +52,39 @@ struct YourTildeSummaryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
-                Text(model.snapshot.wordsWrittenWithTildeToday.formatted())
+                Text(headlineNumber.formatted())
                     .font(.system(size: 36, weight: .semibold))
                     .monospacedDigit()
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("words today")
+                    Text(headlineLabel)
                         .font(.subheadline)
-                    Text("\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) total")
+                    Text(headlineSupportingText)
                         .font(.subheadline)
                         .foregroundStyle(.primary.opacity(0.72))
                         .monospacedDigit()
                 }
             }
+
+            if keptLine != nil || streakLine != nil || heldBackLine != nil {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let keptLine {
+                        Text(keptLine)
+                            .font(.subheadline)
+                    }
+                    if let streakLine {
+                        Text(streakLine)
+                            .font(.subheadline)
+                    }
+                    if let heldBackLine {
+                        Text(heldBackLine)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Divider()
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(stageHeadline)
@@ -83,6 +119,37 @@ struct YourTildeSummaryView: View {
                 .font(.subheadline.weight(.medium))
             }
         }
+    }
+
+    var headlineNumber: Int {
+        model.ledger.hasTodayEvidence
+            ? model.ledger.keystrokesSavedToday
+            : model.snapshot.wordsWrittenWithTildeToday
+    }
+
+    var headlineLabel: String {
+        model.ledger.hasTodayEvidence ? "keystrokes saved today" : "words today"
+    }
+
+    var headlineSupportingText: String {
+        model.ledger.hasTodayEvidence
+            ? "\(model.ledger.keystrokesSavedLast7Days.formatted()) in the last 7 days"
+            : "\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) total"
+    }
+
+    var keptLine: String? {
+        OutcomeLedgerPresentation.keptAfter30SecondsLine(summary: model.ledger)
+    }
+
+    var streakLine: String? {
+        OutcomeLedgerPresentation.helpfulStreakLine(summary: model.ledger)
+    }
+
+    var heldBackLine: String? {
+        OutcomeLedgerPresentation.heldBackLine(
+            summary: model.ledger,
+            screenAccessGranted: model.screenAccessGranted
+        )
     }
 
     private var stageHeadline: String {
