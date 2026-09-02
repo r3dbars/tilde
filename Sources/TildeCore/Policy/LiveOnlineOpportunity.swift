@@ -40,6 +40,10 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     /// a long document shown ten ghosts would otherwise count its whole
     /// body ten times and bury the value per thousand characters.
     public let opportunityCharacters: Int
+    /// The app's receipt for the model that produced this ghost; `nil` for a
+    /// dictionary ghost or an app older than the receipt.
+    public let generatorMilliseconds: Int?
+    public let firstStableWordMilliseconds: Int?
     public var typedAfterShow: Bool
     public var acceptedKind: AcceptKind?
     public var accepted: String
@@ -60,7 +64,9 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         candidateCharacters: Int,
         candidateWordCount: Int,
         candidateSource: TextFreeCandidateSource,
-        opportunityCharacters: Int
+        opportunityCharacters: Int,
+        generatorMilliseconds: Int? = nil,
+        firstStableWordMilliseconds: Int? = nil
     ) {
         self.id = id
         self.shownAt = shownAt
@@ -74,6 +80,8 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         self.candidateWordCount = max(0, candidateWordCount)
         self.candidateSource = candidateSource.rawValue
         self.opportunityCharacters = max(1, opportunityCharacters)
+        self.generatorMilliseconds = generatorMilliseconds.map { min(300_000, max(0, $0)) }
+        self.firstStableWordMilliseconds = firstStableWordMilliseconds.map { min(300_000, max(0, $0)) }
         typedAfterShow = false
         acceptedKind = nil
         accepted = ""
@@ -160,6 +168,8 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
             acceptedCharacters: isAccept ? acceptedCount : 0,
             replacedCharactersWithin5Seconds: isAccept ? replacedCharactersWithin5Seconds : 0,
             nextActionMilliseconds: nextActionMilliseconds,
+            generatorMilliseconds: generatorMilliseconds,
+            firstStableWordMilliseconds: firstStableWordMilliseconds,
             settledVisibleMilliseconds: settledVisibleMilliseconds,
             candidateCharacters: max(candidateCharacters, isAccept ? acceptedCount : 0),
             candidateSourceBucket: candidateSource,

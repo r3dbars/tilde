@@ -26,6 +26,10 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
     /// travels: the visible-word cap is looked up from `H01Arm` inside the
     /// app, so no wire value can set a length directly.
     public let experimentArm: String?
+    /// Random identifier the keyboard minted for this opportunity. The app
+    /// echoes it on every response line so a receipt can be matched to the
+    /// opportunity it answers; it carries no meaning beyond identity.
+    public let opportunityID: String?
 
     public var supportsStreamingResponses: Bool { streamResponses == true }
 
@@ -33,7 +37,8 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         context: String,
         app: String?,
         fieldSessionIdentifier: String? = nil,
-        experimentArm: String? = nil
+        experimentArm: String? = nil,
+        opportunityID: String? = nil
     ) {
         self.v = Self.version
         self.context = context
@@ -43,6 +48,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.streamResponses = true
         self.fieldSessionIdentifier = fieldSessionIdentifier
         self.experimentArm = experimentArm
+        self.opportunityID = opportunityID
     }
 
     public init(personalHistoryEvents: [PersonalHistoryEvent]) {
@@ -54,6 +60,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.streamResponses = nil
         self.fieldSessionIdentifier = nil
         self.experimentArm = nil
+        self.opportunityID = nil
     }
 
     public init(screenMemoryEvent: ScreenMemoryInputEvent) {
@@ -65,6 +72,7 @@ public struct GhostBrainRequest: Codable, Equatable, Sendable {
         self.streamResponses = nil
         self.fieldSessionIdentifier = nil
         self.experimentArm = nil
+        self.opportunityID = nil
     }
 }
 
@@ -117,23 +125,43 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
     /// `TextFreeCandidateSource` raw value for the served text. Absent from
     /// a pre-receipt app and from partial lines that precede arbitration.
     public let source: String?
+    /// The decision receipt, on terminal lines: the request's opportunity
+    /// id echoed back, the `SuggestionDecisionReason` the app reached,
+    /// whether the model produced any text, and the model timings. Every
+    /// field is an identifier, a fixed word, a boolean, or a count.
+    public let opportunityID: String?
+    public let reason: String?
+    public let generated: Bool?
+    public let generatorMilliseconds: Int?
+    public let firstStableWordMilliseconds: Int?
 
     public init(
         outcome: Outcome,
         suggestion: String?,
         final: Bool = true,
         register: String? = nil,
-        source: String? = nil
+        source: String? = nil,
+        opportunityID: String? = nil,
+        reason: String? = nil,
+        generated: Bool? = nil,
+        generatorMilliseconds: Int? = nil,
+        firstStableWordMilliseconds: Int? = nil
     ) {
         self.outcome = outcome
         self.suggestion = suggestion
         self.final = final
         self.register = register
         self.source = source
+        self.opportunityID = opportunityID
+        self.reason = reason
+        self.generated = generated
+        self.generatorMilliseconds = generatorMilliseconds
+        self.firstStableWordMilliseconds = firstStableWordMilliseconds
     }
 
     private enum CodingKeys: String, CodingKey {
         case outcome, suggestion, final, register, source
+        case opportunityID, reason, generated, generatorMilliseconds, firstStableWordMilliseconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -144,6 +172,55 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
         final = try container.decodeIfPresent(Bool.self, forKey: .final) ?? true
         register = try container.decodeIfPresent(String.self, forKey: .register)
         source = try container.decodeIfPresent(String.self, forKey: .source)
+        opportunityID = try container.decodeIfPresent(String.self, forKey: .opportunityID)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        generated = try container.decodeIfPresent(Bool.self, forKey: .generated)
+        generatorMilliseconds = try container.decodeIfPresent(Int.self, forKey: .generatorMilliseconds)
+        firstStableWordMilliseconds = try container.decodeIfPresent(Int.self, forKey: .firstStableWordMilliseconds)
+    }
+
+    /// The same line with the decision receipt attached. Terminal lines
+    /// only; a partial never carries a reason.
+    public func stamped(
+        opportunityID: String?,
+        reason: SuggestionDecisionReason,
+        generated: Bool,
+        generatorMilliseconds: Int? = nil,
+        firstStableWordMilliseconds: Int? = nil
+    ) -> Self {
+        Self(
+            outcome: outcome,
+            suggestion: suggestion,
+            final: final,
+            register: register,
+            source: source,
+            opportunityID: opportunityID,
+            reason: reason.rawValue,
+            generated: generated,
+            generatorMilliseconds: generatorMilliseconds,
+            firstStableWordMilliseconds: firstStableWordMilliseconds
+        )
+    }
+
+    /// Silence with its reason, for the app's pre- and post-inference gates.
+    public static func silence(
+        reason: SuggestionDecisionReason,
+        opportunityID: String?,
+        register: ContinuationRegister? = nil,
+        generated: Bool = false,
+        generatorMilliseconds: Int? = nil,
+        firstStableWordMilliseconds: Int? = nil
+    ) -> Self {
+        Self(
+            outcome: .silence,
+            suggestion: nil,
+            register: register?.rawValue,
+            opportunityID: opportunityID,
+            reason: reason.rawValue,
+            generated: generated,
+            generatorMilliseconds: generatorMilliseconds,
+            firstStableWordMilliseconds: firstStableWordMilliseconds
+        )
     }
 
     public static func suggestion(
