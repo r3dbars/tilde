@@ -15,6 +15,11 @@ final class GhostInputController: IMKInputController {
     /// accept key, ask for the next continuation right away. See
     /// `TildeProductProfile.chainsCompletionAfterAccept`.
     private static let chainsAfterAccept = TildeProductProfile.current.chainsCompletionAfterAccept
+    /// The schedule revision of the request a consumed accept chained, while
+    /// it is still the live one. A Tab that lands before that ghost appears
+    /// is held rather than handed to the host: the writer is mid-chain, and
+    /// in an Electron composer a stray Tab moves focus out of the field.
+    private var chainedRequestRevision: Int?
     private static let slowKeyLogger = Logger(
         subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "typing-performance"
@@ -195,7 +200,10 @@ final class GhostInputController: IMKInputController {
                 return false
             }
             let accepted = acceptSuggestion(client, observation: insertionObservation)
-            if !accepted { breakHistorySegment() }
+            if !accepted {
+                if awaitingChainedGhost() { return true }
+                breakHistorySegment()
+            }
             return accepted
 
         case 50: // The physical backtick/tilde key accepts the whole visible suggestion.
@@ -545,7 +553,19 @@ final class GhostInputController: IMKInputController {
     /// reveal delay, activation checks, and ticket rules intact.
     private func chainAfterAcceptIfConsumed(_ client: IMKTextInput) {
         guard Self.chainsAfterAccept, !state.isVisible else { return }
-        scheduleSuggestion(for: client, afterUserTyped: " ")
+        scheduleSuggestion(for: client, afterUserTyped: " ", chained: true)
+        chainedRequestRevision = scheduleRevision
+    }
+
+    /// True while the request a consumed accept chained is still pending.
+    /// Any newer schedule (a keystroke, a dismissal) moves the revision on,
+    /// so an ordinary Tab is never held.
+    private func awaitingChainedGhost() -> Bool {
+        guard Self.chainsAfterAccept,
+              let chained = chainedRequestRevision,
+              chained == scheduleRevision,
+              state.pendingTicket != nil else { return false }
+        return true
     }
 
     private func acceptAllSuggestion(
@@ -727,7 +747,11 @@ final class GhostInputController: IMKInputController {
 
     // MARK: - Suggestion paths
 
-    private func scheduleSuggestion(for client: IMKTextInput, afterUserTyped grapheme: String) {
+    private func scheduleSuggestion(
+        for client: IMKTextInput,
+        afterUserTyped grapheme: String,
+        chained: Bool = false
+    ) {
         // Same field, different conversation: tell Screen Memory so the
         // next capture happens now-ish instead of serving the old thread.
         let contextTail = String(contextBeforeCaret(client).suffix(Self.contextLimit))
@@ -741,7 +765,8 @@ final class GhostInputController: IMKInputController {
         let expectedBundle = client.bundleIdentifier() ?? ""
         let timing = SuggestionRevealDelayPolicy.schedule(
             afterUserTyped: grapheme,
-            calmMarkedText: usesCalmReveal(for: expectedBundle)
+            calmMarkedText: usesCalmReveal(for: expectedBundle),
+            chained: chained
         )
         guard scheduleRevision == revision,
               (client.bundleIdentifier() ?? "") == expectedBundle else { return }
