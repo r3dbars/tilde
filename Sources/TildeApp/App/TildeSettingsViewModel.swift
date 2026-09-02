@@ -17,6 +17,24 @@ enum TildeModelPresentation {
     static let description = "\(name) · \(approximateSize)"
 }
 
+/// The two keys that accept a suggestion, written once and shown everywhere
+/// the product explains itself. Tab has always been documented; the tilde
+/// key — the product's namesake, `GhostInputController`'s key code 50 — was
+/// implemented and never mentioned anywhere a user would look.
+enum TildeAcceptKeys {
+    /// "the key above Tab" is the description that survives layout
+    /// differences: key code 50 sits at the top-left on both ANSI and ISO
+    /// keyboards, but only ANSI prints `~` on it.
+    static let wholeSuggestionKeyDescription = "~ (the key above Tab)"
+    static let wordShortcut = "Tab"
+    static let wholeSuggestionShortcut = "~"
+    static let wordLabel = "Accept the next word"
+    static let wholeSuggestionLabel = "Accept the whole suggestion"
+    static let summary =
+        "Tab accepts the next word. \(wholeSuggestionKeyDescription) accepts the whole suggestion."
+    static let readySummary = "Start typing anywhere. \(summary)"
+}
+
 enum TildeSettingsPresentation {
     static func simpleStatusText(for statusText: String) -> String {
         switch statusText {
@@ -67,12 +85,21 @@ final class TildeSettingsViewModel: ObservableObject {
 
     private weak var appDelegate: AppDelegate?
     private let personalHistory: PersonalHistoryController
-    private let settings = TildeSettings()
+    private let settings: TildeSettings
     private var localOCREvaluationSummaryGeneration: UInt64 = 0
 
-    init(appDelegate: AppDelegate, personalHistory: PersonalHistoryController) {
+    /// `appDelegate` is optional and `settings` is injectable so this model
+    /// can be exercised without a running app: every use of the delegate is
+    /// already optional-chained, and a test that wrote through the real
+    /// `TildeSettings()` would edit the owner's own daily driver.
+    init(
+        appDelegate: AppDelegate?,
+        personalHistory: PersonalHistoryController,
+        settings: TildeSettings = TildeSettings()
+    ) {
         self.appDelegate = appDelegate
         self.personalHistory = personalHistory
+        self.settings = settings
         refresh()
     }
 
@@ -229,9 +256,30 @@ final class TildeSettingsViewModel: ObservableObject {
         }
     }
 
+    /// The Screen Memory covenant's mandatory master toggle. Off is a real
+    /// off: the setting is written first, then the app is told, so the
+    /// capture service drops the snapshots it is still holding rather than
+    /// serving them for the rest of the staleness window.
+    func setScreenMemoryEnabled(_ enabled: Bool) {
+        settings.screenMemoryEnabled = enabled
+        screenMemoryEnabled = enabled
+        appDelegate?.screenMemoryEnabledDidChange(enabled)
+        screenRecordingGranted = ScreenRecordingPermission.isGranted()
+        statusText = appDelegate?.applicationState().statusText ?? statusText
+    }
+
+    /// Honest copy, and the honest part is that this is not a "less
+    /// context" switch: with Screen Memory off, Tilde answers every
+    /// completion request with silence (`ScreenMemoryStatus`). Saying only
+    /// that it "suggests less" would be a comfortable lie.
+    var screenMemoryExplanation: String {
+        screenMemoryEnabled
+            ? "Tilde reads the text on your screen so it knows what you are replying to. It stays on this Mac. Turn this off and Tilde cannot see what you are replying to — it stops suggesting entirely until you turn it back on."
+            : "Tilde cannot see what you are replying to, so it is not suggesting anything. Turn this back on to get suggestions again."
+    }
+
     func enableScreenAccess() {
-        settings.screenMemoryEnabled = true
-        screenMemoryEnabled = true
+        setScreenMemoryEnabled(true)
         if !ScreenRecordingPermission.isGranted(), !ScreenRecordingPermission.request() {
             openScreenRecordingSettings()
         }
