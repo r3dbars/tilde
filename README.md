@@ -10,13 +10,23 @@ take one word, `~` to take all of it, or keep typing and it gets out of the
 way. It works in Slack, Mail, Notes, Chrome, Claude, VS Code, anywhere you can
 type, because it is a real macOS keyboard, not a floating window.
 
-<!-- demo: Assets/GitHub/tilde-demo.gif — fifteen seconds: type a Slack reply,
-one Tab, one ~, one Esc. Record at 2x, crop to the composer. -->
+![Tilde finishing a Slack reply](Assets/GitHub/demo-slack.gif)
 
 Want to see it without installing anything into your real apps? Open
 [`demo/index.html`](demo/index.html) in Chrome or Safari with the Tilde
 keyboard selected: four mock apps (Slack, Mail, Messages, Discord), each pre-loaded with a conversation and a card that
 tells you what to type. Nothing on the page talks to a network.
+
+<details>
+<summary>More of the demo: Mail, Messages, Discord</summary>
+
+![Tilde writing an email reply](Assets/GitHub/demo-mail.gif)
+
+![Tilde texting back](Assets/GitHub/demo-messages.gif)
+
+![Tilde in a Discord channel](Assets/GitHub/demo-discord.gif)
+
+</details>
 
 ## What makes it different
 
