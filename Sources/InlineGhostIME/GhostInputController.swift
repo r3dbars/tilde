@@ -11,6 +11,10 @@ final class GhostInputController: IMKInputController {
     private static let contextLimit = 3_000
     private static let trailingContextLimit = 80
     private static let slowKeyThreshold: TimeInterval = 0.050
+    /// Chained accept: once the ghost is fully consumed by Tab or the whole-
+    /// accept key, ask for the next continuation right away. See
+    /// `TildeProductProfile.chainsCompletionAfterAccept`.
+    private static let chainsAfterAccept = TildeProductProfile.current.chainsCompletionAfterAccept
     private static let slowKeyLogger = Logger(
         subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "typing-performance"
@@ -529,7 +533,19 @@ final class GhostInputController: IMKInputController {
             kind: .word,
             remainderVisible: state.isVisible
         )
+        chainAfterAcceptIfConsumed(client)
         return true
+    }
+
+    /// The reward for a correct ghost used to be silence: accepting its last
+    /// word left the caret at a word boundary with nothing scheduled until
+    /// the next keystroke. When the profile chains, the accepted text (which
+    /// ends in the separator) is the new context and the next three words
+    /// are requested at once, through the ordinary schedule path with its
+    /// reveal delay, activation checks, and ticket rules intact.
+    private func chainAfterAcceptIfConsumed(_ client: IMKTextInput) {
+        guard Self.chainsAfterAccept, !state.isVisible else { return }
+        scheduleSuggestion(for: client, afterUserTyped: " ")
     }
 
     private func acceptAllSuggestion(
@@ -542,7 +558,10 @@ final class GhostInputController: IMKInputController {
         }
         let match = matchingVisibleState(for: client)
         cancelPendingWork()
-        let effects = state.reduce(.acceptAll(current: match?.ticket))
+        let effects = state.reduce(.acceptAll(
+            current: match?.ticket,
+            appendsSeparator: Self.chainsAfterAccept
+        ))
         guard case let .insert(accepted)? = effects.first(where: {
             if case .insert = $0 { return true }
             return false
@@ -565,6 +584,7 @@ final class GhostInputController: IMKInputController {
             kind: .all,
             remainderVisible: state.isVisible
         )
+        chainAfterAcceptIfConsumed(client)
         return true
     }
 
