@@ -40,6 +40,8 @@ final class GhostInputController: IMKInputController {
     /// edge check. Keystroke requests never hit this because the next key
     /// arrives after the host has caught up.
     private static let chainedCalmSettleNanoseconds: UInt64 = 90_000_000
+    private static let calmRevealDelays = TildeProductProfile.current.calmRevealDelays
+    private static let requestsAfterPunctuation = TildeProductProfile.current.requestsAfterPunctuation
 
     struct SlowKeyTiming {
         let totalMilliseconds: Int
@@ -778,7 +780,8 @@ final class GhostInputController: IMKInputController {
         let timing = SuggestionRevealDelayPolicy.schedule(
             afterUserTyped: grapheme,
             calmMarkedText: usesCalmReveal(for: expectedBundle),
-            chained: chained
+            chained: chained,
+            calm: Self.calmRevealDelays
         )
         guard scheduleRevision == revision,
               (client.bundleIdentifier() ?? "") == expectedBundle else { return }
@@ -873,7 +876,10 @@ final class GhostInputController: IMKInputController {
                     revealNotBefore: revealNotBefore
                 )
             }
-        } else if context.last?.isWhitespace == true {
+        } else if RawContinuationPrompt.endsAtRequestBoundary(
+            context,
+            allowingPunctuation: Self.requestsAfterPunctuation
+        ) {
             requestPhrase(
                 bundleIdentifier: field.bundleIdentifier,
                 context: context,
@@ -945,6 +951,11 @@ final class GhostInputController: IMKInputController {
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
         let fieldSessionIdentifier = requestTicket.clientIdentifier
+        // After punctuation the ghost carries its own separator: the brain
+        // strips leading whitespace on the wire, so the keyboard puts the
+        // space back before the marked text. Accepting inserts it, and a
+        // typed space consumes it as ordinary type-through.
+        let separator = context.last.map(RawContinuationPrompt.requestPunctuation.contains) == true ? " " : ""
         // Session-pinned, and nil unless the H01 harness is explicitly on.
         let experimentArm = h01SessionArm()?.rawValue
         modelTask = Task { [weak self] in
@@ -959,7 +970,7 @@ final class GhostInputController: IMKInputController {
                     // `present` is what discards a partial that arrives late.
                     Task { @MainActor [weak self] in
                         self?.present(
-                            text,
+                            separator + text,
                             ticket: requestTicket,
                             revealNotBefore: revealNotBefore
                         )
@@ -972,7 +983,7 @@ final class GhostInputController: IMKInputController {
             case .suggestion:
                 if let text = result.suggestion {
                     await self?.present(
-                        text,
+                        separator + text,
                         ticket: requestTicket,
                         revealNotBefore: revealNotBefore
                     )

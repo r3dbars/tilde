@@ -592,7 +592,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
             guard !request.context.isEmpty,
                   request.screenMemoryEvent == nil,
                   request.context.count <= 3_000,
-                  request.context.last?.isWhitespace == true,
+                  RawContinuationPrompt.endsAtRequestBoundary(
+                      request.context,
+                      allowingPunctuation: TildeProductProfile.current.requestsAfterPunctuation
+                  ),
                   request.fieldSessionIdentifier.map({ UUID(uuidString: $0) != nil }) ?? true,
                   // An unknown arm identifier is a malformed request, not a
                   // silent fallback: the harness must never guess a cap.

@@ -177,6 +177,22 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         self == .preview9B
     }
 
+    /// Reveal floor for Chromium/Electron hosts. The 9B preview trials the
+    /// shorter pair (owner-directed 2026-09-02); production keeps the
+    /// measured floor until the real-host matrix clears the change.
+    public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {
+        self == .preview9B ? .preview : .production
+    }
+
+    /// Whether sentence and clause punctuation is a request boundary. In
+    /// production a period, comma, or question mark hides the ghost and
+    /// nothing is asked until the next letter, which is the dead zone at
+    /// exactly the moment a thought turns. The 9B preview asks there too
+    /// (owner-directed 2026-09-02); the ghost carries its own separator.
+    public var requestsAfterPunctuation: Bool {
+        self == .preview9B
+    }
+
     public var personalHistoryKeychainService: String {
         "\(appBundleIdentifier).personal-history"
     }
