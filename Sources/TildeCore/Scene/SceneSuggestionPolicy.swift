@@ -77,11 +77,7 @@ public enum SceneSuggestionPolicy {
         if !hasEarlierSelfTurn,
            let textBeforeCursor,
            isNonActionableDeclarative(incoming),
-           !hasReplyCue(
-               options.replyCueAnchoredToCurrentSentence
-                   ? currentSentence(of: textBeforeCursor)
-                   : textBeforeCursor
-           ) {
+           !writerHasStartedReply(textBeforeCursor, options: options) {
             return .nonActionableScene
         }
         guard options.extendedOrdinarySilenceGate else { return nil }
@@ -133,6 +129,24 @@ public enum SceneSuggestionPolicy {
     private static func hasReplyCue(_ text: String) -> Bool {
         let phrase = normalizedWords(text).joined(separator: " ")
         return replyPrefixes.contains { phrase == $0 || phrase.hasPrefix($0 + " ") }
+    }
+
+    /// Once the current sentence carries this many words the writer has
+    /// plainly started a reply, cue word or not. The gate exists to keep a
+    /// statement that asked nothing from drawing an opening ghost; it was
+    /// never meant to silence a sentence already under way, which is what a
+    /// chained accept in a long chat composer kept running into.
+    static let startedReplyMinimumWords = 3
+
+    /// The non-actionable gate's escape hatch. Production reads a reply cue
+    /// off the head of the whole field. The anchored option reads it off the
+    /// current sentence and also stands down once that sentence is under
+    /// way (`startedReplyMinimumWords`).
+    private static func writerHasStartedReply(_ text: String, options: Options) -> Bool {
+        guard options.replyCueAnchoredToCurrentSentence else { return hasReplyCue(text) }
+        let sentence = currentSentence(of: text)
+        return hasReplyCue(sentence)
+            || normalizedWords(sentence).count >= startedReplyMinimumWords
     }
 
     /// The text after the last sentence terminator or line break: the
