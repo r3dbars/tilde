@@ -65,6 +65,19 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         text.last?.isWhitespace ?? false
     }
 
+    /// Punctuation after which a phrase request may fire when the profile
+    /// allows it. Sentence and clause marks only: the writer has finished a
+    /// unit and the model can open the next one. Closing brackets, quotes,
+    /// and symbols stay out; they say nothing about where the thought is.
+    public static let requestPunctuation: Set<Character> = [".", ",", "!", "?", ";", ":"]
+
+    /// Whether `text` ends where a phrase request is allowed to start:
+    /// whitespace always, request punctuation when the profile allows it.
+    public static func endsAtRequestBoundary(_ text: String, allowingPunctuation: Bool) -> Bool {
+        guard let last = text.last else { return false }
+        return last.isWhitespace || (allowingPunctuation && requestPunctuation.contains(last))
+    }
+
     public static func scaffold(for register: ContinuationRegister) -> String {
         switch register {
         case .chat:
