@@ -189,7 +189,9 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
         generatorMilliseconds = try container.decodeIfPresent(Int.self, forKey: .generatorMilliseconds)
         firstStableWordMilliseconds = try container.decodeIfPresent(Int.self, forKey: .firstStableWordMilliseconds)
         configurationDigest = try container.decodeIfPresent(String.self, forKey: .configurationDigest)
-        interaction = try container.decodeIfPresent(InteractionPolicy.self, forKey: .interaction)
+        // A policy this keyboard cannot read is a policy it does not adopt;
+        // it must never cost the writer the suggestion on the same line.
+        interaction = try? container.decodeIfPresent(InteractionPolicy.self, forKey: .interaction)
     }
 
     /// The same line naming the configuration that produced it. Applied by

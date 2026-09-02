@@ -197,6 +197,34 @@ enum GhostOutcomeLedger {
         lock.unlock()
     }
 
+    /// The app's terminal receipt for the ghost on screen: a streamed
+    /// partial opened the record without timings, and the final line has
+    /// them. Merged in place; the source stays what the presentation said.
+    static func noteReceipt(_ receipt: GhostDecisionReceipt) {
+        lock.lock()
+        opportunity?.noteReceipt(
+            source: nil,
+            generatorMilliseconds: receipt.generatorMilliseconds,
+            firstStableWordMilliseconds: receipt.firstStableWordMilliseconds
+        )
+        lock.unlock()
+    }
+
+    /// The model extended a dictionary ghost that was already on screen.
+    /// One ghost, one record: the pending model opportunity folds into the
+    /// shown record (source becomes the base model, timings fill in) instead
+    /// of becoming a second, falsely superseded event.
+    static func noteModelExtendedVisibleCandidate(opportunityID: UUID?, receipt: GhostDecisionReceipt?) {
+        lock.lock()
+        if let opportunityID, pending?.id == opportunityID { pending = nil }
+        opportunity?.noteReceipt(
+            source: .baseModel,
+            generatorMilliseconds: receipt?.generatorMilliseconds,
+            firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds
+        )
+        lock.unlock()
+    }
+
     static func noteVisibleCandidate(characters: Int, wordCount: Int) {
         lock.lock()
         opportunity?.noteVisibleCandidate(characters: characters, wordCount: wordCount)

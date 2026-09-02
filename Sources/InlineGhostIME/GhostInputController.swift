@@ -1120,9 +1120,14 @@ final class GhostInputController: IMKInputController {
                       await self?.isCurrentSchedule(revision) == true else { return }
             }
             if opportunityID == nil, boundary == .midWord {
+                // A keystroke can land between the throttle check and this
+                // hop; re-check on the actor so a cancelled request never
+                // opens a record nothing will close.
                 opportunityID = await MainActor.run {
-                    self?.openOpportunity(ticket: requestTicket, context: context, field: field)
+                    guard let self, !Task.isCancelled, self.isCurrentSchedule(revision) else { return nil }
+                    return self.openOpportunity(ticket: requestTicket, context: context, field: field)
                 }
+                guard opportunityID != nil else { return }
             }
             let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(
@@ -1146,7 +1151,14 @@ final class GhostInputController: IMKInputController {
                     }
                 }
             )
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                // Superseded while in flight: the keystroke that cancelled us
+                // may have run before this record existed, so close it here.
+                await MainActor.run {
+                    self?.endOpenOpportunity(.supersededByTyping, ticket: requestTicket, deadlineMissed: true)
+                }
+                return
+            }
             Self.logRoundTrip(startedAt: startedAt, outcome: result.outcome)
             await MainActor.run { ServedConfiguration.adopt(result) }
             let receipt = GhostDecisionReceipt(result)
@@ -1225,7 +1237,28 @@ final class GhostInputController: IMKInputController {
         }
         if bufferedReveal?.ticket == requestTicket { bufferedReveal = nil }
         presentedProvenance = (requestTicket, provenance)
-        apply(state.reduce(.update(text, requestTicket)), to: liveClient)
+        let wasVisible = state.isVisible && state.visibleTicket == requestTicket
+        let effects = state.reduce(.update(text, requestTicket))
+        apply(effects, to: liveClient)
+        guard state.visibleTicket == requestTicket else { return }
+        if wasVisible {
+            // A ghost was already on screen for this ticket (the dictionary,
+            // or an earlier partial). The model either grew it — one ghost,
+            // one record, now credited to the model — or added nothing.
+            let grew = effects.contains { if case .show = $0 { return true } else { return false } }
+            if grew {
+                let answered = openOpportunity.flatMap { $0.ticket == requestTicket ? $0 : nil }
+                if answered != nil { openOpportunity = nil }
+                GhostOutcomeLedger.noteModelExtendedVisibleCandidate(
+                    opportunityID: answered?.id,
+                    receipt: provenance.receipt
+                )
+            } else if provenance.source != .dictionary {
+                endOpenOpportunity(.behindVisibleGhost, ticket: requestTicket, receipt: provenance.receipt)
+            }
+        }
+        // The terminal line's timings fill in a record a partial opened.
+        if let receipt = provenance.receipt { GhostOutcomeLedger.noteReceipt(receipt) }
     }
 
     @MainActor

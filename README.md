@@ -63,8 +63,8 @@ Tilde is three small pieces:
 
 Typed text, screen text, and model output stay in memory and are gone when
 the request is done. If you turn on Personal History, what you write is
-stored on your Mac in an encrypted log you can inspect, exclude apps from,
-and delete with one click. [PRIVACY.md](PRIVACY.md) has the full boundary.
+stored on your Mac in an encrypted log whose size you can see, that you can
+exclude apps from, and that you can delete with one click. [PRIVACY.md](PRIVACY.md) has the full boundary.
 
 ## How I know it works
 

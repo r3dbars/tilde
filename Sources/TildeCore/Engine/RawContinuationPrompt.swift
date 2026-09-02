@@ -120,9 +120,18 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     /// that it stopped being a word, to be worth asking about. This is the
     /// mid-word counterpart of `endsAtRequestBoundary`: no text can satisfy
     /// both.
+    ///
+    /// The run must be the whole last whitespace-delimited token: a partial
+    /// joined to earlier characters ("long-ter", "e-mai", "O'Brie", "v2ab")
+    /// is not seeded, because the cleaner trims typed prefixes by whole
+    /// token and would put the seed back on screen ("long-terterm").
     public static func endsMidWord(_ text: String) -> Bool {
         let letters = text.reversed().prefix(while: \.isLetter).count
-        return letters >= minimumMidWordPartialLetters && letters <= maximumMidWordPartialLetters
+        guard letters >= minimumMidWordPartialLetters, letters <= maximumMidWordPartialLetters else {
+            return false
+        }
+        let before = text.dropLast(letters).last
+        return before == nil || before?.isWhitespace == true
     }
 
     /// The one definition of "may a model request start here, and from which

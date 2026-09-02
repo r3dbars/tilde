@@ -59,7 +59,7 @@ public enum DiagnosticsMetadataRedactor {
         "resolved", "timeout",
         // `personal-stream-hold`'s outcome (`GhostBrainServerHost.PartialResponseSink`):
         // what the first streamed prefix did while the personal lookup raced.
-        "not-held", "streamed", "expired", "final-only",
+        "not-held", "streamed", "expired", "final-only", "held-until-end",
         // `personal-model-unreadable`'s reason (`PersonalHistoryStore`): why a
         // persisted trained model was discarded and rebuilt. Never its contents.
         "permissions", "size", "header", "authentication", "schema", "read",
