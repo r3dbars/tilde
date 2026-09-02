@@ -202,12 +202,15 @@ enum GhostOutcomeLedger {
     /// them. Merged in place; the source stays what the presentation said.
     static func noteReceipt(_ receipt: GhostDecisionReceipt) {
         lock.lock()
+        defer { lock.unlock() }
+        // A dictionary ghost never borrows a model's timings, even when a
+        // rejected model answer arrives while it is on screen.
+        guard opportunity?.candidateSource != TextFreeCandidateSource.dictionary.rawValue else { return }
         opportunity?.noteReceipt(
             source: nil,
             generatorMilliseconds: receipt.generatorMilliseconds,
             firstStableWordMilliseconds: receipt.firstStableWordMilliseconds
         )
-        lock.unlock()
     }
 
     /// The model extended a dictionary ghost that was already on screen.

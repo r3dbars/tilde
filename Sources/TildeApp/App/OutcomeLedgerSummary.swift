@@ -329,9 +329,9 @@ enum OutcomeLedgerPresentation {
         screenAccessGranted: Bool
     ) -> String? {
         if !screenAccessGranted {
-            return summary.hasTodayEvidence
-                ? "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back."
-                : "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back."
+            // The current state only: the ledger cannot establish that a
+            // whole day was silent, and the legacy counters may say otherwise.
+            return "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back."
         }
         guard summary.heldBackToday > 0, let reason = summary.topHeldBackReason else {
             return nil
@@ -352,7 +352,7 @@ enum OutcomeLedgerPresentation {
     ) -> String {
         guard summary.hasTodayEvidence else {
             if !screenAccessGranted {
-                return "Screen Access is off — Tilde stays silent"
+                return "Screen Access is off now — Tilde is not suggesting"
             }
             return "\(wordsToday.formatted()) words with Tilde today"
         }
