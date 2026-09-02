@@ -28,6 +28,54 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Three review passes before open-sourcing: simplify, ponytail, and a Codex cross-inspection
+
+- **Try:** Before opening the repository, run today's whole diff through
+  three independent passes and apply what survives: the simplify skill
+  (four Opus cleanup agents: reuse, simplification, efficiency, altitude),
+  the ponytail ruleset applied as a "what can we delete" review, and a
+  correctness workflow (five Opus finders by lens, two adversarial
+  skeptics per finding) alongside a claudex-style Codex cross-inspection
+  in a read-only sandbox, rounds until approval, orchestrator arbitrating
+  every finding with the reason logged.
+- **Learn:** The cleanup passes found the same seams from different
+  angles — the request-boundary rule written once per side of the socket,
+  "can Tilde suggest at all" hand-copied where `ScreenMemoryStatus`
+  already answers it, a build constant where a served policy field
+  belonged (the mid-word throttle now travels with the digest), and the
+  flight recorder opening a record per letter instead of per request.
+  The correctness passes found what tests had not: a restore path that
+  would have silently wiped every pre-upgrade personal-history record on
+  first launch (position-0 records filtered by `> 0`); a newer keyboard
+  failing every response from an older app because the served policy
+  object had grown two required fields; a mid-word ghost glued to the
+  writer's last letter ("thebest") because the wire stripped the leading
+  space that meant "new word"; a joined partial ("long-ter") re-typing its
+  own letters; the model's takeover of a dictionary ghost recorded as two
+  events under the wrong identity; a personal-lookup deadline that was
+  not a bound. All fixed, each with a test; the fast proof stayed green
+  throughout. Ponytail's honest verdict on the rest: lean already.
+- **Fail:** Two review-recommended restructurings were left for another
+  day and logged rather than done: the `TildeApplicationState.disabled`
+  case still collapses "suggestions off" and "Screen Memory off" and the
+  menu re-splits them, and the ledger summary types live in the app
+  rather than Core. The efficiency pass's regex-alternation rewrite of
+  the sensitive-scene table and the on-actor trained-model sort were not
+  changed without a measurement. Codex's rounds are owner-local
+  (`PLAN-REVIEW-LOG.md` in session scratch), not in git.
+- **Where:** commits f143c0a3, c6134171, 8806515d on this branch;
+  `Sources/TildeCore/Engine/RawContinuationPrompt.swift` (`requestBoundary`,
+  strict `endsMidWord`), `Sources/TildeCore/Runtime/TildeConfiguration.swift`
+  (throttle field, tolerant decode), `Sources/TildeApp/App/GhostBrainServerHost.swift`
+  (`servedText`, `PersonalLookupRace`, hold outcomes),
+  `Sources/InlineGhostIME/GhostInputController.swift` (lazy mid-word
+  opportunity, model takeover of a dictionary ghost),
+  `Sources/TildeApp/PersonalHistory/PersonalHistoryController.swift`
+  (replay with nothing covered), `PersonalVocabularyShadow.swift` (model
+  schema v2 with the duplicate guard).
+- **Next:** Land the PR, install the build, and let the flight recorder
+  and the ledger judge the week.
+
 ## 2026-09-02 — Tilde stays free: MIT, open beta, no paid tier
 
 - **Try:** Owner decision, same evening as the AGPL switch: Tilde is a
