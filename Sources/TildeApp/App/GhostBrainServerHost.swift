@@ -333,6 +333,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // (if any) runs CONCURRENTLY with the llama call, not after it —
             // "never lengthen latency" (docs/plans/road-to-paid.md Phase 3).
             let personalSuggestionsEnabled = self.personalSuggestionsGate?() ?? false
+            // The register the generator composes with: the same pure
+            // function of the same scene and host the engine applies, sent
+            // back on every response line so the outcome ledger records
+            // what actually ran instead of re-deriving a register from the
+            // host bundle (which calls a Screen-Memory chat reply in a
+            // browser "prose").
+            let register = ContinuationRegister.following(
+                scene: scene,
+                hostBundleIdentifier: completionRequest.app
+            )
             // Stream stable complete-word prefixes to peers that asked for
             // them. Personal suggestions may replace the base prefix, so
             // those requests stay final-only: a visible stream is never
@@ -340,6 +350,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let partials = PartialResponseSink(
                 connection: connection,
                 enabled: completionRequest.supportsStreamingResponses && !personalSuggestionsEnabled,
+                register: register,
                 targetIsCurrent: targetIsCurrent
             )
             let completion = Task {
@@ -412,7 +423,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     text = applied.text
                     source = applied.source
                 }
-                response = .suggestion(text)
+                response = .suggestion(
+                    text,
+                    register: register,
+                    source: TextFreeCandidateSource(personal: source)
+                )
                 servedMetadata = text.isEmpty ? nil : Self.servedMetadata(
                     app: completionRequest.app,
                     text: text,
@@ -616,6 +631,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private final class PartialResponseSink: @unchecked Sendable {
         private let connection: Int32
         private let enabled: Bool
+        private let register: ContinuationRegister
         private let targetIsCurrent: @Sendable () -> Bool
         private let lock = NSLock()
         private var failed = false
@@ -624,10 +640,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
         init(
             connection: Int32,
             enabled: Bool,
+            register: ContinuationRegister,
             targetIsCurrent: @escaping @Sendable () -> Bool
         ) {
             self.connection = connection
             self.enabled = enabled
+            self.register = register
             self.targetIsCurrent = targetIsCurrent
         }
 
@@ -651,7 +669,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             lock.lock()
             defer { lock.unlock() }
             guard !failed else { return }
-            if !GhostBrainServerHost.write(.partial(text), to: connection) {
+            if !GhostBrainServerHost.write(.partial(text, register: register), to: connection) {
                 failed = true
                 DiagnosticsLog.shared.record("ghost-partial-write-failed", metadata: [:])
                 failureHandler?()

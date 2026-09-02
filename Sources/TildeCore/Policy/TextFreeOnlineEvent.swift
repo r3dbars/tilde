@@ -62,7 +62,7 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         settledVisibleMilliseconds: Int? = nil,
         deadlineMissed: Bool = false,
         candidateCharacters: Int,
-        candidateSourceBucket: String = "unknown",
+        candidateSourceBucket: String,
         candidateLengthBucket: String,
         championDisagreed: Bool = false,
         crashed: Bool = false,
@@ -104,6 +104,39 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         self.retentionAtSegmentClose = retentionAtSegmentClose
     }
 
+    /// Every key this event can write, and therefore every key a production
+    /// event line may carry. Lab ingest of the live ledger checks lines
+    /// against this set, so the production DTO is the one definition of
+    /// what production emitted: a Lab-only field can never appear in a live
+    /// line, and a new production field cannot ship without appearing here.
+    public static let allowedKeys: Set<String> = [
+        "schema", "id", "campaignID", "occurredAt", "sessionDigestSHA256", "variant",
+        "appCategory", "register", "boundary", "typingSpeedBucket", "safeOpportunity",
+        "generated", "displayed", "policyHidden", "outcome",
+        "acceptedCharacters", "replacedCharactersWithin5Seconds",
+        "nextActionMilliseconds", "settledVisibleMilliseconds", "deadlineMissed",
+        "candidateCharacters", "candidateSourceBucket", "candidateLengthBucket",
+        "championDisagreed", "crashed", "timedOut", "opportunityCharacters",
+        "retentionAt5Seconds", "retentionAt30Seconds", "retentionAtSegmentClose",
+    ]
+
+    /// Decodes one live ledger line strictly: v3 schema only, no key outside
+    /// `allowedKeys`, dates in ISO 8601.
+    public static func decodeProductionLine(_ data: Data) throws -> TextFreeOnlineEvent {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw TextFreeOnlineEventError.malformedLine
+        }
+        if let key = Set(object.keys).subtracting(allowedKeys).sorted().first {
+            throw TextFreeOnlineEventError.unexpectedKey(key)
+        }
+        guard object["schema"] as? String == schema else {
+            throw TextFreeOnlineEventError.unsupportedSchema
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(TextFreeOnlineEvent.self, from: data)
+    }
+
     public static func sessionDigest(sessionIdentifier: String) -> String {
         SHA256.hash(data: Data(sessionIdentifier.utf8))
             .map { String(format: "%02x", $0) }
@@ -117,6 +150,39 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         var data = try encoder.encode(event)
         data.append(0x0A)
         return data
+    }
+}
+
+public enum TextFreeOnlineEventError: Error, Equatable, Sendable {
+    case malformedLine
+    case unexpectedKey(String)
+    case unsupportedSchema
+}
+
+/// Where the visible candidate came from. A fixed vocabulary so a report can
+/// separate a dictionary suffix from a model phrase and the personal layer's
+/// contribution from the base model's. New events always name one; only an
+/// event written before the field existed may read `unknown-legacy`.
+public enum TextFreeCandidateSource: String, Codable, CaseIterable, Sendable {
+    /// `NSSpellChecker` word completion inside a partial word; no model ran.
+    case dictionary
+    /// The app-owned local model alone.
+    case baseModel = "base-model"
+    /// Personal History replaced the base prefix.
+    case personal
+    /// Personal History and the base model agreed on the prefix.
+    case basePersonalAgreement = "base-personal-agreement"
+    /// Written before the source travelled on the wire.
+    case unknownLegacy = "unknown-legacy"
+
+    /// The app's arbitration outcome, or `nil` when personal serving was off
+    /// and the base model answered alone.
+    public init(personal: PersonalSuggestionSource?) {
+        switch personal {
+        case .none, .base: self = .baseModel
+        case .personal: self = .personal
+        case .agreed: self = .basePersonalAgreement
+        }
     }
 }
 

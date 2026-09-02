@@ -22,13 +22,14 @@ enum GhostBrainClient {
     )
 
     /// `onPartial` is invoked on the client's worker queue with each stable
-    /// streamed prefix; callers must hop to their own actor.
+    /// streamed prefix (a non-final line carrying non-empty text, plus the
+    /// app's register receipt); callers must hop to their own actor.
     static func complete(
         context: String,
         app: String?,
         fieldSessionIdentifier: String? = nil,
         experimentArm: String? = nil,
-        onPartial: (@Sendable (String) -> Void)? = nil
+        onPartial: (@Sendable (GhostBrainResponse) -> Void)? = nil
     ) async -> GhostBrainResponse {
         await send(
             GhostBrainRequest(
@@ -59,7 +60,7 @@ enum GhostBrainClient {
 
     private static func send(
         _ request: GhostBrainRequest,
-        onPartial: (@Sendable (String) -> Void)? = nil
+        onPartial: (@Sendable (GhostBrainResponse) -> Void)? = nil
     ) async -> GhostBrainResponse {
         guard let payload = encoded(request) else { return .invalidRequest }
         guard let connection = Connection(path: socketPath) else { return .unavailable }
@@ -121,7 +122,7 @@ enum GhostBrainClient {
 
         func run(
             payload: Data,
-            onPartial: (@Sendable (String) -> Void)? = nil
+            onPartial: (@Sendable (GhostBrainResponse) -> Void)? = nil
         ) -> GhostBrainResponse {
             defer { finish() }
             guard !isCancelled, connect(), !isCancelled, verifyPeer() else { return .unavailable }
@@ -133,7 +134,7 @@ enum GhostBrainClient {
                 deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
                 let event = GhostBrainResponse.decode(line)
                 if !event.final {
-                    if let text = event.suggestion, !text.isEmpty { onPartial?(text) }
+                    if let text = event.suggestion, !text.isEmpty { onPartial?(event) }
                     continue
                 }
                 return event

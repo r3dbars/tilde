@@ -372,6 +372,29 @@ typed-through, flicker accepts, realized accepted characters, edits/undoes,
 deadline misses, matched-stratum attention tax, and net time per 1,000 typed
 characters. `delete-telemetry` deletes every event for the campaign.
 
+Four rules of the live ledger, fixed 2026-09-02 so its reports can be trusted:
+
+- `register` is the app's receipt, not the host bundle. Every completion
+  response line carries the register the generator actually composed with
+  (`GhostBrainResponse.register`), so a Screen-Memory reply in a browser is
+  recorded as `chat`, the way it was generated. Dictionary ghosts, which never
+  reach the app, carry the host's own register.
+- `candidateSourceBucket` is one of `dictionary`, `base-model`, `personal`,
+  or `base-personal-agreement` (`TextFreeCandidateSource`), also from the
+  response receipt. New events never write `unknown`; only lines written
+  before the receipt existed read `unknown-legacy`.
+- `opportunityCharacters` is the writing that happened since the previous
+  ghost in the segment — typed graphemes plus accepted characters, counted
+  once by `OpportunityCharacterMeter` — never the length of the bounded
+  context. Ten ghosts in a 2,000-character document used to sum to 20,000
+  and bury net time per 1,000 characters; they now sum to what was authored.
+- `TextFreeOnlineEvent` in `TildeCore` is the one definition of a live event.
+  `ingest-events --instrument` decodes each line strictly as that type
+  (`allowedKeys`, v3 only) and bridges it field by field into
+  `LabOnlineExperimentEvent`; a Lab-only key in a live line is refused by
+  name, and a production event cannot gain a field without the contract test
+  and this list changing with it.
+
 A soak requires sustained active duration, enough events, p99 first-stable-word
 at or below one second, zero crashes, timeouts, wrong insertions, committed-text
 corruption, or network egress, and explicit exercise of network denial, memory

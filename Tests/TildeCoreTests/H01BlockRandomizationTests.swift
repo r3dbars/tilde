@@ -214,6 +214,7 @@ struct H01BlockRandomizationTests {
                 safeOpportunity: true,
                 candidateCharacters: 9,
                 candidateWordCount: 2,
+                candidateSource: .baseModel,
                 opportunityCharacters: 40
             )
         }
@@ -226,6 +227,7 @@ struct H01BlockRandomizationTests {
             safeOpportunity: true,
             candidateCharacters: 9,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 40
         )
     }

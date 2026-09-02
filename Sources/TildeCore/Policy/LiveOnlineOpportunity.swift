@@ -32,6 +32,13 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     public let safeOpportunity: Bool
     public var candidateCharacters: Int
     public var candidateWordCount: Int
+    /// `TextFreeCandidateSource` raw value: dictionary suffix, base model,
+    /// personal, or agreement. Set from the app's receipt, never guessed.
+    public let candidateSource: String
+    /// Characters the writer authored since the previous opportunity in this
+    /// segment (typed or accepted), counted once. Never the context length:
+    /// a long document shown ten ghosts would otherwise count its whole
+    /// body ten times and bury the value per thousand characters.
     public let opportunityCharacters: Int
     public var typedAfterShow: Bool
     public var acceptedKind: AcceptKind?
@@ -52,6 +59,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         safeOpportunity: Bool,
         candidateCharacters: Int,
         candidateWordCount: Int,
+        candidateSource: TextFreeCandidateSource,
         opportunityCharacters: Int
     ) {
         self.id = id
@@ -64,6 +72,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         self.safeOpportunity = safeOpportunity
         self.candidateCharacters = max(0, candidateCharacters)
         self.candidateWordCount = max(0, candidateWordCount)
+        self.candidateSource = candidateSource.rawValue
         self.opportunityCharacters = max(1, opportunityCharacters)
         typedAfterShow = false
         acceptedKind = nil
@@ -153,6 +162,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
             nextActionMilliseconds: nextActionMilliseconds,
             settledVisibleMilliseconds: settledVisibleMilliseconds,
             candidateCharacters: max(candidateCharacters, isAccept ? acceptedCount : 0),
+            candidateSourceBucket: candidateSource,
             candidateLengthBucket: TextFreeLengthBucket.from(wordCount: candidateWordCount).rawValue,
             opportunityCharacters: opportunityCharacters,
             retentionAt5Seconds: try retentionAt5Seconds.validated(),
