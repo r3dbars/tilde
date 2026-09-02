@@ -255,7 +255,11 @@ struct OutcomeLedgerReasonTests {
             summary: summary,
             screenAccessGranted: false
         )
-        #expect(blocked == "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back.")
+        // Access went off part-way through a day that already has evidence:
+        // the line must not claim the whole day was silent.
+        #expect(blocked == "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back.")
+        #expect(OutcomeLedgerPresentation.heldBackLine(summary: .empty, screenAccessGranted: false)
+            == "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back.")
 
         // A quiet, healthy day says nothing at all.
         #expect(OutcomeLedgerPresentation.heldBackLine(

@@ -31,6 +31,7 @@ public enum LabDecisionReason: String, Codable, CaseIterable, Sendable {
     case fieldTargetLost = "field-target-lost"
     case supersededByTyping = "superseded-by-typing"
     case notAtGrowingEdge = "not-at-growing-edge"
+    case behindVisibleGhost = "behind-visible-ghost"
 }
 
 extension LabDecisionReason {

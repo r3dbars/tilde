@@ -102,6 +102,22 @@ struct TildeConfigurationTests {
         #expect(served.policy == .tuned9B)
     }
 
+    @Test("A newer keyboard reads an older app's interaction object with conservative defaults")
+    func olderInteractionObjectDecodes() throws {
+        let legacy = Data(#"{"chainsCompletionAfterAccept":true,"calmRevealPostSpaceMilliseconds":120,"calmRevealMidWordMilliseconds":80,"requestsAfterPunctuation":true}"#.utf8)
+        let policy = try JSONDecoder().decode(InteractionPolicy.self, from: legacy)
+        #expect(policy.chainsCompletionAfterAccept)
+        #expect(!policy.requestsMidWordContinuation)
+        #expect(policy.midWordRequestThrottleMilliseconds == 0)
+        // And a response whose interaction object cannot be read at all still
+        // delivers its suggestion; the keyboard just adopts nothing.
+        let line = Data(#"{"outcome":"suggestion","suggestion":"there","interaction":{"garbage":1}}"#.utf8)
+        let response = GhostBrainResponse.decode(line)
+        #expect(response.outcome == .suggestion)
+        #expect(response.suggestion == "there")
+        #expect(response.interaction == nil)
+    }
+
     @Test("Stamping the configuration keeps the decision receipt intact")
     func stampsCompose() throws {
         let configuration = TildeEffectiveConfiguration.resolve(

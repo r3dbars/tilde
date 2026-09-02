@@ -125,6 +125,24 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         self.midWordRequestThrottleMilliseconds = midWordRequestThrottleMilliseconds
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case chainsCompletionAfterAccept, calmRevealPostSpaceMilliseconds, calmRevealMidWordMilliseconds
+        case requestsAfterPunctuation, requestsMidWordContinuation, midWordRequestThrottleMilliseconds
+    }
+
+    /// Fields added after the first served policy decode with their
+    /// conservative defaults, so a newer keyboard reading an older app's
+    /// interaction object keeps every response rather than failing it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chainsCompletionAfterAccept = try c.decode(Bool.self, forKey: .chainsCompletionAfterAccept)
+        calmRevealPostSpaceMilliseconds = try c.decode(Int.self, forKey: .calmRevealPostSpaceMilliseconds)
+        calmRevealMidWordMilliseconds = try c.decode(Int.self, forKey: .calmRevealMidWordMilliseconds)
+        requestsAfterPunctuation = try c.decode(Bool.self, forKey: .requestsAfterPunctuation)
+        requestsMidWordContinuation = try c.decodeIfPresent(Bool.self, forKey: .requestsMidWordContinuation) ?? false
+        midWordRequestThrottleMilliseconds = try c.decodeIfPresent(Int.self, forKey: .midWordRequestThrottleMilliseconds) ?? 0
+    }
+
     /// The measured production interaction.
     public static let conservative = InteractionPolicy(
         chainsCompletionAfterAccept: false,

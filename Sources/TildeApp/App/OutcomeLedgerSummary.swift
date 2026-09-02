@@ -46,7 +46,7 @@ enum HeldBackReason: String, CaseIterable, Sendable {
             self = .keptTyping
         case .sensitiveScene, .promptInjectionScene:
             self = .sensitive
-        case .emptyOutput, .noSuggestion, .emptyPrompt:
+        case .emptyOutput, .noSuggestion, .emptyPrompt, .behindVisibleGhost:
             self = .modelHadNothing
         case .runtimeUnavailable, .timeout, .protocolError, .suggestionsPaused:
             self = .notReady
@@ -246,9 +246,13 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
 /// the file once, seeks to at most `maximumTailBytes` from the end, and
 /// never holds more than that in memory.
 enum OutcomeLedgerReader {
-    /// One megabyte of tail is roughly a week of heavy writing and stays
-    /// well under a frame's worth of work off the main thread.
-    static let maximumTailBytes = 1_048_576
+    /// One encoded event is about a kilobyte, and a heavy day with the
+    /// flight recorder on can write well over a thousand, so the tail must
+    /// hold several thousand lines per day to cover the seven-day window.
+    /// Twelve mebibytes is read off the main thread, at most once per
+    /// refresh interval; when even that is not enough, `truncated` says so
+    /// and every surface labels its totals partial.
+    static let maximumTailBytes = 12 * 1_048_576
 
     struct Tail: Equatable, Sendable {
         let lines: [Data]
@@ -325,7 +329,9 @@ enum OutcomeLedgerPresentation {
         screenAccessGranted: Bool
     ) -> String? {
         if !screenAccessGranted {
-            return "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back."
+            return summary.hasTodayEvidence
+                ? "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back."
+                : "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back."
         }
         guard summary.heldBackToday > 0, let reason = summary.topHeldBackReason else {
             return nil

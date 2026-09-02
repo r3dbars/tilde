@@ -134,12 +134,13 @@ struct YourTildeSummaryView: View {
     }
 
     var headlineLabel: String {
-        model.ledger.hasTodayEvidence ? "keystrokes saved today" : "words today"
+        guard model.ledger.hasTodayEvidence else { return "words today" }
+        return model.ledger.truncated ? "keystrokes saved today (partial)" : "keystrokes saved today"
     }
 
     var headlineSupportingText: String {
         model.ledger.hasTodayEvidence
-            ? "\(model.ledger.keystrokesSavedLast7Days.formatted()) in the last 7 days"
+            ? "\(model.ledger.keystrokesSavedLast7Days.formatted()) in the last 7 days\(model.ledger.truncated ? " (partial)" : "")"
             : "\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) total"
     }
 

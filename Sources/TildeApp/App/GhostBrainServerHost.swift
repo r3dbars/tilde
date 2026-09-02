@@ -380,10 +380,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // prefix for a bounded window rather than giving up streaming
             // for the whole request (see `PartialResponseSink`).
             let configuration = self.configuration
+            let midWordContext = RawContinuationPrompt.endsMidWord(completionRequest.context)
             let partials = PartialResponseSink(
                 enabled: completionRequest.supportsStreamingResponses,
                 holdingForPersonal: personalPredictionTask != nil,
                 register: register,
+                midWordContext: midWordContext,
                 holdDeadlineNanoseconds: Self.personalStreamHoldNanoseconds,
                 targetIsCurrent: targetIsCurrent,
                 write: { response in
@@ -462,7 +464,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             switch result {
             case let .success(decision):
                 let baseText = decision.suggestion.map {
-                    String($0.visibleText.drop(while: \Character.isWhitespace))
+                    Self.servedText($0.visibleText, midWord: midWordContext)
                 } ?? ""
                 var text = baseText
                 if personalSuggestionsEnabled {
@@ -591,15 +593,18 @@ final class GhostBrainServerHost: @unchecked Sendable {
             return nil
         }
         let waitStartedAt = now()
-        let raceResult = await withTaskGroup(of: PersonalLookupRaceResult.self) { group in
-            group.addTask { .predicted(await task.value) }
-            group.addTask {
+        // A one-shot race, not a task group: a group's exit awaits every
+        // child, and the child awaiting `task.value` cannot return until the
+        // provider does, which is the very wait the deadline exists to bound.
+        // Whichever side resumes first wins; the loser's task is simply
+        // never awaited, and the provider is told to stop.
+        let raceResult = await withCheckedContinuation { (continuation: CheckedContinuation<PersonalLookupRaceResult, Never>) in
+            let once = OnceResume(continuation)
+            Task { once.resume(.predicted(await task.value)) }
+            Task {
                 try? await Task.sleep(nanoseconds: personalPredictionDeadlineNanoseconds)
-                return .timedOut
+                once.resume(.timedOut)
             }
-            let first = await group.next() ?? .timedOut
-            group.cancelAll()
-            return first
         }
         task.cancel()
         let waitedMilliseconds = milliseconds(from: waitStartedAt, to: now())
@@ -618,6 +623,34 @@ final class GhostBrainServerHost: @unchecked Sendable {
             "outcome": outcome,
         ])
         return prediction
+    }
+
+    /// What goes on the wire for a cleaned suggestion. At a word or
+    /// punctuation boundary the leading whitespace is stripped and the
+    /// keyboard restores the separator it needs; inside a word a leading
+    /// space is the answer's meaning — "start a new word" rather than
+    /// "finish this one" — and stripping it glued the ghost onto the
+    /// writer's last letter ("thebest"). `internal` for tests.
+    static func servedText(_ visibleText: String, midWord: Bool) -> String {
+        midWord ? visibleText : String(visibleText.drop(while: \Character.isWhitespace))
+    }
+
+    /// Resumes a continuation exactly once, whichever racer arrives first.
+    private final class OnceResume: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<PersonalLookupRaceResult, Never>?
+
+        init(_ continuation: CheckedContinuation<PersonalLookupRaceResult, Never>) {
+            self.continuation = continuation
+        }
+
+        func resume(_ result: PersonalLookupRaceResult) {
+            let pending: CheckedContinuation<PersonalLookupRaceResult, Never>? = lock.withLock {
+                defer { continuation = nil }
+                return continuation
+            }
+            pending?.resume(returning: result)
+        }
     }
 
     /// Whole milliseconds between two instants, floored at zero — same
@@ -783,12 +816,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
             case expired
             /// A personal replacement won while holding; final-only.
             case finalOnly = "final-only"
+            /// The request ended while the prefix was still held: the writer
+            /// got no streamed ghost because the personal lookup never
+            /// answered in time. The one outcome that costs the writer.
+            case heldUntilEnd = "held-until-end"
         }
 
         private enum GateState { case streaming, holding, closed }
 
         private let enabled: Bool
         private let register: ContinuationRegister
+        private let midWordContext: Bool
         private let holdDeadlineNanoseconds: UInt64
         private let targetIsCurrent: @Sendable () -> Bool
         private let write: @Sendable (GhostBrainResponse) -> Bool
@@ -808,12 +846,14 @@ final class GhostBrainServerHost: @unchecked Sendable {
             enabled: Bool,
             holdingForPersonal: Bool,
             register: ContinuationRegister,
+            midWordContext: Bool = false,
             holdDeadlineNanoseconds: UInt64,
             targetIsCurrent: @escaping @Sendable () -> Bool,
             write: @escaping @Sendable (GhostBrainResponse) -> Bool
         ) {
             self.enabled = enabled
             self.register = register
+            self.midWordContext = midWordContext
             self.holdDeadlineNanoseconds = holdDeadlineNanoseconds
             self.targetIsCurrent = targetIsCurrent
             self.write = write
@@ -842,7 +882,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 }
                 return
             }
-            let text = String(partial.visibleText.drop(while: \Character.isWhitespace))
+            let text = GhostBrainServerHost.servedText(partial.visibleText, midWord: midWordContext)
             guard !text.isEmpty else { return }
             lock.lock()
             defer { lock.unlock() }
@@ -880,7 +920,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
         /// flushed into the middle of it.
         func finish() {
             let timer: Task<Void, Never>? = lock.withLock {
-                if state == .holding { stopHoldClockLocked() }
+                if state == .holding {
+                    stopHoldClockLocked()
+                    if heldPartial != nil { outcome = .heldUntilEnd }
+                }
                 state = .closed
                 heldPartial = nil
                 let timer = expiryTimer

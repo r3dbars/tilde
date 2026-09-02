@@ -577,11 +577,14 @@ private actor PersistenceOperations {
             experimentIdentifier: configuration.experimentIdentifier,
             excludedApps: configuration.excludedApps
         ) == true ? replay.trainedModel : nil
-        var coverage: Int64 = 0
+        var coverage: Int64?
         if let storedModel, rebuilt.restore(storedModel.model) {
             coverage = storedModel.coveredThroughSequence
         }
-        let events = replay.events(after: coverage).filter {
+        // With nothing restored every record replays, including the ones
+        // written before log positions existed (they decode as position 0
+        // and a `> 0` filter would silently drop a whole pre-upgrade history).
+        let events = (coverage.map(replay.events(after:)) ?? replay.events).filter {
             $0.historyIdentifier == historyIdentifier
                 && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
         }

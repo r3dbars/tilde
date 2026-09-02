@@ -213,3 +213,13 @@ struct GhostBrainServerHostPersonalLookupTimingTests {
         #expect(GhostBrainServerHost.milliseconds(from: instant, to: instant.addingTimeInterval(-1)) == 0)
     }
 }
+
+@Suite("Served text keeps a mid-word answer's separator")
+struct ServedTextTests {
+    @Test("A boundary answer loses its leading space; a mid-word answer keeps it")
+    func leadingSpaceRule() {
+        #expect(GhostBrainServerHost.servedText(" best part", midWord: false) == "best part")
+        #expect(GhostBrainServerHost.servedText(" best part", midWord: true) == " best part")
+        #expect(GhostBrainServerHost.servedText("ting the report", midWord: true) == "ting the report")
+    }
+}
