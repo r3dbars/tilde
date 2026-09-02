@@ -397,9 +397,12 @@ Four rules of the live ledger, fixed 2026-09-02 so its reports can be trusted:
 
 A fifth rule, the flight recorder (2026-09-02): every eligible opportunity
 ends with exactly one terminal reason, shown or not. An opportunity is a
-model request — the caret at a word or punctuation boundary with a request
-about to leave the keyboard; the dictionary path runs no model and is
-recorded only when it shows something. The keyboard mints a random
+model request — the caret at a word or punctuation boundary, or (where
+`requestsMidWordContinuation` is served) inside a 3-to-24-letter partial
+word, with a request about to leave the keyboard; a dictionary-only pass
+runs no model and is recorded only when it shows something. `boundary`
+says which of the three it was, and only letters read `mid-word`, so the
+punctuation-boundary and mid-word trials stay separable. The keyboard mints a random
 `opportunityID`, the app echoes it on every response line together with a
 receipt (`reason`, `generated`, `generatorMilliseconds`,
 `firstStableWordMilliseconds`, `register`, `source`), and the keyboard
@@ -427,7 +430,7 @@ behaves is three policy objects in `TildeConfiguration.swift` —
 `GeneratorProfile` (model, temperature, token budget), `DecisionPolicy`
 (visible cap, echo floor, grounding, scene gates, window title) and
 `InteractionPolicy` (chained accept, calm reveal floor, punctuation
-boundaries) — assembled by the app into one
+boundaries, mid-word continuation) — assembled by the app into one
 `TildeEffectiveConfiguration` whose `digestSHA256` is the canonical-JSON
 hash of all three. The app stamps the digest and the interaction policy on
 every response line; the keyboard adopts the served interaction policy

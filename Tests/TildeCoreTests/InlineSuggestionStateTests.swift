@@ -43,6 +43,50 @@ struct InlineSuggestionStateTests {
         #expect(state.visibleText == " world again")
     }
 
+    /// Mid-word puts two predictors on one ticket for the first time: the
+    /// system dictionary answers immediately and the model answers later,
+    /// into the same request. The grow-only rule is what makes that safe —
+    /// the writer is already reading the dictionary's suffix, and a model
+    /// answer may only ever add to it.
+    @Test("A mid-word model answer may extend a visible dictionary ghost, never rewrite it")
+    func modelMayOnlyGrowADictionaryGhost() {
+        let request = ticket(request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(request))
+
+        // The dictionary's completion of "writ" lands first.
+        #expect(state.reduce(.update("ing", request)) == [.shown, .show("ing")])
+
+        // A model answer that extends it grows the same ghost, with no second
+        // impression and no hide/show flicker.
+        #expect(state.reduce(.update("ing the report", request)) == [.show("ing the report")])
+        #expect(state.visibleText == "ing the report")
+
+        // A model answer that disagrees with what is on screen is dropped:
+        // "ten" would have retracted the writer's "ing" and re-marked a
+        // different word under their caret.
+        #expect(state.reduce(.update("ten a draft", request)).isEmpty)
+        #expect(state.reduce(.update("ing", request)).isEmpty)
+        #expect(state.visibleText == "ing the report")
+    }
+
+    @Test("With no dictionary suffix the mid-word model answer is the first thing shown")
+    func modelAnswersAloneWhenTheDictionaryHasNothing() {
+        let request = ticket(request: 7)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(request))
+
+        // An empty dictionary suffix leaves the request pending, not resolved.
+        #expect(state.reduce(.update("", request)).isEmpty)
+        #expect(!state.isVisible)
+        #expect(state.pendingTicket == request)
+
+        #expect(state.reduce(.update("ting the report", request)) == [
+            .shown, .show("ting the report"),
+        ])
+        #expect(state.visibleText == "ting the report")
+    }
+
     @Test("A newer request rejects an older result for the same field state")
     func requestOrderRejectsLateResult() {
         let older = ticket(request: 1)

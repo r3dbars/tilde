@@ -226,7 +226,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             guard case let .success(request) = Self.readRequest(
                 connection,
-                allowingPunctuation: self.configuration.interaction.requestsAfterPunctuation
+                allowingPunctuation: self.configuration.interaction.requestsAfterPunctuation,
+                allowingMidWord: self.configuration.interaction.requestsMidWordContinuation
             ) else {
                 _ = Self.write(.invalidRequest, to: connection)
                 return
@@ -488,14 +489,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
     }
 
     /// The personal model must only ever see finished words. Mid-word
-    /// requests (cursor inside a word, no trailing whitespace) never reach
-    /// here today — the wire parser (`readRequest`) only accepts
-    /// word-boundary context — but this path must not depend on that
-    /// incidentally: a partial word fed to the model as a finished tail
-    /// word could resolve to a confident prediction that gets glued onto
-    /// the very word still being typed (e.g. "tomo" + "tomorrow" →
-    /// "tomotomorrow"). `internal`, not `private`, so it is directly
-    /// testable.
+    /// requests (cursor inside a word, no trailing whitespace) now do reach
+    /// here — `acceptsCompletionContext` lets them through whenever the
+    /// served interaction policy turns mid-word continuation on — and this
+    /// guard is what keeps personal serving word-boundary only regardless:
+    /// a partial word fed to the model as a finished tail word could
+    /// resolve to a confident prediction that gets glued onto the very word
+    /// still being typed (e.g. "tomo" + "tomorrow" → "tomotomorrow"). The
+    /// base model has a prompt shape for a partial word
+    /// (`RawContinuationPrompt.partialWordToComplete`); the personal
+    /// next-word path has none, so it declines. `internal`, not `private`,
+    /// so it is directly testable.
     static func personalTailWords(fromContext context: String) -> [String] {
         guard RawContinuationPrompt.endsAtWordBoundary(context) else { return [] }
         return PersonalSuggestionPolicy.tailWords(fromContext: context)
@@ -607,9 +611,33 @@ final class GhostBrainServerHost: @unchecked Sendable {
         case screenMemory(ScreenMemoryInputEvent)
     }
 
+    /// Where a completion request is allowed to have left the caret.
+    ///
+    /// A word boundary always, request punctuation when the served
+    /// interaction policy allows it, and — only when that policy turns
+    /// mid-word continuation on — a context that ends inside a word the
+    /// writer has already typed at least
+    /// `RawContinuationPrompt.minimumMidWordPartialLetters` letters of. The
+    /// wire is the boundary where the two processes could disagree, so the
+    /// check is made against the same served policy the keyboard adopted,
+    /// not against this build's own bundle. `internal` for tests: the socket
+    /// itself is not unit-testable, this predicate is.
+    static func acceptsCompletionContext(
+        _ context: String,
+        allowingPunctuation: Bool,
+        allowingMidWord: Bool
+    ) -> Bool {
+        if RawContinuationPrompt.endsAtRequestBoundary(
+            context,
+            allowingPunctuation: allowingPunctuation
+        ) { return true }
+        return allowingMidWord && RawContinuationPrompt.endsMidWord(context)
+    }
+
     private static func readRequest(
         _ fd: Int32,
-        allowingPunctuation: Bool
+        allowingPunctuation: Bool,
+        allowingMidWord: Bool
     ) -> Result<ValidatedRequest, Error> {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4_096)
@@ -650,9 +678,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
             guard !request.context.isEmpty,
                   request.screenMemoryEvent == nil,
                   request.context.count <= 3_000,
-                  RawContinuationPrompt.endsAtRequestBoundary(
+                  Self.acceptsCompletionContext(
                       request.context,
-                      allowingPunctuation: allowingPunctuation
+                      allowingPunctuation: allowingPunctuation,
+                      allowingMidWord: allowingMidWord
                   ),
                   request.fieldSessionIdentifier.map({ UUID(uuidString: $0) != nil }) ?? true,
                   // An unknown arm identifier is a malformed request, not a
