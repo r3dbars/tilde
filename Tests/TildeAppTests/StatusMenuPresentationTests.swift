@@ -31,6 +31,37 @@ struct StatusMenuPresentationTests {
         #expect(menu.primaryAction == "Resume Tilde")
     }
 
+    /// `.disabled` covers two different user choices. When the Screen Memory
+    /// master toggle is the reason, the resume action turns a privacy
+    /// control back on, so the menu has to say which switch it is flipping
+    /// instead of hiding it behind "Resume Tilde".
+    @Test("Screen Memory off is named, not disguised as a pause")
+    func screenMemoryOff() {
+        let menu = StatusMenuHost.Presentation.make(
+            state: .disabled,
+            model: .ready(modelURL),
+            wordsToday: 13,
+            screenMemoryEnabled: false
+        )
+
+        #expect(menu.status == "Screen Memory is Off")
+        #expect(menu.detail == "Tilde suggests nothing until it can read the screen")
+        #expect(menu.primaryAction == "Turn Screen Memory Back On")
+    }
+
+    @Test("Suggestions off with Screen Memory on is still an ordinary pause")
+    func suggestionsOffIsStillAPause() {
+        let menu = StatusMenuHost.Presentation.make(
+            state: .disabled,
+            model: .ready(modelURL),
+            wordsToday: 13,
+            screenMemoryEnabled: true
+        )
+
+        #expect(menu.status == "Tilde is Paused")
+        #expect(menu.primaryAction == "Resume Tilde")
+    }
+
     @Test("Attention menu points to setup")
     func attention() {
         let menu = StatusMenuHost.Presentation.make(

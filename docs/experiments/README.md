@@ -154,6 +154,9 @@ Completed: <ISO-8601 UTC>
 
 ## Index
 
+- [Q14 — Generator by policy: tuned stack on Gemma versus Qwen](Q14-generator-by-policy-2x2.md) — REGISTERED; not yet run
+- [Q13 — Visible-word cap 3 versus 8](Q13-visible-cap-3v8.md) — REJECTED; cap-8 killed on every clause of its rule
+- [Q12 — Scene-echo floor retune and grounding](Q12-scene-echo-grounding.md) — SUPPORTED; both arms nominated as validation candidates
 - [Q11 — Extended ordinary-silence gate](Q11-ordinary-silence-gate.md) — REGISTERED; not yet run
 - [Q10 — K=1 early-start timing falsifier](Q10-early-start-timing-falsifier.md) — IMPLEMENTING; registered and built, not yet run
 - [Q09 — Future Lattice K=16 feasibility](Q09-future-lattice-k16-feasibility.md) — REJECTED; K=16 failed diversity and added only 1.39 points over K=8

@@ -17,10 +17,21 @@ import Foundation
 /// catastrophic failure and silence is the respectful one).
 ///
 /// `SensitiveScenePolicy` is pure, deterministic, and Core-only (no AppKit,
-/// no I/O): it looks at a classified `ScreenScene.Scene`'s conversation
-/// turns for phrases that mark an emotionally sensitive context and, if any
-/// match, tells the caller to withhold the suggestion entirely rather than
-/// try to produce one.
+/// no I/O): it looks at every piece of screen text a classified
+/// `ScreenScene.Scene` carries — conversation turns (`.replying`) and
+/// reference snippets (`.referencing`) alike — for phrases that mark an
+/// emotionally sensitive context and, if any match, tells the caller to
+/// withhold the suggestion entirely rather than try to produce one.
+///
+/// Both scene modes are scanned because the failure the policy exists to
+/// prevent is about what is VISIBLE to the writer, not about which window
+/// it sits in. A `.referencing` scene is "composing while another visible
+/// window shares vocabulary with what's being typed" — an obituary draft, a
+/// condolence thread, or a diagnosis in a document beside the composer
+/// feeds that vocabulary straight into the prompt through
+/// `RawContinuationPrompt`'s Reference block, so a model completing over it
+/// can produce exactly the tone-deaf suggestion Case B was. Scanning only
+/// `conversationTurns` left that half of the surface open.
 ///
 /// Deliberately blunt v1: word-boundary, case-insensitive substring matching
 /// against a single flat phrase table, no NLP, no LLM call. It will both
@@ -95,22 +106,29 @@ public enum SensitiveScenePolicy {
     /// speaker's turns in particular: it's the other party's disclosure
     /// (grief, a diagnosis, a breakup) that small models are least equipped
     /// to reason about correctly, and that's exactly what happened in both
-    /// live failure cases above.
+    /// live failure cases above. Reference snippets have no speaker at all,
+    /// so they are simply scanned as visible text.
     public static func isSensitive(scene: ScreenScene.Scene?) -> Bool {
-        guard let scene else { return false }
-        return scene.conversationTurns.contains { turn in
-            matchedCategory(in: turn.text) != nil
-        }
+        matchedCategory(scene: scene) != nil
     }
 
     /// Same decision as `isSensitive`, but also returns which category
     /// fired first (deterministic `Category.allCases` order) — useful for
     /// diagnostics or future tuning, though today's caller only logs a
     /// count, never the category or the matched text.
+    ///
+    /// Conversation turns are scanned before reference snippets, in scene
+    /// order, so a `.replying` scene reports exactly the category it always
+    /// did; the snippet pass only ever adds a decision where there was none.
     static func matchedCategory(scene: ScreenScene.Scene?) -> Category? {
         guard let scene else { return nil }
         for turn in scene.conversationTurns {
             if let category = matchedCategory(in: turn.text) {
+                return category
+            }
+        }
+        for snippet in scene.referenceSnippets {
+            if let category = matchedCategory(in: snippet) {
                 return category
             }
         }
@@ -130,9 +148,10 @@ public enum SensitiveScenePolicy {
 
     /// One pattern per phrase, compiled once at type load.
     ///
-    /// `isSensitive` runs the whole table against every conversation turn on
-    /// the completion path, and each check used to escape its phrase and build
-    /// a fresh `NSRegularExpression`. A non-sensitive scene — the common case,
+    /// `isSensitive` runs the whole table against every conversation turn and
+    /// every reference snippet on the completion path, and each check used to
+    /// escape its phrase and build a fresh `NSRegularExpression`. A
+    /// non-sensitive scene — the common case,
     /// and the one that never early-exits — therefore paid for hundreds of
     /// regex compiles per keystroke. Compiling once removes that cost outright.
     ///

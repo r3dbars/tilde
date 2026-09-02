@@ -723,6 +723,128 @@ struct PersonalHistoryControllerTests {
         #expect(after == before)
     }
 
+    @Test("The trained model survives a restart the bounded raw tail could not")
+    func trainedModelSurvivesRestartBeyondTheReplayTail() async {
+        let fixture = Fixture(enabled: true, modelPersistenceInterval: 0)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        let learned = fixture.event(
+            id: "learned",
+            text: " alpha beta gamma alpha beta gamma "
+        )
+        #expect(await fixture.controller.ingest([learned]))
+        let saved = await fixture.store.trainedModel
+        #expect(saved != nil)
+        #expect(saved?.coveredThroughSequence == 1)
+
+        // The raw records roll out of the bounded replay window. Before the
+        // trained table was durable this is exactly where learning quietly
+        // reset; now only the saved model can carry it across.
+        await fixture.store.dropRecords()
+
+        let restarted = fixture.restart()
+        #expect(await settledStatus(restarted).phase == .ready)
+        let continuation = fixture.event(id: "after-restart", text: " alpha beta ")
+        #expect(await restarted.ingest([continuation]))
+
+        var uninterrupted = PersonalNextWordShadow()
+        uninterrupted.consume([learned], scoring: true)
+        uninterrupted.consume([continuation], scoring: true)
+        #expect(await settledStatus(restarted).snapshot == uninterrupted.snapshot)
+        #expect(await restarted.personalNextWordPrediction(
+            afterTailWords: ["alpha", "beta"],
+            appBundleIdentifier: "com.example.Editor"
+        ) == uninterrupted.predictNextWord(afterTailWords: ["alpha", "beta"]))
+    }
+
+    @Test("Without a saved model the same restart loses what the tail no longer holds")
+    func withoutATrainedModelLearningStillResets() async {
+        // The control for the test above: the durable table is the only
+        // thing standing between a rolled-off tail and a reset model.
+        let fixture = Fixture(enabled: true, modelPersistenceInterval: 0)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        await fixture.store.setSaveModelFailure(.corruptStore)
+        let learned = fixture.event(
+            id: "learned",
+            text: " alpha beta gamma alpha beta gamma "
+        )
+
+        // A model that cannot be saved must not fail the ingest: the events
+        // themselves are durable and the table is derived state.
+        #expect(await fixture.controller.ingest([learned]))
+        #expect(await fixture.store.trainedModel == nil)
+        #expect(fixture.controller.storageHealthSnapshot == .healthy)
+        await fixture.store.dropRecords()
+
+        let restarted = fixture.restart()
+        #expect(await settledStatus(restarted).snapshot.learnedTransitions == 0)
+    }
+
+    @Test("A throttled, stale save is still exact: the log positions after it are replayed")
+    func staleSaveIsToppedUpByCoverage() async {
+        let fixture = Fixture(enabled: true, modelPersistenceInterval: 3_600)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        let batches = [
+            fixture.event(id: "one", text: " alpha beta gamma "),
+            fixture.event(id: "two", text: "alpha beta gamma "),
+            fixture.event(id: "three", text: "alpha beta delta "),
+        ]
+        for batch in batches {
+            #expect(await fixture.controller.ingest([batch]))
+        }
+        // One save for three batches — the table is a whole-file record and
+        // is not rewritten per keystroke batch.
+        #expect(await fixture.store.trainedModelSaves == 1)
+        #expect(await fixture.store.trainedModel?.coveredThroughSequence == 1)
+
+        let restarted = fixture.restart(modelPersistenceInterval: 3_600)
+        #expect(await settledStatus(restarted).phase == .ready)
+
+        var uninterrupted = PersonalNextWordShadow()
+        for batch in batches { uninterrupted.consume([batch], scoring: true) }
+        let status = await settledStatus(restarted)
+        #expect(status.snapshot.learnedContexts == uninterrupted.snapshot.learnedContexts)
+        #expect(status.snapshot.learnedTransitions == uninterrupted.snapshot.learnedTransitions)
+        #expect(await restarted.personalNextWordPrediction(
+            afterTailWords: ["alpha", "beta"],
+            appBundleIdentifier: "com.example.Editor"
+        ) == uninterrupted.predictNextWord(afterTailWords: ["alpha", "beta"]))
+    }
+
+    @Test("Deleting personalization data deletes the trained model")
+    func deletionRemovesTheTrainedModel() async throws {
+        let fixture = Fixture(enabled: true, modelPersistenceInterval: 0)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        #expect(await fixture.controller.ingest([
+            fixture.event(text: " alpha beta alpha beta "),
+        ]))
+        #expect(await fixture.store.trainedModel != nil)
+
+        try await fixture.controller.deleteAll()
+
+        #expect(await fixture.store.trainedModel == nil)
+        #expect(await fixture.store.events.isEmpty)
+        #expect(await fixture.controller.nextWordStatus().snapshot.learnedTransitions == 0)
+        let restarted = fixture.restart()
+        #expect(await settledStatus(restarted).snapshot.learnedTransitions == 0)
+    }
+
+    @Test("An exclusion change refuses a trained model learned under the old scope")
+    func exclusionChangeDiscardsTheTrainedModel() async {
+        let fixture = Fixture(enabled: true, modelPersistenceInterval: 0)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+        #expect(await fixture.controller.ingest([
+            fixture.event(text: " alpha beta alpha beta "),
+        ]))
+        #expect(await fixture.store.trainedModel != nil)
+        await fixture.store.dropRecords()
+
+        fixture.controller.excludedApps = ["com.example.Other"]
+
+        let reset = await settledStatus(fixture.controller)
+        #expect(reset.snapshot.learnedTransitions == 0)
+        #expect(reset.snapshot.opportunities == 0)
+    }
+
     @Test("Disabled Personal History never serves a personal prediction")
     func disabledHistoryNeverServesPersonalPrediction() async {
         let fixture = Fixture(enabled: false)
@@ -735,8 +857,13 @@ struct PersonalHistoryControllerTests {
 
     private actor MemoryStore: PersonalHistoryStore {
         nonisolated let location = URL(fileURLWithPath: "/tmp/tilde-personal-history-test")
-        private(set) var events: [PersonalHistoryEvent]
+        private(set) var records: [PersonalHistoryRecord] = []
         private(set) var checkpoint: PersonalNextWordStoredCheckpoint?
+        private(set) var trainedModel: PersonalNextWordStoredModel?
+        private(set) var trainedModelSaves = 0
+        private var saveModelFailure: PersonalHistoryStorageError?
+        private var nextSequence: Int64 = 0
+        var events: [PersonalHistoryEvent] { records.flatMap(\.events) }
         private var appendFailure: PersonalHistoryStorageError?
         private var replayFailure: PersonalHistoryStorageError?
         private var replayBlocked: Bool
@@ -763,7 +890,10 @@ struct PersonalHistoryControllerTests {
             appendBlocked: Bool = false,
             deleteBlocked: Bool = false
         ) {
-            self.events = events
+            if !events.isEmpty {
+                nextSequence = 1
+                records = [PersonalHistoryRecord(sequence: 1, events: events)]
+            }
             self.checkpoint = checkpoint
             self.appendFailure = appendFailure
             self.replayFailure = replayFailure
@@ -772,10 +902,11 @@ struct PersonalHistoryControllerTests {
             self.deleteBlocked = deleteBlocked
         }
 
+        @discardableResult
         func append(
             _ events: [PersonalHistoryEvent],
             checkpoint: PersonalNextWordStoredCheckpoint?
-        ) async throws {
+        ) async throws -> Int64 {
             appendStarted = true
             appendStartWaiters.forEach { $0.resume() }
             appendStartWaiters.removeAll()
@@ -783,8 +914,26 @@ struct PersonalHistoryControllerTests {
                 await withCheckedContinuation { appendWaiters.append($0) }
             }
             if let appendFailure { throw appendFailure }
-            self.events.append(contentsOf: events)
+            nextSequence += 1
+            records.append(PersonalHistoryRecord(sequence: nextSequence, events: events))
             if let checkpoint { self.checkpoint = checkpoint }
+            return nextSequence
+        }
+
+        func saveTrainedModel(_ model: PersonalNextWordStoredModel) async throws {
+            trainedModelSaves += 1
+            if let saveModelFailure { throw saveModelFailure }
+            trainedModel = model
+        }
+
+        func setSaveModelFailure(_ failure: PersonalHistoryStorageError?) {
+            saveModelFailure = failure
+        }
+
+        /// What the 4 MiB bounded replay does to an old history: the raw
+        /// records roll out of reach while the store lives on.
+        func dropRecords() {
+            records = []
         }
 
         func setAppendFailure(_ failure: PersonalHistoryStorageError?) {
@@ -838,7 +987,11 @@ struct PersonalHistoryControllerTests {
                 await withCheckedContinuation { replayWaiters.append($0) }
             }
             if let replayFailure { throw replayFailure }
-            return PersonalHistoryReplay(events: events, checkpoint: checkpoint)
+            return PersonalHistoryReplay(
+                records: records,
+                checkpoint: checkpoint,
+                trainedModel: trainedModel
+            )
         }
         func deleteAll() async throws {
             deleteStarted = true
@@ -847,8 +1000,10 @@ struct PersonalHistoryControllerTests {
             if deleteBlocked {
                 await withCheckedContinuation { deleteWaiters.append($0) }
             }
-            events = []
+            records = []
+            nextSequence = 0
             checkpoint = nil
+            trainedModel = nil
         }
         func summary() async throws -> PersonalHistorySummary {
             PersonalHistorySummary(location: location, approximateBytes: Int64(events.count))
@@ -873,7 +1028,9 @@ struct PersonalHistoryControllerTests {
             blockAppends: Bool = false,
             blockDeletes: Bool = false,
             checkpoint: PersonalNextWordStoredCheckpoint? = nil,
-            diagnostics: DiagnosticsLog = .shared
+            diagnostics: DiagnosticsLog = .shared,
+            modelPersistenceInterval: TimeInterval
+                = PersonalHistoryController.defaultModelPersistenceInterval
         ) {
             let name = "tilde.tests.personal-history.\(UUID().uuidString)"
             defaults = UserDefaults(suiteName: name)!
@@ -916,7 +1073,19 @@ struct PersonalHistoryControllerTests {
             controller = PersonalHistoryController(
                 store: store,
                 settings: TildeSettings(keyboard: defaults),
-                diagnostics: diagnostics
+                diagnostics: diagnostics,
+                modelPersistenceInterval: modelPersistenceInterval
+            )
+        }
+
+        /// A relaunch of Tilde against the same durable store.
+        func restart(
+            modelPersistenceInterval: TimeInterval = 0
+        ) -> PersonalHistoryController {
+            PersonalHistoryController(
+                store: store,
+                settings: TildeSettings(keyboard: defaults),
+                modelPersistenceInterval: modelPersistenceInterval
             )
         }
 

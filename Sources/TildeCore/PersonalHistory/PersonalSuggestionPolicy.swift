@@ -6,6 +6,20 @@ public enum PersonalSuggestionSource: String, Equatable, Sendable {
     case agreed
 }
 
+/// What a streaming ghost may do while a personal prediction is still racing
+/// the generator. The keyboard grows a visible ghost and never rewrites it, so
+/// a prefix may only be shown once it is certain the personal layer will not
+/// replace the first word.
+public enum PersonalStreamDecision: String, Equatable, Sendable {
+    /// Not yet decidable — keep the prefix buffered, show nothing.
+    case hold
+    /// The personal layer cannot displace this ghost; stream normally.
+    case stream
+    /// A personal replacement won before anything was shown; this request
+    /// answers with one final line instead of a stream.
+    case finalOnly
+}
+
 public enum PersonalSuggestionPolicy {
     public static let maximumTailWords = 2
 
@@ -59,5 +73,59 @@ public enum PersonalSuggestionPolicy {
         case .baseOnly, .baseFallback, .silence:
             return (chosen.text, .base)
         }
+    }
+
+    /// Whether a personal answer could still displace whatever the base
+    /// model eventually says. Asked before the base text exists, so it can
+    /// only consult the arbiter's evidence bar; a prediction that cannot
+    /// clear it will lose to every possible base ghost, which is enough to
+    /// release a held stream immediately.
+    public static func couldReplaceAnyBase(_ prediction: PersonalNextWordPrediction?) -> Bool {
+        guard let prediction else { return false }
+        let set = candidateSet(baseGhost: "", personalPrediction: prediction)
+        guard let personal = set.first(from: .personal) else { return false }
+        return SuggestionArbiter.meetsPersonalEvidenceBar(personal)
+    }
+
+    /// The streaming gate. `basePrefix` is the longest stable complete-word
+    /// prefix the generator has produced so far, or `nil` when it has
+    /// produced none yet; `personalPrediction` is meaningful only once
+    /// `personalResolved` is true.
+    ///
+    /// Deciding on the first stable prefix rather than the finished ghost is
+    /// sound because the arbiter compares first words only, and a stable
+    /// prefix's first word is already the finished ghost's first word — so
+    /// "would personal replace this prefix" and "would personal replace the
+    /// final ghost" are the same question.
+    public static func streamDecision(
+        basePrefix: String?,
+        personalPrediction: PersonalNextWordPrediction?,
+        personalResolved: Bool
+    ) -> PersonalStreamDecision {
+        guard personalResolved else {
+            // Nothing may be shown while an answer that could replace the
+            // first word is still in flight.
+            return .hold
+        }
+        guard let personalPrediction else { return .stream }
+        guard let basePrefix, !basePrefix.isEmpty else {
+            return couldReplaceAnyBase(personalPrediction) ? .hold : .stream
+        }
+        let applied = apply(baseGhost: basePrefix, personalPrediction: personalPrediction)
+        return applied.source == .personal ? .finalOnly : .stream
+    }
+
+    /// The terminal line's text and source. Identical to `apply` except that
+    /// a prefix already on screen is never rewritten: once a partial has
+    /// been written, the final honours the base ghost the writer is already
+    /// reading, and reports the `base` source it actually served.
+    public static func finalSuggestion(
+        baseGhost: String,
+        personalPrediction: PersonalNextWordPrediction?,
+        streamedPrefix: Bool
+    ) -> (text: String, source: PersonalSuggestionSource) {
+        let applied = apply(baseGhost: baseGhost, personalPrediction: personalPrediction)
+        guard streamedPrefix, applied.source == .personal else { return applied }
+        return (baseGhost, .base)
     }
 }

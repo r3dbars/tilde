@@ -143,6 +143,7 @@ public enum TildeProductProfile: String, Equatable, Sendable {
     public var chainsCompletionAfterAccept: Bool { interactionPolicy.chainsCompletionAfterAccept }
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays { interactionPolicy.calmRevealDelays }
     public var requestsAfterPunctuation: Bool { interactionPolicy.requestsAfterPunctuation }
+    public var requestsMidWordContinuation: Bool { interactionPolicy.requestsMidWordContinuation }
 
     public var personalHistoryKeychainService: String {
         "\(appBundleIdentifier).personal-history"

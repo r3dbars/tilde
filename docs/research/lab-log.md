@@ -28,6 +28,99 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Executing the field audit: seven tracks, six merged, one by hand
+
+- **Try:** Turn the field audit's to-do list into code in one pass: seven
+  parallel Opus tracks in isolated worktrees (app surface, core safety and
+  speed, personal history, records and license, mid-word continuation,
+  restraint UI, promotion campaign), each ending in a branch with tests and
+  a green fast proof, reviewed by the orchestrator before merging.
+- **Learn:** Six tracks merged with one trivial conflict (the status menu's
+  presentation gained parameters from two sides) and one cross-track test
+  fallout (a store stub predating the personal track's new protocol
+  requirement). What landed: the Screen Memory master toggle the covenant
+  mandates, wired so off drops every held snapshot and the menu stops
+  calling it a pause; an honest one-line model-picker copy; the tilde key
+  documented in setup, Help, and README; one-click "Ignore <App>" from the
+  menu bar; the sensitive-scene guard now scans reference snippets (adds
+  silence only); `PreparedCompletionContext` so the cleaner, echo, and
+  grounding derive their structures once per request (golden tests pin
+  byte-identical output); streaming survives personalization via a 60 ms
+  first-prefix hold instead of an unconditional off; the trained personal
+  model persists encrypted beside the log and dies with delete-everything;
+  mid-word model continuation as a fourth `InteractionPolicy` field, off in
+  production, on in the 9B preview, with clause punctuation no longer filed
+  as mid-word; `OutcomeLedgerSummary` behind Your Tilde and the menu bar
+  (keystrokes saved, kept after 30 s, streaks, held-back count by reason,
+  and an honest line when Screen Access is off); Q14 registered as the
+  Gemma/Qwen × conservative/tuned promotion test with two validated
+  owner-local campaigns. By hand: PRIVACY.md now states the packaged
+  capture/redaction proof accurately; the platform audit carries a
+  Corrections block striking the unrecorded "Q10R" figures (tally 2 of 3;
+  the ledger entry's "early start" phrase corrected too); TRADEMARK.md and
+  the README's license section prepare the AGPL-3.0 switch; a NOT RUN
+  compatibility results sheet exists for the first recorded run.
+- **Fail:** The records-license track died on an API content filter while
+  emitting the AGPL text, so the LICENSE file itself is not yet replaced;
+  the switch is documented but not legally in force until that file lands.
+  Nothing here is measured: mid-word continuation, the 60 ms hold, the
+  prepared context, and the new UI numbers all await dogfood and the
+  flight recorder; the sensitive-scene extension is a production behaviour
+  change that only adds silence and will show as more `sensitive-scene`
+  events. Q14 is registered and validated but not run. The compatibility
+  sheet is a template, not a result.
+- **Where:** merge commits on this branch for `audit/app-ui`,
+  `audit/core-safety-speed`, `audit/personal`, `audit/keyboard-midword`,
+  `audit/restraint-ui`, `audit/promotion-campaign`; `PRIVACY.md`, `README.md`,
+  `TRADEMARK.md`, `docs/research/platform-audit-2026-09-01.md`,
+  `docs/compatibility/app-compatibility-results-template.md`,
+  `docs/experiments/Q14-generator-by-policy-2x2.md`.
+- **Next:** Land the AGPL LICENSE text; install the build on the daily
+  driver; run the Q14 Gemma campaign, then the Qwen one, serially and on
+  AC; read a week of the flight recorder before promoting anything.
+
+## 2026-09-02 — Twenty-agent field audit: the shipped build is the unmeasured one
+
+- **Try:** A structured audit of the whole system by eight subsystem readers,
+  eight skeptics refuting each reader's top gaps and blockers against the
+  code, three business perspectives on free-versus-paid, and one
+  completeness critic (all Sonnet 5), with the load-bearing claims
+  re-verified by hand. Deliverable: the owner-facing "Tilde Field Audit".
+- **Learn:** Three readers independently found one root cause: production
+  resolves its behaviour from build identity, so the official app ships
+  the conservative decision and interaction policies while every measured
+  improvement (Q11/Q12/Q13 stack, anchored gate, chained accept,
+  punctuation requests, shorter reveal floor) lives only in the owner-only
+  9B preview. The shortest honest path to a public beta is that promotion
+  (via a Gemma-control validation run the settings split now makes
+  possible) plus four confirmed trust items: the Screen Memory master
+  toggle the covenant calls mandatory does not exist in the UI; the
+  sensitive-scene guard scans only conversation turns, not the referencing
+  mode; enabling personal suggestions disables streaming for every
+  request; PRIVACY.md still calls the capture/redaction proof unbuilt. The
+  three business perspectives converged on MIT core forever plus a
+  one-time Alfred-priced official build with support and the personal
+  layer, and one of them caught that the personal layer is MIT today with
+  no carve-out or entitlement code, so a paid tier must be service and
+  finish, not a fork-removable feature.
+- **Fail:** Two findings against our own evidence trail. (1)
+  `platform-audit-2026-09-01.md` cites a decided "Q10R" early-start
+  result with specific numbers in three places; Q10's registered file says
+  NOT RUN and no Q10R record exists in `docs/experiments`, the ledger, or
+  this log. Until its source is found the "latency-hiding mechanisms
+  rejected: 3 of 3" line is unsupported and mid-word continuation's timing
+  headroom is unproven. (2) One reader recommended reading the simulated
+  typist's 44.9% wrong-when-shown as the operative estimate, which the
+  partnership rules forbid; the two quality instruments disagree by 2.5×
+  and neither absolute number is trusted. The audit itself is
+  discovery-grade: Sonnet readers with file access, not a campaign.
+- **Where:** owner-local workflow transcript; the published Field Audit
+  page; this entry.
+- **Next:** Reconcile or strike Q10R in the platform audit; fix the four
+  trust items; register the Gemma/Qwen × conservative/tuned 2×2 as the
+  promotion campaign; read a week of the flight recorder before touching
+  any gate.
+
 ## 2026-09-02 — The settings split: one configuration in both processes, one digest on every event
 
 - **Try:** Untangle `TildeProductProfile`, which named the build *and* how

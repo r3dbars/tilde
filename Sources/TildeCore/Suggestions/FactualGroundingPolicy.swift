@@ -28,14 +28,50 @@ public enum FactualGroundingPolicy {
         scene: ScreenScene.Scene?,
         mode: Mode
     ) -> Bool {
-        guard mode != .off else { return false }
+        containsUnsupportedFact(
+            candidate,
+            in: prepared(typedContext: typedContext, scene: scene, mode: mode)
+        )
+    }
+
+    /// The anchors one request is allowed to assert, extracted once.
+    ///
+    /// The supported set comes from the typed context and the scene, neither
+    /// of which changes while the model streams — so a streaming request
+    /// derives it once here rather than re-scanning the whole context and
+    /// every scene turn for each partial. Only the candidate side is
+    /// per-output.
+    public struct PreparedAnchors: Sendable {
+        let mode: Mode
+        let allowed: Set<String>
+
+        /// Grounding off: nothing is ever unsupported.
+        public static let ungated = PreparedAnchors(mode: .off, allowed: [])
+    }
+
+    public static func prepared(
+        typedContext: String,
+        scene: ScreenScene.Scene?,
+        mode: Mode
+    ) -> PreparedAnchors {
+        guard mode != .off else { return .ungated }
         let source = ([typedContext]
             + (scene?.conversationTurns.map(\.text) ?? [])
             + (scene?.referenceSnippets ?? []))
             .joined(separator: " ")
-        let allowed = factualAnchors(in: source, mode: mode, dropsLeadingCapital: false)
-        let offered = factualAnchors(in: candidate, mode: mode, dropsLeadingCapital: true)
-        return !offered.isSubset(of: allowed)
+        return PreparedAnchors(
+            mode: mode,
+            allowed: factualAnchors(in: source, mode: mode, dropsLeadingCapital: false)
+        )
+    }
+
+    public static func containsUnsupportedFact(
+        _ candidate: String,
+        in context: PreparedAnchors
+    ) -> Bool {
+        guard context.mode != .off else { return false }
+        let offered = factualAnchors(in: candidate, mode: context.mode, dropsLeadingCapital: true)
+        return !offered.isSubset(of: context.allowed)
     }
 
     /// The anchors a piece of text asserts, folded to lowercase.

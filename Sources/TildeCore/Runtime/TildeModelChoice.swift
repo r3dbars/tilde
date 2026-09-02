@@ -28,10 +28,14 @@ public enum TildeModelChoice: String, CaseIterable, Equatable, Hashable, Sendabl
         }
     }
 
+    /// One honest line per model, shown in the setup and settings pickers.
+    /// Gemma is the model every shipped measurement was taken on; Qwen is
+    /// the larger option and has not been through the same evidence, so the
+    /// picker says exactly that instead of implying it is simply "better".
     public var resourceGuidance: String {
         switch self {
-        case .gemma4E2B: "Lower resource use"
-        case .qwen35B9B: "More memory and storage"
+        case .gemma4E2B: "Measured default, uses less memory and storage"
+        case .qwen35B9B: "Needs more memory and storage, still under study"
         }
     }
 

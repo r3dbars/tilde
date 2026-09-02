@@ -6,6 +6,7 @@ Tilde is an open-source macOS input method that offers quiet inline writing
 suggestions. Type normally, then use:
 
 - `Tab` to accept the next word; press it again to keep advancing
+- `~`, the key above `Tab`, to accept the whole visible suggestion at once
 - `Esc` to dismiss
 
 Suggestions are IMKit marked text inside the app where you are writing. Tilde
@@ -45,9 +46,9 @@ Tilde ships as a small signed package:
    not install or run a model server.
 4. `ModelManager` downloads the selected pinned model to Tilde's external
    app-support storage, verifies its exact size and SHA-256, and starts the
-   helper only with that verified path. Gemma 4 E2B is the lower-resource
-   default; Qwen 3.5 9B is the higher-resource option. GGUF files are never
-   part of `Tilde.app`.
+   helper only with that verified path. Gemma 4 E2B is the measured default
+   and uses less memory and storage; Qwen 3.5 9B needs more of both and is
+   still under study. GGUF files are never part of `Tilde.app`.
 
 The official picker offers exactly two immutable assets and requires no
 Hugging Face login:
@@ -187,4 +188,17 @@ never transmitted for inference, analytics, or training. See
 
 ## License
 
-[MIT](LICENSE)
+[GNU Affero General Public License v3.0](LICENSE), from 2 September 2026.
+Releases made before that date remain under the MIT license they shipped
+with. The Tilde name, icon, and logo are not covered by the software
+license; see [TRADEMARK.md](TRADEMARK.md).
+
+**Why AGPL.** The code stays fully open: read every line, build it yourself,
+fork it, change it. What the AGPL adds is a fair trade — anyone who
+distributes a modified Tilde, including as a hosted service, has to publish
+their source too. A keyboard that reads your screen has to be readable, so
+the free, open build gives you the whole input method, both local models,
+and every privacy guarantee described above. What is sold is the finished
+product around it: the official signed and notarized build, updates, and
+support. Third-party components keep their own licenses; `llama.cpp`, for
+example, is MIT.
