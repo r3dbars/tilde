@@ -21,10 +21,15 @@ public enum DiagnosticsMetadataRedactor {
         // The 2026-08-16 first-launch Screen Recording permission prompt's
         // outcome vocabulary from the setup permission flow.
         "requested", "settings-opened", "dismissed",
+        // `accessibility-permission` (exact screen text): held or only asked.
+        "granted",
         // `ScreenScene.Mode`'s raw values, logged by the `scene-classified`
         // diagnostic (`ScreenCaptureService.freshScene`) so a classification
         // is never opaque — mode only, never any of the OCR'd text itself.
         "replying", "referencing", "composing",
+        // `scaffold-prewarm`'s outcome (`ScaffoldPrewarmer`): whether the
+        // register scaffold was prefilled into the helper's slot. No text.
+        "warmed", "failed",
         // `SensitiveScenePolicy`'s suppression reason, logged by the
         // `suggestion-suppressed` diagnostic (`GhostBrainServerHost`) —
         // count-only, never the matched category or any scene text.
@@ -78,7 +83,10 @@ public enum DiagnosticsMetadataRedactor {
              // first complete-word partial, whole milliseconds, no text.
              "firstTokenMilliseconds", "firstPartialMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
-        case "willRestart", "firstInstall":
+        case "willRestart", "firstInstall",
+             // `llama-completion-timing`: whether the stream was cut once the
+             // display cap had settled the visible text. A bare flag, no text.
+             "stoppedAtCap":
             safe = value == "true" || value == "false"
         case "reason", "status", "mode", "source", "kind", "outcome", "ocrScope":
             safe = enumValues.contains(value)

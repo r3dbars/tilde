@@ -168,11 +168,52 @@ enum SecureLocalStorage {
         ) == 0
     }
 
+    /// Everything the kernel records about one file's content identity at a
+    /// moment: device and inode pin the file, size and modification time
+    /// change on any write, and the change time moves on every metadata
+    /// write too — including an attempt to set the modification time back.
+    /// Two equal fingerprints taken under the same directory lock name the
+    /// same bytes.
+    struct FileContentFingerprint: Equatable, Sendable {
+        let device: Int32
+        let inode: UInt64
+        let size: Int64
+        let modifiedSeconds: Int
+        let modifiedNanoseconds: Int
+        let changedSeconds: Int
+        let changedNanoseconds: Int
+        let createdSeconds: Int
+        let createdNanoseconds: Int
+
+        init(_ info: stat) {
+            device = info.st_dev
+            inode = info.st_ino
+            size = info.st_size
+            modifiedSeconds = info.st_mtimespec.tv_sec
+            modifiedNanoseconds = info.st_mtimespec.tv_nsec
+            changedSeconds = info.st_ctimespec.tv_sec
+            changedNanoseconds = info.st_ctimespec.tv_nsec
+            createdSeconds = info.st_birthtimespec.tv_sec
+            createdNanoseconds = info.st_birthtimespec.tv_nsec
+        }
+    }
+
     /// Makes an APFS copy-on-write snapshot of an owner-only regular file,
     /// opens it, and immediately unlinks its name. The returned descriptor is
     /// therefore unaffected by later path replacement or in-place writes to
     /// the installed source inode.
     static func openUnlinkedCloneForReading(at source: URL) -> FileHandle? {
+        openUnlinkedCloneForReading(at: source, fingerprint: nil)
+    }
+
+    /// `openUnlinkedCloneForReading(at:)` that also reports the source's
+    /// content fingerprint, taken on the same descriptor the clone is made
+    /// from while the directory lock is held: the clone holds exactly the
+    /// bytes that fingerprint describes.
+    static func openUnlinkedCloneForReading(
+        at source: URL,
+        fingerprint: UnsafeMutablePointer<FileContentFingerprint?>?
+    ) -> FileHandle? {
         let directory = source.deletingLastPathComponent()
         guard !source.lastPathComponent.isEmpty,
               let directoryDescriptor = secureDirectoryDescriptor(at: directory) else { return nil }
@@ -192,6 +233,7 @@ enum SecureLocalStorage {
               info.st_uid == getuid(),
               info.st_mode & 0o7777 == 0o600,
               info.st_nlink > 0 else { return nil }
+        fingerprint?.pointee = FileContentFingerprint(info)
 
         let snapshotName = ".model-runtime-\(UUID().uuidString)"
         guard fclonefileat(sourceDescriptor, directoryDescriptor, snapshotName, 0) == 0 else {

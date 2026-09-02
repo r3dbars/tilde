@@ -67,6 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let completionProductProfile: TildeProductProfile
     private let modelManager: ModelManager
     private let llamaServerHost: LlamaServerProcessHost
+    /// Keeps the frontmost app's register scaffold in the helper's prompt
+    /// cache so the first suggestion after launch, a helper restart, or an
+    /// app switch pays only for the scene block and field text.
+    private lazy var scaffoldPrewarmer = ScaffoldPrewarmer(baseURL: llamaServerHost.baseURL)
     private lazy var personalHistoryController = PersonalHistoryController()
     private lazy var statusMenuHost = StatusMenuHost(
         appDelegate: self,
@@ -110,7 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sceneProvider: Self.sceneProvider(for: screenCaptureService),
         targetProvider: Self.suggestionTargetProvider,
         // A bare activity pulse only — see GhostBrainServerHost's doc comment.
-        onCompletionActivity: Self.completionActivityHandler(for: screenCaptureService),
+        onCompletionActivity: Self.completionActivityHandler(
+            for: screenCaptureService,
+            prewarmer: scaffoldPrewarmer
+        ),
         onScreenMemoryEvent: Self.screenMemoryEventHandler(for: screenCaptureService),
         suggestionsGate: Self.suggestionsGate,
         personalSuggestionsGate: Self.personalSuggestionsGate,
@@ -167,9 +174,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// compiler cannot tell whether the closure belongs to `AppDelegate`'s
     /// MainActor or to `ScreenCaptureService`'s own actor.
     private nonisolated static func completionActivityHandler(
-        for service: ScreenCaptureService
+        for service: ScreenCaptureService,
+        prewarmer: ScaffoldPrewarmer
     ) -> @Sendable () -> Void {
-        { Task { await service.noteCompletionActivity() } }
+        {
+            prewarmer.noteCompletionActivity()
+            Task { await service.noteCompletionActivity() }
+        }
     }
 
     private nonisolated static func screenMemoryEventHandler(
@@ -288,6 +299,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launchMode == .production {
             statusMenuHost.start()
             startObservingFrontmostAppForScreenMemory()
+            let prewarmer = scaffoldPrewarmer
+            prewarmer.noteFrontmostApp(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+            llamaServerHost.setReadinessObserver { ready in
+                if ready { prewarmer.noteHelperReady() } else { prewarmer.noteHelperUnavailable() }
+            }
+            if llamaServerHost.snapshot == .ready { prewarmer.noteHelperReady() }
+            // Exact screen text: the Accessibility reader beats OCR on both
+            // precision and latency and is tried first, but nothing ever asked
+            // for the permission, so every install ran OCR. Ask once; the
+            // menu line can ask again. Reading only, under the Screen Memory
+            // covenant; there is no insertion path.
+            if TildeSettings().screenMemoryEnabled,
+               !AccessibilityPermission.isGranted(),
+               !TildeSettings().accessibilityRequested {
+                requestAccessibilityAccess()
+            }
         } else if launchMode == .releaseProof
             && ProcessInfo.processInfo.environment["TILDE_SCREEN_MEMORY_DEV"] == "1"
         {
@@ -421,11 +448,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// misses same-app window changes (see `windowIdentityPollTimer`'s doc
     /// comment), so a lightweight poll backs it up.
     private func startObservingFrontmostAppForScreenMemory() {
+        let prewarmer = scaffoldPrewarmer
         frontmostAppObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [screenCaptureService] _ in
+        ) { [screenCaptureService] notification in
+            let activated = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            prewarmer.noteFrontmostApp(bundleIdentifier: activated?.bundleIdentifier)
             Task {
                 await screenCaptureService.noteWindowChanged(
                     target: Self.currentTypingTarget(sessionIdentifier: "")
@@ -599,6 +629,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func openScreenRecordingSettings() {
         NSWorkspace.shared.open(ScreenRecordingPermission.systemSettingsURL)
+    }
+
+    /// Shows the system Accessibility prompt (which also lists Tilde in the
+    /// Accessibility pane) and records that it was asked. Count-only
+    /// diagnostic: whether access is held, never what was read.
+    func requestAccessibilityAccess() {
+        let settings = TildeSettings()
+        settings.accessibilityRequested = true
+        let granted = AccessibilityPermission.request()
+        DiagnosticsLog.shared.record(
+            "accessibility-permission",
+            metadata: ["outcome": granted ? "granted" : "requested"]
+        )
+    }
+
+    func openAccessibilitySettings() {
+        NSWorkspace.shared.open(AccessibilityPermission.systemSettingsURL)
     }
 
     func retrySetup() {

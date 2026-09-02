@@ -23,9 +23,23 @@ public enum SceneSuggestionPolicy {
     /// machinery until a registered display-policy experiment promotes them.
     public struct Options: Equatable, Sendable {
         public var extendedOrdinarySilenceGate: Bool
+        /// The non-actionable gate's escape hatch asks whether the writer
+        /// has begun a reply ("okay", "thanks", "I will"). Production reads
+        /// that cue off the head of the whole bounded field text, which in
+        /// a long composer, a document, or a mail reply with quoted text is
+        /// never a reply cue, so the gate silences replies the writer has
+        /// plainly started. With this on, the cue is read from the sentence
+        /// the writer is in. Owner-directed for the 9B preview (2026-09-01);
+        /// production stays as measured until a display-policy campaign
+        /// promotes it.
+        public var replyCueAnchoredToCurrentSentence: Bool
 
-        public init(extendedOrdinarySilenceGate: Bool = false) {
+        public init(
+            extendedOrdinarySilenceGate: Bool = false,
+            replyCueAnchoredToCurrentSentence: Bool = false
+        ) {
             self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
+            self.replyCueAnchoredToCurrentSentence = replyCueAnchoredToCurrentSentence
         }
 
         public static let production = Options()
@@ -63,7 +77,11 @@ public enum SceneSuggestionPolicy {
         if !hasEarlierSelfTurn,
            let textBeforeCursor,
            isNonActionableDeclarative(incoming),
-           !hasReplyCue(textBeforeCursor) {
+           !hasReplyCue(
+               options.replyCueAnchoredToCurrentSentence
+                   ? currentSentence(of: textBeforeCursor)
+                   : textBeforeCursor
+           ) {
             return .nonActionableScene
         }
         guard options.extendedOrdinarySilenceGate else { return nil }
@@ -115,6 +133,14 @@ public enum SceneSuggestionPolicy {
     private static func hasReplyCue(_ text: String) -> Bool {
         let phrase = normalizedWords(text).joined(separator: " ")
         return replyPrefixes.contains { phrase == $0 || phrase.hasPrefix($0 + " ") }
+    }
+
+    /// The text after the last sentence terminator or line break: the
+    /// sentence the writer is in, which is where a reply cue actually sits.
+    static func currentSentence(of text: String) -> String {
+        let boundaries: Set<Character> = [".", "!", "?", "\n"]
+        guard let index = text.lastIndex(where: boundaries.contains) else { return text }
+        return String(text[text.index(after: index)...])
     }
 
     // MARK: - Extended ordinary-silence detectors (development-only)

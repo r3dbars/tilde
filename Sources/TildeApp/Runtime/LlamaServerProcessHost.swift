@@ -74,6 +74,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var preparing = false
     private var launchedAt = Date.distantPast
     private var restartPolicy = LlamaRestartPolicy()
+    private var readinessObserver: (@Sendable (Bool) -> Void)?
 
     init(
         port: Int,
@@ -93,6 +94,13 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             stopped = false
             prepareLaunch()
         }
+    }
+
+    /// Called with `true` each time a helper becomes ready to serve and
+    /// `false` when that helper goes away. A fresh helper has an empty
+    /// prompt cache, which is what the scaffold prewarmer needs to know.
+    func setReadinessObserver(_ observer: (@Sendable (Bool) -> Void)?) {
+        lifecycle.async { [weak self] in self?.readinessObserver = observer }
     }
 
     func stop() {
@@ -254,6 +262,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         healthTask = nil
         let shouldRestart = !stopped
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
+        if wasHealthy { readinessObserver?(false) }
         if shouldRestart { scheduleRestart(reason: reason, wasHealthy: wasHealthy, uptime: uptime) }
     }
 
@@ -305,14 +314,15 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             for attempt in 0..<Self.healthProbeAttempts {
                 guard !Task.isCancelled, self.isCurrent(child) else { return }
                 if await self.probeHealth(of: child) {
-                    let transitioned = self.lifecycle.sync { () -> Bool in
+                    let observer = self.lifecycle.sync { () -> (@Sendable (Bool) -> Void)?? in
                         guard !self.stopped, self.runtimeSnapshot == .starting,
-                              self.process === child else { return false }
+                              self.process === child else { return nil }
                         self.runtimeSnapshot = .ready
-                        return true
+                        return .some(self.readinessObserver)
                     }
-                    if transitioned {
+                    if let observer {
                         DiagnosticsLog.shared.record("llama-server-healthy", metadata: [:])
+                        observer?(true)
                     }
                     return
                 }
