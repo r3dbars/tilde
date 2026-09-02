@@ -210,42 +210,42 @@ answer, not a temporary one.
 
 ## Result
 
-Status: NOT RUN
-Completed: —
+Status: REJECTED as stated (Gemma gains less than Qwen); the tuned stack's
+direction is SUPPORTED on both generators
+Completed: 2026-09-02, two clean campaigns, 3,600/3,600 evaluations each,
+reviewed `supported` within each campaign and compared with a 10,000-iteration
+root-clustered bootstrap.
 
 ### Aggregate evidence
 
-None. Both campaigns are registered and validated; neither has been executed.
+| | conservative | tuned | Δ bad-when-shown (improvement) | useful retention |
+| --- | --- | --- | --- | --- |
+| Gemma 4 E2B | 312 shown, 73 useful, bad-when-shown 76.6%, NKS 0.7% | 464 shown, 199 useful, 57.1%, NKS 4.8% | 0.19 [0.14, 0.25], P(>0) 100% | 273% |
+| Qwen 3.5 9B | 959 shown, 373 useful, 61.1%, NKS 6.9% | 1,079 shown, 747 useful, 30.8%, NKS 19.4% | 0.30 [0.26, 0.35], P(>0) 100% | 200% |
+
+The primary metric is won in both campaigns with the interval excluding
+zero, and the guardrail holds by a wide margin in both. The registered
+hypothesis — that Gemma gains at least as much as Qwen — is rejected: the
+two intervals do not overlap, and Gemma's gain is about two thirds of Qwen's
+in points and half in relative terms. Worst seeds move the picture by under
+two points.
+
+### Promotion
+
+Nothing promotes from this pair, as registered. Every arm, including both
+tuned arms, fails the bad-suggestion and latency hard gates under this
+campaign runtime, so the standard path — validation partition with a Gemma
+control, sealed holdout, isolated preview, live dogfood, IMKit interaction
+proof, owner approval — begins from here with the expectation of a gain near
+twenty points on Gemma, not thirty.
 
 ### Failures and limitations
 
-Stated in advance: the unpaired generator contrast, the Qwen-tuned generation
-recipe applied to both models, development-partition reuse for the Qwen
-column, the two `tuned9B` scene knobs this instrument cannot vary, and the
-absence of any live feel or interruption evidence.
-
-### Decision
-
-Pending.
-
-### Durable changes
-
-- Learning Ledger entry: none. `docs/learning-ledger.md` admits an entry only
-  for a decision or a reusable lesson, and the research queue only when
-  evidence changes the order or requirement; a registration is neither. Q11,
-  Q12, and Q13 are likewise absent from the bundled ledger. An entry becomes
-  due when Q14 has a reviewed result.
-- Lab log: appended by the orchestrating session on the day of registration.
-- Regression IDs: none yet.
-- Implementation pull request: none — this registration changes no product
-  behaviour and no Swift.
-- Rollback: not applicable; production defaults are untouched.
-
-### Follow-up
-
-If the tuned stack helps Gemma, the next question is whether the two
-scene-composition knobs of `DecisionPolicy.tuned9B` (anchored reply cue,
-window title in scene) carry any of the effect — which first needs a Lab arm
-field so they can be varied at all. If it does not, the next question is
-which single filter breaks on the weaker generator: the three-word cap, the
-24-character echo floor, or names-and-numbers grounding.
+Stated in advance and unchanged: the unpaired generator contrast, the
+Qwen-tuned generation recipe applied to both models, development-partition
+reuse for the Qwen column, the two `tuned9B` scene knobs this instrument
+cannot vary, and the absence of any live feel or interruption evidence. Added
+after the run: the latency gate failure reflects an 8-worker campaign
+runtime, not the product path, and the absolute bad-when-shown rates here
+count unwanted displays alongside wrong ones and are not comparable to Q12
+and Q13's headline percentages without that adjustment.

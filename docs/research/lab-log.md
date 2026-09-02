@@ -28,6 +28,39 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Q14: the tuned stack helps Gemma too, at about half of Qwen's gain
+
+- **Try:** Run the registered generator-by-policy 2×2 as two paired
+  campaigns (Gemma 4 E2B and Qwen 3.5 9B, each conservative versus tuned)
+  on the certified-v2 development partition, serially, right after the
+  settings split made the arm identity honest. Both finished in minutes on
+  the synthetic cache.
+- **Learn:** The tuned display stack lowers bad-when-shown on both
+  generators with the interval well clear of zero: Gemma 76.6% → 57.1%
+  (improvement 0.19 [0.14, 0.25]), Qwen 61.1% → 30.8% (0.30 [0.26,
+  0.35]), and useful displays rise 73 → 199 and 373 → 747, so the
+  guardrail holds by a wide margin. The direction is generator-independent;
+  the magnitude is not — Gemma gets about two thirds of Qwen's points and
+  half the relative gain, so the registered "at least as much" hypothesis
+  is rejected while the useful conclusion is supported. Reviewed `supported`
+  within each campaign, compared with a 10,000-iteration bootstrap, recorded
+  in the Learning Ledger.
+- **Fail:** Every arm, including both tuned arms, fails the bad-suggestion
+  and latency hard gates under the 8-worker campaign runtime, so this pair
+  nominates nothing; promotion starts the standard validation path from
+  here. The absolute bad-when-shown rates count unwanted displays with
+  wrong ones and do not line up with Q12/Q13's headline percentages without
+  that adjustment. The Lab arm still cannot express the anchored reply cue
+  or the window title, so the live 9B preview remains the only place those
+  two have run.
+- **Where:** `docs/experiments/Q14-generator-by-policy-2x2.md` § Result;
+  ledger entry `tuned-display-stack-helps-gemma-at-half-qwen-gain`;
+  owner-local campaigns `q14-gemma-2x2-20260902` and `q14-qwen-2x2-20260902`.
+- **Next:** Register the validation-partition run with a Gemma control as
+  the promotion campaign for the production default; add Lab arm fields for
+  the two scene knobs so the whole tuned9B decision policy can be measured
+  offline.
+
 ## 2026-09-02 — Executing the field audit: seven tracks, six merged, one by hand
 
 - **Try:** Turn the field audit's to-do list into code in one pass: seven
