@@ -60,21 +60,15 @@
   #slack .tools { display: flex; gap: 12px; padding: 4px 10px 8px; color: var(--muted); font-size: 12px; }
 
   /* ---------- Mail ---------- */
-  #mail { grid-template-columns: 220px 300px 1fr; background: #f5f5f7; }
-  #mail .box { border-right: 1px solid var(--line); padding: 46px 12px 12px; color: #444; }
-  #mail .box .f { padding: 5px 10px; border-radius: 6px; } #mail .box .f.on { background: #dfe6f5; color: #0b4bd6; }
-  #mail .list { border-right: 1px solid var(--line); background: #fff; padding-top: 46px; }
-  #mail .row { padding: 10px 14px; border-bottom: 1px solid #eee; }
-  #mail .row.on { background: #eaf0ff; }
-  #mail .row b { display: block; } #mail .row span { color: var(--muted); font-size: 12px; }
-  #mail .read { background: #fff; display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
-  #mail .subj { padding: 46px 28px 12px; border-bottom: 1px solid var(--line); }
-  #mail .subj h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
-  #mail .subj .from { color: var(--muted); font-size: 13px; }
-  #mail .body { padding: 20px 28px; overflow: auto; line-height: 1.55; white-space: pre-wrap; }
-  #mail .reply { border-top: 1px solid var(--line); padding: 12px 28px 22px; background: #fbfbfd; }
-  #mail .reply .to { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
-  #mail textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 15px; line-height: 1.5; min-height: 140px; background: #fff; outline: 0; }
+  #mail { grid-template-columns: 1fr; background: #f5f5f7; }
+  #mail .read { background: #fff; display: grid; grid-template-rows: auto 1fr auto; max-width: 760px; width: 100%; margin: 28px auto; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+  #mail .subj { padding: 26px 32px 14px; border-bottom: 1px solid var(--line); }
+  #mail .subj h2 { margin: 0 0 8px; font-size: 21px; font-weight: 600; }
+  #mail .subj .from { color: var(--muted); font-size: 13px; line-height: 1.5; } #mail .subj .from b { color: var(--ink); }
+  #mail .body { padding: 22px 32px; overflow: auto; line-height: 1.55; white-space: pre-wrap; font-size: 15px; }
+  #mail .reply { border-top: 1px solid var(--line); padding: 14px 32px 24px; background: #fbfbfd; }
+  #mail .reply .to { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  #mail textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 15px; line-height: 1.5; min-height: 150px; background: #fff; outline: 0; }
 
   /* ---------- Messages ---------- */
   #messages { grid-template-columns: 300px 1fr; background: #fff; }
@@ -189,18 +183,10 @@
 
   <!-- ===================== MAIL ===================== -->
   <section id="mail" class="app">
-    <div class="box">
-      <div class="f on">Inbox</div><div class="f">Flagged</div><div class="f">Drafts</div><div class="f">Sent</div>
-    </div>
-    <div class="list">
-      <div class="row on"><b>Dana Whitfield</b>Contract renewal — need your sign-off by Friday<span>Today, 9:12 AM</span></div>
-      <div class="row"><b>Apple Developer</b>Your certificate expires in 30 days<span>Yesterday</span></div>
-      <div class="row"><b>Sam Kessler</b>Re: Lisbon dates<span>Tuesday</span></div>
-    </div>
     <div class="read">
       <div class="subj">
         <h2>Contract renewal — need your sign-off by Friday</h2>
-        <div class="from">Dana Whitfield &lt;dana@meridianlabs.example&gt; · To: you · Today at 9:12 AM</div>
+        <div class="from"><b>Dana Whitfield</b> &lt;dana@meridianlabs.example&gt;<br>To: you · Today at 9:12 AM</div>
       </div>
       <div class="body">Hi,
 
@@ -214,7 +200,7 @@ If I can get your answer by Thursday I can have the paperwork to them Friday mor
 Thanks,
 Dana</div>
       <div class="reply">
-        <div class="to">Reply to Dana Whitfield</div>
+        <div class="to">↩ Reply to Dana Whitfield</div>
         <textarea data-field placeholder="Write your reply…"></textarea>
       </div>
     </div>
