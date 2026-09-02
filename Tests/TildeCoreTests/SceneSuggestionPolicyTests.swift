@@ -207,6 +207,23 @@ struct SceneSuggestionPolicyTests {
             textBeforeCursor: "Okay. The agenda ",
             options: anchored
         ) == .nonActionableScene)
+        // A sentence already under way is a started reply, cue or not: the
+        // chained accept in a chat composer must not be silenced mid-sentence.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "Okay. The agenda looks fine ",
+            options: anchored
+        ) == nil)
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "I want to make sure the ",
+            options: anchored
+        ) == nil)
+        // Production still reads the head only, so it keeps suppressing here.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "I want to make sure the "
+        ) == .nonActionableScene)
         // Short fields behave exactly as production.
         #expect(SceneSuggestionPolicy.suppressionReason(
             scene: scene,
