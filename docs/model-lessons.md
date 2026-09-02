@@ -2,20 +2,27 @@
 
 Durable, measured findings about Tilde's model and evaluation. Newest first.
 
-## 2026-09-02 — Output-identical speed cuts: the Qwen 9B live tail halved (directional)
+## 2026-09-02 — Output-identical speed cuts: the Qwen 9B live tail halved
 
 Same diagnostics log, same Mac, Tilde 9B Preview. The old-build column pools
 several days of mixed load before the 2026-09-01 relaunch; the new-build
-column is 91 completions on builds 2927–2932 with the other two engines quit.
-Below the 200-completion verdict floor, so directional.
+column is 242 completions on builds 2927–2937 over one evening of ordinary
+use, past the 200-completion floor the ledger requires before a latency
+verdict. Still not a controlled comparison: the old column had two other
+engines sharing the GPU for part of its window.
 
 | Stage | Old p50 / p95 / p99 | New p50 / p95 / p99 |
 |---|---|---|
-| Model total (`llama-completion-timing`) | 203 / 381 / 518 ms | 122 / 249 / 280 ms |
-| First stable word | 89 / 280 / 443 ms | 82 / 219 / 227 ms |
-| First token | 60 / 252 / 351 ms | 56 / 204 / 213 ms |
-| Socket request total | 125 / 349 / 454 ms | 99 / 241 / 260 ms |
+| Model total (`llama-completion-timing`) | 203 / 381 / 518 ms | 121 / 262 / 321 ms |
+| First stable word | 89 / 280 / 443 ms | 85 / 230 / 295 ms |
+| First token | 60 / 252 / 351 ms | 62 / 210 / 257 ms |
+| Socket request total | 125 / 349 / 454 ms | 105 / 256 / 298 ms |
 | Handshake (`ghost-handshake-timing`) | 6 / 9 / 10 ms | 0 / 0 / 4 ms |
+
+At 91 completions the same table read 122 / 249 / 280 ms for model total;
+the tail grew as the sample tripled under real mixed use and stayed inside
+the 400 ms p99 budget the old build missed. The stream cut fired on 192 of
+246 completions.
 
 What produced it (PR #461, all profiles): the stream is cut once the display
 cap has settled the visible text (fired on 69 of 91 completions), peer
