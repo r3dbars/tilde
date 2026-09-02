@@ -60,7 +60,12 @@ the same day the ledger also records every silent model opportunity with a
 terminal reason (the flight recorder, `docs/tilde-lab.md` "fifth rule"), so
 `online-report --instrument` can say how often Tilde was quiet and why;
 before it, silence left no event at all, and a shown-only ledger must not
-be read as "Tilde spoke at every opportunity". The
+be read as "Tilde spoke at every opportunity". Also from that day, every
+event names its `configurationDigestSHA256` (the "sixth rule"), and the
+keyboard runs the interaction policy the app serves rather than its own
+bundle's, so a slice by digest is a slice by one exact behaviour; the
+built-in digests are production+Gemma, production+Qwen, and the 9B
+preview. The
 dated read behind all of it is
 [`platform-audit-2026-09-01.md`](platform-audit-2026-09-01.md); the
 attempts are in [`lab-log.md`](lab-log.md).

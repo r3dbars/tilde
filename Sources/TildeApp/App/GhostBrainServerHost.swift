@@ -66,6 +66,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// proof mode and tests).
     private let personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)?
     private let productProfile: TildeProductProfile
+    /// The whole behaviour the app serves, stamped on every response line
+    /// so the keyboard runs the same interaction policy and every outcome
+    /// event names the configuration that produced it.
+    private let configuration: TildeEffectiveConfiguration
     private let queue = DispatchQueue(label: "bar.r3d.tilde.ghost-brain-server")
     private var listenerFD: Int32 = -1
     private var lockFD: Int32 = -1
@@ -84,12 +88,18 @@ final class GhostBrainServerHost: @unchecked Sendable {
         suggestionsGate: (@Sendable () -> Bool)? = nil,
         personalSuggestionsGate: (@Sendable () -> Bool)? = nil,
         personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil,
+        configuration: TildeEffectiveConfiguration? = nil,
         productProfile: TildeProductProfile = PreviewModelSelection.completionProfile(
             for: TildeProductProfile.current
         )
     ) {
         self.runtime = runtime
         self.productProfile = productProfile
+        self.configuration = configuration ?? TildeEffectiveConfiguration.resolve(
+            build: .current,
+            completionProfile: productProfile,
+            modelIdentifier: "unspecified"
+        )
         self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL, productProfile: productProfile)
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
@@ -214,7 +224,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 _ = Self.write(.unavailable, to: connection)
                 return
             }
-            guard case let .success(request) = Self.readRequest(connection) else {
+            guard case let .success(request) = Self.readRequest(
+                connection,
+                allowingPunctuation: self.configuration.interaction.requestsAfterPunctuation
+            ) else {
                 _ = Self.write(.invalidRequest, to: connection)
                 return
             }
@@ -255,7 +268,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             self.onCompletionActivity?()
             let opportunityID = completionRequest.opportunityID
             guard await self.runtime.isReadyForCompletion() else {
-                _ = Self.write(
+                _ = self.writeStamped(
                     GhostBrainResponse.unavailable.stamped(
                         opportunityID: opportunityID, reason: .runtimeUnavailable, generated: false
                     ),
@@ -273,7 +286,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // completion already produces, so the IME does nothing special
             // and nothing gets logged as a failure.
             guard self.suggestionsGate?() ?? true else {
-                _ = Self.write(.silence(reason: .suggestionsPaused, opportunityID: opportunityID), to: connection)
+                _ = self.writeStamped(.silence(reason: .suggestionsPaused, opportunityID: opportunityID), to: connection)
                 return
             }
 
@@ -282,7 +295,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 completionRequest.fieldSessionIdentifier
             )
             if self.targetProvider != nil, expectedTarget == nil {
-                _ = Self.write(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
+                _ = self.writeStamped(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
             let targetIsCurrent: @Sendable () -> Bool = { [targetProvider = self.targetProvider] in
@@ -303,7 +316,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 expectedTarget
             )
             guard targetIsCurrent() else {
-                _ = Self.write(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
+                _ = self.writeStamped(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
 
@@ -318,7 +331,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // completion. Count-only diagnostic: never the matched category
             // or any scene text, only that suppression happened.
             if SensitiveScenePolicy.isSensitive(scene: scene) {
-                _ = Self.write(.silence(reason: .sensitiveScene, opportunityID: opportunityID), to: connection)
+                _ = self.writeStamped(.silence(reason: .sensitiveScene, opportunityID: opportunityID), to: connection)
                 DiagnosticsLog.shared.record("suggestion-suppressed", metadata: ["reason": "sensitive-scene"])
                 return
             }
@@ -327,7 +340,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 textBeforeCursor: completionRequest.context,
                 options: self.productProfile.sceneSuggestionOptions
             ) {
-                _ = Self.write(
+                _ = self.writeStamped(
                     .silence(reason: SuggestionDecisionReason(scene: reason), opportunityID: opportunityID),
                     to: connection
                 )
@@ -360,6 +373,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 connection: connection,
                 enabled: completionRequest.supportsStreamingResponses && !personalSuggestionsEnabled,
                 register: register,
+                configuration: self.configuration,
                 targetIsCurrent: targetIsCurrent
             )
             let completion = Task {
@@ -411,7 +425,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             guard !completion.isCancelled else { return }
             guard targetIsCurrent() else {
-                _ = Self.write(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
+                _ = self.writeStamped(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
 
@@ -464,7 +478,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 )
                 servedMetadata = nil
             }
-            if Self.write(response, to: connection), let servedMetadata {
+            if self.writeStamped(response, to: connection), let servedMetadata {
                 DiagnosticsLog.shared.record("suggestion-served", metadata: servedMetadata)
                 if let source {
                     PersonalSuggestionStats.record(source: source)
@@ -593,7 +607,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
         case screenMemory(ScreenMemoryInputEvent)
     }
 
-    private static func readRequest(_ fd: Int32) -> Result<ValidatedRequest, Error> {
+    private static func readRequest(
+        _ fd: Int32,
+        allowingPunctuation: Bool
+    ) -> Result<ValidatedRequest, Error> {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4_096)
         while data.count < GhostBrainRequest.maximumWireBytes {
@@ -635,7 +652,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                   request.context.count <= 3_000,
                   RawContinuationPrompt.endsAtRequestBoundary(
                       request.context,
-                      allowingPunctuation: TildeProductProfile.current.requestsAfterPunctuation
+                      allowingPunctuation: allowingPunctuation
                   ),
                   request.fieldSessionIdentifier.map({ UUID(uuidString: $0) != nil }) ?? true,
                   // An unknown arm identifier is a malformed request, not a
@@ -658,6 +675,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private let connection: Int32
         private let enabled: Bool
         private let register: ContinuationRegister
+        private let configuration: TildeEffectiveConfiguration
         private let targetIsCurrent: @Sendable () -> Bool
         private let lock = NSLock()
         private var failed = false
@@ -667,11 +685,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
             connection: Int32,
             enabled: Bool,
             register: ContinuationRegister,
+            configuration: TildeEffectiveConfiguration,
             targetIsCurrent: @escaping @Sendable () -> Bool
         ) {
             self.connection = connection
             self.enabled = enabled
             self.register = register
+            self.configuration = configuration
             self.targetIsCurrent = targetIsCurrent
         }
 
@@ -695,12 +715,20 @@ final class GhostBrainServerHost: @unchecked Sendable {
             lock.lock()
             defer { lock.unlock() }
             guard !failed else { return }
-            if !GhostBrainServerHost.write(.partial(text, register: register), to: connection) {
+            if !GhostBrainServerHost.write(
+                GhostBrainResponse.partial(text, register: register).stamped(configuration: configuration),
+                to: connection
+            ) {
                 failed = true
                 DiagnosticsLog.shared.record("ghost-partial-write-failed", metadata: [:])
                 failureHandler?()
             }
         }
+    }
+
+    /// Every completion-path line carries the configuration stamp.
+    private func writeStamped(_ response: GhostBrainResponse, to fd: Int32) -> Bool {
+        Self.write(response.stamped(configuration: configuration), to: fd)
     }
 
     private static func write(_ response: GhostBrainResponse, to fd: Int32) -> Bool {

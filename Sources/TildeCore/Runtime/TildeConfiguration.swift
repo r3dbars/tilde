@@ -1,0 +1,199 @@
+import CryptoKit
+import Foundation
+
+/// The four things "which Tilde is this" used to mean at once, pulled apart.
+///
+/// `TildeProductProfile` answers only *which build*: bundle identifiers,
+/// ports, directories. The three policies below answer *how it behaves*,
+/// each owned by one process, and `TildeEffectiveConfiguration` is the
+/// whole of it with one digest. The app assembles the configuration from
+/// its build and its model choice, stamps the digest and the interaction
+/// policy on every response line, and the keyboard adopts what it is told
+/// instead of reading interaction behaviour off its own bundle — so "Qwen
+/// in the production app" is one reproducible configuration in both
+/// processes, and every outcome event names the one that produced it.
+
+/// Model and sampling: what the helper runs and how it is asked.
+public struct GeneratorProfile: Codable, Equatable, Sendable {
+    public let modelIdentifier: String
+    public let temperature: Double
+    public let generatedTokenBudget: Int
+
+    public init(modelIdentifier: String, temperature: Double, generatedTokenBudget: Int) {
+        self.modelIdentifier = modelIdentifier
+        self.temperature = temperature
+        self.generatedTokenBudget = generatedTokenBudget
+    }
+}
+
+/// Gates, cleaning, and prompt shape: what may be shown from what came back.
+public struct DecisionPolicy: Codable, Equatable, Sendable {
+    public let maximumVisibleWords: Int
+    public let sceneEchoMinimumWords: Int
+    public let sceneEchoMinimumCharacters: Int
+    public let factualGrounding: FactualGroundingPolicy.Mode
+    public let replyCueAnchoredToCurrentSentence: Bool
+    public let extendedOrdinarySilenceGate: Bool
+    public let includesWindowTitleInScene: Bool
+
+    public init(
+        maximumVisibleWords: Int,
+        sceneEchoMinimumWords: Int,
+        sceneEchoMinimumCharacters: Int,
+        factualGrounding: FactualGroundingPolicy.Mode,
+        replyCueAnchoredToCurrentSentence: Bool,
+        extendedOrdinarySilenceGate: Bool,
+        includesWindowTitleInScene: Bool
+    ) {
+        self.maximumVisibleWords = maximumVisibleWords
+        self.sceneEchoMinimumWords = sceneEchoMinimumWords
+        self.sceneEchoMinimumCharacters = sceneEchoMinimumCharacters
+        self.factualGrounding = factualGrounding
+        self.replyCueAnchoredToCurrentSentence = replyCueAnchoredToCurrentSentence
+        self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
+        self.includesWindowTitleInScene = includesWindowTitleInScene
+    }
+
+    /// The measured production stack: Gemma's gates, byte for byte.
+    public static let conservative = DecisionPolicy(
+        maximumVisibleWords: CompletionSuggestion.defaultMaxVisibleWords,
+        sceneEchoMinimumWords: SceneEchoPolicy.defaultMinimumWords,
+        sceneEchoMinimumCharacters: SceneEchoPolicy.defaultMinimumCharacters,
+        factualGrounding: .off,
+        replyCueAnchoredToCurrentSentence: false,
+        extendedOrdinarySilenceGate: false,
+        includesWindowTitleInScene: false
+    )
+
+    /// Q12/Q13's nominated display filters plus the owner-directed scene
+    /// changes of 2026-09-01. Served for the official Qwen choice and the
+    /// isolated 9B preview.
+    public static let tuned9B = DecisionPolicy(
+        maximumVisibleWords: 3,
+        sceneEchoMinimumWords: SceneEchoPolicy.defaultMinimumWords,
+        sceneEchoMinimumCharacters: 24,
+        factualGrounding: .numbersAndNames,
+        replyCueAnchoredToCurrentSentence: true,
+        extendedOrdinarySilenceGate: false,
+        includesWindowTitleInScene: true
+    )
+
+    public var sceneSuggestionOptions: SceneSuggestionPolicy.Options {
+        SceneSuggestionPolicy.Options(
+            extendedOrdinarySilenceGate: extendedOrdinarySilenceGate,
+            replyCueAnchoredToCurrentSentence: replyCueAnchoredToCurrentSentence
+        )
+    }
+}
+
+/// Timing and accept behaviour in the keyboard: when a ghost is revealed,
+/// whether an accept chains, where a request may start.
+public struct InteractionPolicy: Codable, Equatable, Sendable {
+    public let chainsCompletionAfterAccept: Bool
+    public let calmRevealPostSpaceMilliseconds: Int
+    public let calmRevealMidWordMilliseconds: Int
+    public let requestsAfterPunctuation: Bool
+
+    public init(
+        chainsCompletionAfterAccept: Bool,
+        calmRevealPostSpaceMilliseconds: Int,
+        calmRevealMidWordMilliseconds: Int,
+        requestsAfterPunctuation: Bool
+    ) {
+        self.chainsCompletionAfterAccept = chainsCompletionAfterAccept
+        self.calmRevealPostSpaceMilliseconds = calmRevealPostSpaceMilliseconds
+        self.calmRevealMidWordMilliseconds = calmRevealMidWordMilliseconds
+        self.requestsAfterPunctuation = requestsAfterPunctuation
+    }
+
+    /// The measured production interaction.
+    public static let conservative = InteractionPolicy(
+        chainsCompletionAfterAccept: false,
+        calmRevealPostSpaceMilliseconds: 200,
+        calmRevealMidWordMilliseconds: 120,
+        requestsAfterPunctuation: false
+    )
+
+    /// The owner's 9B preview trial of 2026-09-01/02: chained accept, the
+    /// shorter Electron reveal floor, punctuation as a request boundary.
+    public static let tuned9B = InteractionPolicy(
+        chainsCompletionAfterAccept: true,
+        calmRevealPostSpaceMilliseconds: 120,
+        calmRevealMidWordMilliseconds: 80,
+        requestsAfterPunctuation: true
+    )
+
+    public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {
+        SuggestionRevealDelayPolicy.CalmDelays(
+            postSpaceNanoseconds: UInt64(max(0, calmRevealPostSpaceMilliseconds)) * 1_000_000,
+            midWordNanoseconds: UInt64(max(0, calmRevealMidWordMilliseconds)) * 1_000_000
+        )
+    }
+}
+
+/// Everything that decides behaviour, with one digest.
+public struct TildeEffectiveConfiguration: Codable, Equatable, Sendable {
+    public let generator: GeneratorProfile
+    public let decision: DecisionPolicy
+    public let interaction: InteractionPolicy
+
+    public init(generator: GeneratorProfile, decision: DecisionPolicy, interaction: InteractionPolicy) {
+        self.generator = generator
+        self.decision = decision
+        self.interaction = interaction
+    }
+
+    /// SHA-256 of the canonical (sorted-key) JSON. Two builds that behave
+    /// identically share a digest; any changed number changes it.
+    public var digestSHA256: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let bytes = try? encoder.encode(self) else { return "" }
+        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The configuration a build serves for a model identity.
+    /// `completionProfile` is the behaviour profile the app resolved for the
+    /// model choice (the official Qwen choice maps to the 9B behaviour);
+    /// `build` decides the interaction policy, which is why production with
+    /// Qwen keeps the conservative interaction until it is promoted.
+    public static func resolve(
+        build: TildeProductProfile,
+        completionProfile: TildeProductProfile,
+        modelIdentifier: String
+    ) -> TildeEffectiveConfiguration {
+        TildeEffectiveConfiguration(
+            generator: GeneratorProfile(
+                modelIdentifier: modelIdentifier,
+                temperature: completionProfile.completionTemperature,
+                generatedTokenBudget: completionProfile.generatedTokenBudget
+            ),
+            decision: completionProfile.decisionPolicy,
+            interaction: build.interactionPolicy
+        )
+    }
+}
+
+/// The keyboard's view of the app's interaction policy: its own build's
+/// default until the first response line teaches it better, then whatever
+/// the app most recently served. Adopting is idempotent and text-free.
+public struct ServedInteractionPolicy: Equatable, Sendable {
+    public private(set) var policy: InteractionPolicy
+    public private(set) var configurationDigest: String?
+
+    public init(default policy: InteractionPolicy) {
+        self.policy = policy
+        configurationDigest = nil
+    }
+
+    /// Returns true when the policy changed.
+    @discardableResult
+    public mutating func adopt(_ response: GhostBrainResponse) -> Bool {
+        if let digest = response.configurationDigest, !digest.isEmpty {
+            configurationDigest = digest
+        }
+        guard let served = response.interaction, served != policy else { return false }
+        policy = served
+        return true
+    }
+}

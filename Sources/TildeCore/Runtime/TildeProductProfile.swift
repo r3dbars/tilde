@@ -115,83 +115,34 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         }
     }
 
-    public var maximumVisibleWords: Int {
-        switch self {
-        case .preview9B: 3
-        case .production, .preview26B, .modelPreview:
-            CompletionSuggestion.defaultMaxVisibleWords
-        }
+    // MARK: - Behaviour, owned by the policy objects in TildeConfiguration.swift
+
+    /// Gates, cleaning, and prompt shape this behaviour profile serves.
+    /// Production, the 26B preview, and the Model Preview keep the measured
+    /// stack; the 9B behaviour (also the official Qwen choice) runs the
+    /// Q12/Q13-nominated filters and the owner-directed scene changes.
+    public var decisionPolicy: DecisionPolicy {
+        self == .preview9B ? .tuned9B : .conservative
     }
 
-    /// Q12 nominated a 24-character scene-echo floor as a frozen validation
-    /// candidate: at the shipped floor of 10 the detector coincides with a
-    /// short visible-word cap and kills correct short verbatim answers. The
-    /// word floor is unchanged — only the character floor was measured.
-    /// Shared by the official Qwen choice and the isolated 9B preview.
-    public var sceneEchoMinimumWords: Int {
-        SceneEchoPolicy.defaultMinimumWords
+    /// Keyboard timing and accept behaviour for this *build*. Only the
+    /// isolated 9B preview trials the tuned interaction; production keeps
+    /// the measured one for every model choice until a live result
+    /// promotes it. The app serves this on every response line and the
+    /// keyboard adopts it, so the two processes never disagree.
+    public var interactionPolicy: InteractionPolicy {
+        self == .preview9B ? .tuned9B : .conservative
     }
 
-    public var sceneEchoMinimumCharacters: Int {
-        switch self {
-        case .preview9B: 24
-        case .production, .preview26B, .modelPreview:
-            SceneEchoPolicy.defaultMinimumCharacters
-        }
-    }
-
-    /// Q12's second quality gate: refuse a suggestion that asserts a
-    /// number, address, date, or name the writer never typed and the scene
-    /// never showed. Applied to the official Qwen choice and 9B preview.
-    public var factualGrounding: FactualGroundingPolicy.Mode {
-        switch self {
-        case .preview9B: .numbersAndNames
-        case .production, .preview26B, .modelPreview: .off
-        }
-    }
-
-    /// Pre-inference scene gate selection. The 9B preview reads the reply
-    /// cue off the writer's current sentence (owner-directed 2026-09-01);
-    /// every other profile keeps the measured production gate.
-    public var sceneSuggestionOptions: SceneSuggestionPolicy.Options {
-        switch self {
-        case .preview9B: SceneSuggestionPolicy.Options(replyCueAnchoredToCurrentSentence: true)
-        case .production, .preview26B, .modelPreview: .production
-        }
-    }
-
-    /// Whether the Conversation block opens with the source window's title
-    /// (owner-directed 2026-09-01, 9B preview only). Production prompts
-    /// stay byte-identical until a context campaign promotes it.
-    public var includesWindowTitleInScene: Bool {
-        self == .preview9B
-    }
-
-    /// After the writer accepts the last visible word (or the whole ghost),
-    /// request the next continuation at once instead of waiting for the
-    /// next keystroke, so a sentence can be completed Tab by Tab at the
-    /// three-word precision the lab has measured. Owner-directed for the 9B
-    /// preview (2026-09-01); an interaction change, so it stays out of
-    /// production until the live acceptance and retention numbers hold.
-    public var chainsCompletionAfterAccept: Bool {
-        self == .preview9B
-    }
-
-    /// Reveal floor for Chromium/Electron hosts. The 9B preview trials the
-    /// shorter pair (owner-directed 2026-09-02); production keeps the
-    /// measured floor until the real-host matrix clears the change.
-    public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {
-        self == .preview9B ? .preview : .production
-    }
-
-    /// Whether sentence and clause punctuation is a request boundary. In
-    /// production a period, comma, or question mark hides the ghost and
-    /// nothing is asked until the next letter, which is the dead zone at
-    /// exactly the moment a thought turns. The 9B preview asks there too
-    /// (owner-directed 2026-09-02); the ghost carries its own separator.
-    public var requestsAfterPunctuation: Bool {
-        self == .preview9B
-    }
+    public var maximumVisibleWords: Int { decisionPolicy.maximumVisibleWords }
+    public var sceneEchoMinimumWords: Int { decisionPolicy.sceneEchoMinimumWords }
+    public var sceneEchoMinimumCharacters: Int { decisionPolicy.sceneEchoMinimumCharacters }
+    public var factualGrounding: FactualGroundingPolicy.Mode { decisionPolicy.factualGrounding }
+    public var sceneSuggestionOptions: SceneSuggestionPolicy.Options { decisionPolicy.sceneSuggestionOptions }
+    public var includesWindowTitleInScene: Bool { decisionPolicy.includesWindowTitleInScene }
+    public var chainsCompletionAfterAccept: Bool { interactionPolicy.chainsCompletionAfterAccept }
+    public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays { interactionPolicy.calmRevealDelays }
+    public var requestsAfterPunctuation: Bool { interactionPolicy.requestsAfterPunctuation }
 
     public var personalHistoryKeychainService: String {
         "\(appBundleIdentifier).personal-history"

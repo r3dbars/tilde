@@ -28,6 +28,52 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — The settings split: one configuration in both processes, one digest on every event
+
+- **Try:** Untangle `TildeProductProfile`, which named the build *and* how
+  prediction behaves in one enum, and which the app and the keyboard read
+  differently: the app mapped the official Qwen choice to the 9B
+  completion behaviour while the keyboard kept reading chaining, reveal
+  floor, and punctuation boundaries off its own bundle. Pull behaviour
+  into three policy objects — `GeneratorProfile`, `DecisionPolicy`,
+  `InteractionPolicy` — assembled by the app into
+  `TildeEffectiveConfiguration` with one canonical-JSON SHA-256; stamp the
+  digest and the interaction policy on every response line; have the
+  keyboard adopt the served interaction policy; carry the digest on every
+  outcome event into the Lab.
+- **Learn:** The enum's behaviour properties now delegate to the presets,
+  so every caller and every existing pin (`ProfileSceneOptionsTests`,
+  `TildeProductProfileTests`, the display-filter and H01 tests) passed
+  unchanged: production is byte-identical by construction, not by
+  re-checking. Three built-in digests fall out — production+Gemma
+  (conservative everything), production+Qwen (tuned generation and
+  decision, conservative interaction), the 9B preview (tuned everything) —
+  and the split brain is closed as an explicit statement rather than a
+  behaviour change: production with Qwen keeps the measured interaction
+  until a live result promotes it, and the keyboard is told so on every
+  line. The same request in the same app can no longer chain, reveal, or
+  start on punctuation differently in two processes; the app's own wire
+  check for punctuation boundaries reads the served policy too.
+- **Fail:** The keyboard is one response behind the app after a launch
+  (its bundle default applies until the first line), so a session's first
+  event may carry no digest; that is recorded as absence, never as a
+  guessed digest. The digest covers the three policies and the model
+  identifier, not the helper build or model file hash — those live in the
+  diagnostics and Lab asset snapshots. Nothing measured; this is the
+  precondition for the fair 2×2 (Gemma/Qwen × conservative/tuned), which
+  can now be registered with an honest arm identity per event.
+- **Where:** `Sources/TildeCore/Runtime/TildeConfiguration.swift`,
+  `TildeProductProfile.swift` (delegation), `GhostBrainWire.swift`
+  (`configurationDigest`, `interaction`, `stamped(configuration:)`),
+  `TextFreeOnlineEvent.configurationDigestSHA256`;
+  `AppDelegate.effectiveConfiguration`, `GhostBrainServerHost.writeStamped`;
+  `InlineGhostIME/GhostProvenance.swift` (`ServedConfiguration`);
+  `LabOnlineExperimentEvent.configurationDigestSHA256` and the bridge;
+  `docs/tilde-lab.md` "sixth rule".
+- **Next:** Register the 2×2 generator-by-policy comparison on the
+  repaired ledger; read the first day of quiet-rate-by-reason before
+  touching any gate.
+
 ## 2026-09-02 — The flight recorder: every model opportunity now ends with a reason
 
 - **Try:** Close the biggest hole the outside review named: the ledger

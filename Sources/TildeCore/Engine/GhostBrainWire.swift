@@ -134,6 +134,12 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
     public let generated: Bool?
     public let generatorMilliseconds: Int?
     public let firstStableWordMilliseconds: Int?
+    /// `TildeEffectiveConfiguration.digestSHA256` of the configuration that
+    /// produced this line, and the interaction policy the keyboard should
+    /// run under it. On every line the app writes, so the keyboard is never
+    /// more than one response behind the app's actual configuration.
+    public let configurationDigest: String?
+    public let interaction: InteractionPolicy?
 
     public init(
         outcome: Outcome,
@@ -145,7 +151,9 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
         reason: String? = nil,
         generated: Bool? = nil,
         generatorMilliseconds: Int? = nil,
-        firstStableWordMilliseconds: Int? = nil
+        firstStableWordMilliseconds: Int? = nil,
+        configurationDigest: String? = nil,
+        interaction: InteractionPolicy? = nil
     ) {
         self.outcome = outcome
         self.suggestion = suggestion
@@ -157,11 +165,14 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
         self.generated = generated
         self.generatorMilliseconds = generatorMilliseconds
         self.firstStableWordMilliseconds = firstStableWordMilliseconds
+        self.configurationDigest = configurationDigest
+        self.interaction = interaction
     }
 
     private enum CodingKeys: String, CodingKey {
         case outcome, suggestion, final, register, source
         case opportunityID, reason, generated, generatorMilliseconds, firstStableWordMilliseconds
+        case configurationDigest, interaction
     }
 
     public init(from decoder: Decoder) throws {
@@ -177,6 +188,27 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
         generated = try container.decodeIfPresent(Bool.self, forKey: .generated)
         generatorMilliseconds = try container.decodeIfPresent(Int.self, forKey: .generatorMilliseconds)
         firstStableWordMilliseconds = try container.decodeIfPresent(Int.self, forKey: .firstStableWordMilliseconds)
+        configurationDigest = try container.decodeIfPresent(String.self, forKey: .configurationDigest)
+        interaction = try container.decodeIfPresent(InteractionPolicy.self, forKey: .interaction)
+    }
+
+    /// The same line naming the configuration that produced it. Applied by
+    /// the app to every line it writes.
+    public func stamped(configuration: TildeEffectiveConfiguration) -> Self {
+        Self(
+            outcome: outcome,
+            suggestion: suggestion,
+            final: final,
+            register: register,
+            source: source,
+            opportunityID: opportunityID,
+            reason: reason,
+            generated: generated,
+            generatorMilliseconds: generatorMilliseconds,
+            firstStableWordMilliseconds: firstStableWordMilliseconds,
+            configurationDigest: configuration.digestSHA256,
+            interaction: configuration.interaction
+        )
     }
 
     /// The same line with the decision receipt attached. Terminal lines
@@ -198,7 +230,9 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
             reason: reason.rawValue,
             generated: generated,
             generatorMilliseconds: generatorMilliseconds,
-            firstStableWordMilliseconds: firstStableWordMilliseconds
+            firstStableWordMilliseconds: firstStableWordMilliseconds,
+            configurationDigest: configurationDigest,
+            interaction: interaction
         )
     }
 
