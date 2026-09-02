@@ -1,3 +1,4 @@
+import TildeCore
 import Foundation
 import TildeLabKit
 
@@ -134,7 +135,18 @@ extension ResearchCoordinator {
             } catch LabOnlineExperimentError.forbiddenKey(let key) {
                 throw ResearchCLIError.rawTelemetryKey(key)
             }
-            decoded.append(try decoder.decode(LabOnlineExperimentEvent.self, from: data))
+            if arguments.hasFlag("instrument") {
+                // The live ledger is production's: decode it as the
+                // production type and bridge, so a Lab-only key in a live
+                // line is refused by name instead of silently accepted.
+                do {
+                    decoded.append(try LabOnlineExperimentEvent.decodeProductionLine(data))
+                } catch TextFreeOnlineEventError.unexpectedKey(let key) {
+                    throw ResearchCLIError.rawTelemetryKey(key)
+                }
+            } else {
+                decoded.append(try decoder.decode(LabOnlineExperimentEvent.self, from: data))
+            }
         }
         let plan: LabOnlineExperimentPlan
         if arguments.hasFlag("instrument") {

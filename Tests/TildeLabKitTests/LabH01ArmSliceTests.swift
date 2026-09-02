@@ -123,6 +123,7 @@ struct LabH01ArmSliceTests {
             safeOpportunity: true,
             candidateCharacters: accepted.count,
             candidateWordCount: accepted.split(whereSeparator: \Character.isWhitespace).count,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted(accepted, kind: .all, at: shownAt.addingTimeInterval(0.4))

@@ -2,11 +2,28 @@ import Foundation
 import TildeCore
 
 public enum LabCandidateSourceBucket: String, Codable, CaseIterable, Sendable {
-    case generator
+    // Production vocabulary (`TextFreeCandidateSource`), what the live
+    // ledger writes since 2026-09-02.
+    case dictionary
+    case baseModel = "base-model"
     case personal
+    case basePersonalAgreement = "base-personal-agreement"
+    case unknownLegacy = "unknown-legacy"
+    // Lab-only buckets used by synthetic runners and older stored events.
+    case generator
     case scene
     case mixed
     case unknown
+
+    public init(production: TextFreeCandidateSource) {
+        switch production {
+        case .dictionary: self = .dictionary
+        case .baseModel: self = .baseModel
+        case .personal: self = .personal
+        case .basePersonalAgreement: self = .basePersonalAgreement
+        case .unknownLegacy: self = .unknownLegacy
+        }
+    }
 }
 
 public enum LabCandidateLengthBucket: String, Codable, CaseIterable, Sendable {
