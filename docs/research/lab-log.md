@@ -28,6 +28,143 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Shorter Electron reveal floor and punctuation boundaries, preview only
+
+- **Try:** In the 9B preview, drop the Chromium/Electron reveal floor from
+  200/120 ms to 120/80 ms, and let sentence and clause punctuation start a
+  phrase request (the keyboard re-adds the leading space the wire strips,
+  so accepting inserts it and a typed space consumes it).
+- **Learn:** Both are the mechanisms the audit named as the largest fixed
+  delay and the dead zone in the owner's daily apps; the chained accept had
+  already run at the shorter floor without caret jitter, which is the only
+  evidence behind the new value. The wire now accepts punctuation-terminated
+  context only when the running profile allows it.
+- **Fail:** No measurement yet. Caret jitter in an Electron host is the kill
+  signal for the floor; a rise in dismissed or ignored ghosts right after
+  punctuation is the kill signal for the boundary. Neither is registered as
+  an experiment; both are owner dogfood on an isolated identity.
+- **Where:** PR #463; `Sources/TildeCore/Policy/SuggestionRevealDelayPolicy.swift`
+  (`CalmDelays.preview`); `TildeProductProfile.requestsAfterPunctuation`;
+  `Sources/InlineGhostIME/GhostInputController.swift`.
+- **Next:** Read the outcome ledger's post-punctuation slice after a few days
+  of typing, and watch for caret jitter before either value leaves the preview.
+
+## 2026-09-02 — The chained accept dies in Electron for two unrelated reasons
+
+- **Try:** After the owner reported Tab-Tab-Tab working in Notes but dying in
+  Claude Desktop, read the diagnostics and outcome ledger for the failing
+  windows instead of guessing.
+- **Learn:** Two separate mechanisms, found in order. First, the non-actionable
+  gate: with the assistant's last message as a declarative incoming turn, the
+  gate silenced every chained request whose sentence did not open with one of
+  twelve cue words (eight suppressions in a row at 01:10:44Z), and after the
+  sentence rule was added it still fired whenever an accepted ghost ended a
+  sentence, because the next request was judged on an empty one. The paragraph
+  rule (stand down once the current paragraph holds three or more words) fixed
+  that. Second, the host: after an accept the chained request produced no
+  request at all. Electron reports the caret tens of milliseconds late after
+  `insertText`, so a request that read the field immediately saw the
+  pre-insert caret, judged the just-inserted ghost as trailing text, and bailed
+  at the growing-edge check. Keystroke requests never hit this because the next
+  key arrives after the host has caught up. A 90 ms settle before the read in
+  calm hosts fixed it, confirmed live by the owner. A third, smaller one: a
+  fast second Tab landed before the chained ghost was visible and fell through
+  to the composer, moving focus; a Tab that lands while a chained request is
+  pending is now held.
+- **Fail:** The first two builds of the chain shipped to the owner without
+  catching either mechanism; the second was only findable because the keyboard
+  did not log why a schedule bailed, which it now does (reason codes only,
+  `chained-accept` OSLog category). Acceptance and retention for chained
+  ghosts are recorded but not yet compared against opening ghosts.
+- **Where:** PR #462 (four commits); `SceneSuggestionPolicy.currentParagraph`,
+  `GhostInputController.chainedCalmSettleNanoseconds`,
+  `awaitingChainedGhost()`.
+- **Next:** Compare accepted-word and accepted-all against typed-through and
+  ignored for chained versus opening ghosts once the ledger has a few days.
+
+## 2026-09-02 — Chained accept: complete the sentence without touching the cap
+
+- **Try:** In the 9B preview, request the next continuation the moment a ghost
+  is fully consumed by Tab or the whole-accept key, so a sentence can be
+  completed Tab by Tab at the measured three-word precision; the whole-accept
+  key now appends the separator the way a word accept already did.
+- **Learn:** The reward for a correct ghost used to be silence: accepting its
+  last word left the caret at a boundary with nothing scheduled until the next
+  keystroke, and typing through a ghost issued no request either. The chain
+  runs through the ordinary schedule path (reveal delay, activation checks,
+  ticket rules), so it inherits every host guard. Q13's kill rule on longer
+  visible windows is untouched by construction.
+- **Fail:** Worked in Notes on the first build and died in Claude Desktop; see
+  the entry above for why. No acceptance or retention comparison yet.
+- **Where:** PR #462; `TildeProductProfile.chainsCompletionAfterAccept`;
+  `InlineSuggestionState.acceptAll(current:appendsSeparator:)`.
+- **Next:** The ledger comparison, then decide whether the chain is a
+  candidate for a registered interaction experiment.
+
+## 2026-09-01 — Exact screen text, anchored gate, window title: preview trials
+
+- **Try:** Three owner-directed changes gated to the 9B preview profile: ask
+  for Accessibility permission (once at launch, and from a menu line) so the
+  exact-text reader actually runs; read the non-actionable gate's reply cue
+  off the current sentence instead of the head of the 3,000-character field;
+  carry the source window's title into the scene and open the Conversation
+  block with a JSON-quoted, scrubbed `{"window": ...}` line.
+- **Learn:** The Accessibility path was tried before OCR on every window
+  capture and had never once run, because nothing asked for the permission;
+  after the grant, focused-window reads switched to exact text with OCR
+  skipped, at about the same duration as a window OCR. Live, the
+  non-actionable gate had silenced 29 of 47 suppressed requests in the owner's
+  chat composers that day. The window title flows through the existing
+  snapshot bridge and costs nothing at the cache: it is stable per window.
+- **Fail:** None of the three is a registered experiment. Production Gemma is
+  byte-identical and pinned by `ProfileSceneOptionsTests`; promotion of the
+  gate and the title needs a display-policy and a context campaign. Lab replay
+  deliberately does not carry the new gate option, because adding a field to
+  the judgment configuration would change encoded manifest digests. Full-
+  display captures (the source of reference snippets) still never consult
+  Accessibility.
+- **Where:** PR #461 (commit 296a84af); `AccessibilityPermission.swift`;
+  `SceneSuggestionPolicy.Options.replyCueAnchoredToCurrentSentence`;
+  `ScreenScene.Scene.windowTitle`; `RawContinuationPrompt.windowLine(for:)`.
+- **Next:** Register the gate change as a display-policy question on the Q12
+  cache before it goes anywhere near production.
+
+## 2026-09-01 — First live numbers for the speed cuts, below the verdict floor
+
+- **Try:** Install the rebuilt 9B preview, quit the two other engines so the
+  GPU was uncontended, and read `latency_report.py` against the same log the
+  old build had written into.
+- **Learn:** Old build history versus new builds on 91 completions: model total
+  203/381/518 → 122/249/280 ms (p50/p95/p99); first stable word 89/280/443 →
+  82/219/227; socket request total 125/349/454 → 99/241/260; handshake
+  6/9/10 → 0/0/4. The stream cut fired on 69 of 91 completions. The shape held
+  as the sample grew from 43 to 91.
+- **Fail:** Directional only: below the 200-completion floor, the old column
+  pools days of mixed load while the new one had the GPU to itself, and
+  nothing here measures whether the ghosts were useful. The fresh preview
+  build also started a 5.6 GB model download on first launch because the
+  builder seeded the pre-#460 model directory; fixed in the builder.
+- **Where:** PR #461; `script/build_preview_9b.sh`;
+  [`docs/model-lessons.md`](../model-lessons.md) 2026-09-02 entry.
+- **Next:** Rerun the report at 200 completions and record it as the first live
+  speed result for the 9B path.
+
+## 2026-09-01 — Platform audit: the wins were already built or already measured
+
+- **Try:** Five read-only audits of the production request path, the policy
+  layer, the two context sources, the helper runtime, and the experiment
+  record, then one synthesis ranking quality and speed levers against the
+  Ledger's own evidence.
+- **Learn:** Most of what would move quality was either a supported result that
+  had never reached the default model (echo-24, grounding, the Q11 gate) or a
+  path that existed and was never enabled (Accessibility). Most of what would
+  move speed was fixed cost around a 91 ms model, not decode. The helper
+  already exposes draftless n-gram speculation. The bundled Ledger JSON stops
+  at Q09 and carries no entry for Q11–Q13.
+- **Fail:** A read, not a result. It moved no queue and unlocked no stage.
+- **Where:** [`platform-audit-2026-09-01.md`](platform-audit-2026-09-01.md).
+- **Next:** The engineering entries above; the causal queue is unchanged.
+
 ## 2026-09-01 — Four output-identical speed changes, ahead of any live number
 
 - **Try:** Audit the production request path end to end (IME, socket,

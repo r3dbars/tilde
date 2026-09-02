@@ -2,6 +2,47 @@
 
 Durable, measured findings about Tilde's model and evaluation. Newest first.
 
+## 2026-09-02 — Output-identical speed cuts: the Qwen 9B live tail halved (directional)
+
+Same diagnostics log, same Mac, Tilde 9B Preview. The old-build column pools
+several days of mixed load before the 2026-09-01 relaunch; the new-build
+column is 91 completions on builds 2927–2932 with the other two engines quit.
+Below the 200-completion verdict floor, so directional.
+
+| Stage | Old p50 / p95 / p99 | New p50 / p95 / p99 |
+|---|---|---|
+| Model total (`llama-completion-timing`) | 203 / 381 / 518 ms | 122 / 249 / 280 ms |
+| First stable word | 89 / 280 / 443 ms | 82 / 219 / 227 ms |
+| First token | 60 / 252 / 351 ms | 56 / 204 / 213 ms |
+| Socket request total | 125 / 349 / 454 ms | 99 / 241 / 260 ms |
+| Handshake (`ghost-handshake-timing`) | 6 / 9 / 10 ms | 0 / 0 / 4 ms |
+
+What produced it (PR #461, all profiles): the stream is cut once the display
+cap has settled the visible text (fired on 69 of 91 completions), peer
+code-signing identities are cached per live process, the frontmost
+register's scaffold is prewarmed, the context window start is quantized,
+and the model is hashed once per process. Visible text is unchanged by
+construction except one deliberate case: a rejection that depended only on
+text past the cap no longer silences a suggestion.
+
+Two live mechanisms worth keeping on record:
+
+- **The non-actionable scene gate silenced 29 of 47 suppressed requests in
+  the owner's chat composers.** With an assistant's declarative message as
+  the incoming turn, the gate's escape hatch (a reply cue at the head of the
+  whole field) never opened. Fixed for the 9B preview only; see
+  `SceneSuggestionPolicy.Options.replyCueAnchoredToCurrentSentence`.
+- **Electron hosts report the caret late after `insertText`.** A request
+  that reads the field immediately after an accept sees the pre-insert
+  caret, judges the just-inserted text as trailing, and bails at the
+  growing-edge check. Keystroke requests never see this. Chained requests
+  wait 90 ms in calm hosts (`GhostInputController.chainedCalmSettleNanoseconds`).
+
+Exact screen text: after the Accessibility grant, focused-window reads came
+from the AX tree with OCR skipped, 51 ms median per read versus 56 ms for a
+window OCR. Capture is off the request path, so this is a precision lever,
+not a latency one; full-display captures still use OCR.
+
 ## 2026-09-01 — Official Tilde makes Gemma E2B and Qwen 9B selectable
 
 The owner authorized the already-isolated Qwen 3.5 9B Q4_K_M path as an

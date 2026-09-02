@@ -31,6 +31,31 @@ keep from rewrite without storing words.
   frozen everything else. First live bet after F03 is supported: H01
   three words vs eight. Not a new model.
 
+## State as of 2026-09-02 (read this first)
+
+The owner daily-drives the Tilde 9B Preview identity (Qwen 9B). Since
+2026-09-01, `main` carries, for every profile, four output-identical speed
+cuts (stream cut at the settled cap, peer identity cache, scaffold
+prewarm, model hash once per process; PR #461), and, gated to the
+`preview-9b` profile only: exact screen text via Accessibility, the
+non-actionable gate anchored to the current sentence and paragraph, the
+window title in the scene block, the chained accept, the shorter Electron
+reveal floor, and punctuation as a request boundary (PRs #461–#463).
+Production Gemma is byte-identical and pinned by `ProfileSceneOptionsTests`.
+
+None of the preview changes is a registered result. The ordered causal
+queue below is unchanged; what changed is that the build the owner types
+on now produces the F03 events this page is about, and the outcome ledger
+can additionally compare chained ghosts against opening ghosts. The
+dated read behind all of it is
+[`platform-audit-2026-09-01.md`](platform-audit-2026-09-01.md); the
+attempts are in [`lab-log.md`](lab-log.md).
+
+Build and install: `script/build_preview_9b.sh --model <installed model.gguf>
+--helper "/Applications/Tilde 9B Preview.app/Contents/Helpers/llama-server"`,
+quit the preview, move the old bundle aside, `ditto` the new one into
+`/Applications`, open it. The app reinstalls and restarts the keyboard.
+
 ## What already landed on GitHub
 
 On branch `cursor/f03-live-ruler-and-local-diary` (built on PR 424):
