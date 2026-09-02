@@ -161,6 +161,7 @@ final class TildeSettingsViewModel: ObservableObject {
         launchAtLoginEnabled = settings.launchAtLoginEnabled
         screenMemoryEnabled = settings.screenMemoryEnabled
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
+        exactScreenTextGranted = AccessibilityPermission.isGranted()
         personalizationEnabled = personalHistory.isEnabled
         selectedProductionModel = appDelegate?.selectedProductionModel()
         selectedPreviewModel = appDelegate?.selectedPreviewModel()
@@ -279,6 +280,19 @@ final class TildeSettingsViewModel: ObservableObject {
         screenMemoryEnabled
             ? "Tilde reads the text on your screen so it knows what you are replying to. It stays on this Mac. Turn this off and Tilde cannot see what you are replying to — it stops suggesting entirely until you turn it back on."
             : "Tilde cannot see what you are replying to, so it is not suggesting anything. Turn this back on to get suggestions again."
+    }
+
+    /// Exact screen text: with macOS Accessibility permission Tilde reads
+    /// the focused window's text exactly instead of recognizing it from
+    /// pixels. Reading only; Tilde never inserts text through Accessibility.
+    @Published private(set) var exactScreenTextGranted = false
+
+    func enableExactScreenText() {
+        if !AccessibilityPermission.isGranted() {
+            appDelegate?.requestAccessibilityAccess()
+            if !AccessibilityPermission.isGranted() { appDelegate?.openAccessibilitySettings() }
+        }
+        exactScreenTextGranted = AccessibilityPermission.isGranted()
     }
 
     func enableScreenAccess() {
