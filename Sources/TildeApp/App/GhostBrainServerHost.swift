@@ -674,11 +674,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
         allowingPunctuation: Bool,
         allowingMidWord: Bool
     ) -> Bool {
-        if RawContinuationPrompt.endsAtRequestBoundary(
-            context,
-            allowingPunctuation: allowingPunctuation
-        ) { return true }
-        return allowingMidWord && RawContinuationPrompt.endsMidWord(context)
+        RawContinuationPrompt.requestBoundary(
+            in: context,
+            allowingPunctuation: allowingPunctuation,
+            allowingMidWord: allowingMidWord
+        ) != nil
     }
 
     private static func readRequest(
@@ -772,11 +772,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// firing.
     final class PartialResponseSink: @unchecked Sendable {
         /// One event per request, fixed vocabulary, no candidate text.
-        enum HoldOutcome: String {
-            /// The peer did not ask for streaming.
-            case unstreamed
-            /// Streamed with nothing ever held — the toggle was off, no
-            /// personal lookup ran, or it answered before the first prefix.
+        enum HoldOutcome: String, CaseIterable {
+            /// Streamed with nothing ever held — no personal lookup ran, or it
+            /// answered before the first prefix. (The diagnostic is recorded
+            /// only for streaming peers, so there is no "unstreamed" case.)
             case notHeld = "not-held"
             /// A prefix was held and the personal answer released it in time.
             case streamed
@@ -793,7 +792,6 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private let holdDeadlineNanoseconds: UInt64
         private let targetIsCurrent: @Sendable () -> Bool
         private let write: @Sendable (GhostBrainResponse) -> Bool
-        private let now: @Sendable () -> Date
         private let lock = NSLock()
         private var state: GateState
         private var failed = false
@@ -802,8 +800,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private var holdStartedAt: Date?
         private var heldMilliseconds = 0
         private var wroteAnything = false
-        private var personalResolved: Bool
-        private var personalPrediction: PersonalNextWordPrediction?
+        private var personalLookup: PersonalLookupState
         private var outcome: HoldOutcome
         private var expiryTimer: Task<Void, Never>?
 
@@ -813,19 +810,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
             register: ContinuationRegister,
             holdDeadlineNanoseconds: UInt64,
             targetIsCurrent: @escaping @Sendable () -> Bool,
-            now: @escaping @Sendable () -> Date = Date.init,
             write: @escaping @Sendable (GhostBrainResponse) -> Bool
         ) {
             self.enabled = enabled
             self.register = register
             self.holdDeadlineNanoseconds = holdDeadlineNanoseconds
             self.targetIsCurrent = targetIsCurrent
-            self.now = now
             self.write = write
             let holding = enabled && holdingForPersonal
             state = holding ? .holding : .streaming
-            personalResolved = !holding
-            outcome = enabled ? .notHeld : .unstreamed
+            personalLookup = holding ? .pending : .resolved(nil)
+            outcome = .notHeld
         }
 
         var onWriteFailure: (() -> Void)? {
@@ -866,8 +861,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         func resolvePersonal(_ prediction: PersonalNextWordPrediction?) {
             lock.lock()
             defer { lock.unlock() }
-            personalResolved = true
-            personalPrediction = prediction
+            personalLookup = .resolved(prediction)
             guard state == .holding else { return }
             applyDecisionLocked()
         }
@@ -906,8 +900,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private func applyDecisionLocked() {
             switch PersonalSuggestionPolicy.streamDecision(
                 basePrefix: heldPartial,
-                personalPrediction: personalPrediction,
-                personalResolved: personalResolved
+                personalLookup: personalLookup
             ) {
             case .hold:
                 startHoldClockLocked()
@@ -936,7 +929,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         /// delayed no ghost, and must not be reported as if it had.
         private func startHoldClockLocked() {
             guard heldPartial != nil, holdStartedAt == nil, expiryTimer == nil else { return }
-            holdStartedAt = now()
+            holdStartedAt = Date()
             expiryTimer = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: self?.holdDeadlineNanoseconds ?? 0)
                 guard !Task.isCancelled else { return }
@@ -946,7 +939,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
 
         private func stopHoldClockLocked() {
             if let holdStartedAt {
-                heldMilliseconds = GhostBrainServerHost.milliseconds(from: holdStartedAt, to: now())
+                heldMilliseconds = GhostBrainServerHost.milliseconds(from: holdStartedAt, to: Date())
                 self.holdStartedAt = nil
             }
             expiryTimer?.cancel()

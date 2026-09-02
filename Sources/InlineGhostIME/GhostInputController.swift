@@ -51,27 +51,15 @@ final class GhostInputController: IMKInputController {
     private static var requestsMidWordContinuation: Bool {
         ServedConfiguration.interaction.requestsMidWordContinuation
     }
-    /// How long a mid-word request waits before it leaves the keyboard.
-    ///
-    /// Word boundaries are self-throttling — a writer produces a handful of
-    /// them a sentence — but letters are not: at a fast typist's ~8-10
-    /// characters a second an unthrottled mid-word path would open, and
-    /// immediately supersede, a request per letter, spending the helper's
-    /// single slot on contexts that no longer exist. The wait is not a
-    /// timer of its own: the schedule revision a keystroke already bumps
-    /// (`cancelPendingWork`) is what kills the waiting request, so the newest
-    /// ticket always wins and a burst of typing costs exactly one request,
-    /// issued when the writer pauses. The dictionary suffix is presented
-    /// immediately either way; only the model request waits.
-    private static let midWordRequestThrottleNanoseconds: UInt64 = 120_000_000
-
     /// How long a request from `boundary` waits before it leaves. Word and
-    /// punctuation boundaries do not wait — they never did, and a writer
-    /// makes few enough of them that each one deserves an answer. Only the
-    /// mid-word path, which a keystroke can retrigger ten times a second, is
-    /// held back. See `midWordRequestThrottleNanoseconds`.
-    static func requestThrottleNanoseconds(for boundary: TextFreeCursorBoundary?) -> UInt64 {
-        boundary == .midWord ? midWordRequestThrottleNanoseconds : 0
+    /// punctuation boundaries never wait; only the mid-word path, which a
+    /// keystroke can retrigger ten times a second, is held back — by the
+    /// served policy's throttle, so the number is part of the digest.
+    static func requestThrottleNanoseconds(
+        for boundary: TextFreeCursorBoundary?,
+        policy: InteractionPolicy
+    ) -> UInt64 {
+        boundary == .midWord ? UInt64(max(0, policy.midWordRequestThrottleMilliseconds)) * 1_000_000 : 0
     }
 
     struct SlowKeyTiming {
@@ -449,17 +437,11 @@ final class GhostInputController: IMKInputController {
         allowsPunctuation: Bool,
         allowsMidWordContinuation: Bool
     ) -> TextFreeCursorBoundary? {
-        let eligible: Bool
-        if context.last?.isLetter == true {
-            eligible = allowsMidWordContinuation && RawContinuationPrompt.endsMidWord(context)
-        } else {
-            eligible = RawContinuationPrompt.endsAtRequestBoundary(
-                context,
-                allowingPunctuation: allowsPunctuation
-            )
-        }
-        guard eligible else { return nil }
-        return TextFreeCursorBoundary.from(precedingCharacter: context.last)
+        RawContinuationPrompt.requestBoundary(
+            in: context,
+            allowingPunctuation: allowsPunctuation,
+            allowingMidWord: allowsMidWordContinuation
+        )
     }
 
     /// An eligible opportunity: the caret sits where a request may start and
@@ -988,7 +970,11 @@ final class GhostInputController: IMKInputController {
             allowsPunctuation: Self.requestsAfterPunctuation,
             allowsMidWordContinuation: Self.requestsMidWordContinuation
         )
-        let opportunityID = boundary != nil
+        // Word and punctuation boundaries open their record now, so a host
+        // that cannot render still ends it with a reason. A mid-word request
+        // waits out the throttle first: only the request that actually
+        // leaves is an opportunity, not every letter on the way there.
+        let opportunityID = boundary != nil && boundary != .midWord
             ? openOpportunity(ticket: requestTicket, context: context, field: field)
             : nil
         guard SuggestionActivationPolicy.allowsSuggestions(
@@ -1026,30 +1012,21 @@ final class GhostInputController: IMKInputController {
                     provenance: provenance
                 )
             }
-            // The dictionary has had its say — a suffix is already on its way
-            // to the same ticket, or it had nothing. Either way the model may
-            // now guess at the rest of the word. It cannot take anything back:
-            // the reducer only ever grows a visible ghost, so an answer that
-            // does not extend the dictionary's suffix is dropped rather than
-            // rewriting what the writer is already reading.
-            if boundary == .midWord {
-                requestPhrase(
-                    bundleIdentifier: field.bundleIdentifier,
-                    context: context,
-                    ticket: requestTicket,
-                    revealNotBefore: revealNotBefore,
-                    opportunityID: opportunityID,
-                    throttleNanoseconds: Self.requestThrottleNanoseconds(for: boundary)
-                )
-            }
-        } else if boundary != nil {
+        }
+        // Mid-word, the dictionary has had its say and the model may now
+        // guess at the rest of the word. It cannot take anything back: the
+        // reducer only ever grows a visible ghost, so an answer that does not
+        // extend the dictionary's suffix is dropped rather than rewriting
+        // what the writer is already reading.
+        if let boundary {
             requestPhrase(
                 bundleIdentifier: field.bundleIdentifier,
                 context: context,
+                field: field,
                 ticket: requestTicket,
                 revealNotBefore: revealNotBefore,
-                opportunityID: opportunityID,
-                throttleNanoseconds: Self.requestThrottleNanoseconds(for: boundary)
+                boundary: boundary,
+                opportunityID: opportunityID
             )
         }
     }
@@ -1057,8 +1034,8 @@ final class GhostInputController: IMKInputController {
     /// The only synchronous predictor: one system completion lookup for a 3+
     /// letter partial word, run after the key callback has returned.
     private func spellCheckerSuffix(for context: String) -> String {
-        let partial = String(context.reversed().prefix(while: \Character.isLetter).reversed())
-        guard partial.count >= 3 else { return "" }
+        let partial = RawContinuationPrompt.partialWord(in: context)
+        guard partial.count >= RawContinuationPrompt.minimumMidWordPartialLetters else { return "" }
         let range = NSRange(location: 0, length: partial.utf16.count)
         let candidates = NSSpellChecker.shared.completions(
             forPartialWordRange: range,
@@ -1070,7 +1047,7 @@ final class GhostInputController: IMKInputController {
     }
 
     static func dictionarySuffix(for partial: String, candidates: [String]) -> String {
-        guard partial.count >= 3 else { return "" }
+        guard partial.count >= RawContinuationPrompt.minimumMidWordPartialLetters else { return "" }
         let normalizedPartial = partial.lowercased()
         guard !candidates.contains(where: { $0.lowercased() == normalizedPartial }) else {
             return ""
@@ -1106,19 +1083,24 @@ final class GhostInputController: IMKInputController {
         )
     }
 
-    /// One request to Tilde's app-owned model. `throttleNanoseconds` holds it
-    /// back first (mid-word only; see `midWordRequestThrottleNanoseconds`) —
-    /// the wait ends the moment the next keystroke moves the schedule on, and
-    /// that keystroke has already closed this opportunity as superseded
-    /// through `cancelPendingWork`, so nothing is left dangling.
+    /// One request to Tilde's app-owned model. A mid-word request waits out
+    /// the served throttle first and opens its flight-recorder opportunity
+    /// only if it survives the wait; the next keystroke moves the schedule
+    /// on and the waiting request simply never leaves. Word and punctuation
+    /// requests arrive with their opportunity already open.
     private func requestPhrase(
         bundleIdentifier: String,
         context: String,
+        field: FieldSnapshot,
         ticket requestTicket: InlineSuggestionTicket,
         revealNotBefore: Date,
-        opportunityID: UUID?,
-        throttleNanoseconds: UInt64
+        boundary: TextFreeCursorBoundary,
+        opportunityID openedOpportunityID: UUID?
     ) {
+        let throttleNanoseconds = Self.requestThrottleNanoseconds(
+            for: boundary,
+            policy: ServedConfiguration.interaction
+        )
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
         let fieldSessionIdentifier = requestTicket.clientIdentifier
@@ -1131,10 +1113,16 @@ final class GhostInputController: IMKInputController {
         let experimentArm = h01SessionArm()?.rawValue
         let revision = scheduleRevision
         modelTask = Task { [weak self] in
+            var opportunityID = openedOpportunityID
             if throttleNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: throttleNanoseconds)
                 guard !Task.isCancelled,
                       await self?.isCurrentSchedule(revision) == true else { return }
+            }
+            if opportunityID == nil, boundary == .midWord {
+                opportunityID = await MainActor.run {
+                    self?.openOpportunity(ticket: requestTicket, context: context, field: field)
+                }
             }
             let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(

@@ -121,8 +121,23 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     /// mid-word counterpart of `endsAtRequestBoundary`: no text can satisfy
     /// both.
     public static func endsMidWord(_ text: String) -> Bool {
-        let letters = partialWord(in: text).count
+        let letters = text.reversed().prefix(while: \.isLetter).count
         return letters >= minimumMidWordPartialLetters && letters <= maximumMidWordPartialLetters
+    }
+
+    /// The one definition of "may a model request start here, and from which
+    /// boundary". The keyboard opens a flight-recorder opportunity on the
+    /// returned boundary; the socket host accepts a request exactly when this
+    /// is non-nil for the same served policy. `nil` is not an opportunity.
+    public static func requestBoundary(
+        in text: String,
+        allowingPunctuation: Bool,
+        allowingMidWord: Bool
+    ) -> TextFreeCursorBoundary? {
+        let eligible = endsAtRequestBoundary(text, allowingPunctuation: allowingPunctuation)
+            || (allowingMidWord && endsMidWord(text))
+        guard eligible else { return nil }
+        return TextFreeCursorBoundary.from(precedingCharacter: text.last)
     }
 
     public static func scaffold(for register: ContinuationRegister) -> String {
@@ -332,13 +347,15 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         // Mid-word: the finished words go on the `Text:` line and the
         // unfinished one seeds `Continuation:`, so the model is completing a
         // word rather than opening one. See `partialWordToComplete`.
-        let head = String(trimmed.dropLast(partial.count))
-        let headTrimmed = String(head.reversed().drop(while: { $0.isWhitespace }).reversed())
-        let textLine = partial.isEmpty
-            ? "Text: " + trimmed
-            : (headTrimmed.isEmpty ? "Text:" : "Text: " + headTrimmed)
-        let continuationLine = partial.isEmpty ? "\nContinuation:" : "\nContinuation: " + partial
-        prompt = Self.scaffold(for: register) + sceneBlock + textLine + continuationLine
+        let body = Self.scaffold(for: register) + sceneBlock
+        if partial.isEmpty {
+            prompt = body + "Text: " + trimmed + "\nContinuation:"
+        } else {
+            let head = trimmed.dropLast(partial.count)
+            let headTrimmed = head[..<(head.lastIndex(where: { !$0.isWhitespace }).map(head.index(after:)) ?? head.startIndex)]
+            let textLine = headTrimmed.isEmpty ? "Text:" : "Text: " + headTrimmed
+            prompt = body + textLine + "\nContinuation: " + partial
+        }
     }
 
     /// Renders the classified scene into the prompt shape the plan
@@ -559,7 +576,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     /// ("wriwriting"), which is the one outcome mid-word must never produce.
     static func restoringPartialWord(_ partial: String, to text: String) -> String {
         guard !partial.isEmpty,
-              !text.lowercased().hasPrefix(partial.lowercased()) else { return text }
+              text.range(of: partial, options: [.caseInsensitive, .anchored]) == nil else { return text }
         return partial + text
     }
 

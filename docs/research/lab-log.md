@@ -28,6 +28,26 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Tilde stays free: MIT, open beta, no paid tier
+
+- **Try:** Owner decision, same evening as the AGPL switch: Tilde is a
+  portfolio-grade open-source project, not a business. Revert LICENSE to
+  the MIT text it shipped under, keep TRADEMARK.md, rewrite the README's
+  front page for a first-time reader (what it does, honest beta status, how
+  it was tested with links to the records), and mark the road-to-paid plan
+  as history.
+- **Learn:** The AGPL switch had been one commit old and existed only to
+  protect a paid tier; with no tier planned it was friction for nothing.
+  What the README now leads with is the part nobody else has — the
+  experiment records, the lab log, the ledger — because that, not the
+  ghost text, is the argument for the project.
+- **Fail:** No demo recording yet; the README carries a placeholder and
+  the fifteen seconds to capture. The compatibility sheet is still blank,
+  so "open beta" is labelled, not proven.
+- **Where:** `LICENSE`, `README.md`, `TRADEMARK.md`, `docs/plans/road-to-paid.md`.
+- **Next:** Record the demo, fill the compatibility sheet for the daily
+  apps, and let a week of the flight recorder decide the promotions.
+
 ## 2026-09-02 — Q14: the tuned stack helps Gemma too, at about half of Qwen's gain
 
 - **Try:** Run the registered generator-by-policy 2×2 as two paired

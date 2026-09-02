@@ -57,6 +57,12 @@ public enum DiagnosticsMetadataRedactor {
         // `personal-lookup-timing` — which arm of the 250ms personal-brain
         // race actually decided the request, never the prediction itself.
         "resolved", "timeout",
+        // `personal-stream-hold`'s outcome (`GhostBrainServerHost.PartialResponseSink`):
+        // what the first streamed prefix did while the personal lookup raced.
+        "not-held", "streamed", "expired", "final-only",
+        // `personal-model-unreadable`'s reason (`PersonalHistoryStore`): why a
+        // persisted trained model was discarded and rebuilt. Never its contents.
+        "permissions", "size", "header", "authentication", "schema", "read",
     ]
 
     public static func logSafeEvent(_ event: String) -> String {
@@ -81,7 +87,9 @@ public enum DiagnosticsMetadataRedactor {
              "handshakeMilliseconds",
              // Streaming split on `llama-completion-timing`: first token and
              // first complete-word partial, whole milliseconds, no text.
-             "firstTokenMilliseconds", "firstPartialMilliseconds":
+             "firstTokenMilliseconds", "firstPartialMilliseconds",
+             // `personal-stream-hold`: how long the first prefix was held.
+             "heldMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
         case "willRestart", "firstInstall",
              // `llama-completion-timing`: whether the stream was cut once the

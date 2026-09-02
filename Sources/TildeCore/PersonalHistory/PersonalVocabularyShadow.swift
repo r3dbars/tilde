@@ -444,9 +444,9 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
                 largest = max(largest, transition.count)
             }
             guard context.total >= largest else { return false }
-            guard context.top.map({ words.contains($0) }) ?? context.transitions.isEmpty,
-                  context.runner.map({ words.contains($0) && $0 != context.top }) ?? true,
-                  context.runner == nil || context.top != nil else { return false }
+            // Transitions are non-empty above, so a top word always exists.
+            guard let top = context.top, words.contains(top),
+                  context.runner.map({ words.contains($0) && $0 != top }) ?? true else { return false }
             transitions += context.transitions.count
             guard transitions <= PersonalNextWordShadow.maximumTransitions else { return false }
         }

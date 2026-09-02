@@ -51,7 +51,7 @@ public struct PreparedTypedContext: Sendable {
     let words: [String]
 
     /// The no-context request shape.
-    public static let absent = PreparedTypedContext(textBeforeCursor: nil)
+    static let absent = PreparedTypedContext(textBeforeCursor: nil)
 
     public init(textBeforeCursor: String?) {
         self.init(textBeforeCursor: textBeforeCursor, tokenizer: CompletionContextWords.normalizedWords(in:))

@@ -261,9 +261,12 @@ final class TildeSettingsViewModel: ObservableObject {
     /// capture service drops the snapshots it is still holding rather than
     /// serving them for the rest of the staleness window.
     func setScreenMemoryEnabled(_ enabled: Bool) {
-        settings.screenMemoryEnabled = enabled
+        if let appDelegate {
+            appDelegate.setScreenMemoryEnabled(enabled)
+        } else {
+            settings.screenMemoryEnabled = enabled
+        }
         screenMemoryEnabled = enabled
-        appDelegate?.screenMemoryEnabledDidChange(enabled)
         screenRecordingGranted = ScreenRecordingPermission.isGranted()
         statusText = appDelegate?.applicationState().statusText ?? statusText
     }

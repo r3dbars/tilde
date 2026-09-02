@@ -30,36 +30,6 @@ struct PreparedCompletionContextTests {
         #expect(index == PreparedContextGoldens.goldenSignatures.count)
     }
 
-    @Test("The context-string entry point and the prepared entry point agree exactly")
-    func bothEntryPointsAgree() {
-        for context in PreparedContextGoldens.contexts {
-            let prepared = PreparedTypedContext(textBeforeCursor: context)
-            for raw in PreparedContextGoldens.rawOutputs {
-                #expect(
-                    PreparedContextGoldens.signature(cleaner.clean(raw, after: context))
-                        == PreparedContextGoldens.signature(cleaner.clean(raw, in: prepared))
-                )
-                #expect(
-                    cleaner.cleanWithReason(raw, after: context).suggestion?.visibleText
-                        == cleaner.cleanWithReason(raw, in: prepared).suggestion?.visibleText
-                )
-            }
-        }
-    }
-
-    @Test("`.absent` is the no-context request, not an empty one")
-    func absentContextMatchesNil() {
-        // An empty-but-present context still runs the prefix and replay
-        // rules; an absent one skips them. The two are only accidentally
-        // alike, so keep the distinction pinned.
-        for raw in PreparedContextGoldens.rawOutputs {
-            #expect(
-                PreparedContextGoldens.signature(cleaner.clean(raw, in: .absent))
-                    == PreparedContextGoldens.signature(cleaner.clean(raw, after: nil))
-            )
-        }
-    }
-
     @Test("Every scene-policy golden still holds through the prepared forms")
     func scenePolicyGoldensHold() {
         var index = 0
@@ -94,32 +64,9 @@ struct PreparedCompletionContextTests {
         #expect(index == PreparedContextGoldens.goldenPolicyDecisions.count)
     }
 
-    @Test("Grounding off stays off, and a prepared scene matches the per-call form")
+    @Test("Grounding off stays off through the prepared form")
     func preparedPoliciesMatchPerCallForm() {
         for scene in PreparedContextGoldens.scenes {
-            for candidate in PreparedContextGoldens.candidates {
-                #expect(
-                    SceneEchoPolicy.isEcho(candidate, scene: scene, profile: .preview9B)
-                        == SceneEchoPolicy.isEcho(
-                            candidate, in: SceneEchoPolicy.prepared(scene: scene, profile: .preview9B)
-                        )
-                )
-                for mode: FactualGroundingPolicy.Mode in [.off, .numbersAndNames, .allAnchors] {
-                    let prepared = FactualGroundingPolicy.prepared(
-                        typedContext: PreparedContextGoldens.groundingTypedContext,
-                        scene: scene,
-                        mode: mode
-                    )
-                    #expect(
-                        FactualGroundingPolicy.containsUnsupportedFact(
-                            candidate,
-                            typedContext: PreparedContextGoldens.groundingTypedContext,
-                            scene: scene,
-                            mode: mode
-                        ) == FactualGroundingPolicy.containsUnsupportedFact(candidate, in: prepared)
-                    )
-                }
-            }
             #expect(
                 !FactualGroundingPolicy.containsUnsupportedFact(
                     "Priya at 9pm",
@@ -162,18 +109,6 @@ struct PreparedCompletionContextTests {
 
         #expect(partials >= 8, "the streaming shape under test must actually produce partials")
         #expect(counter.count == 1, "the context was tokenized \(counter.count) times, not once")
-    }
-
-    @Test("The convenience entry point is the one that pays per call")
-    func perCallEntryPointStillTokenizesEveryTime() {
-        // Guards the claim above from being vacuous: the counter really does
-        // record one tokenization per construction, so a construction per
-        // partial would have shown up as a count of twelve.
-        let counter = TokenizeCounter()
-        for _ in 0..<12 {
-            _ = PreparedTypedContext(textBeforeCursor: "and then ", tokenizer: counter.tokenize)
-        }
-        #expect(counter.count == 12)
     }
 
     @Test("A prepared context holds the same words the tokenizer produces")

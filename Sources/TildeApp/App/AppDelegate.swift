@@ -531,18 +531,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else { return nil }
         return ForegroundApplication(
             bundleIdentifier: bundleIdentifier,
-            name: application.localizedName ?? bundleIdentifier
+            name: application.localizedName ?? ""
         )
     }
 
-    /// The Screen Memory master toggle changed. Turning it off must stop
-    /// capture AND leave nothing behind: the service's `enabled` closure
+    /// The one writer of the Screen Memory master toggle. Turning it off
+    /// must stop capture AND leave nothing behind: the service's `enabled` closure
     /// already refuses the next capture and `freshScene`, and this drops the
     /// snapshots, baselines, and typing target it is still holding so no
     /// completion can be answered from a scene captured while it was on.
     /// The menu is refreshed either way — the status line and icon both
     /// depend on this flag.
-    func screenMemoryEnabledDidChange(_ enabled: Bool) {
+    func setScreenMemoryEnabled(_ enabled: Bool) {
+        let settings = TildeSettings()
+        guard settings.screenMemoryEnabled != enabled else { return }
+        settings.screenMemoryEnabled = enabled
+        screenMemoryEnabledDidChange(enabled)
+    }
+
+    private func screenMemoryEnabledDidChange(_ enabled: Bool) {
         if !enabled {
             Task { [screenCaptureService] in
                 await screenCaptureService.forgetCapturedScreenState()
