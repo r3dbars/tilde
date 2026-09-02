@@ -42,17 +42,15 @@ window. Slack, Mail, Messages, Discord, Notes, Chrome, VS Code, all of them.
 **Without installing anything:** open [`demo/index.html`](demo/index.html)
 in your browser. It has four fake apps with a card telling you what to type.
 
-**The real thing:** you need an Apple Silicon Mac on macOS 26 or newer and
-about 3.5 GB of disk for the model. There is no downloadable build yet, so
-build it yourself:
+**The real thing:** [download the latest release](https://github.com/r3dbars/tilde/releases/latest).
+You need an Apple Silicon Mac on macOS 26 or newer and about 3.5 GB of disk
+for the model, which the app downloads on first run.
 
-```bash
-./script/build_and_run.sh
-./script/build_ime.sh
-```
+1. Open the DMG and drag Tilde to Applications, then open it.
+2. Turn the Tilde keyboard on when the app asks (it opens System Settings for you).
+3. Give it Screen Recording permission so it can see what you are replying to.
 
-Then turn the keyboard on in System Settings, and give it Screen Recording
-permission so it can see what you are replying to. Details are in
+The app is signed and notarized by Apple. To build it yourself instead, see
 [docs/development.md](docs/development.md).
 
 ## Honest status
