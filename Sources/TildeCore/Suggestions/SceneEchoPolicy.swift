@@ -92,6 +92,7 @@ public enum SceneEchoPolicy {
     }
 
     public static func isEcho(_ suggestionText: String, in scene: PreparedScene) -> Bool {
+        guard !scene.normalizedSources.isEmpty else { return false }
         let candidate = normalized(suggestionText)
         guard candidate.count >= scene.minimumCharacters,
               candidate.split(separator: " ").count >= scene.minimumWords else { return false }

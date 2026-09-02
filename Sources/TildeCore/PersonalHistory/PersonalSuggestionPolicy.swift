@@ -20,6 +20,14 @@ public enum PersonalStreamDecision: String, Equatable, Sendable {
     case finalOnly
 }
 
+/// The personal lookup as the streaming gate sees it: still racing, or
+/// answered (possibly with nothing). One value, so "resolved with nothing"
+/// and "not resolved" cannot both read as `nil`.
+public enum PersonalLookupState: Equatable, Sendable {
+    case pending
+    case resolved(PersonalNextWordPrediction?)
+}
+
 public enum PersonalSuggestionPolicy {
     public static let maximumTailWords = 2
 
@@ -80,7 +88,7 @@ public enum PersonalSuggestionPolicy {
     /// only consult the arbiter's evidence bar; a prediction that cannot
     /// clear it will lose to every possible base ghost, which is enough to
     /// release a held stream immediately.
-    public static func couldReplaceAnyBase(_ prediction: PersonalNextWordPrediction?) -> Bool {
+    static func couldReplaceAnyBase(_ prediction: PersonalNextWordPrediction?) -> Bool {
         guard let prediction else { return false }
         let set = candidateSet(baseGhost: "", personalPrediction: prediction)
         guard let personal = set.first(from: .personal) else { return false }
@@ -89,8 +97,8 @@ public enum PersonalSuggestionPolicy {
 
     /// The streaming gate. `basePrefix` is the longest stable complete-word
     /// prefix the generator has produced so far, or `nil` when it has
-    /// produced none yet; `personalPrediction` is meaningful only once
-    /// `personalResolved` is true.
+    /// produced none yet; `personalLookup` says whether the personal answer
+    /// exists yet, and what it was.
     ///
     /// Deciding on the first stable prefix rather than the finished ghost is
     /// sound because the arbiter compares first words only, and a stable
@@ -99,14 +107,11 @@ public enum PersonalSuggestionPolicy {
     /// final ghost" are the same question.
     public static func streamDecision(
         basePrefix: String?,
-        personalPrediction: PersonalNextWordPrediction?,
-        personalResolved: Bool
+        personalLookup: PersonalLookupState
     ) -> PersonalStreamDecision {
-        guard personalResolved else {
-            // Nothing may be shown while an answer that could replace the
-            // first word is still in flight.
-            return .hold
-        }
+        // Nothing may be shown while an answer that could replace the first
+        // word is still in flight.
+        guard case let .resolved(personalPrediction) = personalLookup else { return .hold }
         guard let personalPrediction else { return .stream }
         guard let basePrefix, !basePrefix.isEmpty else {
             return couldReplaceAnyBase(personalPrediction) ? .hold : .stream

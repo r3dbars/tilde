@@ -103,19 +103,44 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
     /// shrink or rewrite it. Personal serving stays word-boundary only
     /// either way (`GhostBrainServerHost.personalTailWords`).
     public let requestsMidWordContinuation: Bool
+    /// How long a mid-word request waits before leaving the keyboard, so a
+    /// burst of letters costs one request instead of one per letter. Served
+    /// with the rest of the policy and part of the digest, because a trial of
+    /// mid-word continuation is a trial of this number too.
+    public let midWordRequestThrottleMilliseconds: Int
 
     public init(
         chainsCompletionAfterAccept: Bool,
         calmRevealPostSpaceMilliseconds: Int,
         calmRevealMidWordMilliseconds: Int,
         requestsAfterPunctuation: Bool,
-        requestsMidWordContinuation: Bool
+        requestsMidWordContinuation: Bool,
+        midWordRequestThrottleMilliseconds: Int = 0
     ) {
         self.chainsCompletionAfterAccept = chainsCompletionAfterAccept
         self.calmRevealPostSpaceMilliseconds = calmRevealPostSpaceMilliseconds
         self.calmRevealMidWordMilliseconds = calmRevealMidWordMilliseconds
         self.requestsAfterPunctuation = requestsAfterPunctuation
         self.requestsMidWordContinuation = requestsMidWordContinuation
+        self.midWordRequestThrottleMilliseconds = midWordRequestThrottleMilliseconds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case chainsCompletionAfterAccept, calmRevealPostSpaceMilliseconds, calmRevealMidWordMilliseconds
+        case requestsAfterPunctuation, requestsMidWordContinuation, midWordRequestThrottleMilliseconds
+    }
+
+    /// Fields added after the first served policy decode with their
+    /// conservative defaults, so a newer keyboard reading an older app's
+    /// interaction object keeps every response rather than failing it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chainsCompletionAfterAccept = try c.decode(Bool.self, forKey: .chainsCompletionAfterAccept)
+        calmRevealPostSpaceMilliseconds = try c.decode(Int.self, forKey: .calmRevealPostSpaceMilliseconds)
+        calmRevealMidWordMilliseconds = try c.decode(Int.self, forKey: .calmRevealMidWordMilliseconds)
+        requestsAfterPunctuation = try c.decode(Bool.self, forKey: .requestsAfterPunctuation)
+        requestsMidWordContinuation = try c.decodeIfPresent(Bool.self, forKey: .requestsMidWordContinuation) ?? false
+        midWordRequestThrottleMilliseconds = try c.decodeIfPresent(Int.self, forKey: .midWordRequestThrottleMilliseconds) ?? 0
     }
 
     /// The measured production interaction.
@@ -136,7 +161,8 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         calmRevealPostSpaceMilliseconds: 120,
         calmRevealMidWordMilliseconds: 80,
         requestsAfterPunctuation: true,
-        requestsMidWordContinuation: true
+        requestsMidWordContinuation: true,
+        midWordRequestThrottleMilliseconds: 120
     )
 
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {

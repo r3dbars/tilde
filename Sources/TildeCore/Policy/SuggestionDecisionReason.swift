@@ -47,6 +47,9 @@ public enum SuggestionDecisionReason: String, Codable, CaseIterable, Sendable {
     case supersededByTyping = "superseded-by-typing"
     /// Text follows the caret, so a ghost could not be rendered safely.
     case notAtGrowingEdge = "not-at-growing-edge"
+    /// The model answered, but its text did not extend the dictionary ghost
+    /// already on screen, so nothing changed for the writer.
+    case behindVisibleGhost = "behind-visible-ghost"
 
     public init(scene reason: SceneSuggestionPolicy.SuppressionReason) {
         switch reason {
@@ -86,7 +89,7 @@ public enum SuggestionDecisionReason: String, Codable, CaseIterable, Sendable {
     /// which are neither a policy nor a model verdict.
     public var isPolicyHidden: Bool {
         switch self {
-        case .shown, .supersededByTyping, .notAtGrowingEdge: false
+        case .shown, .supersededByTyping, .notAtGrowingEdge, .behindVisibleGhost: false
         default: !isUnavailable
         }
     }

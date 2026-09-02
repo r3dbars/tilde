@@ -45,7 +45,7 @@ struct PreparedContextStreamingTests {
             textBeforeCursor: context,
             appBundleIdentifier: "com.apple.TextEdit",
             scene: scene,
-            onPartialSuggestion: { collector.append($0.visibleText) }
+            onPartialSuggestion: { partial, _ in collector.append(partial.visibleText) }
         )
         return (collector.texts, decision.suggestion?.visibleText, decision.reason)
     }

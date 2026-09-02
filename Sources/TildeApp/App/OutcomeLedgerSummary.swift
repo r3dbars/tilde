@@ -46,7 +46,7 @@ enum HeldBackReason: String, CaseIterable, Sendable {
             self = .keptTyping
         case .sensitiveScene, .promptInjectionScene:
             self = .sensitive
-        case .emptyOutput, .noSuggestion, .emptyPrompt:
+        case .emptyOutput, .noSuggestion, .emptyPrompt, .behindVisibleGhost:
             self = .modelHadNothing
         case .runtimeUnavailable, .timeout, .protocolError, .suggestionsPaused:
             self = .notReady
@@ -71,35 +71,6 @@ struct OutcomeLedgerFact: Equatable, Sendable {
     /// `nil` when the horizon was never observed. Missing is not zero.
     let retainedCharactersAt30Seconds: Int?
 
-    init(event: TextFreeOnlineEvent) {
-        occurredAt = event.occurredAt
-        sessionDigestSHA256 = event.sessionDigestSHA256
-        displayed = event.displayed
-        acceptedCharacters = max(0, event.acceptedCharacters)
-        heldBackReason = event.displayed
-            ? nil
-            : event.guardReason
-                .flatMap(SuggestionDecisionReason.init(rawValue:))
-                .flatMap(HeldBackReason.init(reason:))
-        retainedCharactersAt30Seconds = event.retentionAt30Seconds.retainedCharacters
-    }
-
-    init(
-        occurredAt: Date,
-        sessionDigestSHA256: String,
-        displayed: Bool,
-        acceptedCharacters: Int,
-        heldBackReason: HeldBackReason?,
-        retainedCharactersAt30Seconds: Int?
-    ) {
-        self.occurredAt = occurredAt
-        self.sessionDigestSHA256 = sessionDigestSHA256
-        self.displayed = displayed
-        self.acceptedCharacters = acceptedCharacters
-        self.heldBackReason = heldBackReason
-        self.retainedCharactersAt30Seconds = retainedCharactersAt30Seconds
-    }
-
     /// Every ledger key this reader touches. All numeric, boolean, enum, or
     /// hash — no field that could carry writing.
     static let readKeys: Set<String> = [
@@ -110,6 +81,24 @@ struct OutcomeLedgerFact: Equatable, Sendable {
         "guardReason",
         "retentionAt30Seconds",
     ]
+}
+
+extension OutcomeLedgerFact {
+    /// In an extension so the memberwise initializer survives for tests.
+    init(event: TextFreeOnlineEvent) {
+        self.init(
+            occurredAt: event.occurredAt,
+            sessionDigestSHA256: event.sessionDigestSHA256,
+            displayed: event.displayed,
+            acceptedCharacters: max(0, event.acceptedCharacters),
+            heldBackReason: event.displayed
+                ? nil
+                : event.guardReason
+                    .flatMap(SuggestionDecisionReason.init(rawValue:))
+                    .flatMap(HeldBackReason.init(reason:)),
+            retainedCharactersAt30Seconds: event.retentionAt30Seconds.retainedCharacters
+        )
+    }
 }
 
 struct OutcomeLedgerSummary: Equatable, Sendable {
@@ -126,7 +115,6 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
     /// Runs of three or more accepts close together in one session, today.
     let helpfulStreaksToday: Int
     let longestHelpfulStreakToday: Int
-    let heldBackToday: Int
     let heldBackTodayByReason: [HeldBackReason: Int]
     let keystrokesSavedLast7Days: Int
     /// The tail cap was hit, so older lines in the window were not read.
@@ -140,11 +128,12 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
         keptAfter30SecondsObservations: 0,
         helpfulStreaksToday: 0,
         longestHelpfulStreakToday: 0,
-        heldBackToday: 0,
         heldBackTodayByReason: [:],
         keystrokesSavedLast7Days: 0,
         truncated: false
     )
+
+    var heldBackToday: Int { heldBackTodayByReason.values.reduce(0, +) }
 
     /// True once the ledger has told us anything at all today.
     var hasTodayEvidence: Bool {
@@ -154,13 +143,9 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
     /// The most common reason Tilde stayed quiet today. Ties break toward the
     /// most actionable reason, in `HeldBackReason.allCases` order.
     var topHeldBackReason: HeldBackReason? {
-        var best: (reason: HeldBackReason, count: Int)?
-        for reason in HeldBackReason.allCases {
-            let count = heldBackTodayByReason[reason] ?? 0
-            guard count > 0 else { continue }
-            if best == nil || count > best!.count { best = (reason, count) }
-        }
-        return best?.reason
+        // `max` keeps the first of equals, which is the documented tie-break.
+        let top = HeldBackReason.allCases.max { (heldBackTodayByReason[$0] ?? 0) < (heldBackTodayByReason[$1] ?? 0) }
+        return top.flatMap { (heldBackTodayByReason[$0] ?? 0) > 0 ? $0 : nil }
     }
 
     // MARK: - Aggregation
@@ -217,7 +202,6 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
             keptAfter30SecondsObservations: observations,
             helpfulStreaksToday: streaks.count,
             longestHelpfulStreakToday: streaks.longest,
-            heldBackToday: byReason.values.reduce(0, +),
             heldBackTodayByReason: byReason,
             keystrokesSavedLast7Days: window.reduce(0) { $0 + $1.acceptedCharacters },
             truncated: truncated
@@ -236,18 +220,23 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
 
         var count = 0
         var longest = 0
+        func closeRun(_ run: Int) {
+            guard run >= streakMinimumAccepts else { return }
+            count += 1
+            longest = max(longest, run)
+        }
         for (_, unsorted) in bySession {
             let times = unsorted.sorted()
             var run = 1
-            for index in 1..<max(1, times.count) {
+            for index in times.indices.dropFirst() {
                 if times[index].timeIntervalSince(times[index - 1]) <= streakGapSeconds {
                     run += 1
                 } else {
-                    if run >= streakMinimumAccepts { count += 1; longest = max(longest, run) }
+                    closeRun(run)
                     run = 1
                 }
             }
-            if run >= streakMinimumAccepts { count += 1; longest = max(longest, run) }
+            closeRun(run)
         }
         return (count, longest)
     }
@@ -257,9 +246,13 @@ struct OutcomeLedgerSummary: Equatable, Sendable {
 /// the file once, seeks to at most `maximumTailBytes` from the end, and
 /// never holds more than that in memory.
 enum OutcomeLedgerReader {
-    /// One megabyte of tail is roughly a week of heavy writing and stays
-    /// well under a frame's worth of work off the main thread.
-    static let maximumTailBytes = 1_048_576
+    /// One encoded event is about a kilobyte, and a heavy day with the
+    /// flight recorder on can write well over a thousand, so the tail must
+    /// hold several thousand lines per day to cover the seven-day window.
+    /// Twelve mebibytes is read off the main thread, at most once per
+    /// refresh interval; when even that is not enough, `truncated` says so
+    /// and every surface labels its totals partial.
+    static let maximumTailBytes = 12 * 1_048_576
 
     struct Tail: Equatable, Sendable {
         let lines: [Data]
@@ -286,17 +279,7 @@ enum OutcomeLedgerReader {
               let data = try? handle.read(upToCount: maximumBytes),
               !data.isEmpty else { return .empty }
 
-        var lines: [Data] = []
-        var start = data.startIndex
-        var cursor = data.startIndex
-        while cursor < data.endIndex {
-            if data[cursor] == 0x0A {
-                if cursor > start { lines.append(Data(data[start..<cursor])) }
-                start = data.index(after: cursor)
-            }
-            cursor = data.index(after: cursor)
-        }
-        if start < data.endIndex { lines.append(Data(data[start..<data.endIndex])) }
+        var lines = data.split(separator: UInt8(0x0A), omittingEmptySubsequences: true).map { Data($0) }
         // A tail cut lands mid-line; drop that fragment rather than guess.
         if truncated, !lines.isEmpty { lines.removeFirst() }
         // The writer appends a newline per line, so a trailing fragment means
@@ -346,7 +329,9 @@ enum OutcomeLedgerPresentation {
         screenAccessGranted: Bool
     ) -> String? {
         if !screenAccessGranted {
-            return "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back."
+            // The current state only: the ledger cannot establish that a
+            // whole day was silent, and the legacy counters may say otherwise.
+            return "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back."
         }
         guard summary.heldBackToday > 0, let reason = summary.topHeldBackReason else {
             return nil
@@ -367,7 +352,7 @@ enum OutcomeLedgerPresentation {
     ) -> String {
         guard summary.hasTodayEvidence else {
             if !screenAccessGranted {
-                return "Screen Access is off — Tilde stays silent"
+                return "Screen Access is off now — Tilde is not suggesting"
             }
             return "\(wordsToday.formatted()) words with Tilde today"
         }
@@ -384,8 +369,7 @@ enum OutcomeLedgerPresentation {
 
     /// "92% kept after 30 seconds" — or nothing, when no horizon was observed.
     static func keptAfter30SecondsLine(summary: OutcomeLedgerSummary) -> String? {
-        guard let share = summary.keptAfter30SecondsShare,
-              summary.keptAfter30SecondsObservations > 0 else { return nil }
+        guard let share = summary.keptAfter30SecondsShare else { return nil }
         return "\(share.formatted(.percent.precision(.fractionLength(0)))) kept after 30 seconds"
     }
 

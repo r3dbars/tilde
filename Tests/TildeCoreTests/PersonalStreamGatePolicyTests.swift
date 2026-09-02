@@ -12,20 +12,20 @@ struct PersonalStreamGatePolicyTests {
     @Test("An unresolved lookup holds, whatever the generator has produced")
     func unresolvedHolds() {
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: nil, personalPrediction: nil, personalResolved: false
+            basePrefix: nil, personalLookup: .pending
         ) == .hold)
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: "meet you", personalPrediction: nil, personalResolved: false
+            basePrefix: "meet you", personalLookup: .pending
         ) == .hold)
     }
 
     @Test("A lookup that answers with nothing streams immediately")
     func resolvedEmptyStreams() {
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: nil, personalPrediction: nil, personalResolved: true
+            basePrefix: nil, personalLookup: .resolved(nil)
         ) == .stream)
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: "meet you", personalPrediction: nil, personalResolved: true
+            basePrefix: "meet you", personalLookup: .resolved(nil)
         ) == .stream)
     }
 
@@ -35,26 +35,26 @@ struct PersonalStreamGatePolicyTests {
         #expect(!PersonalSuggestionPolicy.couldReplaceAnyBase(nil))
         #expect(PersonalSuggestionPolicy.couldReplaceAnyBase(replacement))
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: nil, personalPrediction: unsupported, personalResolved: true
+            basePrefix: nil, personalLookup: .resolved(unsupported)
         ) == .stream)
         // A candidate that could still displace some ghost keeps holding
         // until the generator gives the gate something to compare it with.
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: nil, personalPrediction: replacement, personalResolved: true
+            basePrefix: nil, personalLookup: .resolved(replacement)
         ) == .hold)
     }
 
     @Test("Agreement on the first word streams; disagreement with evidence goes final-only")
     func decidesOnTheFirstStablePrefix() {
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: "Tomorrow works", personalPrediction: replacement, personalResolved: true
+            basePrefix: "Tomorrow works", personalLookup: .resolved(replacement)
         ) == .stream)
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: "afternoon works", personalPrediction: replacement, personalResolved: true
+            basePrefix: "afternoon works", personalLookup: .resolved(replacement)
         ) == .finalOnly)
         // Disagreement the arbiter would not act on still streams.
         #expect(PersonalSuggestionPolicy.streamDecision(
-            basePrefix: "afternoon works", personalPrediction: unsupported, personalResolved: true
+            basePrefix: "afternoon works", personalLookup: .resolved(unsupported)
         ) == .stream)
     }
 

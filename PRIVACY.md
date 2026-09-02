@@ -73,6 +73,16 @@ Records are stored at:
 
 `~/Library/Application Support/Tilde/Personal History/history.v1.enc`
 
+Since 2026-09-02 the trained next-word table is stored beside it:
+
+`~/Library/Application Support/Tilde/Personal History/model.v1.enc`
+
+(with a `model.v1.enc.partial` temporary file during an atomic write). It
+holds the learned word contexts and counts and each open writing stream's
+in-progress token and context words, so a restart mid-sentence does not reset
+learning. It is sealed with the same key, under the same owner-only
+permissions, and is deleted by the same delete-everything action.
+
 Each record is authenticated and encrypted with AES-GCM. The 256-bit key is a
 non-synchronizing item in the user's macOS login Keychain. The directory is
 owner-only (`0700`) and the file is owner-only (`0600`). The file header,
@@ -91,9 +101,10 @@ backup as well as the older app.
 
 While Tilde is running, the paired shadow necessarily holds derived word
 contexts and transition counts in process memory. At launch it restores a
-bounded aggregate checkpoint, then rebuilds both recipes from the most recent
-complete events in a 4 MiB encrypted-history window without adding replayed
-events to the score. It learns and scores only new allowed events while Tilde
+bounded aggregate checkpoint and, when a compatible trained table was saved,
+that table plus only the records written after it; otherwise it rebuilds both
+recipes from the most recent complete events in a 4 MiB encrypted-history
+window. Replayed events never add to the score. It learns and scores only new allowed events while Tilde
 keeps running. Because the tail can begin partway through a writing stream, the
 predictor discards the first possibly truncated token before learning it. Replay
 work and decrypted replay memory stay bounded as the encrypted corpus grows.
@@ -314,7 +325,8 @@ real-editor round trip.
   retained event history is filtered under the current exclusions. Deletion also
   turns capture off, rotates the
   local history identifier so queued older events are rejected, and removes
-  both the encrypted file and its Keychain key. It also clears the in-memory
+  the encrypted history file, the trained-model file and its temporary
+  sibling, and the Keychain key. It also clears the in-memory
   next-word predictor and aggregate shadow result. It is not a promise of
   forensic erasure from backups, snapshots, storage wear-leveling, or
   previously copied files.

@@ -153,10 +153,15 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         guard object["schema"] as? String == schema else {
             throw TextFreeOnlineEventError.unsupportedSchema
         }
+        return try productionDecoder.decode(TextFreeOnlineEvent.self, from: data)
+    }
+
+    /// Stateless, so one instance serves every line of a ledger read.
+    private static let productionDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(TextFreeOnlineEvent.self, from: data)
-    }
+        return decoder
+    }()
 
     /// An eligible opportunity that ended without a ghost. `generated` says
     /// whether the model produced text at all; `policyHidden` and the

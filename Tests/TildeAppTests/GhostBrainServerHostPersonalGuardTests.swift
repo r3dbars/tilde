@@ -153,11 +153,10 @@ struct GhostBrainServerHostPersonalLookupTimingTests {
     @Test("A task that resolves before the deadline reports outcome=resolved with its own prediction")
     func fastTaskReportsResolved() async {
         let (sink, events) = recordingDiagnostics()
-        let task = Task<PersonalNextWordPrediction?, Never> {
-            PersonalNextWordPrediction(word: "tomorrow", support: 4, total: 4)
-        }
+        let race = GhostBrainServerHost.PersonalLookupRace()
+        Task { race.resolve(PersonalNextWordPrediction(word: "tomorrow", support: 4, total: 4)) }
         let prediction = await GhostBrainServerHost.awaitPersonalPrediction(
-            task,
+            race,
             now: { Date() },
             diagnostics: sink
         )
@@ -170,9 +169,10 @@ struct GhostBrainServerHostPersonalLookupTimingTests {
     @Test("A task that resolves with nil still reports outcome=resolved, not timeout — value and outcome are independent")
     func resolvedNilIsStillResolved() async {
         let (sink, events) = recordingDiagnostics()
-        let task = Task<PersonalNextWordPrediction?, Never> { nil }
+        let race = GhostBrainServerHost.PersonalLookupRace()
+        race.resolve(nil)
         let prediction = await GhostBrainServerHost.awaitPersonalPrediction(
-            task,
+            race,
             now: { Date() },
             diagnostics: sink
         )
@@ -184,19 +184,23 @@ struct GhostBrainServerHostPersonalLookupTimingTests {
     @Test("A task slower than the 250ms deadline reports outcome=timeout")
     func slowTaskReportsTimeout() async {
         let (sink, events) = recordingDiagnostics()
-        let task = Task<PersonalNextWordPrediction?, Never> {
+        let race = GhostBrainServerHost.PersonalLookupRace()
+        let slow = Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            return PersonalNextWordPrediction(word: "late", support: 4, total: 4)
+            race.resolve(PersonalNextWordPrediction(word: "late", support: 4, total: 4))
         }
+        let started = Date()
         let prediction = await GhostBrainServerHost.awaitPersonalPrediction(
-            task,
+            race,
             now: { Date() },
             diagnostics: sink
         )
         #expect(prediction == nil)
         let logged = events.values.first { $0.0 == "personal-lookup-timing" }
         #expect(logged?.1["outcome"] == "timeout")
-        task.cancel()
+        // The deadline is a real bound: nothing waited for the slow provider.
+        #expect(Date().timeIntervalSince(started) < 1.5)
+        slow.cancel()
     }
 
     @Test("milliseconds rounds to the nearest whole millisecond, matching ScreenCaptureService's rounding")
@@ -211,5 +215,15 @@ struct GhostBrainServerHostPersonalLookupTimingTests {
         let instant = Date(timeIntervalSince1970: 1_000)
         #expect(GhostBrainServerHost.milliseconds(from: instant, to: instant) == 0)
         #expect(GhostBrainServerHost.milliseconds(from: instant, to: instant.addingTimeInterval(-1)) == 0)
+    }
+}
+
+@Suite("Served text keeps a mid-word answer's separator")
+struct ServedTextTests {
+    @Test("A boundary answer loses its leading space; a mid-word answer keeps it")
+    func leadingSpaceRule() {
+        #expect(GhostBrainServerHost.servedText(" best part", midWord: false) == "best part")
+        #expect(GhostBrainServerHost.servedText(" best part", midWord: true) == " best part")
+        #expect(GhostBrainServerHost.servedText("ting the report", midWord: true) == "ting the report")
     }
 }

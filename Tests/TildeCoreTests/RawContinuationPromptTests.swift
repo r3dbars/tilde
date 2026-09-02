@@ -641,3 +641,19 @@ struct ScreenContextPromptAssemblyTests {
         return prompt[header..<end].split(separator: "\n").map(String.init)
     }
 }
+
+@Suite("Mid-word seed is the whole last token")
+struct MidWordSeedTokenTests {
+    @Test("A partial joined to earlier characters is not a mid-word request")
+    func joinedPartialIsNotSeeded() {
+        #expect(RawContinuationPrompt.endsMidWord("I am wri"))
+        #expect(RawContinuationPrompt.endsMidWord("wri"))
+        #expect(!RawContinuationPrompt.endsMidWord("I need a long-ter"))
+        #expect(!RawContinuationPrompt.endsMidWord("my e-mai"))
+        #expect(!RawContinuationPrompt.endsMidWord("call O'Brie"))
+        #expect(!RawContinuationPrompt.endsMidWord("v2ab"))
+        // The prompt seeds only what endsMidWord admits.
+        let joined = RawContinuationPrompt(textBeforeCursor: "I need a long-ter", register: .prose, scene: nil)
+        #expect(joined.partialWordToComplete.isEmpty)
+    }
+}

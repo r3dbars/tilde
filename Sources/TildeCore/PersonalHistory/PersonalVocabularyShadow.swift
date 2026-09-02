@@ -330,7 +330,19 @@ public struct PersonalNextWordShadowCheckpoint: Codable, Equatable, Sendable {
 /// ever written to the same owner-only encrypted store as the history log, and
 /// never to a log, diagnostic, or report.
 public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
-    public static let version = 1
+    /// 2: the bounded duplicate-event guard travels with the table, so a
+    /// retried append after a restart is skipped exactly as a rebuild would
+    /// skip it. A version-1 file is refused and rebuilt from history.
+    public static let version = 2
+
+    /// One consumed event, as the shadow remembers it to refuse a repeat.
+    public struct RecentEvent: Codable, Equatable, Sendable {
+        public let historyIdentifier: String
+        public let consentIdentifier: String
+        public let sessionIdentifier: String
+        public let appBundleIdentifier: String
+        public let eventID: String
+    }
 
     public struct Transition: Codable, Equatable, Sendable {
         public let word: String
@@ -370,13 +382,17 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
     public let transitionCount: Int
     public let capacityLimited: Bool
     public let everCapacityLimited: Bool
+    /// The in-session duplicate guard, oldest first, bounded by
+    /// `PersonalNextWordShadow.maximumRecentEventIDs`.
+    public let recentEvents: [RecentEvent]
 
     init(
         contexts: [Context],
         streams: [Stream],
         transitionCount: Int,
         capacityLimited: Bool,
-        everCapacityLimited: Bool
+        everCapacityLimited: Bool,
+        recentEvents: [RecentEvent] = []
     ) {
         v = Self.version
         recipeID = PersonalNextWordShadow.recipeID
@@ -385,6 +401,7 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
         self.transitionCount = transitionCount
         self.capacityLimited = capacityLimited
         self.everCapacityLimited = everCapacityLimited
+        self.recentEvents = recentEvents
     }
 
     public init(from decoder: Decoder) throws {
@@ -396,6 +413,7 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
         transitionCount = try container.decode(Int.self)
         capacityLimited = try container.decode(Bool.self)
         everCapacityLimited = try container.decode(Bool.self)
+        recentEvents = try container.decode([RecentEvent].self)
         guard container.isAtEnd, isStructurallyValid else {
             throw DecodingError.dataCorrupted(
                 .init(codingPath: decoder.codingPath, debugDescription: "Invalid trained model")
@@ -412,6 +430,7 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
         try container.encode(transitionCount)
         try container.encode(capacityLimited)
         try container.encode(everCapacityLimited)
+        try container.encode(recentEvents)
     }
 
     /// A schema or recipe change rebuilds instead of misreading a table whose
@@ -426,7 +445,8 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
               transitionCount >= 0,
               transitionCount <= PersonalNextWordShadow.maximumTransitions,
               contexts.count <= PersonalNextWordShadow.maximumContexts,
-              streams.count <= PersonalNextWordShadow.maximumActiveStreams else { return false }
+              streams.count <= PersonalNextWordShadow.maximumActiveStreams,
+              recentEvents.count <= PersonalNextWordShadow.maximumRecentEventIDs else { return false }
         var contextKeys = Set<[String]>()
         var transitions = 0
         for context in contexts {
@@ -444,9 +464,9 @@ public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
                 largest = max(largest, transition.count)
             }
             guard context.total >= largest else { return false }
-            guard context.top.map({ words.contains($0) }) ?? context.transitions.isEmpty,
-                  context.runner.map({ words.contains($0) && $0 != context.top }) ?? true,
-                  context.runner == nil || context.top != nil else { return false }
+            // Transitions are non-empty above, so a top word always exists.
+            guard let top = context.top, words.contains(top),
+                  context.runner.map({ words.contains($0) && $0 != top }) ?? true else { return false }
             transitions += context.transitions.count
             guard transitions <= PersonalNextWordShadow.maximumTransitions else { return false }
         }
@@ -659,10 +679,9 @@ public struct PersonalNextWordShadow: Sendable {
     /// (contexts and transitions in a fixed order) so two shadows that would
     /// predict identically also serialize identically.
     ///
-    /// `recentEventIDs` is deliberately absent: it is a within-session guard
-    /// against the same event being consumed twice (a startup replay
-    /// overlapping the batch that was appended during it), and both consumes
-    /// always happen on one live shadow. It is not part of what was learned.
+    /// `recentEvents` travels too: an append whose acknowledgement was lost
+    /// is retried after a restart, and a restored table must refuse it the
+    /// way a rebuild from the log would.
     public var trainedModel: PersonalNextWordTrainedModel {
         let contexts = model.keys
             .sorted { Self.tokensPrecede($0.tokens, $1.tokens) }
@@ -700,8 +719,24 @@ public struct PersonalNextWordShadow: Sendable {
             streams: streams,
             transitionCount: transitionCount,
             capacityLimited: capacityLimited,
-            everCapacityLimited: everCapacityLimited
+            everCapacityLimited: everCapacityLimited,
+            recentEvents: recentEventsOldestFirst.map {
+                PersonalNextWordTrainedModel.RecentEvent(
+                    historyIdentifier: $0.stream.history,
+                    consentIdentifier: $0.stream.consent,
+                    sessionIdentifier: $0.stream.session,
+                    appBundleIdentifier: $0.stream.app,
+                    eventID: $0.event
+                )
+            }
         )
+    }
+
+    /// The ring in the order it would be evicted, so a restore rebuilds the
+    /// same eviction sequence.
+    private var recentEventsOldestFirst: [EventIdentity] {
+        guard recentEventIDs.count == Self.maximumRecentEventIDs else { return recentEventIDs }
+        return Array(recentEventIDs[nextEventEvictionIndex...] + recentEventIDs[..<nextEventEvictionIndex])
     }
 
     /// Puts a persisted table back, leaving the paired aggregate counters
@@ -729,6 +764,22 @@ public struct PersonalNextWordShadow: Sendable {
         transitionCount = trained.transitionCount
         capacityLimited = trained.capacityLimited
         everCapacityLimited = trained.everCapacityLimited
+        recentEventIDs = []
+        recentEventIDSet = []
+        nextEventEvictionIndex = 0
+        for recent in trained.recentEvents {
+            let identity = EventIdentity(
+                stream: StreamKey(
+                    history: recent.historyIdentifier,
+                    consent: recent.consentIdentifier,
+                    session: recent.sessionIdentifier,
+                    app: recent.appBundleIdentifier
+                ),
+                event: recent.eventID
+            )
+            guard recentEventIDSet.insert(identity).inserted else { continue }
+            recentEventIDs.append(identity)
+        }
         streams = [:]
         streamOrder = []
         for stream in trained.streams {

@@ -20,21 +20,21 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         case observerStopped = "observer-stopped"
     }
 
-    public let id: UUID
+    public private(set) var id: UUID
     public let shownAt: Date
     public let sessionDigestSHA256: String
     /// H01 arm tag. `champion` unless the disabled-by-default block
     /// randomization harness is running, so ordinary events are unchanged.
     public let variant: String
-    public let appCategory: String
-    public let register: String
+    public private(set) var appCategory: String
+    public private(set) var register: String
     public let boundary: String
     public let safeOpportunity: Bool
     public var candidateCharacters: Int
     public var candidateWordCount: Int
     /// `TextFreeCandidateSource` raw value: dictionary suffix, base model,
     /// personal, or agreement. Set from the app's receipt, never guessed.
-    public let candidateSource: String
+    public private(set) var candidateSource: String
     /// Characters the writer authored since the previous opportunity in this
     /// segment (typed or accepted), counted once. Never the context length:
     /// a long document shown ten ghosts would otherwise count its whole
@@ -42,9 +42,9 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     public let opportunityCharacters: Int
     /// The app's receipt for the model that produced this ghost; `nil` for a
     /// dictionary ghost or an app older than the receipt.
-    public let generatorMilliseconds: Int?
-    public let firstStableWordMilliseconds: Int?
-    public let configurationDigestSHA256: String?
+    public private(set) var generatorMilliseconds: Int?
+    public private(set) var firstStableWordMilliseconds: Int?
+    public private(set) var configurationDigestSHA256: String?
     public var typedAfterShow: Bool
     public var acceptedKind: AcceptKind?
     public var accepted: String
@@ -95,6 +95,41 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     }
 
     public var didAccept: Bool { acceptedKind != nil }
+
+    /// The model took over a ghost the dictionary opened: the record keeps
+    /// its interaction history (shown time, typing, acceptance) but is
+    /// re-keyed to the model opportunity the app answered — its id, the
+    /// register the generator composed with, and the configuration digest —
+    /// so the event reads as what it now is: a model ghost.
+    public mutating func adoptModelOpportunity(
+        id: UUID,
+        register: ContinuationRegister,
+        configurationDigestSHA256: String?
+    ) {
+        self.id = id
+        self.register = register.rawValue
+        appCategory = TextFreeAppCategory.from(register: register).rawValue
+        if let configurationDigestSHA256 { self.configurationDigestSHA256 = configurationDigestSHA256 }
+    }
+
+    /// A later receipt for the same ghost: the terminal line after a
+    /// streamed partial opened the record, or the model extending a
+    /// dictionary ghost. Timings fill in only where they were missing; the
+    /// source moves to the model only when the model's text is what is now
+    /// on screen.
+    public mutating func noteReceipt(
+        source: TextFreeCandidateSource?,
+        generatorMilliseconds: Int?,
+        firstStableWordMilliseconds: Int?
+    ) {
+        if let source { candidateSource = source.rawValue }
+        if self.generatorMilliseconds == nil, let generatorMilliseconds {
+            self.generatorMilliseconds = min(300_000, max(0, generatorMilliseconds))
+        }
+        if self.firstStableWordMilliseconds == nil, let firstStableWordMilliseconds {
+            self.firstStableWordMilliseconds = min(300_000, max(0, firstStableWordMilliseconds))
+        }
+    }
 
     public mutating func noteVisibleCandidate(characters: Int, wordCount: Int) {
         candidateCharacters = max(candidateCharacters, characters)

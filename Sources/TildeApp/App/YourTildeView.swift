@@ -1,4 +1,5 @@
 import SwiftUI
+import TildeCore
 
 @MainActor
 final class YourTildeViewModel: ObservableObject {
@@ -33,11 +34,16 @@ final class YourTildeViewModel: ObservableObject {
         refreshGeneration &+= 1
         let generation = refreshGeneration
         let url = ledgerURL
-        let access = TildeSettings().screenMemoryEnabled && ScreenRecordingPermission.isGranted()
+        let access = ScreenMemoryStatus.evaluate(
+            enabled: TildeSettings().screenMemoryEnabled,
+            permissionGranted: ScreenRecordingPermission.isGranted()
+        ).allowsSuggestions
         Task { [weak self, personalHistory] in
-            let next = await TildeProgress.snapshot(personalHistory: personalHistory)
-            // Reads the tail of the text-free ledger off the main thread.
-            let ledger = await OutcomeLedgerReader.summary(url: url)
+            // Independent loads; the ledger read is off the main thread.
+            async let progress = TildeProgress.snapshot(personalHistory: personalHistory)
+            async let ledgerSummary = OutcomeLedgerReader.summary(url: url)
+            let next = await progress
+            let ledger = await ledgerSummary
             guard let self, generation == self.refreshGeneration, !Task.isCancelled else { return }
             self.snapshot = next
             self.ledger = ledger
@@ -128,12 +134,13 @@ struct YourTildeSummaryView: View {
     }
 
     var headlineLabel: String {
-        model.ledger.hasTodayEvidence ? "keystrokes saved today" : "words today"
+        guard model.ledger.hasTodayEvidence else { return "words today" }
+        return model.ledger.truncated ? "keystrokes saved today (partial)" : "keystrokes saved today"
     }
 
     var headlineSupportingText: String {
         model.ledger.hasTodayEvidence
-            ? "\(model.ledger.keystrokesSavedLast7Days.formatted()) in the last 7 days"
+            ? "\(model.ledger.keystrokesSavedLast7Days.formatted()) in the last 7 days\(model.ledger.truncated ? " (partial)" : "")"
             : "\(model.snapshot.wordsWrittenWithTildeLifetime.formatted()) total"
     }
 

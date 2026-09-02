@@ -42,6 +42,25 @@ struct PersonalTrainedModelTests {
         #expect(restored.predictNextWord(afterTailWords: ["alpha", "beta"])?.word == "gamma")
     }
 
+    @Test("A retried append after a restart is refused, as a rebuild from the log would refuse it")
+    func retriedEventAfterRestoreIsNotLearnedTwice() {
+        var live = PersonalNextWordShadow()
+        let events = [
+            event(id: "e1", text: "see you tomorrow "),
+            event(id: "e2", text: "see you tomorrow "),
+        ]
+        live.consume(events, scoring: false)
+        let before = live.trainedModel
+
+        var restored = PersonalNextWordShadow()
+        let restoredOK = restored.restore(before)
+        #expect(restoredOK)
+        // The keyboard lost the acknowledgement and sends the last event again.
+        restored.consume([events[1]], scoring: false)
+        #expect(restored.trainedModel.contexts == before.contexts)
+        #expect(!before.recentEvents.isEmpty)
+    }
+
     @Test("A restart mid-word does not reset the stream: token, context, and censoring survive")
     func streamStateSurvivesTheRestart() {
         // The keystrokes of one word arrive split across the save boundary.

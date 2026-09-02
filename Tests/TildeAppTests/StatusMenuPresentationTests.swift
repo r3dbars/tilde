@@ -41,7 +41,7 @@ struct StatusMenuPresentationTests {
             state: .disabled,
             model: .ready(modelURL),
             wordsToday: 13,
-            screenMemoryEnabled: false
+            screenMemory: .disabled
         )
 
         #expect(menu.status == "Screen Memory is Off")
@@ -55,7 +55,7 @@ struct StatusMenuPresentationTests {
             state: .disabled,
             model: .ready(modelURL),
             wordsToday: 13,
-            screenMemoryEnabled: true
+            screenMemory: .on
         )
 
         #expect(menu.status == "Tilde is Paused")

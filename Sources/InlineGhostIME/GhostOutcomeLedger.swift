@@ -197,6 +197,44 @@ enum GhostOutcomeLedger {
         lock.unlock()
     }
 
+    /// The app's terminal receipt for the ghost on screen: a streamed
+    /// partial opened the record without timings, and the final line has
+    /// them. Merged in place; the source stays what the presentation said.
+    static func noteReceipt(_ receipt: GhostDecisionReceipt) {
+        lock.lock()
+        defer { lock.unlock() }
+        // A dictionary ghost never borrows a model's timings, even when a
+        // rejected model answer arrives while it is on screen.
+        guard opportunity?.candidateSource != TextFreeCandidateSource.dictionary.rawValue else { return }
+        opportunity?.noteReceipt(
+            source: nil,
+            generatorMilliseconds: receipt.generatorMilliseconds,
+            firstStableWordMilliseconds: receipt.firstStableWordMilliseconds
+        )
+    }
+
+    /// The model extended a dictionary ghost that was already on screen.
+    /// One ghost, one record: the pending model opportunity folds into the
+    /// shown record (source becomes the base model, timings fill in) instead
+    /// of becoming a second, falsely superseded event.
+    static func noteModelExtendedVisibleCandidate(opportunityID: UUID?, receipt: GhostDecisionReceipt?) {
+        lock.lock()
+        if let opportunityID, let open = pending, open.id == opportunityID {
+            pending = nil
+            opportunity?.adoptModelOpportunity(
+                id: open.id,
+                register: receipt?.register ?? open.hostRegister,
+                configurationDigestSHA256: receipt?.configurationDigest ?? ServedConfiguration.digest
+            )
+        }
+        opportunity?.noteReceipt(
+            source: .baseModel,
+            generatorMilliseconds: receipt?.generatorMilliseconds,
+            firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds
+        )
+        lock.unlock()
+    }
+
     static func noteVisibleCandidate(characters: Int, wordCount: Int) {
         lock.lock()
         opportunity?.noteVisibleCandidate(characters: characters, wordCount: wordCount)

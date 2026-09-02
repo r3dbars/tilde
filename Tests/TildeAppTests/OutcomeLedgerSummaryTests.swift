@@ -255,7 +255,11 @@ struct OutcomeLedgerReasonTests {
             summary: summary,
             screenAccessGranted: false
         )
-        #expect(blocked == "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back.")
+        // Access went off part-way through a day that already has evidence:
+        // the line must not claim the whole day was silent.
+        #expect(blocked == "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back.")
+        #expect(OutcomeLedgerPresentation.heldBackLine(summary: .empty, screenAccessGranted: false)
+            == "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back.")
 
         // A quiet, healthy day says nothing at all.
         #expect(OutcomeLedgerPresentation.heldBackLine(
@@ -303,7 +307,7 @@ struct OutcomeLedgerReasonTests {
             summary: .empty,
             wordsToday: 40,
             screenAccessGranted: false
-        ) == "Screen Access is off — Tilde stays silent")
+        ) == "Screen Access is off now — Tilde is not suggesting")
     }
 
     @Test("The menu bar renders the ledger through the same presentation")
@@ -316,8 +320,8 @@ struct OutcomeLedgerReasonTests {
             state: .ready,
             model: .ready(URL(fileURLWithPath: "/tmp/model.gguf")),
             wordsToday: 13,
-            ledger: summary,
-            screenAccessGranted: true
+            screenMemory: .on,
+            ledger: summary
         )
         #expect(menu.detail == "88 keystrokes saved today")
     }

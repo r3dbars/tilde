@@ -169,10 +169,13 @@ struct GhostInputControllerOpportunityTests {
 
     @Test("Only the mid-word path is throttled, and by more than a fast typist's keystroke")
     func onlyMidWordIsThrottled() {
-        #expect(GhostInputController.requestThrottleNanoseconds(for: .wordBoundary) == 0)
-        #expect(GhostInputController.requestThrottleNanoseconds(for: .sentenceBoundary) == 0)
-        #expect(GhostInputController.requestThrottleNanoseconds(for: nil) == 0)
-        let throttle = GhostInputController.requestThrottleNanoseconds(for: .midWord)
+        let tuned = InteractionPolicy.tuned9B
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .wordBoundary, policy: tuned) == 0)
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .sentenceBoundary, policy: tuned) == 0)
+        #expect(GhostInputController.requestThrottleNanoseconds(for: nil, policy: tuned) == 0)
+        // Production does not ask mid-word at all, so its throttle is moot and zero.
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: .conservative) == 0)
+        let throttle = GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: tuned)
         // A fast typist lands roughly ten characters a second. The wait has
         // to outlast that gap, or a burst still spends one request a letter.
         #expect(throttle >= 100_000_000)

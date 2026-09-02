@@ -210,7 +210,7 @@ public struct CompletionOutputCleaner: Sendable {
     /// growing, and at exactly the character limit the next character decides
     /// whether the cut lands on a whitespace boundary.
     private func capHasBitten(_ continuation: String) -> Bool {
-        if wordRanges(in: continuation).count > maxVisibleWords { return true }
+        if CompletionContextWords.wordRanges(in: continuation).count > maxVisibleWords { return true }
         let characterLimit = maxVisibleCharacters
             ?? CompletionSuggestion.defaultMaxVisibleCharacters(forVisibleWords: maxVisibleWords)
         let wordCapped = CompletionSuggestion.acceptedPrefix(in: continuation, wordLimit: maxVisibleWords)
@@ -283,8 +283,8 @@ public struct CompletionOutputCleaner: Sendable {
         // normalized empty string as a prefix used to drop the first character.
         guard context.endsWithLetter else { return suggestion }
 
-        let suggestionRanges = wordRanges(in: suggestion)
-        let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
+        let suggestionRanges = CompletionContextWords.wordRanges(in: suggestion)
+        let suggestionWords = suggestionRanges.map { CompletionContextWords.normalized(String(suggestion[$0])) }
         guard !contextWords.isEmpty, !suggestionWords.isEmpty else { return suggestion }
 
         for count in stride(from: min(contextWords.count, suggestionWords.count), through: 1, by: -1) {
@@ -319,8 +319,8 @@ public struct CompletionOutputCleaner: Sendable {
     /// when the typed context ends in whitespace, so there is no partial last
     /// word to reason about the way `trimTypedPrefix`'s other branch does.
     private func stripLeadingWordEcho(_ suggestion: String, contextWords: [String]) -> String {
-        let suggestionRanges = wordRanges(in: suggestion)
-        let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
+        let suggestionRanges = CompletionContextWords.wordRanges(in: suggestion)
+        let suggestionWords = suggestionRanges.map { CompletionContextWords.normalized(String(suggestion[$0])) }
         guard !contextWords.isEmpty, !suggestionWords.isEmpty else { return suggestion }
 
         for count in stride(from: min(contextWords.count, suggestionWords.count), through: 1, by: -1) {
@@ -334,7 +334,7 @@ public struct CompletionOutputCleaner: Sendable {
     }
 
     private func replaysContext(_ suggestion: String, contextWords typed: [String]) -> Bool {
-        let offered = normalizedWords(in: suggestion)
+        let offered = CompletionContextWords.normalizedWords(in: suggestion)
         guard offered.count >= 3, typed.count >= 3 else { return false }
 
         for size in stride(from: min(4, offered.count), through: 3, by: -1) {
@@ -375,9 +375,9 @@ public struct CompletionOutputCleaner: Sendable {
         var wordStarts: [String.Index] = []
         var words: [String] = []
         var endsClause: [Bool] = []
-        for range in wordRanges(in: suggestion) {
+        for range in CompletionContextWords.wordRanges(in: suggestion) {
             let token = String(suggestion[range])
-            let word = normalized(token)
+            let word = CompletionContextWords.normalized(token)
             let breaksHere = token.last.map(clauseBreaks.contains) ?? false
             if !word.isEmpty {
                 wordStarts.append(range.lowerBound)
@@ -475,19 +475,6 @@ public struct CompletionOutputCleaner: Sendable {
         }
     }
 
-    // The tokenizer lives in `CompletionContextWords` so that the prepared
-    // context and the per-output passes below split words the same way.
-    private func normalizedWords(in text: String) -> [String] {
-        CompletionContextWords.normalizedWords(in: text)
-    }
-
-    private func wordRanges(in text: String) -> [Range<String.Index>] {
-        CompletionContextWords.wordRanges(in: text)
-    }
-
-    private func normalized(_ word: String) -> String {
-        CompletionContextWords.normalized(word)
-    }
 }
 
 private extension CompletionCleanOutcome {

@@ -1,6 +1,8 @@
 # Road to paid — agent plan
 
-Status: HISTORICAL PLAN, IMPLEMENTED IN PART. Personal serving and the first-run
+Status: HISTORICAL PLAN, IMPLEMENTED IN PART. On 2026-09-02 the owner
+decided Tilde stays free and open source under MIT with no paid tier planned;
+Phase 5 below is kept as a record of the earlier thinking, not a plan. Personal serving and the first-run
 setup described below now exist; their remaining proof gaps are noted in place.
 Current product and privacy behavior lives in `README.md`, `PRIVACY.md`, and
 `docs/evaluation.md`. The product goal, in the owner's words (2026-08-17): "I

@@ -7,7 +7,14 @@ import TildeCore
 /// anything it is displaying, never anything typed into it.
 struct ForegroundApplication: Equatable, Sendable {
     let bundleIdentifier: String
+    /// Never empty: an app with no usable display name is named by its
+    /// bundle identifier at construction, so no reader repeats the fallback.
     let name: String
+
+    init(bundleIdentifier: String, name: String) {
+        self.bundleIdentifier = bundleIdentifier
+        self.name = name.isEmpty ? bundleIdentifier : name
+    }
 }
 
 /// The pure half of the menu's one-click "Ignore <App>" affordance, kept out
@@ -20,8 +27,7 @@ enum IgnoreApplicationMenuItem {
     /// the row would read as "the click did nothing".
     static func title(for application: ForegroundApplication?, isIgnored: Bool) -> String? {
         guard let application else { return nil }
-        let name = application.name.isEmpty ? application.bundleIdentifier : application.name
-        return isIgnored ? "Ignoring \(name)" : "Ignore \(name)"
+        return isIgnored ? "Ignoring \(application.name)" : "Ignore \(application.name)"
     }
 
     /// Adds one bundle identifier to the same excluded-apps list the
@@ -58,16 +64,17 @@ final class StatusMenuHost: NSObject {
             state: TildeApplicationState,
             model: ModelState,
             wordsToday: Int,
-            screenMemoryEnabled: Bool = true,
-            ledger: OutcomeLedgerSummary = .empty,
-            screenAccessGranted: Bool = true
+            screenMemory: ScreenMemoryStatus = .on,
+            ledger: OutcomeLedgerSummary = .empty
         ) -> Self {
             /// Value first: keystrokes saved and the honest held-back count,
             /// falling back to the words line until the ledger has evidence.
+            /// "Can Tilde suggest at all" is `ScreenMemoryStatus`'s one answer,
+            /// the same one the completion path reads.
             let today = OutcomeLedgerPresentation.menuDetail(
                 summary: ledger,
                 wordsToday: wordsToday,
-                screenAccessGranted: screenAccessGranted
+                screenAccessGranted: screenMemory.allowsSuggestions
             )
             if state.requiresUserAttention {
                 return Self(
@@ -101,7 +108,7 @@ final class StatusMenuHost: NSObject {
                     detail: today,
                     primaryAction: "Pause for 1 Hour"
                 )
-            case .disabled where !screenMemoryEnabled:
+            case .disabled where screenMemory == .disabled:
                 return Self(
                     status: "Screen Memory is Off",
                     detail: "Tilde suggests nothing until it can read the screen",
@@ -233,9 +240,8 @@ final class StatusMenuHost: NSObject {
             state: state,
             model: appDelegate.modelState(),
             wordsToday: TildeStats.todayWordsAccepted(),
-            screenMemoryEnabled: settings.screenMemoryEnabled,
-            ledger: ledger,
-            screenAccessGranted: screenAccessGranted
+            screenMemory: screenMemoryStatus,
+            ledger: ledger
         )
         statusLineItem?.title = switch TildeProductProfile.current {
         case .production: "\(appDelegate.selectedProductionModel()?.shortName ?? "Gemma E2B") · \(presentation.status)"
@@ -288,9 +294,12 @@ final class StatusMenuHost: NSObject {
         tildeWindow?.refresh()
     }
 
-    /// Suggesting at all needs Screen Memory on and the OS permission granted.
-    private var screenAccessGranted: Bool {
-        settings.screenMemoryEnabled && ScreenRecordingPermission.isGranted()
+    /// The same answer the completion path gives, never a hand-written copy.
+    private var screenMemoryStatus: ScreenMemoryStatus {
+        ScreenMemoryStatus.evaluate(
+            enabled: settings.screenMemoryEnabled,
+            permissionGranted: ScreenRecordingPermission.isGranted()
+        )
     }
 
     private func refreshLedgerIfStale() {
@@ -316,14 +325,11 @@ final class StatusMenuHost: NSObject {
         } else if settings.pausedUntil != nil {
             settings.resume()
         } else if appDelegate?.applicationState() == .disabled {
-            let screenMemoryWasOff = !settings.screenMemoryEnabled
             settings.suggestionsEnabled = true
-            settings.screenMemoryEnabled = true
             settings.resume()
             // The menu item says which switch this flips (see
-            // `Presentation.make`), and the app still has to hear about it:
-            // the capture service and the status icon both key off it.
-            if screenMemoryWasOff { appDelegate?.screenMemoryEnabledDidChange(true) }
+            // `Presentation.make`); the app owns the write and its effects.
+            appDelegate?.setScreenMemoryEnabled(true)
         } else {
             settings.pause(for: 3_600)
         }
