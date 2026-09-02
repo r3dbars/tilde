@@ -2,101 +2,112 @@
 
 ![Tilde cover](Assets/GitHub/tilde-cover.png)
 
-Tilde is an open-source macOS input method that offers quiet inline writing
-suggestions. Type normally, then use:
+**Tilde finishes your sentences, in any Mac app, with a model that never
+leaves your Mac.**
 
-- `Tab` to accept the next word; press it again to keep advancing
-- `~`, the key above `Tab`, to accept the whole visible suggestion at once
-- `Esc` to dismiss
+You type. A quiet grey ghost appears with the next few words. Press `Tab` to
+take one word, `~` to take all of it, or keep typing and it gets out of the
+way. It works in Slack, Mail, Notes, Chrome, Claude, VS Code, anywhere you can
+type, because it is a real macOS keyboard, not a floating window.
 
-Suggestions are IMKit marked text inside the app where you are writing. Tilde
-does not use an overlay, Accessibility-based insertion, or synthetic paste
-events. Screen
-Memory uses macOS Screen Recording and on-device OCR when enabled by its
-privacy controls; screen text stays on this Mac and is never sent for cloud
-inference.
+<!-- demo: Assets/GitHub/tilde-demo.gif — fifteen seconds: type a Slack reply,
+one Tab, one ~, one Esc. Record at 2x, crop to the composer. -->
+
+## What makes it different
+
+- **It knows what you are replying to.** With your permission, Tilde reads
+  the text on your screen, so a reply to "can you do 3pm?" gets a ghost that
+  actually answers the question.
+- **It learns how you write.** With your permission, it remembers your own
+  phrasing and prefers it. Off by default.
+- **Nothing leaves your Mac.** The model runs on your Mac. There is no
+  account, no cloud, no analytics. The release process proves it by watching
+  every socket the app opens while it works.
+- **It stays quiet when it should.** Tilde would rather say nothing than
+  guess wrong over a sensitive conversation, and it records every time it
+  holds back, and why, so it can explain itself.
+
+## Status: open beta
+
+Tilde is my daily keyboard and it is free and open source under MIT. It is
+not finished. The honest version:
+
+- Suggestions are good when the context is good, and wrong more often than I
+  would like when it is not.
+- The filters that make it quiet and short are measured on my own test
+  build and are being promoted to the default build through the same tests.
+- It has been tested in the apps I use, which is a shorter list than the
+  apps you use. See the [compatibility runbook](docs/compatibility/app-compatibility-runbook.md).
+
+Requirements: an Apple Silicon Mac on macOS 26 or newer, about 3.5 GB of
+disk for the default model, and one trip to System Settings to enable the
+keyboard. Screen Recording permission is required for suggestions; without
+it Tilde stays silent.
+
+## How it works
+
+Tilde is three small pieces:
+
+1. **The keyboard** (`InlineGhostIME`) handles your keystrokes and draws the
+   ghost as marked text inside the app you are typing in. It never inserts
+   text through Accessibility, overlays, or fake paste events.
+2. **The app** in the menu bar takes a bounded slice of what you typed, adds
+   what it can see on screen, asks the model, filters the answer, and sends
+   back a short suggestion over a private local socket.
+3. **The model** is a signed copy of `llama-server` running as a child of
+   the app, with one of two pinned open-weight models downloaded on first
+   run and verified byte for byte:
+   - **Gemma 4 E2B** (default, 3.4 GB) — lighter, measured.
+   - **Qwen 3.5 9B** (optional, 5.6 GB) — stronger, needs more memory,
+     still under study.
+
+Typed text, screen text, and model output stay in memory and are gone when
+the request is done. If you turn on Personal History, what you write is
+stored on your Mac in an encrypted log you can inspect, exclude apps from,
+and delete with one click. [PRIVACY.md](PRIVACY.md) has the full boundary.
+
+## How I know it works
+
+Every change to what Tilde shows goes through a research harness in this
+repository called Tilde Lab. Experiments are registered with a kill rule
+before they run, results are written down whether they won or lost, and
+nothing reaches the default build without a measured comparison against the
+build it replaces.
+
+- [Experiment records](docs/experiments/README.md) — Q11 to Q14 are the
+  chain that took wrong-when-shown on the tuned stack from the forties into
+  the teens. Q13 is the one that killed my own favourite idea, longer ghosts.
+- [The lab log](docs/research/lab-log.md) — every attempt: what was tried,
+  what was learned, what failed, written the same day.
+- [The learning ledger](docs/learning-ledger.md) — the reusable lessons and
+  the ordered queue of what may run next.
+- The live outcome ledger — a text-free record of every ghost shown and
+  every silence, with its reason, kept on your Mac and never uploaded.
 
 ## Two parts, one repository
-
-This repository contains exactly two things:
 
 | Name | Purpose | Ships to users? |
 | --- | --- | --- |
 | **Tilde** | The macOS input method and its local runtime | **Yes** |
-| **Tilde Lab** | The separate app and command-line tools used to test and improve Tilde | **No** |
+| **Tilde Lab** | The app and command-line tools used to test and improve Tilde | **No** |
 
-There is no separate “Tilde Research” product. Long-running experiments are a
-Tilde Lab capability and use the `tilde-lab` command.
+The boundary is enforced by Swift package dependencies: Tilde Lab may use
+`TildeCore`, but the app and keyboard never import anything from Tilde Lab.
+See the [repository boundary map](docs/repository-boundary.md).
 
-The source boundary is enforced by Swift package dependencies: Tilde Lab may
-exercise `TildeCore`, but `TildeApp` and `InlineGhostIME` do not import or link
-any `TildeLab…` target. Packaging includes the Tilde app, input method, and
-signed inference helper—not Tilde Lab. See the
-[repository boundary map](docs/repository-boundary.md) for the exact folders and
-dependency direction.
+### Pinned model assets
 
-## How it works
+The picker offers exactly two immutable files and needs no Hugging Face login:
 
-Tilde ships as a small signed package:
-
-1. `InlineGhostIME` handles keystrokes and marked-text display.
-2. The Tilde menu-bar app receives bounded context over an owner-only local
-   Unix socket.
-3. The app runs its signed `llama-server` helper as a child process. Users do
-   not install or run a model server.
-4. `ModelManager` downloads the selected pinned model to Tilde's external
-   app-support storage, verifies its exact size and SHA-256, and starts the
-   helper only with that verified path. Gemma 4 E2B is the measured default
-   and uses less memory and storage; Qwen 3.5 9B needs more of both and is
-   still under study. GGUF files are never part of `Tilde.app`.
-
-The official picker offers exactly two immutable assets and requires no
-Hugging Face login:
-
-`https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
-
-- 3,427,861,984 bytes; SHA-256
+- `https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
+  — 3,427,861,984 bytes; SHA-256
   `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`
-
-`https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf`
-
-- 5,629,109,312 bytes; SHA-256
+- `https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf`
+  — 5,629,109,312 bytes; SHA-256
   `4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`
 
-Completion requests and unaccepted model output stay in memory. When the user
-explicitly enables Personal History, the input method asynchronously sends the
-text the user produces to the Tilde app. The app stores a local encrypted event
-log and quietly compares two bounded personal next-word recipes. That paired
-comparison remains shadow-only, but the same opt-in also lets a conservative,
-read-only personal prediction run beside Gemma. When it has enough local
-support, it can replace the visible base suggestion; otherwise Gemma remains.
-Serving never changes the paired score or trains Gemma. The comparison's bounded
-lifetime and daily aggregate checkpoint is encrypted in the same app-owned
-history log as the batch it scores; it contains no words, candidate text, or
-per-case rows.
-Tilde has no cloud inference, analytics, sync, upload, or accept sounds. The
-separate first-run asset phase may make an HTTPS request only to the immutable
-model URL above; it sends no typed text, screen text, prompt, history, or model
-output. After the model is verified, autocomplete is local-only.
-
-Personal History is off by default. Its menu shows the local storage location
-and approximate size, lets the user exclude the current app, reports aggregate
-next-word test progress, and can delete the entire store. At launch the two
-in-memory recipes restore aggregate results and rebuild their learned contexts
-without scoring from a bounded recent 4 MiB history tail. Writing stored while
-that rebuild is loading warms the model but is not scored. They then learn and
-score shared fresh writing while Tilde runs. The menu reports fresh words,
-candidate predictions, disagreements, active days, and any memory limit; only
-after fixed descriptive thresholds does it show candidate versus baseline
-effective rates. Each history record is encrypted with AES-GCM; its key lives
-as a non-synchronizing item in the user's macOS login Keychain. See
-[PRIVACY.md](PRIVACY.md) for the capture boundary and remaining risks.
-
-## Status and requirements
-
-Tilde is beta software for Apple Silicon Macs running macOS 26 or newer. The
-input method must be enabled once in System Settings. IMKit behavior varies by
-editor; see the [compatibility guide](docs/compatibility/app-compatibility-runbook.md).
+The first-run download is the only network request Tilde ever makes. It
+sends no typed text, screen text, prompt, history, or model output.
 
 ## Development
 
@@ -188,17 +199,10 @@ never transmitted for inference, analytics, or training. See
 
 ## License
 
-[GNU Affero General Public License v3.0](LICENSE), from 2 September 2026.
-Releases made before that date remain under the MIT license they shipped
-with. The Tilde name, icon, and logo are not covered by the software
-license; see [TRADEMARK.md](TRADEMARK.md).
+[MIT](LICENSE). Use it, fork it, build on it. The Tilde name, icon, and logo
+are not part of the license; see [TRADEMARK.md](TRADEMARK.md), which only
+asks that a modified version be called something else. Third-party components
+keep their own licenses; `llama.cpp`, for example, is MIT too.
 
-**Why AGPL.** The code stays fully open: read every line, build it yourself,
-fork it, change it. What the AGPL adds is a fair trade — anyone who
-distributes a modified Tilde, including as a hosted service, has to publish
-their source too. A keyboard that reads your screen has to be readable, so
-the free, open build gives you the whole input method, both local models,
-and every privacy guarantee described above. What is sold is the finished
-product around it: the official signed and notarized build, updates, and
-support. Third-party components keep their own licenses; `llama.cpp`, for
-example, is MIT.
+There is no paid tier and none is planned. If you want to support the work,
+use it, report what breaks, and tell me what it should do next.

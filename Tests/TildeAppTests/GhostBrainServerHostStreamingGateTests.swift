@@ -72,7 +72,7 @@ struct GhostBrainServerHostStreamingGateTests {
 
         #expect(writer.written.isEmpty)
         #expect(!sink.didStream)
-        #expect(sink.holdDiagnostics()["outcome"] == "unstreamed")
+        #expect(sink.holdDiagnostics()["outcome"] == "not-held")
     }
 
     @Test("Personal on, late answer: the first prefix is held, then the window releases it")
@@ -210,5 +210,22 @@ struct GhostBrainServerHostStreamingGateTests {
         private var count = 0
         func increment() { lock.withLock { count += 1 } }
         var value: Int { lock.withLock { count } }
+    }
+}
+
+@Suite("Personal stream hold diagnostics")
+struct PersonalStreamHoldDiagnosticsTests {
+    @Test("Every hold outcome and the held duration print literally instead of as a redacted length")
+    func holdOutcomesSurviveTheRedactor() {
+        for outcome in GhostBrainServerHost.PartialResponseSink.HoldOutcome.allCases {
+            #expect(
+                DiagnosticsMetadataRedactor.logSafeField(forKey: "outcome", value: outcome.rawValue)
+                    == "outcome=\(outcome.rawValue)"
+            )
+        }
+        #expect(DiagnosticsMetadataRedactor.logSafeField(forKey: "heldMilliseconds", value: "42") == "heldMilliseconds=42")
+        for reason in ["permissions", "size", "header", "authentication", "schema", "read"] {
+            #expect(DiagnosticsMetadataRedactor.logSafeField(forKey: "reason", value: reason) == "reason=\(reason)")
+        }
     }
 }

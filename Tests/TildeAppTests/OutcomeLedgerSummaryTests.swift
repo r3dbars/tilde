@@ -316,8 +316,8 @@ struct OutcomeLedgerReasonTests {
             state: .ready,
             model: .ready(URL(fileURLWithPath: "/tmp/model.gguf")),
             wordsToday: 13,
-            ledger: summary,
-            screenAccessGranted: true
+            screenMemory: .on,
+            ledger: summary
         )
         #expect(menu.detail == "88 keystrokes saved today")
     }
