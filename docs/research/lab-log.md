@@ -28,6 +28,48 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Luna judges the live 9B preview stack: 33.9% simulated retained value
+
+- **Try:** Point the simulated typist at exactly the arm the live 9B
+  preview generates and filters with (Qwen 9B, temperature 0.10, 12
+  tokens, cap 3/42, echo floor 3 words / 24 chars, names-and-numbers
+  grounding, no Lab confidence gate, extended silence gate off) — the
+  model file byte-identical to the preview's, the preview's own helper —
+  over the full replying-v2 speak-expected set (240 scenarios × 5
+  personas), with Luna deciding (batch 25, 12 workers, 5 skips allowed).
+  Heuristic and Luna smoke runs first; the full run took 26 minutes.
+- **Learn:** Pooled over 2,950 displays: retained-character potential
+  33.9% (9,983 / 29,483), accepts 27.1% (word-only 3.1%), type-through
+  20.2%, dismiss 52.8%, wrong-when-shown 44.9%, 178 correction
+  characters. Per persona, retained value 30.6–36.9% and accepts
+  25.1–29.0%, so the live stack sits at or slightly above the 2026-08-30
+  campaign-arm staircase top (30.5% retained, 26.9% accepts) on the same
+  instrument, without the campaign's confidence gate and silence gate.
+  Wrong-when-shown stays uniform across personas (43.8–46.2%), the same
+  generator-side shape the 2026-08-29 run showed; type-through spreads
+  more (15.7–25.3%), highest for the email writer. The run also
+  establishes a repeatable owner-local harness: one run.sh, one arm file
+  per configuration, one report per run, so the campaign arm can be
+  rerun on today's code with one command.
+- **Fail:** One Luna batch failed after its retries and was skipped,
+  abandoning 25 deliberate-prose-drafter sessions (50 moments); that
+  persona covers 215 scenarios, not 240, and the pooled number is over a
+  sample smaller than the suite it names. The staircase comparison is
+  across runs on different days with different scenario counts, not a
+  paired arm, and the simulator is still uncalibrated out of sample —
+  discovery-grade, permanently fenced, not a promotion signal. The
+  simulator has no keyboard, so the chained accept, punctuation
+  boundary, Electron reveal floor, window title, and anchored gate
+  shipped this week are invisible to it; those remain outcome-ledger
+  questions. Wrong-when-shown near 45% on this suite is the number that
+  has not moved since 2026-08-29.
+- **Where:** owner-local `Tilde Lab/SimulatedTypist/2026-09-02-luna-preview9b/`
+  (arm files, run.sh, aggregate-only reports); decision adapter and
+  reports stay out of git per the partnership rules.
+- **Next:** Rerun the `q13-cap-3-campaign` arm through the same harness for
+  a same-day paired anchor, then a fresh-week out-of-sample scoring of
+  persona v2 against live moments before the simulator screens anything.
+
 ## 2026-09-02 — Shorter Electron reveal floor and punctuation boundaries, preview only
 
 - **Try:** In the 9B preview, drop the Chromium/Electron reveal floor from
