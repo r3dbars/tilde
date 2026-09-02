@@ -87,32 +87,6 @@
   #messages .field { display: flex; align-items: center; gap: 10px; padding: 10px 16px 16px; }
   #messages .field textarea { flex: 1; border: 1px solid #c9ccd1; border-radius: 20px; padding: 8px 14px; font-size: 15px; line-height: 1.35; height: 38px; outline: 0; }
 
-  /* ---------- GitHub ---------- */
-  #github { grid-template-rows: 46px 1fr; background: #f6f8fa; }
-  #github .top { background: #24292f; color: #fff; display: flex; align-items: center; padding: 0 18px; gap: 14px; font-size: 14px; }
-  #github .wrap { max-width: 880px; margin: 22px auto; padding: 0 20px; width: 100%; overflow: auto; }
-  #github h2 { font-size: 22px; font-weight: 600; margin: 0 0 4px; } #github h2 small { color: var(--muted); font-weight: 400; }
-  #github .state { display: inline-block; background: #1a7f37; color: #fff; border-radius: 20px; padding: 3px 10px; font-size: 12px; margin-bottom: 14px; }
-  .gh-c { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; margin-bottom: 14px; }
-  .gh-c .h { background: #f6f8fa; border-bottom: 1px solid #d0d7de; padding: 8px 14px; font-size: 13px; color: var(--muted); } .gh-c .h b { color: var(--ink); }
-  .gh-c .b { padding: 14px; line-height: 1.5; }
-  .gh-c code { font-family: var(--mono); font-size: 12.5px; background: #eff1f3; padding: 1px 5px; border-radius: 4px; }
-  #github textarea { width: 100%; border: 1px solid #d0d7de; border-radius: 6px; padding: 10px; font-size: 14px; line-height: 1.5; min-height: 120px; outline: 0; }
-  #github .btn { display: inline-block; margin-top: 8px; background: #1f883d; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; }
-
-  /* ---------- Assistant chat (Claude Desktop-like) ---------- */
-  #assistant { grid-template-columns: 240px 1fr; background: #f7f5f0; }
-  #assistant .side { background: #f0ede6; border-right: 1px solid #e2ddd2; padding: 46px 12px; color: #555; }
-  #assistant .side .c { padding: 6px 10px; border-radius: 6px; font-size: 13px; } #assistant .side .c.on { background: #e5dfd2; }
-  #assistant .chat { display: grid; grid-template-rows: 1fr auto; }
-  #assistant .turns { overflow: auto; padding: 46px 12% 20px; display: flex; flex-direction: column; gap: 18px; font-size: 15px; line-height: 1.55; }
-  #assistant .u { align-self: flex-end; background: #ebe7dd; padding: 10px 14px; border-radius: 14px; max-width: 78%; }
-  #assistant .a { max-width: 88%; }
-  #assistant .a .who { font-weight: 600; font-size: 12px; color: #a0522d; margin-bottom: 4px; }
-  #assistant .box { margin: 0 12% 22px; border: 1px solid #d8d2c4; border-radius: 14px; background: #fff; }
-  #assistant textarea { width: 100%; border: 0; outline: 0; padding: 14px; font-size: 15px; line-height: 1.5; min-height: 84px; background: transparent; }
-  #assistant .box .foot { display: flex; justify-content: space-between; padding: 4px 12px 10px; color: var(--muted); font-size: 12px; }
-
   /* ---------- Discord ---------- */
   #discord { grid-template-columns: 70px 230px 1fr; background: #313338; color: #dbdee1; }
   #discord .servers { background: #1e1f22; }
@@ -137,8 +111,6 @@
   <button data-app="slack" aria-pressed="true">Slack</button>
   <button data-app="mail">Mail</button>
   <button data-app="messages">Messages</button>
-  <button data-app="github">GitHub</button>
-  <button data-app="assistant">Assistant</button>
   <button data-app="discord">Discord</button>
   <div class="spacer"></div>
   <button id="toggleHints" title="Show or hide the typing hints (H)">Hints</button>
@@ -241,57 +213,6 @@ Dana</div>
     </div>
   </section>
 
-  <!-- ===================== GITHUB ===================== -->
-  <section id="github" class="app">
-    <div class="top">🐙 <span>meridianlabs / onboarding-web</span> <span style="opacity:.6">Pull requests</span></div>
-    <div class="wrap">
-      <h2>Fix permission prompt copy on first launch <small>#218</small></h2>
-      <div class="state">Open</div>
-      <div class="gh-c"><div class="h"><b>marcus-o</b> commented 2 hours ago</div><div class="b">This replaces the three-paragraph prompt with one sentence and moves the "why we need this" link below the button. Copy is from Priya's doc. Screenshots in the description; tested on 14.6 and 15.0.</div></div>
-      <div class="gh-c"><div class="h"><b>priya-n</b> reviewed 1 hour ago · <code>PermissionPrompt.swift</code> line 42</div><div class="b">The fallback string still says "Screen Recording" when the permission is actually Accessibility. Can we make <code>permissionName</code> come from the enum instead of the literal?</div></div>
-      <div class="gh-c"><div class="h"><b>marcus-o</b> replied 40 minutes ago</div><div class="b">Good catch. Fixed in <code>c41f2e0</code>, and added a test that walks every case. Ready for another look.</div></div>
-      <div class="gh-c"><div class="h">Write a review</div><div class="b">
-        <textarea data-field placeholder="Leave a comment"></textarea>
-        <span class="btn">Comment</span>
-      </div></div>
-    </div>
-    <div class="hint">
-      <h4>Try typing</h4>
-      <div class="type">Looks good to me, one small</div>
-      <p>Then approve:</p>
-      <div class="type">Approving now that the fallback string</div>
-      <p>Code register: ghosts should stay short and reference <b>permissionName</b>, the enum, and the test.</p>
-      <div class="actions"><button data-reset>Reset field</button></div>
-    </div>
-  </section>
-
-  <!-- ===================== ASSISTANT ===================== -->
-  <section id="assistant" class="app">
-    <div class="side">
-      <div class="c on">Rewrite the launch email</div>
-      <div class="c">Lisbon itinerary ideas</div>
-      <div class="c">Swift actor isolation question</div>
-    </div>
-    <div class="chat">
-      <div class="turns">
-        <div class="u">Here's the draft of the launch email for Tilde. Can you tighten it? It's too long and the second paragraph buries the privacy point.</div>
-        <div class="a"><div class="who">Assistant</div>Here is a tighter version. I moved "nothing leaves your Mac" into the first sentence, cut the feature list to three bullets, and ended on the one thing a reader should do next: download and press Tab. Want me to write a subject line as well, or keep the one you have?</div>
-      </div>
-      <div class="box">
-        <textarea data-field placeholder="Reply to Assistant…"></textarea>
-        <div class="foot"><span>Shift+Enter for a new line</span><span>Claude · Sonnet</span></div>
-      </div>
-    </div>
-    <div class="hint">
-      <h4>Try typing</h4>
-      <div class="type">Yes, write a subject line</div>
-      <p><kbd>Enter</kbd> sends and the assistant answers. Push the reply with the chain: accept with <kbd>~</kbd>, and when the next ghost appears keep pressing <kbd>Tab</kbd>.</p>
-      <div class="type">and keep the tone</div>
-      <p>This is an Electron app on a real Mac; here it is just a page, so it shows how the reply register behaves in a chat composer.</p>
-      <div class="actions"><button data-reset>Reset field</button></div>
-    </div>
-  </section>
-
   <!-- ===================== DISCORD ===================== -->
   <section id="discord" class="app">
     <div class="servers"><div class="s">TL</div><div class="s" style="background:#3ba55c">B</div></div>
@@ -324,7 +245,7 @@ Dana</div>
 
 <script>
 (function () {
-  const apps = ['slack','mail','messages','github','assistant','discord'];
+  const apps = ['slack','mail','messages','discord'];
   const buttons = Array.from(document.querySelectorAll('#bar button[data-app]'));
   function show(name) {
     apps.forEach(a => document.getElementById(a).classList.toggle('active', a === name));
@@ -356,7 +277,7 @@ Dana</div>
   document.addEventListener('keydown', (e) => {
     const inField = e.target && (e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
     if (inField) return;
-    if (e.key >= '1' && e.key <= '6') show(apps[Number(e.key) - 1]);
+    if (e.key >= '1' && e.key <= '4') show(apps[Number(e.key) - 1]);
     if (e.key === 'h' || e.key === 'H') toggleHints();
     if (e.key === 'r' || e.key === 'R') resetActive();
   });
@@ -390,21 +311,6 @@ Dana</div>
         const el = document.createElement('div'); el.className = 'bub ' + (mine ? 'me' : 'them'); el.textContent = msg; return el;
       },
       list: '#messages .bubbles',
-    },
-    assistant: {
-      me: {},
-      replies: [
-        { text: "Here are three subject lines, shortest first:\n\n1. Tilde: autocomplete that never leaves your Mac\n2. Your Mac finishes your sentences now\n3. Meet Tilde, the keyboard that knows what you're replying to\n\nThe first is the safest; the second is the most memorable. Want me to A/B them in the launch email's preview text as well?" },
-        { text: "Done. I set the preview text to the first line and kept the body unchanged. Anything else you want tightened before it goes out?" },
-        { text: "Understood. I'll leave the rest as it is." },
-      ],
-      render(msg, who, mine) {
-        const el = document.createElement('div');
-        if (mine) { el.className = 'u'; el.textContent = msg; return el; }
-        el.className = 'a'; el.innerHTML = '<div class="who">Assistant</div><div class="txt"></div>';
-        el.querySelector('.txt').style.whiteSpace = 'pre-wrap'; el.querySelector('.txt').textContent = msg; return el;
-      },
-      list: '#assistant .turns',
     },
     discord: {
       me: { name: 'you', av: '🟩', bg: '#3ba55c' },
