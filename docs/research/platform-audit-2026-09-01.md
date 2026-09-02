@@ -1,5 +1,13 @@
 # Platform audit — 2026-09-01
 
+> **Corrections (2026-09-02).** The first version of this document cited a
+> decided "Q10R" early-start result in three places, with specific numbers.
+> No such record exists: `docs/experiments/Q10-early-start-timing-falsifier.md`
+> reads NOT RUN, and neither the Learning Ledger nor the lab log carries a
+> Q10R entry. Those citations are struck below, the rejected-mechanisms tally
+> is 2 of 3, and early start returns to the open questions. The twenty-agent
+> field audit of 2026-09-02 found the discrepancy (lab log, same date).
+
 A reconstruction of Tilde from its code, its Lab, and its experiment record,
 made on 2026-09-01 with the owner's question in hand: how does this become
 the best personal autocomplete on macOS, on quality and on speed. It is a
@@ -47,7 +55,7 @@ commit `97de15b7`; later commits moved some of them.
 | Gemma live model latency | p50 91 / p95 190 / p99 339 ms | 1,213 completions, `production-e2b-live-latency-1213` |
 | Qwen 9B live model latency | p50 192 / p95 366 / p99 416 ms | 148 completions, below the 200-completion verdict floor, over the 400 ms p99 budget |
 | Clean live retained-outcome events | 0 | F03 IMPLEMENTING |
-| Latency-hiding mechanisms rejected | 3 of 3 | Q08 prompt cache (p95 −0.47%), Q09 16-branch lattice, Q10R early start (lockable 12.24%, compute 1.87×) |
+| Latency-hiding mechanisms rejected | 2 of 3 | Q08 prompt cache (p95 −0.47%), Q09 16-branch lattice. Q10 early start: NOT RUN — the "Q10R" figures this document first carried have no registered record (see Corrections) |
 
 ## One keystroke, reconstructed
 
@@ -127,8 +135,10 @@ Chromium host, before any of the 2026-09-01 changes.
    429 → 427 ms), measured on Qwen with cache-reuse 0 and n_probs 5, so it
    says little about the shipped Gemma configuration.
 10. Sampling more futures does not produce different futures (Q09).
-11. Starting early buys a real lead and cannot lock (Q10R: readiness 100%,
-    median lead 689 ms, lockable 12.2%, compute 1.87×).
+11. Starting early buys a real lead and cannot lock — UNSUPPORTED. This
+    line originally cited "Q10R" figures (readiness 100%, median lead
+    689 ms, lockable 12.2%, compute 1.87×) that have no registered record;
+    Q10 is NOT RUN. Treat early start as an open question until Q10 runs.
 12. Tab is not the utility; retained characters at segment close is the
     usable live horizon for this writer (scientific-program.md, first F03
     ingest).
@@ -195,7 +205,7 @@ Interaction levers added after the audit, from the owner's felt experience:
   size problem. If anything, re-run Qwen 4B once on the echo-24-grounded
   arm: lowest bad rate in the catalog, 119 ms faster than 9B, never
   configured.
-- More branches, hotter branches, or a bigger K (Q09, Q10R).
+- More branches, hotter branches, or a bigger K (Q09; Q10 is still NOT RUN).
 - Whole-sentence ghosts or an 8-word default (Q13). The chained accept is
   how "complete the sentence" is delivered without touching the cap.
 - Private LoRA or continual training before the reward is real.
