@@ -28,6 +28,48 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Twenty-agent field audit: the shipped build is the unmeasured one
+
+- **Try:** A structured audit of the whole system by eight subsystem readers,
+  eight skeptics refuting each reader's top gaps and blockers against the
+  code, three business perspectives on free-versus-paid, and one
+  completeness critic (all Sonnet 5), with the load-bearing claims
+  re-verified by hand. Deliverable: the owner-facing "Tilde Field Audit".
+- **Learn:** Three readers independently found one root cause: production
+  resolves its behaviour from build identity, so the official app ships
+  the conservative decision and interaction policies while every measured
+  improvement (Q11/Q12/Q13 stack, anchored gate, chained accept,
+  punctuation requests, shorter reveal floor) lives only in the owner-only
+  9B preview. The shortest honest path to a public beta is that promotion
+  (via a Gemma-control validation run the settings split now makes
+  possible) plus four confirmed trust items: the Screen Memory master
+  toggle the covenant calls mandatory does not exist in the UI; the
+  sensitive-scene guard scans only conversation turns, not the referencing
+  mode; enabling personal suggestions disables streaming for every
+  request; PRIVACY.md still calls the capture/redaction proof unbuilt. The
+  three business perspectives converged on MIT core forever plus a
+  one-time Alfred-priced official build with support and the personal
+  layer, and one of them caught that the personal layer is MIT today with
+  no carve-out or entitlement code, so a paid tier must be service and
+  finish, not a fork-removable feature.
+- **Fail:** Two findings against our own evidence trail. (1)
+  `platform-audit-2026-09-01.md` cites a decided "Q10R" early-start
+  result with specific numbers in three places; Q10's registered file says
+  NOT RUN and no Q10R record exists in `docs/experiments`, the ledger, or
+  this log. Until its source is found the "latency-hiding mechanisms
+  rejected: 3 of 3" line is unsupported and mid-word continuation's timing
+  headroom is unproven. (2) One reader recommended reading the simulated
+  typist's 44.9% wrong-when-shown as the operative estimate, which the
+  partnership rules forbid; the two quality instruments disagree by 2.5×
+  and neither absolute number is trusted. The audit itself is
+  discovery-grade: Sonnet readers with file access, not a campaign.
+- **Where:** owner-local workflow transcript; the published Field Audit
+  page; this entry.
+- **Next:** Reconcile or strike Q10R in the platform audit; fix the four
+  trust items; register the Gemma/Qwen × conservative/tuned 2×2 as the
+  promotion campaign; read a week of the flight recorder before touching
+  any gate.
+
 ## 2026-09-02 — The settings split: one configuration in both processes, one digest on every event
 
 - **Try:** Untangle `TildeProductProfile`, which named the build *and* how
