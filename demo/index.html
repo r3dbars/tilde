@@ -18,13 +18,12 @@
   textarea { resize: none; }
 
   /* ---------- stage chrome ---------- */
-  #bar { display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #ffffff; border-bottom: 1px solid var(--line); }
-  #bar .brand { font-weight: 700; letter-spacing: -0.01em; margin-right: 10px; }
-  #bar .brand span { color: var(--accent); }
-  #bar button { font: inherit; font-size: 13px; padding: 5px 11px; border: 1px solid var(--line); background: #f6f7f9; color: var(--ink); border-radius: 7px; cursor: pointer; }
-  #bar button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  #bar { display: flex; align-items: center; gap: 6px; padding: 0 12px; background: #ffffff; border-bottom: 1px solid var(--line); }
+  #bar button { font: inherit; font-size: 13px; padding: 5px 12px; border: 0; background: transparent; color: var(--muted); border-radius: 7px; cursor: pointer; }
+  #bar button:hover { color: var(--ink); }
+  #bar button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  #bar #toggleHints { color: var(--muted); font-size: 12px; }
   #bar .spacer { flex: 1; }
-  #bar .tip { color: var(--muted); font-size: 12px; }
   #stage { position: relative; overflow: hidden; }
   .app { position: absolute; inset: 0; display: none; }
   .app.active { display: grid; }
@@ -155,7 +154,6 @@
 <body>
 
 <div id="bar">
-  <div class="brand">Tilde <span>demo stage</span></div>
   <button data-app="slack" aria-pressed="true">Slack</button>
   <button data-app="mail">Mail</button>
   <button data-app="messages">Messages</button>
@@ -164,8 +162,7 @@
   <button data-app="assistant">Assistant</button>
   <button data-app="discord">Discord</button>
   <div class="spacer"></div>
-  <span class="tip">Keys: <b>1–7</b> switch app · <b>H</b> hide hints · <b>R</b> reset field</span>
-  <button id="toggleHints" style="margin-left:10px">Hide hints</button>
+  <button id="toggleHints" title="Show or hide the typing hints (H)">Hints</button>
 </div>
 
 <div id="stage">
@@ -198,7 +195,7 @@
     <div class="hint">
       <h4>Try typing</h4>
       <div class="type">Yes, 3pm works</div>
-      <p>Wait for the grey ghost, press <kbd>Tab</kbd> for one word, <kbd>~</kbd> for all of it. Then keep going:</p>
+      <p>Wait for the grey ghost, press <kbd>Tab</kbd> for one word, <kbd>~</kbd> for all of it. <kbd>Enter</kbd> sends and Priya replies. Then:</p>
       <div class="type">I can take notes, and for the permission copy I'd</div>
       <p>The ghost should know it is <b>tomorrow at 3pm</b> and <b>Room 4B</b> because it can see the thread.</p>
       <div class="actions"><button data-reset>Reset field</button></div>
@@ -266,7 +263,7 @@ Dana</div>
     <div class="hint">
       <h4>Try typing</h4>
       <div class="type">Yes, we'll be there</div>
-      <p>Then a second message:</p>
+      <p><kbd>Enter</kbd> sends; Mom answers. Then:</p>
       <div class="type">Sam is coming too, and I'll grab</div>
       <p>The ghost should offer <b>ice</b> and know about <b>Sunday</b> and the <b>grill</b>.</p>
       <div class="actions"><button data-reset>Reset field</button></div>
@@ -345,7 +342,7 @@ Dana</div>
     <div class="hint">
       <h4>Try typing</h4>
       <div class="type">Yes, write a subject line</div>
-      <p>Then push it with the chain: accept with <kbd>~</kbd>, and when the next ghost appears keep pressing <kbd>Tab</kbd>.</p>
+      <p><kbd>Enter</kbd> sends and the assistant answers. Push the reply with the chain: accept with <kbd>~</kbd>, and when the next ghost appears keep pressing <kbd>Tab</kbd>.</p>
       <div class="type">and keep the tone</div>
       <p>This is an Electron app on a real Mac; here it is just a page, so it shows how the reply register behaves in a chat composer.</p>
       <div class="actions"><button data-reset>Reset field</button></div>
@@ -373,7 +370,7 @@ Dana</div>
     <div class="hint">
       <h4>Try typing</h4>
       <div class="type">yeah I can heal tonight</div>
-      <p>Then:</p>
+      <p><kbd>Enter</kbd> sends; Kez answers. Then:</p>
       <div class="type">9pm works, I'll bring the</div>
       <p>Casual chat register on a dark app. The ghost should stay lowercase and short, and remember the <b>flasks</b> and <b>9pm</b>.</p>
       <div class="actions"><button data-reset>Reset field</button></div>
@@ -419,6 +416,98 @@ Dana</div>
     if (e.key >= '1' && e.key <= '7') show(apps[Number(e.key) - 1]);
     if (e.key === 'h' || e.key === 'H') toggleHints();
     if (e.key === 'r' || e.key === 'R') resetActive();
+  });
+
+  // Scripted conversation partners. Enter sends; the other side answers a
+  // beat later with a line that sets up the next reply. Everything is
+  // canned and local: no network, no model behind the "other" person.
+  const scripts = {
+    slack: {
+      me: { name: 'You', av: '🟩', bg: '#d8f1dc' },
+      replies: [
+        { name: 'Priya Natarajan', av: '🟣', bg: '#e8d5f5', text: "Perfect, thank you! Can you also send the Figma link around after the review so the launch channel has it?" },
+        { name: 'Marcus Oyelaran', av: '🟦', bg: '#d5ecf5', text: "Appreciate it. One more: do you want the prompt copy to lead with what we need the permission for, or with what happens if they say no?" },
+        { name: 'Priya Natarajan', av: '🟣', bg: '#e8d5f5', text: "Great, see you at 3 in 4B 🙌" },
+      ],
+      render(msg, who) {
+        const el = document.createElement('div'); el.className = 'smsg';
+        el.innerHTML = `<div class="av" style="background:${who.bg}">${who.av}</div><div><span class="n">${who.name}</span><span class="t">${clock()}</span><div class="b"></div></div>`;
+        el.querySelector('.b').textContent = msg; return el;
+      },
+      list: '#slack .msgs',
+    },
+    messages: {
+      me: {},
+      replies: [
+        { text: "Yay! Can you be here by 4? Dad wants to start the grill early" },
+        { text: "Perfect. Tell Sam we got the good buns this time 😄" },
+        { text: "See you Sunday ❤️" },
+      ],
+      render(msg, who, mine) {
+        const el = document.createElement('div'); el.className = 'bub ' + (mine ? 'me' : 'them'); el.textContent = msg; return el;
+      },
+      list: '#messages .bubbles',
+    },
+    assistant: {
+      me: {},
+      replies: [
+        { text: "Here are three subject lines, shortest first:\n\n1. Tilde: autocomplete that never leaves your Mac\n2. Your Mac finishes your sentences now\n3. Meet Tilde, the keyboard that knows what you're replying to\n\nThe first is the safest; the second is the most memorable. Want me to A/B them in the launch email's preview text as well?" },
+        { text: "Done. I set the preview text to the first line and kept the body unchanged. Anything else you want tightened before it goes out?" },
+        { text: "Understood. I'll leave the rest as it is." },
+      ],
+      render(msg, who, mine) {
+        const el = document.createElement('div');
+        if (mine) { el.className = 'u'; el.textContent = msg; return el; }
+        el.className = 'a'; el.innerHTML = '<div class="who">Assistant</div><div class="txt"></div>';
+        el.querySelector('.txt').style.whiteSpace = 'pre-wrap'; el.querySelector('.txt').textContent = msg; return el;
+      },
+      list: '#assistant .turns',
+    },
+    discord: {
+      me: { name: 'you', av: '🟩', bg: '#3ba55c' },
+      replies: [
+        { name: 'Kez', av: '🐉', bg: '#5865f2', text: "legend. 9pm then, I'll post the invite in a sec. can you also grab the potions from the bank? we're low" },
+        { name: 'Nova', av: '🦊', bg: '#eb459e', text: "ok healer confirmed, I'll tank. anyone know if Devi's coming tomorrow instead?" },
+        { name: 'Kez', av: '🐉', bg: '#5865f2', text: "gg see you at 9 🔥" },
+      ],
+      render(msg, who) {
+        const el = document.createElement('div'); el.className = 'dm';
+        el.innerHTML = `<div class="av" style="background:${who.bg}">${who.av}</div><div><span class="n">${who.name}</span><span class="t">Today at ${clock()}</span><div class="b"></div></div>`;
+        el.querySelector('.b').textContent = msg; return el;
+      },
+      list: '#discord .msgs',
+    },
+  };
+  const progress = {};
+  function clock() {
+    const d = new Date(); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0');
+    const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return `${h}:${m} ${ap}`;
+  }
+  function send(app, field) {
+    const script = scripts[app]; if (!script) return;
+    const text = field.value.trim(); if (!text) return;
+    const list = document.querySelector(script.list);
+    list.appendChild(script.render(text, script.me, true));
+    field.value = '';
+    list.scrollTop = list.scrollHeight;
+    const index = progress[app] || 0;
+    const reply = script.replies[Math.min(index, script.replies.length - 1)];
+    progress[app] = index + 1;
+    // A person reads before they answer.
+    const delay = 900 + Math.min(2200, reply.text.length * 12);
+    setTimeout(() => {
+      list.appendChild(script.render(reply.text, reply, false));
+      list.scrollTop = list.scrollHeight;
+    }, delay);
+  }
+  document.querySelectorAll('textarea[data-field]').forEach(field => {
+    field.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+      const app = field.closest('.app').id;
+      if (!scripts[app]) return;
+      e.preventDefault();
+      send(app, field);
+    });
   });
 
   // Keep the stage honest: nothing here talks to a network. No fetch, no
