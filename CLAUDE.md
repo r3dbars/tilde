@@ -13,7 +13,9 @@ For Tilde Lab or autocomplete research work, also read
 [the experiment record template](docs/experiments/README.md),
 [the lab partnership](docs/research/lab-partnership.md),
 [the lab log](docs/research/lab-log.md), and
-[the on-device F03 handoff](docs/research/next-on-device.md). The bundled
+[the on-device F03 handoff](docs/research/next-on-device.md), and
+[the 2026-09-01 platform audit](docs/research/platform-audit-2026-09-01.md).
+The bundled
 Learning Ledger JSON is authoritative for the active stage and ordered work
 queue. Run one causal experiment at a time, use the exact same test for control
 and treatment, do not start locked stages early, and capture every reusable
