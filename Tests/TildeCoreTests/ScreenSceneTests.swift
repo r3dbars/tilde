@@ -642,3 +642,24 @@ struct ScreenSceneTests {
         #expect(first == second)
     }
 }
+
+@Suite("Scene window title")
+struct ScreenSceneWindowTitleTests {
+    private func titled(_ title: String?) -> ScreenScene.OCRBlock {
+        block("hello there", x: 0.1, y: 0.1, window: "com.example.chat", title: title)
+    }
+
+    @Test("The most common non-empty title wins, deterministically")
+    func dominantTitle() {
+        #expect(ScreenScene.dominantWindowTitle(of: []) == nil)
+        #expect(ScreenScene.dominantWindowTitle(of: [titled(nil), titled("  ")]) == nil)
+        #expect(ScreenScene.dominantWindowTitle(of: [titled("A"), titled("B"), titled("B")]) == "B")
+        #expect(ScreenScene.dominantWindowTitle(of: [titled("B"), titled("A")]) == "A")
+    }
+
+    @Test("A scene built without a title keeps nil, so existing callers are unchanged")
+    func defaultIsNil() {
+        let scene = ScreenScene.Scene(mode: .replying, conversationTurns: [], referenceSnippets: [])
+        #expect(scene.windowTitle == nil)
+    }
+}

@@ -75,6 +75,7 @@ final class StatusMenuHost: NSObject {
     private var todayItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
     private var setupOrTildeItem: NSMenuItem?
+    private var accessibilityItem: NSMenuItem?
     private var modelPickerItem: NSMenuItem?
     private var productionModelChoiceItems: [TildeModelChoice: NSMenuItem] = [:]
     private var modelChoiceItems: [PreviewModelChoice: NSMenuItem] = [:]
@@ -138,6 +139,7 @@ final class StatusMenuHost: NSObject {
         }
 
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
+        accessibilityItem = addAction(to: menu, "Exact Screen Text", #selector(enableExactScreenText(_:)))
         setupOrTildeItem = addAction(to: menu, "Open \(productName)", #selector(openTilde(_:)))
         menu.addItem(.separator())
         addAction(to: menu, "Quit \(productName)", #selector(quit(_:)), key: "q")
@@ -179,6 +181,11 @@ final class StatusMenuHost: NSObject {
         }
 
         h01Item?.state = settings.h01BlockRandomizationEnabled ? .on : .off
+        let exactTextGranted = AccessibilityPermission.isGranted()
+        accessibilityItem?.title = exactTextGranted
+            ? "Exact Screen Text: On"
+            : "Enable Exact Screen Text (Accessibility)…"
+        accessibilityItem?.state = exactTextGranted ? .on : .off
 
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
@@ -213,6 +220,18 @@ final class StatusMenuHost: NSObject {
 
     @objc private func openTilde(_ sender: Any?) {
         showYourTilde()
+    }
+
+    /// Exact screen text reads the focused window's text through the
+    /// Accessibility API instead of OCR. Asks the system prompt, then opens
+    /// the pane so a previously dismissed prompt still has a path.
+    @objc private func enableExactScreenText(_ sender: Any?) {
+        guard let appDelegate else { return }
+        if !AccessibilityPermission.isGranted() {
+            appDelegate.requestAccessibilityAccess()
+            if !AccessibilityPermission.isGranted() { appDelegate.openAccessibilitySettings() }
+        }
+        refresh()
     }
 
     @objc private func toggleH01BlockRandomization(_ sender: Any?) {

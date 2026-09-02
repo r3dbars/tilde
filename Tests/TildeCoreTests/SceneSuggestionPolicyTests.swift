@@ -181,6 +181,42 @@ struct SceneSuggestionPolicyTests {
 
     private let extended = SceneSuggestionPolicy.Options(extendedOrdinarySilenceGate: true)
 
+    @Test("Production reads the reply cue off the head of the whole field, so a long composer stays silent")
+    func productionReplyCueReadsTheHead() {
+        let scene = reply([turn(.other, "The agenda for Thursday is ready whenever you want it.")])
+        let longComposer = "Notes from the standup.\nThe deploy went fine.\n\nThanks, I will "
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: longComposer
+        ) == .nonActionableScene)
+    }
+
+    @Test("Anchored to the current sentence, a reply the writer has plainly started is not silenced")
+    func anchoredReplyCueReadsTheCurrentSentence() {
+        let scene = reply([turn(.other, "The agenda for Thursday is ready whenever you want it.")])
+        let anchored = SceneSuggestionPolicy.Options(replyCueAnchoredToCurrentSentence: true)
+        let longComposer = "Notes from the standup.\nThe deploy went fine.\n\nThanks, I will "
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: longComposer,
+            options: anchored
+        ) == nil)
+        // A cue at the head no longer rescues a later sentence that has none.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "Okay. The agenda ",
+            options: anchored
+        ) == .nonActionableScene)
+        // Short fields behave exactly as production.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "No worries, ",
+            options: anchored
+        ) == nil)
+        #expect(SceneSuggestionPolicy.currentSentence(of: "Done.\nSure, I ") == "Sure, I ")
+        #expect(SceneSuggestionPolicy.currentSentence(of: "no terminator here") == "no terminator here")
+    }
+
     private func reply(_ turns: [ScreenScene.ConversationTurn]) -> ScreenScene.Scene {
         ScreenScene.Scene(mode: .replying, conversationTurns: turns, referenceSnippets: [])
     }

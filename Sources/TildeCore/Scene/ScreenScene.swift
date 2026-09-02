@@ -113,11 +113,23 @@ public enum ScreenScene {
         public let mode: Mode
         public let conversationTurns: [ConversationTurn]
         public let referenceSnippets: [String]
+        /// The title of the window a reply conversation was read from, when
+        /// the capture attributed one: it is how the model learns whether it
+        /// is looking at a Slack channel, a direct message, or a document.
+        /// On-device, memory-only, and scrubbed before it reaches a prompt;
+        /// never logged.
+        public let windowTitle: String?
 
-        public init(mode: Mode, conversationTurns: [ConversationTurn], referenceSnippets: [String]) {
+        public init(
+            mode: Mode,
+            conversationTurns: [ConversationTurn],
+            referenceSnippets: [String],
+            windowTitle: String? = nil
+        ) {
             self.mode = mode
             self.conversationTurns = conversationTurns
             self.referenceSnippets = referenceSnippets
+            self.windowTitle = windowTitle
         }
 
         static let empty = Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
@@ -175,7 +187,12 @@ public enum ScreenScene {
             if looksLikeMessageList(ownWindowBlocks) {
                 let turns = conversationTurns(from: ownWindowBlocks, fieldText: fieldText)
                 if !turns.isEmpty {
-                    return Scene(mode: .replying, conversationTurns: turns, referenceSnippets: [])
+                    return Scene(
+                        mode: .replying,
+                        conversationTurns: turns,
+                        referenceSnippets: [],
+                        windowTitle: dominantWindowTitle(of: ownWindowBlocks)
+                    )
                 }
             }
         }
@@ -401,6 +418,21 @@ public enum ScreenScene {
 
     /// The sentence-in-progress: everything after the last sentence
     /// terminator (or the whole field if there isn't one yet).
+    /// The title most of the blocks were read under. Blocks in one window
+    /// normally share it; the vote guards against a stray attribution.
+    /// Ties break on the title text so the answer is deterministic.
+    static func dominantWindowTitle(of blocks: [OCRBlock]) -> String? {
+        var counts: [String: Int] = [:]
+        for block in blocks {
+            guard let title = block.windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !title.isEmpty else { continue }
+            counts[title, default: 0] += 1
+        }
+        return counts.max { a, b in
+            a.value < b.value || (a.value == b.value && a.key > b.key)
+        }?.key
+    }
+
     private static func currentSentence(of fieldText: String) -> String {
         let terminators: Set<Character> = [".", "!", "?", "\n"]
         if let index = fieldText.lastIndex(where: terminators.contains) {

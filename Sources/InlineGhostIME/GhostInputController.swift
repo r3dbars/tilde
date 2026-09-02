@@ -664,7 +664,16 @@ final class GhostInputController: IMKInputController {
         guard !IsSecureEventInputEnabled() else { return "" }
         guard selection.location != NSNotFound, selection.length == 0 else { return "" }
         if selection.location > 0 {
-            let start = max(0, selection.location - Self.contextLimit)
+            // Quantized start: once the field is past the limit, a window
+            // that slides one character per keystroke moves every byte of
+            // the prompt behind the scaffold and defeats the helper's
+            // prompt-cache reuse for the rest of the session. The window is
+            // never longer than the limit and never more than one quantum
+            // shorter.
+            let start = RawContinuationPrompt.stableWindowStart(
+                end: selection.location,
+                limit: Self.contextLimit
+            )
             let range = NSRange(location: start, length: selection.location - start)
             if let text = client.attributedSubstring(from: range)?.string, !text.isEmpty {
                 return text

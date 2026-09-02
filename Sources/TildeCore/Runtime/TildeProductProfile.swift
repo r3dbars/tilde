@@ -150,6 +150,23 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         }
     }
 
+    /// Pre-inference scene gate selection. The 9B preview reads the reply
+    /// cue off the writer's current sentence (owner-directed 2026-09-01);
+    /// every other profile keeps the measured production gate.
+    public var sceneSuggestionOptions: SceneSuggestionPolicy.Options {
+        switch self {
+        case .preview9B: SceneSuggestionPolicy.Options(replyCueAnchoredToCurrentSentence: true)
+        case .production, .preview26B, .modelPreview: .production
+        }
+    }
+
+    /// Whether the Conversation block opens with the source window's title
+    /// (owner-directed 2026-09-01, 9B preview only). Production prompts
+    /// stay byte-identical until a context campaign promotes it.
+    public var includesWindowTitleInScene: Bool {
+        self == .preview9B
+    }
+
     public var personalHistoryKeychainService: String {
         "\(appBundleIdentifier).personal-history"
     }
