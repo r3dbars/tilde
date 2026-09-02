@@ -28,6 +28,39 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Paired same-day anchor: the campaign gates buy precision with silence, not value
+
+- **Try:** Rerun the simulated typist on the same 240 scenarios, five
+  personas, and Luna decision brain as the morning run, this time pinned
+  to the Q13 campaign-nominated arm (identical generation and filters
+  plus the Lab confidence gate at 0.475 mean token probability and the
+  extended ordinary-silence gate), so the live-stack number has a
+  same-day paired anchor instead of a cross-day one.
+- **Learn:** A tie on the metric that matters and a clear trade underneath
+  it. Retained-character potential: live 33.9% vs campaign 33.8%. Accepts:
+  27.1% vs 29.0%. Wrong-when-shown: 44.9% vs 42.2%. Silent moments: 267
+  vs 625 — the two gates more than double how often the writer sees
+  nothing, and displays fall 2,950 → 2,808, for 2.7 points less wrong
+  and no retained value. Per persona the campaign arm is flatter
+  (29.1–35.3% vs 30.6–36.9%). Correction characters ran 405 vs 178,
+  opposite to what a "more precise" arm should produce, which reads as
+  the confidence gate keeping the longer, riskier accepts. Silence has a
+  cost this instrument cannot price; on what it can see, the live stack
+  without either gate is not worse.
+- **Fail:** Discovery-grade on an uncalibrated simulator, permanently
+  fenced. The morning run lost 25 prose-drafter sessions to one skipped
+  batch; this run lost none, so the pair is not perfectly matched. A
+  single seed each; no error bars. Both arms use the same prompt, so
+  nothing here says anything about context quality, and the simulator
+  still cannot see the keyboard-side preview behaviors.
+- **Where:** owner-local `Tilde Lab/SimulatedTypist/2026-09-02-luna-preview9b/reports/`
+  (two aggregate-only reports, arm files, run.sh).
+- **Next:** Wrong-when-shown near 45% is the number to attack, and this
+  pair says another threshold is not the way: it should be a display-policy
+  or context campaign aimed at the chronic wrong categories, read on the
+  repaired live ledger once the opportunity receipt records silent
+  opportunities too.
+
 ## 2026-09-02 — Make the ruler honest: four live-ledger bugs fixed before the next experiment
 
 - **Try:** An outside review of the whole path (input method → socket →
