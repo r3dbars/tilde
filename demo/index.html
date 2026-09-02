@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilde Demo Stage</title>
+<style>
+  :root {
+    --bg: #eceef1; --ink: #1d232a; --muted: #6b7681; --line: #d9dee3; --card: #ffffff;
+    --accent: #2f6fed; --hint: #fff8dc; --hint-ink: #5a4500;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); font-size: 14px; display: grid; grid-template-rows: 44px 1fr; }
+  textarea, [contenteditable] { font-family: inherit; }
+  textarea { resize: none; }
+
+  /* ---------- stage chrome ---------- */
+  #bar { display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #ffffff; border-bottom: 1px solid var(--line); }
+  #bar .brand { font-weight: 700; letter-spacing: -0.01em; margin-right: 10px; }
+  #bar .brand span { color: var(--accent); }
+  #bar button { font: inherit; font-size: 13px; padding: 5px 11px; border: 1px solid var(--line); background: #f6f7f9; color: var(--ink); border-radius: 7px; cursor: pointer; }
+  #bar button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  #bar .spacer { flex: 1; }
+  #bar .tip { color: var(--muted); font-size: 12px; }
+  #stage { position: relative; overflow: hidden; }
+  .app { position: absolute; inset: 0; display: none; }
+  .app.active { display: grid; }
+
+  /* ---------- hint card ---------- */
+  .hint { position: absolute; right: 18px; bottom: 18px; width: 340px; background: var(--hint); color: var(--hint-ink); border: 1px solid #efd98a; border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 5; font-size: 13px; line-height: 1.45; }
+  .hint h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .hint p { margin: 0 0 6px; }
+  .hint kbd { font-family: var(--mono); font-size: 12px; background: #fff; border: 1px solid #e3cf7e; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+  .hint .type { font-family: var(--mono); font-size: 12.5px; background: #fffdf3; border: 1px dashed #d8c36a; border-radius: 6px; padding: 6px 8px; margin: 4px 0 8px; white-space: pre-wrap; }
+  .hint .actions { display: flex; gap: 6px; }
+  .hint button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid #d8c36a; background: #fff; border-radius: 6px; cursor: pointer; color: var(--hint-ink); }
+  body.hide-hints .hint { display: none; }
+
+  /* ---------- Slack ---------- */
+  #slack { grid-template-columns: 64px 240px 1fr; background: #fff; }
+  #slack .rail { background: #3f0e40; }
+  #slack .rail .ws { width: 36px; height: 36px; margin: 14px; border-radius: 8px; background: #fff; color: #3f0e40; font-weight: 800; display: grid; place-items: center; }
+  #slack .side { background: #3f0e40; color: #cfc3cf; padding: 12px 0; border-left: 1px solid rgba(255,255,255,.08); }
+  #slack .side h3 { color: #fff; font-size: 15px; margin: 6px 16px 14px; }
+  #slack .side .sec { font-size: 13px; margin: 14px 16px 4px; color: #bcabbc; }
+  #slack .side .ch { padding: 4px 16px; font-size: 14px; }
+  #slack .side .ch.on { background: #1164a3; color: #fff; border-radius: 6px; margin: 0 8px; padding: 4px 8px; }
+  #slack .main { display: grid; grid-template-rows: 50px 1fr auto; min-width: 0; }
+  #slack .head { border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 20px; font-weight: 700; gap: 10px; }
+  #slack .head small { color: var(--muted); font-weight: 400; }
+  #slack .msgs { overflow: auto; padding: 16px 20px; }
+  .smsg { display: grid; grid-template-columns: 36px 1fr; gap: 10px; margin: 0 0 14px; }
+  .smsg .av { width: 36px; height: 36px; border-radius: 6px; display: grid; place-items: center; font-size: 18px; }
+  .smsg .n { font-weight: 700; } .smsg .t { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .smsg .b { margin-top: 2px; line-height: 1.45; }
+  #slack .compose { margin: 0 20px 18px; border: 1px solid #b9bec5; border-radius: 8px; }
+  #slack textarea { width: 100%; border: 0; outline: 0; padding: 12px; font-size: 15px; line-height: 1.4; min-height: 74px; background: transparent; }
+  #slack .tools { display: flex; gap: 12px; padding: 4px 10px 8px; color: var(--muted); font-size: 12px; }
+
+  /* ---------- Mail ---------- */
+  #mail { grid-template-columns: 220px 300px 1fr; background: #f5f5f7; }
+  #mail .box { border-right: 1px solid var(--line); padding: 46px 12px 12px; color: #444; }
+  #mail .box .f { padding: 5px 10px; border-radius: 6px; } #mail .box .f.on { background: #dfe6f5; color: #0b4bd6; }
+  #mail .list { border-right: 1px solid var(--line); background: #fff; padding-top: 46px; }
+  #mail .row { padding: 10px 14px; border-bottom: 1px solid #eee; }
+  #mail .row.on { background: #eaf0ff; }
+  #mail .row b { display: block; } #mail .row span { color: var(--muted); font-size: 12px; }
+  #mail .read { background: #fff; display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
+  #mail .subj { padding: 46px 28px 12px; border-bottom: 1px solid var(--line); }
+  #mail .subj h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+  #mail .subj .from { color: var(--muted); font-size: 13px; }
+  #mail .body { padding: 20px 28px; overflow: auto; line-height: 1.55; white-space: pre-wrap; }
+  #mail .reply { border-top: 1px solid var(--line); padding: 12px 28px 22px; background: #fbfbfd; }
+  #mail .reply .to { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  #mail textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 15px; line-height: 1.5; min-height: 140px; background: #fff; outline: 0; }
+
+  /* ---------- Messages ---------- */
+  #messages { grid-template-columns: 300px 1fr; background: #fff; }
+  #messages .convs { border-right: 1px solid var(--line); padding-top: 46px; }
+  #messages .conv { display: grid; grid-template-columns: 42px 1fr; gap: 10px; padding: 10px 14px; align-items: center; }
+  #messages .conv.on { background: #e5eeff; }
+  #messages .conv .av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(#9aa4b5,#6f7a8c); color: #fff; display: grid; place-items: center; font-weight: 600; }
+  #messages .conv b { display: block; } #messages .conv span { color: var(--muted); font-size: 12px; }
+  #messages .thread { display: grid; grid-template-rows: 46px 1fr auto; }
+  #messages .thread .head { border-bottom: 1px solid var(--line); display: grid; place-items: center; font-weight: 600; }
+  #messages .bubbles { overflow: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 6px; }
+  .bub { max-width: 66%; padding: 9px 13px; border-radius: 18px; line-height: 1.35; font-size: 15px; }
+  .bub.them { background: #e9e9eb; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .bub.me { background: #0b84ff; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .bub .when { display: block; font-size: 11px; opacity: .7; margin-top: 3px; }
+  #messages .field { display: flex; align-items: center; gap: 10px; padding: 10px 16px 16px; }
+  #messages .field textarea { flex: 1; border: 1px solid #c9ccd1; border-radius: 20px; padding: 8px 14px; font-size: 15px; line-height: 1.35; height: 38px; outline: 0; }
+
+  /* ---------- Notes ---------- */
+  #notes { grid-template-columns: 200px 260px 1fr; background: #fff; }
+  #notes .folders { background: #f2f2f4; border-right: 1px solid var(--line); padding: 46px 10px; color: #444; }
+  #notes .folders .f.on { background: #ffd60a; border-radius: 6px; padding: 4px 8px; }
+  #notes .list { border-right: 1px solid var(--line); padding-top: 46px; }
+  #notes .list .n { padding: 10px 14px; border-bottom: 1px solid #eee; }
+  #notes .list .n.on { background: #ffe9a3; }
+  #notes .list .n b { display: block; } #notes .list .n span { color: var(--muted); font-size: 12px; }
+  #notes .doc { padding: 46px 40px; overflow: auto; }
+  #notes .doc h1 { font-size: 22px; margin: 0 0 10px; }
+  #notes .doc .date { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  #notes .doc [contenteditable] { outline: 0; font-size: 15.5px; line-height: 1.6; min-height: 300px; }
+  #notes .doc ul { margin: 6px 0 12px; }
+
+  /* ---------- GitHub ---------- */
+  #github { grid-template-rows: 46px 1fr; background: #f6f8fa; }
+  #github .top { background: #24292f; color: #fff; display: flex; align-items: center; padding: 0 18px; gap: 14px; font-size: 14px; }
+  #github .wrap { max-width: 880px; margin: 22px auto; padding: 0 20px; width: 100%; overflow: auto; }
+  #github h2 { font-size: 22px; font-weight: 600; margin: 0 0 4px; } #github h2 small { color: var(--muted); font-weight: 400; }
+  #github .state { display: inline-block; background: #1a7f37; color: #fff; border-radius: 20px; padding: 3px 10px; font-size: 12px; margin-bottom: 14px; }
+  .gh-c { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; margin-bottom: 14px; }
+  .gh-c .h { background: #f6f8fa; border-bottom: 1px solid #d0d7de; padding: 8px 14px; font-size: 13px; color: var(--muted); } .gh-c .h b { color: var(--ink); }
+  .gh-c .b { padding: 14px; line-height: 1.5; }
+  .gh-c code { font-family: var(--mono); font-size: 12.5px; background: #eff1f3; padding: 1px 5px; border-radius: 4px; }
+  #github textarea { width: 100%; border: 1px solid #d0d7de; border-radius: 6px; padding: 10px; font-size: 14px; line-height: 1.5; min-height: 120px; outline: 0; }
+  #github .btn { display: inline-block; margin-top: 8px; background: #1f883d; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; }
+
+  /* ---------- Assistant chat (Claude Desktop-like) ---------- */
+  #assistant { grid-template-columns: 240px 1fr; background: #f7f5f0; }
+  #assistant .side { background: #f0ede6; border-right: 1px solid #e2ddd2; padding: 46px 12px; color: #555; }
+  #assistant .side .c { padding: 6px 10px; border-radius: 6px; font-size: 13px; } #assistant .side .c.on { background: #e5dfd2; }
+  #assistant .chat { display: grid; grid-template-rows: 1fr auto; }
+  #assistant .turns { overflow: auto; padding: 46px 12% 20px; display: flex; flex-direction: column; gap: 18px; font-size: 15px; line-height: 1.55; }
+  #assistant .u { align-self: flex-end; background: #ebe7dd; padding: 10px 14px; border-radius: 14px; max-width: 78%; }
+  #assistant .a { max-width: 88%; }
+  #assistant .a .who { font-weight: 600; font-size: 12px; color: #a0522d; margin-bottom: 4px; }
+  #assistant .box { margin: 0 12% 22px; border: 1px solid #d8d2c4; border-radius: 14px; background: #fff; }
+  #assistant textarea { width: 100%; border: 0; outline: 0; padding: 14px; font-size: 15px; line-height: 1.5; min-height: 84px; background: transparent; }
+  #assistant .box .foot { display: flex; justify-content: space-between; padding: 4px 12px 10px; color: var(--muted); font-size: 12px; }
+
+  /* ---------- Discord ---------- */
+  #discord { grid-template-columns: 70px 230px 1fr; background: #313338; color: #dbdee1; }
+  #discord .servers { background: #1e1f22; }
+  #discord .servers .s { width: 44px; height: 44px; margin: 10px 13px; border-radius: 14px; background: #5865f2; color: #fff; display: grid; place-items: center; font-weight: 700; }
+  #discord .chans { background: #2b2d31; padding: 46px 10px; }
+  #discord .chans .g { color: #949ba4; font-size: 12px; text-transform: uppercase; margin: 10px 6px 4px; }
+  #discord .chans .c { padding: 5px 8px; border-radius: 4px; color: #949ba4; } #discord .chans .c.on { background: #404249; color: #fff; }
+  #discord .main { display: grid; grid-template-rows: 46px 1fr auto; }
+  #discord .head { border-bottom: 1px solid #26272b; display: flex; align-items: center; padding: 0 16px; font-weight: 600; color: #fff; }
+  #discord .msgs { overflow: auto; padding: 16px; }
+  #discord .dm { display: grid; grid-template-columns: 40px 1fr; gap: 12px; margin-bottom: 14px; }
+  #discord .dm .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: #5865f2; }
+  #discord .dm .n { color: #fff; font-weight: 600; } #discord .dm .t { color: #949ba4; font-size: 12px; margin-left: 6px; }
+  #discord .dm .b { color: #dbdee1; line-height: 1.45; margin-top: 2px; }
+  #discord .compose { margin: 0 16px 20px; background: #383a40; border-radius: 8px; }
+  #discord textarea { width: 100%; border: 0; outline: 0; background: transparent; color: #dbdee1; padding: 12px 14px; font-size: 15px; min-height: 48px; }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div class="brand">Tilde <span>demo stage</span></div>
+  <button data-app="slack" aria-pressed="true">Slack</button>
+  <button data-app="mail">Mail</button>
+  <button data-app="messages">Messages</button>
+  <button data-app="notes">Notes</button>
+  <button data-app="github">GitHub</button>
+  <button data-app="assistant">Assistant</button>
+  <button data-app="discord">Discord</button>
+  <div class="spacer"></div>
+  <span class="tip">Keys: <b>1–7</b> switch app · <b>H</b> hide hints · <b>R</b> reset field</span>
+  <button id="toggleHints" style="margin-left:10px">Hide hints</button>
+</div>
+
+<div id="stage">
+
+  <!-- ===================== SLACK ===================== -->
+  <section id="slack" class="app active">
+    <div class="rail"><div class="ws">M</div></div>
+    <div class="side">
+      <h3>Meridian Labs</h3>
+      <div class="sec">Channels</div>
+      <div class="ch"># general</div>
+      <div class="ch on"># design-review</div>
+      <div class="ch"># launch-oct</div>
+      <div class="sec">Direct messages</div>
+      <div class="ch">Priya Natarajan</div>
+      <div class="ch">Marcus Oyelaran</div>
+    </div>
+    <div class="main">
+      <div class="head"># design-review <small>12 members</small></div>
+      <div class="msgs">
+        <div class="smsg"><div class="av" style="background:#e8d5f5">🟣</div><div><span class="n">Priya Natarajan</span><span class="t">10:42 AM</span><div class="b">Reminder: design review for the onboarding flow is <b>tomorrow at 3pm in Room 4B</b>. Marcus is presenting the new setup screens.</div></div></div>
+        <div class="smsg"><div class="av" style="background:#d5ecf5">🟦</div><div><span class="n">Marcus Oyelaran</span><span class="t">10:44 AM</span><div class="b">I'll have the Figma link posted by noon. Two things I need from the room: a decision on the permission prompt copy, and someone to take notes.</div></div></div>
+        <div class="smsg"><div class="av" style="background:#e8d5f5">🟣</div><div><span class="n">Priya Natarajan</span><span class="t">10:45 AM</span><div class="b">Can everyone confirm you can make 3pm? And if you can take notes, say so here.</div></div></div>
+      </div>
+      <div class="compose">
+        <textarea data-field placeholder="Message #design-review"></textarea>
+        <div class="tools"><span>＋</span><span>Aa</span><span>😊</span><span>@</span></div>
+      </div>
+    </div>
+    <div class="hint">
+      <h4>Try typing</h4>
+      <div class="type">Yes, 3pm works</div>
+      <p>Wait for the grey ghost, press <kbd>Tab</kbd> for one word, <kbd>~</kbd> for all of it. Then keep going:</p>
+      <div class="type">I can take notes, and for the permission copy I'd</div>
+      <p>The ghost should know it is <b>tomorrow at 3pm</b> and <b>Room 4B</b> because it can see the thread.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== MAIL ===================== -->
+  <section id="mail" class="app">
+    <div class="box">
+      <div class="f on">Inbox</div><div class="f">Flagged</div><div class="f">Drafts</div><div class="f">Sent</div>
+    </div>
+    <div class="list">
+      <div class="row on"><b>Dana Whitfield</b>Contract renewal — need your sign-off by Friday<span>Today, 9:12 AM</span></div>
+      <div class="row"><b>Apple Developer</b>Your certificate expires in 30 days<span>Yesterday</span></div>
+      <div class="row"><b>Sam Kessler</b>Re: Lisbon dates<span>Tuesday</span></div>
+    </div>
+    <div class="read">
+      <div class="subj">
+        <h2>Contract renewal — need your sign-off by Friday</h2>
+        <div class="from">Dana Whitfield &lt;dana@meridianlabs.example&gt; · To: you · Today at 9:12 AM</div>
+      </div>
+      <div class="body">Hi,
+
+Two quick things on the Northwind renewal before Friday:
+
+1. Are you okay with the 12-month term at $4,800/month, or do you want me to push for the 18-month option at $4,400?
+2. Their legal team asked whether the data-processing addendum from last year still applies. I believe it does, but I'd rather you confirm.
+
+If I can get your answer by Thursday I can have the paperwork to them Friday morning.
+
+Thanks,
+Dana</div>
+      <div class="reply">
+        <div class="to">Reply to Dana Whitfield</div>
+        <textarea data-field placeholder="Write your reply…"></textarea>
+      </div>
+    </div>
+    <div class="hint">
+      <h4>Try typing</h4>
+      <div class="type">Hi Dana, thanks for</div>
+      <p>Let it finish the opener, then answer the first question:</p>
+      <div class="type">Let's go with the 18-month</div>
+      <p>Watch for the ghost to pick up <b>$4,400</b> and <b>Thursday</b> from the mail, not invent numbers.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== MESSAGES ===================== -->
+  <section id="messages" class="app">
+    <div class="convs">
+      <div class="conv on"><div class="av">M</div><div><b>Mom</b><span>Are you still coming Sunday?</span></div></div>
+      <div class="conv"><div class="av">S</div><div><b>Sam</b><span>Lisbon flights are $412 rn</span></div></div>
+      <div class="conv"><div class="av">P</div><div><b>Priya</b><span>Figma link is up</span></div></div>
+    </div>
+    <div class="thread">
+      <div class="head">Mom</div>
+      <div class="bubbles">
+        <div class="bub them">Hi honey, are you still coming Sunday?<span class="when">4:02 PM</span></div>
+        <div class="bub them">Dad wants to know if you're bringing Sam, he's planning the grill</div>
+        <div class="bub me">Hey! Just wrapping up work</div>
+        <div class="bub them">Also can you pick up ice on the way? We're out</div>
+      </div>
+      <div class="field"><span>📷</span><textarea data-field placeholder="iMessage"></textarea><span>🎤</span></div>
+    </div>
+    <div class="hint">
+      <h4>Try typing</h4>
+      <div class="type">Yes, we'll be there</div>
+      <p>Then a second message:</p>
+      <div class="type">Sam is coming too, and I'll grab</div>
+      <p>The ghost should offer <b>ice</b> and know about <b>Sunday</b> and the <b>grill</b>.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== NOTES ===================== -->
+  <section id="notes" class="app">
+    <div class="folders"><div class="f on">Notes</div><div class="f">Travel</div><div class="f">Work</div></div>
+    <div class="list">
+      <div class="n on"><b>Lisbon — 4 days in October</b><span>Today · Trip planning</span></div>
+      <div class="n"><b>Design review prep</b><span>Yesterday</span></div>
+      <div class="n"><b>Groceries</b><span>Sunday</span></div>
+    </div>
+    <div class="doc">
+      <h1>Lisbon — 4 days in October</h1>
+      <div class="date">September 2, 2026 at 6:10 PM</div>
+      <div contenteditable="true" data-field spellcheck="false"><b>Flights</b>
+<ul><li>Out Thursday Oct 15, back Monday Oct 19</li><li>Sam found seats at $412 round trip, book by Friday</li></ul>
+<b>Where to stay</b>
+<ul><li>Alfama or Príncipe Real, walking distance to the river</li></ul>
+<b>Day 1 — Friday</b>
+<ul><li>Morning: tram 28 to the castle before the crowds</li><li>Lunch near Time Out Market</li></ul>
+<b>Day 2 — Saturday</b>
+<ul><li></li></ul></div>
+    </div>
+    <div class="hint">
+      <h4>Try typing (in the empty Day 2 bullet)</h4>
+      <div class="type">Take the train to Sintra and</div>
+      <p>This is <b>prose</b>, not a reply, so Tilde uses the document itself. Ghosts should read like the bullets above: short, concrete, in your voice.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== GITHUB ===================== -->
+  <section id="github" class="app">
+    <div class="top">🐙 <span>meridianlabs / onboarding-web</span> <span style="opacity:.6">Pull requests</span></div>
+    <div class="wrap">
+      <h2>Fix permission prompt copy on first launch <small>#218</small></h2>
+      <div class="state">Open</div>
+      <div class="gh-c"><div class="h"><b>marcus-o</b> commented 2 hours ago</div><div class="b">This replaces the three-paragraph prompt with one sentence and moves the "why we need this" link below the button. Copy is from Priya's doc. Screenshots in the description; tested on 14.6 and 15.0.</div></div>
+      <div class="gh-c"><div class="h"><b>priya-n</b> reviewed 1 hour ago · <code>PermissionPrompt.swift</code> line 42</div><div class="b">The fallback string still says "Screen Recording" when the permission is actually Accessibility. Can we make <code>permissionName</code> come from the enum instead of the literal?</div></div>
+      <div class="gh-c"><div class="h"><b>marcus-o</b> replied 40 minutes ago</div><div class="b">Good catch. Fixed in <code>c41f2e0</code>, and added a test that walks every case. Ready for another look.</div></div>
+      <div class="gh-c"><div class="h">Write a review</div><div class="b">
+        <textarea data-field placeholder="Leave a comment"></textarea>
+        <span class="btn">Comment</span>
+      </div></div>
+    </div>
+    <div class="hint">
+      <h4>Try typing</h4>
+      <div class="type">Looks good to me, one small</div>
+      <p>Then approve:</p>
+      <div class="type">Approving now that the fallback string</div>
+      <p>Code register: ghosts should stay short and reference <b>permissionName</b>, the enum, and the test.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== ASSISTANT ===================== -->
+  <section id="assistant" class="app">
+    <div class="side">
+      <div class="c on">Rewrite the launch email</div>
+      <div class="c">Lisbon itinerary ideas</div>
+      <div class="c">Swift actor isolation question</div>
+    </div>
+    <div class="chat">
+      <div class="turns">
+        <div class="u">Here's the draft of the launch email for Tilde. Can you tighten it? It's too long and the second paragraph buries the privacy point.</div>
+        <div class="a"><div class="who">Assistant</div>Here is a tighter version. I moved "nothing leaves your Mac" into the first sentence, cut the feature list to three bullets, and ended on the one thing a reader should do next: download and press Tab. Want me to write a subject line as well, or keep the one you have?</div>
+      </div>
+      <div class="box">
+        <textarea data-field placeholder="Reply to Assistant…"></textarea>
+        <div class="foot"><span>Shift+Enter for a new line</span><span>Claude · Sonnet</span></div>
+      </div>
+    </div>
+    <div class="hint">
+      <h4>Try typing</h4>
+      <div class="type">Yes, write a subject line</div>
+      <p>Then push it with the chain: accept with <kbd>~</kbd>, and when the next ghost appears keep pressing <kbd>Tab</kbd>.</p>
+      <div class="type">and keep the tone</div>
+      <p>This is an Electron app on a real Mac; here it is just a page, so it shows how the reply register behaves in a chat composer.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== DISCORD ===================== -->
+  <section id="discord" class="app">
+    <div class="servers"><div class="s">TL</div><div class="s" style="background:#3ba55c">B</div></div>
+    <div class="chans">
+      <div class="g">Text channels</div>
+      <div class="c"># announcements</div>
+      <div class="c on"># raid-night</div>
+      <div class="c"># memes</div>
+    </div>
+    <div class="main">
+      <div class="head"># raid-night</div>
+      <div class="msgs">
+        <div class="dm"><div class="av">🐉</div><div><span class="n">Kez</span><span class="t">Today at 7:31 PM</span><div class="b">ok so are we doing the raid tonight or tomorrow? I can do 9pm tonight but tomorrow I'm out until 10</div></div></div>
+        <div class="dm"><div class="av" style="background:#eb459e">🦊</div><div><span class="n">Nova</span><span class="t">Today at 7:33 PM</span><div class="b">tonight works for me. need a healer though, Devi said she can't make it</div></div></div>
+        <div class="dm"><div class="av">🐉</div><div><span class="n">Kez</span><span class="t">Today at 7:34 PM</span><div class="b">@you can you heal tonight? and bring the flasks from last time</div></div></div>
+      </div>
+      <div class="compose"><textarea data-field placeholder="Message #raid-night"></textarea></div>
+    </div>
+    <div class="hint">
+      <h4>Try typing</h4>
+      <div class="type">yeah I can heal tonight</div>
+      <p>Then:</p>
+      <div class="type">9pm works, I'll bring the</div>
+      <p>Casual chat register on a dark app. The ghost should stay lowercase and short, and remember the <b>flasks</b> and <b>9pm</b>.</p>
+      <div class="actions"><button data-reset>Reset field</button></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  const apps = ['slack','mail','messages','notes','github','assistant','discord'];
+  const buttons = Array.from(document.querySelectorAll('#bar button[data-app]'));
+  function show(name) {
+    apps.forEach(a => document.getElementById(a).classList.toggle('active', a === name));
+    buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.app === name)));
+    const field = document.querySelector('#' + name + ' [data-field]');
+    if (field) setTimeout(() => field.focus(), 30);
+  }
+  buttons.forEach(b => b.addEventListener('click', () => show(b.dataset.app)));
+
+  function resetActive() {
+    const active = document.querySelector('.app.active');
+    const field = active && active.querySelector('[data-field]');
+    if (!field) return;
+    if (field.tagName === 'TEXTAREA') field.value = '';
+    else if (field.dataset.original) field.innerHTML = field.dataset.original;
+    field.focus();
+  }
+  document.querySelectorAll('[contenteditable][data-field]').forEach(el => { el.dataset.original = el.innerHTML; });
+  document.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', resetActive));
+
+  const hintsButton = document.getElementById('toggleHints');
+  function toggleHints() {
+    const hidden = document.body.classList.toggle('hide-hints');
+    hintsButton.textContent = hidden ? 'Show hints' : 'Hide hints';
+    hintsButton.setAttribute('aria-pressed', String(hidden));
+  }
+  hintsButton.addEventListener('click', toggleHints);
+
+  document.addEventListener('keydown', (e) => {
+    const inField = e.target && (e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
+    if (inField) return;
+    if (e.key >= '1' && e.key <= '7') show(apps[Number(e.key) - 1]);
+    if (e.key === 'h' || e.key === 'H') toggleHints();
+    if (e.key === 'r' || e.key === 'R') resetActive();
+  });
+
+  // Keep the stage honest: nothing here talks to a network. No fetch, no
+  // analytics. It is a page of text fields for the real Tilde keyboard.
+  show('slack');
+})();
+</script>
+</body>
+</html>

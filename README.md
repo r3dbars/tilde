@@ -13,6 +13,12 @@ type, because it is a real macOS keyboard, not a floating window.
 <!-- demo: Assets/GitHub/tilde-demo.gif — fifteen seconds: type a Slack reply,
 one Tab, one ~, one Esc. Record at 2x, crop to the composer. -->
 
+Want to see it without installing anything into your real apps? Open
+[`demo/index.html`](demo/index.html) in Chrome or Safari with the Tilde
+keyboard selected: seven mock apps (Slack, Mail, Messages, Notes, GitHub, an
+assistant chat, Discord), each pre-loaded with a conversation and a card that
+tells you what to type. Nothing on the page talks to a network.
+
 ## What makes it different
 
 - **It knows what you are replying to.** With your permission, Tilde reads
