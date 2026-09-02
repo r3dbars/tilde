@@ -25,15 +25,20 @@ public enum SuggestionRevealDelayPolicy {
             || chromiumBundlePrefixes.contains(where: bundleIdentifier.hasPrefix)
     }
 
+    /// `chained` marks a request issued by an accept rather than a
+    /// keystroke: no key is being processed, so the shorter mid-word wait is
+    /// enough to keep a Chromium caret still, and every millisecond here is
+    /// dead air between one Tab and the next ghost.
     public static func nanoseconds(
         afterUserTyped grapheme: String,
-        calmMarkedText: Bool
+        calmMarkedText: Bool,
+        chained: Bool = false
     ) -> UInt64 {
-        let midWord = grapheme.last?.isLetter == true
+        let short = chained || grapheme.last?.isLetter == true
         if calmMarkedText {
-            return midWord ? 120_000_000 : 200_000_000
+            return short ? 120_000_000 : 200_000_000
         }
-        return midWord ? 10_000_000 : 50_000_000
+        return short ? 10_000_000 : 50_000_000
     }
 
     /// Model work always begins with the keystroke. Chromium/Electron only
@@ -41,13 +46,15 @@ public enum SuggestionRevealDelayPolicy {
     /// 120–200ms to inference latency.
     public static func schedule(
         afterUserTyped grapheme: String,
-        calmMarkedText: Bool
+        calmMarkedText: Bool,
+        chained: Bool = false
     ) -> Schedule {
         Schedule(
             inferenceDelayNanoseconds: 0,
             revealDelayNanoseconds: nanoseconds(
                 afterUserTyped: grapheme,
-                calmMarkedText: calmMarkedText
+                calmMarkedText: calmMarkedText,
+                chained: chained
             )
         )
     }

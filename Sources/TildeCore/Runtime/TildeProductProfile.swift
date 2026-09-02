@@ -167,6 +167,16 @@ public enum TildeProductProfile: String, Equatable, Sendable {
         self == .preview9B
     }
 
+    /// After the writer accepts the last visible word (or the whole ghost),
+    /// request the next continuation at once instead of waiting for the
+    /// next keystroke, so a sentence can be completed Tab by Tab at the
+    /// three-word precision the lab has measured. Owner-directed for the 9B
+    /// preview (2026-09-01); an interaction change, so it stays out of
+    /// production until the live acceptance and retention numbers hold.
+    public var chainsCompletionAfterAccept: Bool {
+        self == .preview9B
+    }
+
     public var personalHistoryKeychainService: String {
         "\(appBundleIdentifier).personal-history"
     }

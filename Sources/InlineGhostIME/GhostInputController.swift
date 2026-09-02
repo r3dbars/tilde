@@ -11,6 +11,15 @@ final class GhostInputController: IMKInputController {
     private static let contextLimit = 3_000
     private static let trailingContextLimit = 80
     private static let slowKeyThreshold: TimeInterval = 0.050
+    /// Chained accept: once the ghost is fully consumed by Tab or the whole-
+    /// accept key, ask for the next continuation right away. See
+    /// `TildeProductProfile.chainsCompletionAfterAccept`.
+    private static let chainsAfterAccept = TildeProductProfile.current.chainsCompletionAfterAccept
+    /// The schedule revision of the request a consumed accept chained, while
+    /// it is still the live one. A Tab that lands before that ghost appears
+    /// is held rather than handed to the host: the writer is mid-chain, and
+    /// in an Electron composer a stray Tab moves focus out of the field.
+    private var chainedRequestRevision: Int?
     private static let slowKeyLogger = Logger(
         subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "typing-performance"
@@ -19,6 +28,18 @@ final class GhostInputController: IMKInputController {
         subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "suggestion-latency"
     )
+    /// Chained-accept outcomes, reason codes only, never text.
+    private static let chainLogger = Logger(
+        subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
+        category: "chained-accept"
+    )
+    /// Electron/Chromium hosts update the caret and document length
+    /// asynchronously after `insertText`. A chained request that reads the
+    /// field immediately after an accept sees the pre-insert caret, judges
+    /// the just-inserted ghost as trailing text, and bails at the growing-
+    /// edge check. Keystroke requests never hit this because the next key
+    /// arrives after the host has caught up.
+    private static let chainedCalmSettleNanoseconds: UInt64 = 90_000_000
 
     struct SlowKeyTiming {
         let totalMilliseconds: Int
@@ -191,7 +212,10 @@ final class GhostInputController: IMKInputController {
                 return false
             }
             let accepted = acceptSuggestion(client, observation: insertionObservation)
-            if !accepted { breakHistorySegment() }
+            if !accepted {
+                if awaitingChainedGhost() { return true }
+                breakHistorySegment()
+            }
             return accepted
 
         case 50: // The physical backtick/tilde key accepts the whole visible suggestion.
@@ -529,6 +553,30 @@ final class GhostInputController: IMKInputController {
             kind: .word,
             remainderVisible: state.isVisible
         )
+        chainAfterAcceptIfConsumed(client)
+        return true
+    }
+
+    /// The reward for a correct ghost used to be silence: accepting its last
+    /// word left the caret at a word boundary with nothing scheduled until
+    /// the next keystroke. When the profile chains, the accepted text (which
+    /// ends in the separator) is the new context and the next three words
+    /// are requested at once, through the ordinary schedule path with its
+    /// reveal delay, activation checks, and ticket rules intact.
+    private func chainAfterAcceptIfConsumed(_ client: IMKTextInput) {
+        guard Self.chainsAfterAccept, !state.isVisible else { return }
+        scheduleSuggestion(for: client, afterUserTyped: " ", chained: true)
+        chainedRequestRevision = scheduleRevision
+    }
+
+    /// True while the request a consumed accept chained is still pending.
+    /// Any newer schedule (a keystroke, a dismissal) moves the revision on,
+    /// so an ordinary Tab is never held.
+    private func awaitingChainedGhost() -> Bool {
+        guard Self.chainsAfterAccept,
+              let chained = chainedRequestRevision,
+              chained == scheduleRevision,
+              state.pendingTicket != nil else { return false }
         return true
     }
 
@@ -542,7 +590,10 @@ final class GhostInputController: IMKInputController {
         }
         let match = matchingVisibleState(for: client)
         cancelPendingWork()
-        let effects = state.reduce(.acceptAll(current: match?.ticket))
+        let effects = state.reduce(.acceptAll(
+            current: match?.ticket,
+            appendsSeparator: Self.chainsAfterAccept
+        ))
         guard case let .insert(accepted)? = effects.first(where: {
             if case .insert = $0 { return true }
             return false
@@ -565,6 +616,7 @@ final class GhostInputController: IMKInputController {
             kind: .all,
             remainderVisible: state.isVisible
         )
+        chainAfterAcceptIfConsumed(client)
         return true
     }
 
@@ -707,7 +759,11 @@ final class GhostInputController: IMKInputController {
 
     // MARK: - Suggestion paths
 
-    private func scheduleSuggestion(for client: IMKTextInput, afterUserTyped grapheme: String) {
+    private func scheduleSuggestion(
+        for client: IMKTextInput,
+        afterUserTyped grapheme: String,
+        chained: Bool = false
+    ) {
         // Same field, different conversation: tell Screen Memory so the
         // next capture happens now-ish instead of serving the old thread.
         let contextTail = String(contextBeforeCaret(client).suffix(Self.contextLimit))
@@ -721,7 +777,8 @@ final class GhostInputController: IMKInputController {
         let expectedBundle = client.bundleIdentifier() ?? ""
         let timing = SuggestionRevealDelayPolicy.schedule(
             afterUserTyped: grapheme,
-            calmMarkedText: usesCalmReveal(for: expectedBundle)
+            calmMarkedText: usesCalmReveal(for: expectedBundle),
+            chained: chained
         )
         guard scheduleRevision == revision,
               (client.bundleIdentifier() ?? "") == expectedBundle else { return }
@@ -730,14 +787,28 @@ final class GhostInputController: IMKInputController {
         )
         // Yield only until the key callback returns; there is no timing
         // sleep before inference. Only marked-text presentation waits for
-        // the calm-caret window in Chromium/Electron editors.
+        // the calm-caret window in Chromium/Electron editors. The one
+        // exception is a chained request in such a host, which must let the
+        // host commit the accepted text before the field is read at all.
+        let settleBeforeReading = chained && usesCalmReveal(for: expectedBundle)
         Task { @MainActor [weak self] in
+            if settleBeforeReading {
+                try? await Task.sleep(nanoseconds: Self.chainedCalmSettleNanoseconds)
+            }
             guard let self,
                   self.scheduleRevision == revision,
                   let liveClient = self.client(),
-                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else { return }
+                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else {
+                if chained { Self.chainLogger.info("chain-bailed reason=superseded") }
+                return
+            }
             self.updateSuggestion(for: liveClient, revealNotBefore: revealNotBefore)
         }
+    }
+
+    /// Whether the current schedule is the one a consumed accept chained.
+    private var isChainedSchedule: Bool {
+        chainedRequestRevision == scheduleRevision
     }
 
     /// Chromium browsers and Electron apps render marked-text carets at the
@@ -766,6 +837,7 @@ final class GhostInputController: IMKInputController {
         let field = fieldSnapshot(client)
         let selection = field.selection
         guard selection.location != NSNotFound, selection.length == 0 else {
+            if isChainedSchedule { Self.chainLogger.info("chain-bailed reason=selection") }
             breakHistorySegment()
             dismiss(client)
             resetFallback()
@@ -777,8 +849,17 @@ final class GhostInputController: IMKInputController {
             afterUserTyped: typedFallback,
             trailingTextAfterCaret: trailingText
         ) else {
+            if isChainedSchedule {
+                Self.chainLogger.info(
+                    "chain-bailed reason=activation trailingChars=\(trailingText.count, privacy: .public)"
+                )
+            }
             dismiss(client)
             return
+        }
+        if isChainedSchedule {
+            let tail = context.last.map { $0.isWhitespace ? "whitespace" : ($0.isLetter ? "letter" : "other") } ?? "empty"
+            Self.chainLogger.info("chain-request tail=\(tail, privacy: .public)")
         }
         let requestTicket = ticket(context: context, field: field)
         apply(state.reduce(.awaitSuggestion(requestTicket)), to: client)

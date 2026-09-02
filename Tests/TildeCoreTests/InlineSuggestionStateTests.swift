@@ -274,6 +274,24 @@ struct InlineSuggestionStateTests {
         #expect(state.visibleTicket == nil)
     }
 
+    @Test("Full accept can move the following separator into the inserted text, like a word accept")
+    func fullAcceptAppendsSeparatorWhenAsked() {
+        let current = ticket(context: "hello ", location: 6, request: 3)
+        var state = InlineSuggestionState()
+        _ = state.reduce(.awaitSuggestion(current))
+        _ = state.reduce(.present("see you tomorrow", current))
+        let effects = state.reduce(.acceptAll(current: current, appendsSeparator: true))
+        #expect(effects == [.hide, .insert("see you tomorrow "), .accepted])
+        #expect(!state.isVisible)
+
+        // A ghost that already ends in whitespace is not doubled.
+        var again = InlineSuggestionState()
+        _ = again.reduce(.awaitSuggestion(current))
+        _ = again.reduce(.present("see you ", current))
+        #expect(again.reduce(.acceptAll(current: current, appendsSeparator: true))
+            == [.hide, .insert("see you "), .accepted])
+    }
+
     @Test("Full accept rejects a stale suggestion")
     func fullAcceptanceRequiresCurrentTicket() {
         let current = ticket(context: "hello", location: 5, request: 7)
