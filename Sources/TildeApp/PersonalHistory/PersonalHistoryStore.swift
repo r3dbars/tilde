@@ -10,22 +10,55 @@ struct PersonalHistorySummary: Equatable, Sendable {
 
 protocol PersonalHistoryStore: Sendable {
     var location: URL { get }
+    /// Returns the log position of the record this batch became. The trained
+    /// model is saved separately and can lag the log, so it names the
+    /// position it covers and the next launch replays only what came after.
+    @discardableResult
     func append(
         _ events: [PersonalHistoryEvent],
         checkpoint: PersonalNextWordStoredCheckpoint?
-    ) async throws
+    ) async throws -> Int64
     func loadReplay(maximumBytes: Int64) async throws -> PersonalHistoryReplay
+    /// Writes the trained next-word table into the same owner-only encrypted
+    /// store, under the same key, replacing whatever was there.
+    func saveTrainedModel(_ model: PersonalNextWordStoredModel) async throws
     func deleteAll() async throws
     func summary() async throws -> PersonalHistorySummary
 }
 
-struct PersonalHistoryReplay: Equatable, Sendable {
+/// One durable record: the events that were appended together, and the log
+/// position they occupy.
+struct PersonalHistoryRecord: Equatable, Sendable {
+    let sequence: Int64
     let events: [PersonalHistoryEvent]
+}
+
+struct PersonalHistoryReplay: Equatable, Sendable {
+    let records: [PersonalHistoryRecord]
     let checkpoint: PersonalNextWordStoredCheckpoint?
+    let trainedModel: PersonalNextWordStoredModel?
+
+    init(
+        records: [PersonalHistoryRecord],
+        checkpoint: PersonalNextWordStoredCheckpoint?,
+        trainedModel: PersonalNextWordStoredModel? = nil
+    ) {
+        self.records = records
+        self.checkpoint = checkpoint
+        self.trainedModel = trainedModel
+    }
+
+    var events: [PersonalHistoryEvent] { records.flatMap(\.events) }
+
+    /// The events a restored model has not already learned.
+    func events(after sequence: Int64) -> [PersonalHistoryEvent] {
+        records.filter { $0.sequence > sequence }.flatMap(\.events)
+    }
 }
 
 extension PersonalHistoryStore {
-    func append(_ events: [PersonalHistoryEvent]) async throws {
+    @discardableResult
+    func append(_ events: [PersonalHistoryEvent]) async throws -> Int64 {
         try await append(events, checkpoint: nil)
     }
 
@@ -76,6 +109,60 @@ struct PersonalNextWordStoredCheckpoint: Codable, Equatable, Sendable {
 
     var isCompatibleWithCurrentExperiment: Bool {
         v == Self.version && checkpoint.isCompatibleWithCurrentExperiment
+    }
+}
+
+/// The trained table plus the scope it was trained under. The scope fields are
+/// the checkpoint's, checked the same way: a rotated history or experiment
+/// identifier, or a changed exclusion list, means this table was learned from
+/// a corpus the owner has since redrawn, and it is discarded rather than
+/// carried across the boundary.
+struct PersonalNextWordStoredModel: Codable, Equatable, Sendable {
+    private static let version = 1
+
+    let v: Int
+    let historyIdentifier: String
+    let experimentIdentifier: String
+    let excludedApps: [String]
+    /// The log position (`PersonalHistoryStore.append`'s return value) the
+    /// table has already consumed. Records after it still need replaying.
+    let coveredThroughSequence: Int64
+    let model: PersonalNextWordTrainedModel
+
+    init(
+        historyIdentifier: String,
+        experimentIdentifier: String,
+        excludedApps: Set<String>,
+        coveredThroughSequence: Int64,
+        model: PersonalNextWordTrainedModel
+    ) {
+        v = Self.version
+        self.historyIdentifier = historyIdentifier
+        self.experimentIdentifier = experimentIdentifier
+        self.excludedApps = PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
+        self.coveredThroughSequence = coveredThroughSequence
+        self.model = model
+    }
+
+    func matches(
+        historyIdentifier: String,
+        experimentIdentifier: String,
+        excludedApps: Set<String>
+    ) -> Bool {
+        v == Self.version
+            && self.historyIdentifier == historyIdentifier
+            && self.experimentIdentifier == experimentIdentifier
+            && self.excludedApps == PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
+            && coveredThroughSequence >= 0
+            && model.isCompatibleWithCurrentRecipe
+    }
+
+    fileprivate var hasValidEnvelope: Bool {
+        v > 0
+            && PersonalHistoryEvent.validIdentifier(historyIdentifier)
+            && PersonalHistoryEvent.validIdentifier(experimentIdentifier)
+            && excludedApps == PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
+            && coveredThroughSequence >= 0
     }
 }
 
@@ -173,10 +260,21 @@ final class KeychainPersonalHistoryKeyProvider: PersonalHistoryKeyProviding, @un
 final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Sendable {
     private static let legacyHeader = Data("TILDE-PERSONAL-HISTORY\t1\n".utf8)
     private static let header = Data("TILDE-PERSONAL-HISTORY\t2\n".utf8)
+    private static let modelHeader = Data("TILDE-PERSONAL-MODEL\t1\n".utf8)
     private static var authenticatedData: Data {
         TildeProductProfile.current.personalHistoryAuthenticatedData
     }
+    /// A distinct label so a record from one file can never be replayed into
+    /// the other, even though both are sealed with the same key.
+    private static var modelAuthenticatedData: Data {
+        authenticatedData + Data(".trained-model".utf8)
+    }
     private static let maximumEncryptedRecordBytes = 64 * 1_024
+    /// The trained table is a whole-file record rather than a line in the
+    /// append log, so it gets its own, larger ceiling: the model's own
+    /// capacity limits (8,192 contexts, 32,768 transitions) bound what can
+    /// legitimately be written here.
+    private static let maximumEncryptedModelBytes = 8 * 1_024 * 1_024
 
     let location: URL
     private let keyProvider: any PersonalHistoryKeyProviding
@@ -196,18 +294,33 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         self.diagnostics = diagnostics
     }
 
+    /// The trained model lives beside the history log: same directory, same
+    /// owner-only permissions, same Keychain key, same delete-everything.
+    var modelLocation: URL {
+        location.deletingLastPathComponent().appendingPathComponent("model.v1.enc")
+    }
+
+    private var modelTemporaryLocation: URL {
+        location.deletingLastPathComponent().appendingPathComponent("model.v1.enc.partial")
+    }
+
+    @discardableResult
     func append(
         _ events: [PersonalHistoryEvent],
         checkpoint: PersonalNextWordStoredCheckpoint?
-    ) async throws {
+    ) async throws -> Int64 {
         guard PersonalHistoryEvent.validBatch(events) else {
             throw PersonalHistoryStorageError.invalidEvent
         }
-        try await perform { try self.appendSynchronously(events, checkpoint: checkpoint) }
+        return try await perform { try self.appendSynchronously(events, checkpoint: checkpoint) }
     }
 
     func loadReplay(maximumBytes: Int64) async throws -> PersonalHistoryReplay {
         try await perform { try self.loadSynchronously(maximumBytes: maximumBytes) }
+    }
+
+    func saveTrainedModel(_ model: PersonalNextWordStoredModel) async throws {
+        try await perform { try self.saveTrainedModelSynchronously(model) }
     }
 
     /// Status reads authenticate only the newest record and decode only its
@@ -249,18 +362,34 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
 
     func deleteAll() async throws {
         try await perform {
+            // Everything the trained model knows was learned from this
+            // history, so "delete everything" has to take it too — including
+            // a partial save left behind by an interrupted write.
             let removedFile = SecureLocalStorage.removeOwnerOnlyFile(at: self.location)
-            guard removedFile else { throw CocoaError(.fileWriteUnknown) }
+            let removedModel = SecureLocalStorage.removeOwnerOnlyFile(at: self.modelLocation)
+            let removedPartial = SecureLocalStorage.removeOwnerOnlyFile(
+                at: self.modelTemporaryLocation
+            )
+            guard removedFile, removedModel, removedPartial else {
+                throw CocoaError(.fileWriteUnknown)
+            }
             try self.keyProvider.deleteKey()
         }
     }
 
     func summary() async throws -> PersonalHistorySummary {
         try await perform {
+            // The storage meter must own up to the trained table too: it is
+            // the same store, on the same delete path, and on a heavy
+            // history it is not a rounding error.
+            let modelBytes = self.modelFileBytes()
             var info = stat()
             if lstat(self.location.path, &info) != 0 {
                 guard errno == ENOENT else { throw CocoaError(.fileReadUnknown) }
-                return PersonalHistorySummary(location: self.location, approximateBytes: 0)
+                return PersonalHistorySummary(
+                    location: self.location,
+                    approximateBytes: modelBytes
+                )
             }
             guard let handle = SecureLocalStorage.openExistingFileForReading(at: self.location) else {
                 throw PersonalHistoryStorageError.corruptStore
@@ -273,15 +402,22 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             // usage number, not a claim about how many records replay.
             return PersonalHistorySummary(
                 location: self.location,
-                approximateBytes: Int64(size)
+                approximateBytes: Int64(size) + modelBytes
             )
         }
+    }
+
+    private func modelFileBytes() -> Int64 {
+        var info = stat()
+        guard lstat(modelLocation.path, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG else { return 0 }
+        return Int64(max(0, info.st_size))
     }
 
     private func appendSynchronously(
         _ events: [PersonalHistoryEvent],
         checkpoint: PersonalNextWordStoredCheckpoint?
-    ) throws {
+    ) throws -> Int64 {
         var info = stat()
         let exists = lstat(location.path, &info) == 0
         if !exists, errno != ENOENT { throw CocoaError(.fileReadUnknown) }
@@ -322,16 +458,21 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             keyData = try keyProvider.loadOrCreateKey()
         }
         guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
-        let carriedCheckpoint = size > UInt64(Self.header.count)
+        let carried = size > UInt64(Self.header.count)
             ? try authenticateLastRecord(handle: handle, size: size, keyData: keyData)
             : nil
-        let checkpointToWrite = checkpoint ?? carriedCheckpoint
+        let checkpointToWrite = checkpoint ?? carried?.checkpoint
+        // Log positions are per-store and monotonic. A legacy record decodes
+        // as position 0, so the first record this build writes is 1 — and a
+        // trained model can never claim to cover a record written before
+        // positions existed.
+        let sequence = (carried?.sequence ?? 0) + 1
         let key = SymmetricKey(data: keyData)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         var encryptedLines = Data()
         let plaintext = try encoder.encode(
-            StoredBatch(events: events, checkpoint: checkpointToWrite)
+            StoredBatch(events: events, checkpoint: checkpointToWrite, sequence: sequence)
         )
         let sealed = try AES.GCM.seal(
             plaintext,
@@ -357,15 +498,17 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             try? handle.truncate(atOffset: size)
             throw error
         }
+        return sequence
     }
 
     private func authenticateLastRecord(
         handle: FileHandle,
         size: UInt64,
         keyData: Data
-    ) throws -> PersonalNextWordStoredCheckpoint? {
+    ) throws -> (checkpoint: PersonalNextWordStoredCheckpoint?, sequence: Int64)? {
         let line = try encryptedLine(handle: handle, size: size)
-        return try Self.decode(line + Data([0x0A]), keyData: keyData).checkpoint
+        let replay = try Self.decode(line + Data([0x0A]), keyData: keyData)
+        return (replay.checkpoint, replay.records.last?.sequence ?? 0)
     }
 
     private func decryptLastRecord(
@@ -402,10 +545,11 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
     /// Reads only a bounded recent tail. The encrypted corpus remains complete
     /// while replay work stays flat as Personal History grows.
     private func loadSynchronously(maximumBytes: Int64) throws -> PersonalHistoryReplay {
+        let trainedModel = loadTrainedModelSynchronously()
         var info = stat()
         if lstat(location.path, &info) != 0 {
             guard errno == ENOENT else { throw CocoaError(.fileReadUnknown) }
-            return PersonalHistoryReplay(events: [], checkpoint: nil)
+            return PersonalHistoryReplay(records: [], checkpoint: nil, trainedModel: trainedModel)
         }
         guard let handle = SecureLocalStorage.openExistingFileForReading(at: location) else {
             throw PersonalHistoryStorageError.corruptStore
@@ -419,7 +563,7 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         }
         let bodyStart = UInt64(Self.header.count)
         guard size > bodyStart else {
-            return PersonalHistoryReplay(events: [], checkpoint: nil)
+            return PersonalHistoryReplay(records: [], checkpoint: nil, trainedModel: trainedModel)
         }
 
         let keyData = try keyProvider.loadExistingKey()
@@ -429,7 +573,7 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             ? bodySize
             : UInt64(max(0, maximumBytes))
         guard budget > 0 else {
-            return PersonalHistoryReplay(events: [], checkpoint: nil)
+            return PersonalHistoryReplay(records: [], checkpoint: nil, trainedModel: trainedModel)
         }
         let start = bodySize > budget ? size - budget : bodyStart
         var startsMidLine = false
@@ -446,18 +590,126 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
         var body = try handle.read(upToCount: Int(size - start)) ?? Data()
         if startsMidLine {
             guard let newline = body.firstIndex(of: 0x0A) else {
-                return PersonalHistoryReplay(events: [], checkpoint: nil)
+                return PersonalHistoryReplay(records: [], checkpoint: nil, trainedModel: trainedModel)
             }
             body.removeSubrange(...newline)
         }
-        return try Self.decode(body, keyData: keyData)
+        let decoded = try Self.decode(body, keyData: keyData)
+        return PersonalHistoryReplay(
+            records: decoded.records,
+            checkpoint: decoded.checkpoint,
+            trainedModel: trainedModel
+        )
+    }
+
+    /// Reads the trained table, or reports nothing when it is missing,
+    /// unreadable, or from another schema/recipe/scope. Nothing is thrown:
+    /// this file is derived state, and the honest fallback is to rebuild
+    /// from raw history exactly as Tilde did before it existed. The failure
+    /// is still legible — a count-only diagnostic, never a path or a word.
+    private func loadTrainedModelSynchronously() -> PersonalNextWordStoredModel? {
+        let handle: FileHandle
+        switch SecureLocalStorage.openExistingOwnerOnlyFileForReadOnlyStatus(at: modelLocation) {
+        case let .opened(opened): handle = opened
+        case .missing: return nil
+        case .rejected:
+            diagnostics.record("personal-model-unreadable", metadata: ["reason": "permissions"])
+            return nil
+        }
+        defer { try? handle.close() }
+        do {
+            let size = try handle.seekToEnd()
+            let headerSize = UInt64(Self.modelHeader.count)
+            guard size > headerSize, size <= UInt64(Self.maximumEncryptedModelBytes) else {
+                diagnostics.record("personal-model-unreadable", metadata: ["reason": "size"])
+                return nil
+            }
+            try handle.seek(toOffset: 0)
+            guard try handle.read(upToCount: Self.modelHeader.count) == Self.modelHeader else {
+                diagnostics.record("personal-model-unreadable", metadata: ["reason": "header"])
+                return nil
+            }
+            let body = try handle.read(upToCount: Int(size - headerSize)) ?? Data()
+            let keyData = try keyProvider.loadExistingKey()
+            guard keyData.count == 32,
+                  let line = body.split(separator: 0x0A).last,
+                  let combined = Data(base64Encoded: Data(line)),
+                  let box = try? AES.GCM.SealedBox(combined: combined),
+                  let plaintext = try? AES.GCM.open(
+                    box,
+                    using: SymmetricKey(data: keyData),
+                    authenticating: Self.modelAuthenticatedData
+                  ) else {
+                diagnostics.record("personal-model-unreadable", metadata: ["reason": "authentication"])
+                return nil
+            }
+            guard let stored = try? JSONDecoder().decode(
+                PersonalNextWordStoredModel.self, from: plaintext
+            ), stored.hasValidEnvelope else {
+                diagnostics.record("personal-model-unreadable", metadata: ["reason": "schema"])
+                return nil
+            }
+            return stored
+        } catch {
+            diagnostics.record("personal-model-unreadable", metadata: ["reason": "read"])
+            return nil
+        }
+    }
+
+    /// Replaces the trained table atomically: a full record is written to a
+    /// sibling in the same owner-only directory and renamed over the live
+    /// file, so an interrupted save leaves the previous model intact rather
+    /// than a half-written one.
+    private func saveTrainedModelSynchronously(_ model: PersonalNextWordStoredModel) throws {
+        let keyData = try keyProvider.loadOrCreateKey()
+        guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let plaintext = try encoder.encode(model)
+        let sealed = try AES.GCM.seal(
+            plaintext,
+            using: SymmetricKey(data: keyData),
+            authenticating: Self.modelAuthenticatedData
+        )
+        guard let combined = sealed.combined else {
+            throw PersonalHistoryStorageError.corruptStore
+        }
+        var contents = Self.modelHeader
+        contents.append(combined.base64EncodedData())
+        contents.append(0x0A)
+        guard contents.count <= Self.maximumEncryptedModelBytes else {
+            throw PersonalHistoryStorageError.invalidEvent
+        }
+        guard let handle = SecureLocalStorage.openFileForReadingAndAppending(
+            at: modelTemporaryLocation
+        ) else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        do {
+            try handle.truncate(atOffset: 0)
+            try handle.seek(toOffset: 0)
+            try handle.write(contentsOf: contents)
+            try handle.synchronize()
+            try handle.close()
+        } catch {
+            try? handle.close()
+            _ = SecureLocalStorage.removeOwnerOnlyFile(at: modelTemporaryLocation)
+            throw error
+        }
+        guard SecureLocalStorage.replaceOwnerOnlyFile(
+            at: modelLocation,
+            with: modelTemporaryLocation
+        ) else {
+            _ = SecureLocalStorage.removeOwnerOnlyFile(at: modelTemporaryLocation)
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     private static func decode(_ data: Data, keyData: Data) throws -> PersonalHistoryReplay {
         guard keyData.count == 32 else { throw PersonalHistoryStorageError.invalidKey }
         let key = SymmetricKey(data: keyData)
         let decoder = JSONDecoder()
-        var events: [PersonalHistoryEvent] = []
+        var records: [PersonalHistoryRecord] = []
         var checkpoint: PersonalNextWordStoredCheckpoint?
         for line in data.split(separator: 0x0A) {
             guard line.count + 1 <= maximumEncryptedRecordBytes,
@@ -472,34 +724,46 @@ final class EncryptedPersonalHistoryStore: PersonalHistoryStore, @unchecked Send
             }
             if let batch = try? decoder.decode(StoredBatch.self, from: plaintext),
                batch.isValid {
-                events.append(contentsOf: batch.events)
+                records.append(PersonalHistoryRecord(
+                    sequence: batch.sequence ?? 0,
+                    events: batch.events
+                ))
                 if let stored = batch.checkpoint {
                     checkpoint = stored.isCompatibleWithCurrentExperiment ? stored : nil
                 }
             } else if let legacy = try? decoder.decode(PersonalHistoryEvent.self, from: plaintext) {
-                events.append(legacy)
+                records.append(PersonalHistoryRecord(sequence: 0, events: [legacy]))
             } else {
                 throw PersonalHistoryStorageError.corruptStore
             }
         }
-        return PersonalHistoryReplay(events: events, checkpoint: checkpoint)
+        return PersonalHistoryReplay(records: records, checkpoint: checkpoint)
     }
 
     private struct StoredBatch: Codable {
         let v: Int
         let events: [PersonalHistoryEvent]
         let checkpoint: PersonalNextWordStoredCheckpoint?
+        /// Absent in records written before log positions existed; those
+        /// read as position 0, which no saved model can claim to cover.
+        let sequence: Int64?
 
-        init(events: [PersonalHistoryEvent], checkpoint: PersonalNextWordStoredCheckpoint?) {
+        init(
+            events: [PersonalHistoryEvent],
+            checkpoint: PersonalNextWordStoredCheckpoint?,
+            sequence: Int64
+        ) {
             v = 1
             self.events = events
             self.checkpoint = checkpoint
+            self.sequence = sequence
         }
 
         var isValid: Bool {
             v == 1
                 && PersonalHistoryEvent.validBatch(events)
                 && (checkpoint?.hasValidEnvelope ?? true)
+                && (sequence.map { $0 > 0 } ?? true)
         }
     }
 
