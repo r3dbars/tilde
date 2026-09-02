@@ -36,11 +36,21 @@ public enum SuggestionArbiter {
             return .init(candidate: base, reason: .expertsAgree)
         }
 
-        if personal.support >= minimumPersonalSupport,
-           (personal.confidence ?? 0) >= minimumPersonalConfidence {
+        if meetsPersonalEvidenceBar(personal) {
             return .init(candidate: personal, reason: .personalEvidence)
         }
         return .init(candidate: base, reason: .baseFallback)
+    }
+
+    /// The evidence bar a personal candidate must clear before it may
+    /// displace the base ghost. Exposed so a caller that does not yet know
+    /// the base text — the streaming gate, deciding whether a ghost may be
+    /// shown while the personal lookup is still running — can ask the one
+    /// question it can answer early: "could this answer ever win?" The
+    /// thresholds live here only.
+    public static func meetsPersonalEvidenceBar(_ candidate: SuggestionCandidate) -> Bool {
+        candidate.support >= minimumPersonalSupport
+            && (candidate.confidence ?? 0) >= minimumPersonalConfidence
     }
 
     private static func firstWord(_ text: String) -> String? {

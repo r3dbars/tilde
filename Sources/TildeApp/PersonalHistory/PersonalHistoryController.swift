@@ -190,6 +190,14 @@ struct OrderedAsyncTaskTail: Sendable {
 }
 
 final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Sendable {
+    /// How often the trained table is written back. It is a whole-file
+    /// record — hundreds of kilobytes on a well-trained model — so writing
+    /// it on every keystroke batch would be pointless churn. Staleness is
+    /// safe rather than lossy because the saved model names the log position
+    /// it covers and the next launch replays only what came after, so this
+    /// number trades disk writes against replay work, never against learning.
+    static let defaultModelPersistenceInterval: TimeInterval = 20
+
     private let store: any PersonalHistoryStore
     private let settings: TildeSettings
     private let operations: PersistenceOperations
@@ -199,7 +207,9 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     init(
         store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
         settings: TildeSettings = TildeSettings(),
-        diagnostics: DiagnosticsLog = .shared
+        diagnostics: DiagnosticsLog = .shared,
+        modelPersistenceInterval: TimeInterval
+            = PersonalHistoryController.defaultModelPersistenceInterval
     ) {
         self.store = store
         self.settings = settings
@@ -223,7 +233,9 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             store: store,
             historyIdentifier: historyIdentifier,
             configurationState: initialConfiguration,
-            storageHealthState: storageHealthState
+            storageHealthState: storageHealthState,
+            diagnostics: diagnostics,
+            modelPersistenceInterval: modelPersistenceInterval
         )
         let configuration = initialConfiguration.snapshot()
         if configuration.enabled {
@@ -349,6 +361,8 @@ private actor PersistenceOperations {
     private let store: any PersonalHistoryStore
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
+    private let diagnostics: DiagnosticsLog
+    private let modelPersistenceInterval: TimeInterval
     private var historyIdentifier: String
     private var nextWord = PersonalNextWordShadow()
     private var nextWordPhase: PersonalNextWordShadowPhase = .inactive
@@ -357,17 +371,27 @@ private actor PersistenceOperations {
     private var replayBacklogOverflowed = false
     private var ingestOperations = OrderedAsyncTaskTail()
     private var storageOperations = OrderedAsyncTaskTail()
+    /// The newest log position this process has written. `nextWord` has
+    /// consumed every record up to it, so it is exactly the coverage a saved
+    /// trained table may claim.
+    private var lastAppendedSequence: Int64 = 0
+    private var lastModelSaveUptime: TimeInterval?
+    private var modelSaveFailing = false
 
     init(
         store: any PersonalHistoryStore,
         historyIdentifier: String,
         configurationState: PersonalHistoryConfigurationState,
-        storageHealthState: PersonalHistoryStorageHealthState
+        storageHealthState: PersonalHistoryStorageHealthState,
+        diagnostics: DiagnosticsLog,
+        modelPersistenceInterval: TimeInterval
     ) {
         self.store = store
         self.historyIdentifier = historyIdentifier
         self.configurationState = configurationState
         self.storageHealthState = storageHealthState
+        self.diagnostics = diagnostics
+        self.modelPersistenceInterval = modelPersistenceInterval
     }
 
     func ingest(
@@ -415,8 +439,9 @@ private actor PersistenceOperations {
         let append = storageOperations.enqueue {
             try await store.append(allowed, checkpoint: checkpointToStore)
         }
+        let appendedSequence: Int64
         do {
-            try await append.value
+            appendedSequence = try await append.value
             guard configurationState.snapshot() == configuration else { return }
             storageHealthState.recordSuccess()
         } catch {
@@ -424,6 +449,7 @@ private actor PersistenceOperations {
             storageHealthState.recordFailure(error)
             throw error
         }
+        lastAppendedSequence = max(lastAppendedSequence, appendedSequence)
 
         guard configurationState.snapshot() == configuration else { return }
         if configuration.revision > configurationRevision {
@@ -447,10 +473,57 @@ private actor PersistenceOperations {
                 // was in flight. Warm from the durable batch without scoring it.
                 nextWord.consume(allowed, scoring: false)
             }
+            await persistTrainedModelIfDue(configuration: configuration)
         case .inactive:
             break
         case .unavailable:
             break
+        }
+    }
+
+    /// Writes the trained table back into the encrypted store, throttled.
+    /// `nextWord` has now consumed every record up to `lastAppendedSequence`,
+    /// so that is exactly the coverage the saved model may claim.
+    ///
+    /// A failed save never fails the ingest — the events themselves are
+    /// already durable, and the model is derived state that a replay can
+    /// rebuild. It stays legible as its own count-only diagnostic rather
+    /// than as "History: not saving", which would be untrue.
+    private func persistTrainedModelIfDue(
+        configuration: PersonalHistoryConfiguration
+    ) async {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let lastModelSaveUptime,
+           now - lastModelSaveUptime < modelPersistenceInterval,
+           now >= lastModelSaveUptime {
+            return
+        }
+        lastModelSaveUptime = now
+        let coverage = lastAppendedSequence
+        let stored = PersonalNextWordStoredModel(
+            historyIdentifier: historyIdentifier,
+            experimentIdentifier: configuration.experimentIdentifier,
+            excludedApps: configuration.excludedApps,
+            coveredThroughSequence: coverage,
+            model: nextWord.trainedModel
+        )
+        let store = store
+        let save = storageOperations.enqueue { try await store.saveTrainedModel(stored) }
+        do {
+            try await save.value
+            guard configurationState.snapshot() == configuration else { return }
+            if modelSaveFailing {
+                modelSaveFailing = false
+                diagnostics.record("personal-model-save-recovered")
+            }
+        } catch {
+            guard configurationState.snapshot() == configuration, !modelSaveFailing else { return }
+            modelSaveFailing = true
+            diagnostics.record(
+                "personal-model-save-failed",
+                metadata: ["reason": PersonalHistoryStorageHealth.failure(error: error)?.rawValue
+                    ?? "internal-error"]
+            )
         }
     }
 
@@ -485,10 +558,6 @@ private actor PersistenceOperations {
         guard configurationRevision == configuration.revision,
               configurationState.snapshot() == configuration,
               !replayBacklogOverflowed else { return }
-        let events = replay.events.filter {
-            $0.historyIdentifier == historyIdentifier
-                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
-        }
         let stored = replay.checkpoint?.matches(
             historyIdentifier: historyIdentifier,
             experimentIdentifier: configuration.experimentIdentifier,
@@ -496,11 +565,35 @@ private actor PersistenceOperations {
         ) == true ? replay.checkpoint : nil
         var rebuilt = stored.flatMap { PersonalNextWordShadow(checkpoint: $0.checkpoint) }
             ?? PersonalNextWordShadow()
+        // The trained table, when one was saved under this exact scope, is
+        // put back instead of being relearned from a bounded tail of raw
+        // history — which is what used to silently reset learning on every
+        // launch. It names the log position it already accounts for, so the
+        // replay below picks up exactly the records written after it: a
+        // restore followed by that catch-up is the same model a full rebuild
+        // would have produced.
+        let storedModel = replay.trainedModel?.matches(
+            historyIdentifier: historyIdentifier,
+            experimentIdentifier: configuration.experimentIdentifier,
+            excludedApps: configuration.excludedApps
+        ) == true ? replay.trainedModel : nil
+        var coverage: Int64 = 0
+        if let storedModel, rebuilt.restore(storedModel.model) {
+            coverage = storedModel.coveredThroughSequence
+        }
+        let events = replay.events(after: coverage).filter {
+            $0.historyIdentifier == historyIdentifier
+                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        }
         rebuilt.consume(events, scoring: false)
         rebuilt.consume(replayBacklog, scoring: false)
         guard configurationRevision == configuration.revision,
               configurationState.snapshot() == configuration else { return }
         replayBacklog.removeAll(keepingCapacity: true)
+        lastAppendedSequence = max(
+            lastAppendedSequence,
+            replay.records.map(\.sequence).max() ?? 0
+        )
         nextWord = rebuilt
         nextWordPhase = .ready
     }
@@ -552,6 +645,11 @@ private actor PersistenceOperations {
         nextWord.reset()
         nextWordPhase = .inactive
         historyIdentifier = nextHistoryIdentifier
+        // The log and the trained table both go; positions restart with the
+        // new store, so no stale coverage can survive the deletion.
+        lastAppendedSequence = 0
+        lastModelSaveUptime = nil
+        modelSaveFailing = false
         let store = store
         let deletion = storageOperations.enqueue { try await store.deleteAll() }
         try await deletion.value

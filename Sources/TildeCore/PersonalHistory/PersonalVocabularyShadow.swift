@@ -314,6 +314,169 @@ public struct PersonalNextWordShadowCheckpoint: Codable, Equatable, Sendable {
     }
 }
 
+/// The trained next-word model itself: the context→target count table the
+/// serving lookup reads, plus the per-stream parser state that decides how the
+/// next keystroke extends it.
+///
+/// Until this existed, only `PersonalNextWordShadowCheckpoint`'s paired
+/// aggregate counters were durable, and the table was rebuilt on every launch
+/// from a bounded tail of raw history — so everything learned beyond that tail
+/// quietly disappeared. Persisting it is only safe if a restore is
+/// indistinguishable from that rebuild, which is why the streams travel with
+/// the table: a restart in the middle of a sentence must not reset the context
+/// words, the half-typed token, or the censoring state.
+///
+/// It carries writing (learned words and the words being typed) and so is only
+/// ever written to the same owner-only encrypted store as the history log, and
+/// never to a log, diagnostic, or report.
+public struct PersonalNextWordTrainedModel: Codable, Equatable, Sendable {
+    public static let version = 1
+
+    public struct Transition: Codable, Equatable, Sendable {
+        public let word: String
+        public let count: Int
+    }
+
+    public struct Context: Codable, Equatable, Sendable {
+        public let tokens: [String]
+        public let transitions: [Transition]
+        public let total: Int
+        public let top: String?
+        public let runner: String?
+    }
+
+    public struct Stream: Codable, Equatable, Sendable {
+        public let historyIdentifier: String
+        public let consentIdentifier: String
+        public let sessionIdentifier: String
+        public let appBundleIdentifier: String
+        public let token: String
+        public let tokenTooLong: Bool
+        public let censored: Bool
+        public let context: [String]
+        public let hasOpportunity: Bool
+        public let baselinePrediction: String?
+        public let candidatePrediction: String?
+        public let lastTimestampMilliseconds: Int64?
+    }
+
+    public let v: Int
+    /// The learning recipe the table was built with. A recipe change means the
+    /// counts no longer mean what a restore would assume, so the model is
+    /// discarded and rebuilt rather than misread.
+    public let recipeID: String
+    public let contexts: [Context]
+    public let streams: [Stream]
+    public let transitionCount: Int
+    public let capacityLimited: Bool
+    public let everCapacityLimited: Bool
+
+    init(
+        contexts: [Context],
+        streams: [Stream],
+        transitionCount: Int,
+        capacityLimited: Bool,
+        everCapacityLimited: Bool
+    ) {
+        v = Self.version
+        recipeID = PersonalNextWordShadow.recipeID
+        self.contexts = contexts
+        self.streams = streams
+        self.transitionCount = transitionCount
+        self.capacityLimited = capacityLimited
+        self.everCapacityLimited = everCapacityLimited
+    }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        v = try container.decode(Int.self)
+        recipeID = try container.decode(String.self)
+        contexts = try container.decode([Context].self)
+        streams = try container.decode([Stream].self)
+        transitionCount = try container.decode(Int.self)
+        capacityLimited = try container.decode(Bool.self)
+        everCapacityLimited = try container.decode(Bool.self)
+        guard container.isAtEnd, isStructurallyValid else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: decoder.codingPath, debugDescription: "Invalid trained model")
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(v)
+        try container.encode(recipeID)
+        try container.encode(contexts)
+        try container.encode(streams)
+        try container.encode(transitionCount)
+        try container.encode(capacityLimited)
+        try container.encode(everCapacityLimited)
+    }
+
+    /// A schema or recipe change rebuilds instead of misreading a table whose
+    /// counts were produced by different rules.
+    public var isCompatibleWithCurrentRecipe: Bool {
+        v == Self.version && recipeID == PersonalNextWordShadow.recipeID
+    }
+
+    var isStructurallyValid: Bool {
+        guard v > 0,
+              PersonalHistoryEvent.validIdentifier(recipeID),
+              transitionCount >= 0,
+              transitionCount <= PersonalNextWordShadow.maximumTransitions,
+              contexts.count <= PersonalNextWordShadow.maximumContexts,
+              streams.count <= PersonalNextWordShadow.maximumActiveStreams else { return false }
+        var contextKeys = Set<[String]>()
+        var transitions = 0
+        for context in contexts {
+            guard context.tokens.count <= PersonalNextWordShadow.maximumContextWords,
+                  context.tokens.allSatisfy(Self.isValidToken),
+                  contextKeys.insert(context.tokens).inserted,
+                  !context.transitions.isEmpty,
+                  context.total >= 0 else { return false }
+            var words = Set<String>()
+            var largest = 0
+            for transition in context.transitions {
+                guard transition.count > 0,
+                      Self.isValidToken(transition.word),
+                      words.insert(transition.word).inserted else { return false }
+                largest = max(largest, transition.count)
+            }
+            guard context.total >= largest else { return false }
+            guard context.top.map({ words.contains($0) }) ?? context.transitions.isEmpty,
+                  context.runner.map({ words.contains($0) && $0 != context.top }) ?? true,
+                  context.runner == nil || context.top != nil else { return false }
+            transitions += context.transitions.count
+            guard transitions <= PersonalNextWordShadow.maximumTransitions else { return false }
+        }
+        guard transitions == transitionCount else { return false }
+        var streamKeys = Set<[String]>()
+        for stream in streams {
+            guard PersonalHistoryEvent.validIdentifier(stream.historyIdentifier),
+                  PersonalHistoryEvent.validIdentifier(stream.consentIdentifier),
+                  PersonalHistoryEvent.validIdentifier(stream.sessionIdentifier),
+                  PersonalHistoryEvent.validBundleIdentifier(stream.appBundleIdentifier),
+                  streamKeys.insert([
+                      stream.historyIdentifier, stream.consentIdentifier,
+                      stream.sessionIdentifier, stream.appBundleIdentifier,
+                  ]).inserted,
+                  stream.token.unicodeScalars.count <= PersonalNextWordShadow.maximumTokenCharacters,
+                  stream.context.count <= PersonalNextWordShadow.maximumContextWords,
+                  stream.context.allSatisfy(Self.isValidToken),
+                  stream.baselinePrediction.map(Self.isValidToken) ?? true,
+                  stream.candidatePrediction.map(Self.isValidToken) ?? true,
+                  stream.lastTimestampMilliseconds.map({ $0 >= 0 }) ?? true else { return false }
+        }
+        return true
+    }
+
+    private static func isValidToken(_ token: String) -> Bool {
+        !token.isEmpty
+            && token.unicodeScalars.count <= PersonalNextWordShadow.maximumTokenCharacters
+    }
+}
+
 /// Aggregate-only result of the paired local next-word experiment.
 public struct PersonalNextWordShadowSnapshot: Equatable, Sendable {
     // Candidate aliases retained for the original live shadow API.
@@ -391,8 +554,8 @@ public struct PersonalNextWordShadow: Sendable {
     static let maximumRecentEventIDs = 2_048
     static let maximumActiveDays = 64
     static let dayMilliseconds: Int64 = 24 * 60 * 60 * 1_000
-    private static let maximumContextWords = 4
-    private static let maximumTokenCharacters = 30
+    static let maximumContextWords = 4
+    static let maximumTokenCharacters = 30
     private static let minimumWinnerSupport = 2
     private static let streamGapMilliseconds: Int64 = 30 * 60 * 1_000
 
@@ -490,6 +653,114 @@ public struct PersonalNextWordShadow: Sendable {
             },
             everCapacityLimited: everCapacityLimited || capacityLimited
         )!
+    }
+
+    /// The durable form of everything training has produced. Deterministic
+    /// (contexts and transitions in a fixed order) so two shadows that would
+    /// predict identically also serialize identically.
+    ///
+    /// `recentEventIDs` is deliberately absent: it is a within-session guard
+    /// against the same event being consumed twice (a startup replay
+    /// overlapping the batch that was appended during it), and both consumes
+    /// always happen on one live shadow. It is not part of what was learned.
+    public var trainedModel: PersonalNextWordTrainedModel {
+        let contexts = model.keys
+            .sorted { Self.tokensPrecede($0.tokens, $1.tokens) }
+            .map { key -> PersonalNextWordTrainedModel.Context in
+                let bag = model[key]!
+                return PersonalNextWordTrainedModel.Context(
+                    tokens: key.tokens,
+                    transitions: bag.counts.keys
+                        .sorted(by: Self.surfacePrecedes)
+                        .map { .init(word: $0, count: bag.counts[$0]!) },
+                    total: bag.total,
+                    top: bag.top,
+                    runner: bag.runner
+                )
+            }
+        let streams = streamOrder.compactMap { key -> PersonalNextWordTrainedModel.Stream? in
+            guard let state = self.streams[key] else { return nil }
+            return PersonalNextWordTrainedModel.Stream(
+                historyIdentifier: key.history,
+                consentIdentifier: key.consent,
+                sessionIdentifier: key.session,
+                appBundleIdentifier: key.app,
+                token: state.token,
+                tokenTooLong: state.tokenTooLong,
+                censored: state.censored,
+                context: state.context,
+                hasOpportunity: state.hasOpportunity,
+                baselinePrediction: state.predictions.baseline,
+                candidatePrediction: state.predictions.candidate,
+                lastTimestampMilliseconds: state.lastTimestampMilliseconds
+            )
+        }
+        return PersonalNextWordTrainedModel(
+            contexts: contexts,
+            streams: streams,
+            transitionCount: transitionCount,
+            capacityLimited: capacityLimited,
+            everCapacityLimited: everCapacityLimited
+        )
+    }
+
+    /// Puts a persisted table back, leaving the paired aggregate counters
+    /// (which travel in `PersonalNextWordShadowCheckpoint`) untouched.
+    /// Returns false — and changes nothing — for a model from another recipe
+    /// or schema, so the caller falls back to rebuilding from raw history.
+    @discardableResult
+    public mutating func restore(_ trained: PersonalNextWordTrainedModel) -> Bool {
+        guard trained.isCompatibleWithCurrentRecipe, trained.isStructurallyValid else {
+            return false
+        }
+        var restored: [ContextKey: TargetBag] = [:]
+        restored.reserveCapacity(trained.contexts.count)
+        for context in trained.contexts {
+            var bag = TargetBag()
+            bag.counts = Dictionary(
+                uniqueKeysWithValues: context.transitions.map { ($0.word, $0.count) }
+            )
+            bag.total = context.total
+            bag.top = context.top
+            bag.runner = context.runner
+            restored[ContextKey(tokens: context.tokens)] = bag
+        }
+        model = restored
+        transitionCount = trained.transitionCount
+        capacityLimited = trained.capacityLimited
+        everCapacityLimited = trained.everCapacityLimited
+        streams = [:]
+        streamOrder = []
+        for stream in trained.streams {
+            let key = StreamKey(
+                history: stream.historyIdentifier,
+                consent: stream.consentIdentifier,
+                session: stream.sessionIdentifier,
+                app: stream.appBundleIdentifier
+            )
+            var state = StreamState()
+            state.token = stream.token
+            state.tokenTooLong = stream.tokenTooLong
+            state.censored = stream.censored
+            state.context = stream.context
+            state.hasOpportunity = stream.hasOpportunity
+            state.predictions = Predictions(
+                baseline: stream.baselinePrediction,
+                candidate: stream.candidatePrediction
+            )
+            state.lastTimestampMilliseconds = stream.lastTimestampMilliseconds
+            streams[key] = state
+            streamOrder.append(key)
+        }
+        return true
+    }
+
+    private static func tokensPrecede(_ left: [String], _ right: [String]) -> Bool {
+        if left.count != right.count { return left.count < right.count }
+        for (leftToken, rightToken) in zip(left, right) where leftToken != rightToken {
+            return surfacePrecedes(leftToken, rightToken)
+        }
+        return false
     }
 
     public var snapshot: PersonalNextWordShadowSnapshot {
