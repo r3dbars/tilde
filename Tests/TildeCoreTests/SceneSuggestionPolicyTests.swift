@@ -201,11 +201,43 @@ struct SceneSuggestionPolicyTests {
             textBeforeCursor: longComposer,
             options: anchored
         ) == nil)
-        // A cue at the head no longer rescues a later sentence that has none.
+        // A cue at the head no longer rescues a later sentence that has none,
+        // as long as the paragraph is still only an opening.
         #expect(SceneSuggestionPolicy.suppressionReason(
             scene: scene,
-            textBeforeCursor: "Okay. The agenda ",
+            textBeforeCursor: "Okay.\nThe ",
             options: anchored
+        ) == .nonActionableScene)
+        // A paragraph already under way is a started reply, cue or not: a
+        // chained accept in a chat composer must not be silenced after it
+        // ends a sentence.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "Okay. The agenda looks fine ",
+            options: anchored
+        ) == nil)
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "I want to make sure the ",
+            options: anchored
+        ) == nil)
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "Thanks for the update. ",
+            options: anchored
+        ) == nil)
+        // A fresh paragraph with no cue and under three words is still an
+        // opening, so the gate holds.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "Thanks for the update.\nThe ",
+            options: anchored
+        ) == .nonActionableScene)
+        #expect(SceneSuggestionPolicy.currentParagraph(of: "one\ntwo three") == "two three")
+        // Production still reads the head only, so it keeps suppressing here.
+        #expect(SceneSuggestionPolicy.suppressionReason(
+            scene: scene,
+            textBeforeCursor: "I want to make sure the "
         ) == .nonActionableScene)
         // Short fields behave exactly as production.
         #expect(SceneSuggestionPolicy.suppressionReason(

@@ -77,11 +77,7 @@ public enum SceneSuggestionPolicy {
         if !hasEarlierSelfTurn,
            let textBeforeCursor,
            isNonActionableDeclarative(incoming),
-           !hasReplyCue(
-               options.replyCueAnchoredToCurrentSentence
-                   ? currentSentence(of: textBeforeCursor)
-                   : textBeforeCursor
-           ) {
+           !writerHasStartedReply(textBeforeCursor, options: options) {
             return .nonActionableScene
         }
         guard options.extendedOrdinarySilenceGate else { return nil }
@@ -133,6 +129,30 @@ public enum SceneSuggestionPolicy {
     private static func hasReplyCue(_ text: String) -> Bool {
         let phrase = normalizedWords(text).joined(separator: " ")
         return replyPrefixes.contains { phrase == $0 || phrase.hasPrefix($0 + " ") }
+    }
+
+    /// Once the paragraph the writer is in carries this many words they
+    /// have plainly started a reply, cue word or not. The gate exists to
+    /// keep a statement that asked nothing from drawing an opening ghost; it
+    /// was never meant to silence a reply already under way. The paragraph,
+    /// not the sentence: a chained accept in a chat composer routinely ends
+    /// a sentence, and the next request must not be judged on an empty one.
+    static let startedReplyMinimumWords = 3
+
+    /// The non-actionable gate's escape hatch. Production reads a reply cue
+    /// off the head of the whole field. The anchored option reads it off the
+    /// current sentence and also stands down once the current paragraph is
+    /// under way (`startedReplyMinimumWords`).
+    private static func writerHasStartedReply(_ text: String, options: Options) -> Bool {
+        guard options.replyCueAnchoredToCurrentSentence else { return hasReplyCue(text) }
+        return hasReplyCue(currentSentence(of: text))
+            || normalizedWords(currentParagraph(of: text)).count >= startedReplyMinimumWords
+    }
+
+    /// The text after the last line break: the paragraph the writer is in.
+    static func currentParagraph(of text: String) -> String {
+        guard let index = text.lastIndex(where: \.isNewline) else { return text }
+        return String(text[text.index(after: index)...])
     }
 
     /// The text after the last sentence terminator or line break: the
