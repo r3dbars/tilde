@@ -105,6 +105,37 @@
   ],
   "entries": [
     {
+      "id": "tuned-display-stack-helps-gemma-at-half-qwen-gain",
+      "recordedAt": "2026-09-02T15:40:00Z",
+      "area": "display-policy",
+      "status": "rejected",
+      "title": "Gemma does not gain as much as Qwen from the tuned display stack, but it gains clearly",
+      "finding": "Q14 ran the generator-by-policy 2x2 as two paired two-arm campaigns on the certified-v2 development partition, 1,800 evaluations per arm, seeds 17/41/73, the Q11-Q13 generation chain on both models. Tuned (cap 3/42, echo floor 3/24, names-and-numbers grounding) versus conservative (cap 8/80, echo 3/10, grounding off): Gemma 4 E2B bad-when-shown 76.6% to 57.1%, a paired improvement of 0.19 with a root-clustered 95% interval [0.14, 0.25] and P(>0) 100%, useful displays 73 to 199; Qwen 3.5 9B 61.1% to 30.8%, improvement 0.30 [0.26, 0.35], useful 373 to 747. The useful-display guardrail (95% retention) held in both by a wide margin. The registered hypothesis that Gemma gains at least as much as Qwen is rejected: the intervals do not overlap and Gemma's gain is roughly two thirds of Qwen's in points and half in relative terms. Every arm, including both tuned arms, fails the bad-suggestion and latency hard gates under this campaign runtime, so the pair nominates nothing.",
+      "decision": "The tuned stack's direction is generator-independent; its magnitude is not. Promotion of the tuned display stack to the production Gemma default proceeds through the standard path with a Gemma control on the validation partition, with the expectation of a gain near twenty points, not thirty. Do not read a Qwen-only display-policy result as a Gemma number again; every future display-policy campaign carries a Gemma arm.",
+      "comparisonGroupID": null,
+      "evaluationCount": 7200,
+      "metrics": [
+        { "subjectID": "gemma-conservative", "key": "bad-when-shown", "value": 76.6, "unit": "percent" },
+        { "subjectID": "gemma-tuned", "key": "bad-when-shown", "value": 57.1, "unit": "percent" },
+        { "subjectID": "qwen-conservative", "key": "bad-when-shown", "value": 61.1, "unit": "percent" },
+        { "subjectID": "qwen-tuned", "key": "bad-when-shown", "value": 30.8, "unit": "percent" },
+        { "subjectID": "gemma-tuned", "key": "useful-displays", "value": 199, "unit": "displays" },
+        { "subjectID": "gemma-conservative", "key": "useful-displays", "value": 73, "unit": "displays" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/experiments/Q14-generator-by-policy-2x2.md" },
+        { "kind": "documentation", "id": "docs/research/lab-log.md" },
+        { "kind": "source-file", "id": "Sources/TildeCore/Runtime/TildeConfiguration.swift" }
+      ],
+      "limitations": [
+        "Development partition; the generator contrast is unpaired across two campaigns and reads as a difference in differences.",
+        "The generation recipe (temperature 0.10, 12 tokens, confidence 0.475) was selected on Qwen and applied to Gemma unchanged.",
+        "Hard gates fire on every arm under the 8-worker campaign runtime; the latency gate reflects contention, not the product path.",
+        "The tuned stack here omits the anchored reply cue and the window title, which the Lab arm cannot express."
+      ],
+      "tags": ["display-policy", "gemma", "qwen", "generator-by-policy", "no-promotion"]
+    },
+    {
       "id": "fixed-cost-speed-cuts-live-directional",
       "recordedAt": "2026-09-02T01:30:00Z",
       "area": "runtime",

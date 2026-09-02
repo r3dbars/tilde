@@ -10,8 +10,8 @@ struct LabLearningLedgerTests {
 
         #expect(snapshot.schema == LabLearningLedgerCatalog.schema)
         #expect(snapshot.privacy.safeToCheckIn)
-        #expect(snapshot.entries.count == 46)
-        #expect(snapshot.currentLearnings.count == 39)
+        #expect(snapshot.entries.count == 47)
+        #expect(snapshot.currentLearnings.count == 40)
         #expect(snapshot.archivedLearnings.count == 7)
         #expect(snapshot.entries.contains {
             $0.id == "qwen-prefix-cache-tail-target-rejected" && $0.status == .rejected
