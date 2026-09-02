@@ -44,6 +44,11 @@ not finished. The honest version:
   build and are being promoted to the default build through the same tests.
 - It has been tested in the apps I use, which is a shorter list than the
   apps you use. See the [compatibility runbook](docs/compatibility/app-compatibility-runbook.md).
+- In Chrome, Slack, Claude, VS Code, and other Chromium or Electron apps the
+  ghost shows as faintly underlined text rather than grey text. Those apps
+  draw every input method's pending text with an underline and ignore its
+  colour; Tilde keeps the underline as thin and light as they allow. Native
+  apps such as Notes, Mail, and Messages show the grey ghost.
 
 Requirements: an Apple Silicon Mac on macOS 26 or newer, about 3.5 GB of
 disk for the default model, and one trip to System Settings to enable the

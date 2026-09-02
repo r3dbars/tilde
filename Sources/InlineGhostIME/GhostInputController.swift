@@ -607,13 +607,25 @@ final class GhostInputController: IMKInputController {
         }
 
         let spec = InlineGhostColorSpec.markedText
-        let style: [NSAttributedString.Key: Any] = [
+        var style: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: NSColor(
                 calibratedWhite: CGFloat(spec.fillWhite),
                 alpha: CGFloat(spec.fillAlpha)
             ),
         ]
+        // Chromium and Electron ignore a composition's foreground colour and
+        // always draw an underline under it; with no underline attribute of
+        // our own that underline is thick and text-coloured, which is what
+        // makes the ghost read as "underlined text" instead of grey text in
+        // browsers. They do honour the underline's own style and colour, so
+        // in those hosts the marked text carries a thin, faint underline —
+        // the closest a Chromium composition can get to a ghost. Native
+        // editors honour the grey fill and get no underline at all.
+        if usesCalmReveal(for: client.bundleIdentifier() ?? "") {
+            style[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            style[.underlineColor] = NSColor(calibratedWhite: CGFloat(spec.fillWhite), alpha: 0.45)
+        }
         cachedGhostStyle = style
         return style
     }
