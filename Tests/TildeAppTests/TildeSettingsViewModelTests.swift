@@ -118,14 +118,17 @@ struct TildeSettingsViewModelTests {
 private actor EmptyPersonalHistoryStore: PersonalHistoryStore {
     nonisolated let location = URL(fileURLWithPath: "/dev/null")
 
+    @discardableResult
     func append(
         _ events: [PersonalHistoryEvent],
         checkpoint: PersonalNextWordStoredCheckpoint?
-    ) async throws {}
+    ) async throws -> Int64 { 0 }
 
     func loadReplay(maximumBytes: Int64) async throws -> PersonalHistoryReplay {
-        PersonalHistoryReplay(events: [], checkpoint: nil)
+        PersonalHistoryReplay(records: [], checkpoint: nil)
     }
+
+    func saveTrainedModel(_ model: PersonalNextWordStoredModel) async throws {}
 
     func deleteAll() async throws {}
 

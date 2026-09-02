@@ -159,16 +159,16 @@ yet; nothing screen-derived is written to disk by Tilde today.
 **The privacy boundary is the device, not the capture.** Because nothing
 Screen Memory sees ever leaves the Mac, Tilde is designed to capture and
 retain more than a cloud product safely could. On-device-only is
-non-negotiable, but it is not proven the same way autocomplete is: the
-release egress proof (`script/package_app.sh`) still only runs its original
-autocomplete stimulus, so a packaged build's open sockets have never
-actually been observed during a live capture, OCR, or redaction pass. That
-packaged capture-and-redaction stimulus (enable the toggle, trigger a
-synthetic capture and a redaction pass, observe open sockets throughout)
-remains unbuilt. Screen Memory now ships and runs by default without it —
-this is a known gap, not a design choice, and it should be closed before the
-next release; until it is, Screen Memory's on-device-only claim rests on
-code review and manual testing rather than a blocking, packaged proof.
+non-negotiable, and it is proven the same way autocomplete is: the release
+egress proof (`script/package_app.sh`) runs a packaged capture-and-redaction
+stimulus inside the observed window — a synthetic conversation is
+classified, a scene-bearing prompt is completed, and a redaction pass runs
+while every open socket of the packaged app is observed — and
+`script/check_runtime_network_egress.py --stimulus-proof` refuses the
+release unless that stimulus report was written during the observation and
+shows the redacted outcome. The stimulus is synthetic by construction; it
+does not exercise a real user's screen, so the proof covers the code path,
+not every screen that path may see.
 
 **What is captured.** With Screen Memory enabled, Tilde takes a full-display
 screenshot, runs on-device OCR (Vision framework) over it, and keeps only the
