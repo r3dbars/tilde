@@ -79,7 +79,10 @@ public struct InlineSuggestionState: Equatable, Sendable {
             boundedContext: String,
             utf16Limit: Int
         )
-        case acceptAll(current: InlineSuggestionTicket?)
+        /// `appendsSeparator` moves the following space into the inserted
+        /// text, the way a word accept already does, so the writer can keep
+        /// typing (or a chained request can fire) without pressing space.
+        case acceptAll(current: InlineSuggestionTicket?, appendsSeparator: Bool = false)
         /// Dismisses only the request that still owns pending or visible
         /// state. A late callback cannot erase a newer request.
         case dismissTicket(InlineSuggestionTicket)
@@ -203,7 +206,7 @@ public struct InlineSuggestionState: Equatable, Sendable {
             if recordAccepted { effects.append(.accepted) }
             return effects
 
-        case let .acceptAll(current):
+        case let .acceptAll(current, appendsSeparator):
             pendingTicket = nil
             guard isVisible, let current, visibleTicket == current else {
                 let effects: [Effect] = isVisible ? [.hide] : []
@@ -211,7 +214,9 @@ public struct InlineSuggestionState: Equatable, Sendable {
                 visibleTicket = nil
                 return effects
             }
-            let accepted = visibleText
+            let accepted = appendsSeparator && visibleText.last?.isWhitespace != true
+                ? visibleText + " "
+                : visibleText
             visibleText = ""
             visibleTicket = nil
             presentationAccepted = true

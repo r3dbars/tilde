@@ -11,7 +11,13 @@ struct ProfileSceneOptionsTests {
         for profile in [TildeProductProfile.production, .preview26B, .modelPreview] {
             #expect(profile.sceneSuggestionOptions == .production)
             #expect(!profile.includesWindowTitleInScene)
+            #expect(!profile.chainsCompletionAfterAccept)
         }
+    }
+
+    @Test("Only the 9B preview chains a new request after a consumed accept")
+    func preview9BChains() {
+        #expect(TildeProductProfile.preview9B.chainsCompletionAfterAccept)
     }
 
     @Test("The 9B preview anchors the reply cue and includes the window title")
