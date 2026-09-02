@@ -1,0 +1,149 @@
+# Tilde: how it works and how to build it
+
+This is the long version of the [README](../README.md).
+
+## How it works
+
+Tilde is three small pieces:
+
+1. **The keyboard** (`InlineGhostIME`) handles your keystrokes and draws the
+   ghost as marked text inside the app you are typing in. It never inserts
+   text through Accessibility, overlays, or fake paste events.
+2. **The app** in the menu bar takes a bounded slice of what you typed, adds
+   what it can see on screen, asks the model, filters the answer, and sends
+   back a short suggestion over a private local socket.
+3. **The model** is a signed copy of `llama-server` running as a child of
+   the app, with one of two pinned open-weight models downloaded on first
+   run and verified byte for byte:
+   - **Gemma 4 E2B** (default, 3.4 GB) — lighter, measured.
+   - **Qwen 3.5 9B** (optional, 5.6 GB) — stronger, needs more memory,
+     still under study.
+
+Typed text, screen text, and model output stay in memory and are gone when
+the request is done. If you turn on Personal History, what you write is
+stored on your Mac in an encrypted log whose size you can see, that you can
+exclude apps from, and that you can delete with one click. [PRIVACY.md](../PRIVACY.md) has the full boundary.
+
+## How I know it works
+
+Every change to what Tilde shows goes through a research harness in this
+repository called Tilde Lab. Experiments are registered with a kill rule
+before they run, results are written down whether they won or lost, and
+nothing reaches the default build without a measured comparison against the
+build it replaces.
+
+- [Experiment records](experiments/README.md) — Q11 to Q14 are the
+  chain that took wrong-when-shown on the tuned stack from the forties into
+  the teens. Q13 is the one that killed my own favourite idea, longer ghosts.
+- [The lab log](research/lab-log.md) — every attempt: what was tried,
+  what was learned, what failed, written the same day.
+- [The learning ledger](learning-ledger.md) — the reusable lessons and
+  the ordered queue of what may run next.
+- The live outcome ledger — a text-free record of every ghost shown and
+  every silence, with its reason, kept on your Mac and never uploaded.
+
+## Two parts, one repository
+
+| Name | Purpose | Ships to users? |
+| --- | --- | --- |
+| **Tilde** | The macOS input method and its local runtime | **Yes** |
+| **Tilde Lab** | The app and command-line tools used to test and improve Tilde | **No** |
+
+The boundary is enforced by Swift package dependencies: Tilde Lab may use
+`TildeCore`, but the app and keyboard never import anything from Tilde Lab.
+See the [repository boundary map](repository-boundary.md).
+
+### Pinned model assets
+
+The picker offers exactly two immutable files and needs no Hugging Face login:
+
+- `https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf`
+  — 3,427,861,984 bytes; SHA-256
+  `389c868898bffed97fd178646f88562cafecc6f60983a636bac53b131fd068a2`
+- `https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF/resolve/ec5c6b42ca313fc71afe4a40b068d3f7026bf4f6/Qwen3.5-9B-Base.Q4_K_M.gguf`
+  — 5,629,109,312 bytes; SHA-256
+  `4171d5fec62a373744ca4f01ec9e2378c092a65f480c039e9c679d910351fda2`
+
+The first-run download is the only network request Tilde ever makes. It
+sends no typed text, screen text, prompt, history, or model output.
+
+## Development
+
+The project is a Swift 6.2 package with no Xcode project file.
+
+```bash
+./script/proof.sh fast
+./script/build_and_run.sh
+./script/build_ime.sh
+```
+
+The two build scripts create development bundles; they do not contain the
+release model or helper. By default, both require the one eligible Apple
+Development identity in the keychain, so the app and IME receive matching,
+non-empty Team IDs. If multiple identities exist, pass the same exact SHA-1 to
+both with `--sign-identity`. Explicit `--sign-identity -` builds ad hoc bundles,
+which cannot exercise the authenticated app-to-IME runtime.
+`script/proof.sh fast` is the pre-merge gate.
+`script/package_app.sh` is the single manual release driver. It requires the
+helper hash and explicitly named Gemma and Qwen proof-model preseeds. Both are
+checked against their revisions, byte counts, and SHA-256 pins above, copied
+only into isolated external proof storage, and never into the signed app. The
+driver exercises both selections and then blocks on bundle shape, helper/IME signatures, runtime health,
+steady-state open-socket observation, notarization, Gatekeeper checks, and a
+32 MiB hard cap on the signed app artifact. Run
+`./script/package_app.sh --help` for the full command. The pins must come from
+human review: matching bytes and valid file shapes do not prove provenance.
+
+For private, aggregate-only model comparisons, see the
+[evaluation guide](evaluation.md).
+
+Tilde Lab is the separate local regression studio for reply quality, judgment,
+Scene Memory, synthetic personalization, real text-system interaction, and
+performance experiments. It runs reproducible multi-arm suites through the
+pinned loopback-only Gemma runtime, includes deterministic policy audits and an
+instrumented AppKit Scene Host, and persists aggregate-only reports for
+baseline/candidate comparison. Its locked headline is **Net Keystrokes Saved**,
+with safety, bad-suggestion, temporal-integrity, privacy, interaction, and
+latency gates outside the number. The `tilde-lab` CLI adds durable
+work-item resume, interleaved paired blocks, a hard development/validation/
+holdout firewall, root-clustered uncertainty, risk–coverage, chronological
+personalization, local dogfood/attention-tax and confidence calibration,
+real-host evidence, soak gates, and immutable permanent regressions. It
+includes a 300-case protected curated
+Slack pack with prefix replay/context ablations, the 400-case synthetic quiz,
+and a read-only development-only importer for private accepted/typed-instead
+history:
+
+```bash
+./script/build_and_run.sh --tilde-lab
+swift build --product tilde-lab
+.build/debug/tilde-lab init --name qwen-factorial --hypothesis-id QWEN-GEN-01 --hypothesis "The registered treatment improves expected utility without increasing harm." --class generator --suite certified-v2 --output campaign.json
+.build/debug/tilde-lab run campaign.json --resume
+.build/debug/tilde-lab review --campaign campaign.json --status supported --conclusion "The preregistered criteria passed; see the experiment record."
+.build/debug/tilde-lab compare --campaign campaign.json
+swift run tilde-lab-runner --workers 1 --slots 8 --repetitions 10
+swift run tilde-lab-runner --built-in-suite slack-reply-gold-v1
+swift run tilde-lab-runner --manifest ./candidate-matrix.tilde-lab.json
+```
+
+See the [Tilde Lab guide](tilde-lab.md) for the complete knob manifest,
+score and privacy contracts, scenario format, matrix runner, and the boundary
+between high-throughput model evidence and foreground real-IME proof. The
+[Tilde Learning Ledger](learning-ledger.md) preserves what experiments
+taught us, why candidates were kept or rejected, and what should be tested next.
+The [research roadmap](research-roadmap.md) sequences the longer-term
+hypotheses behind that queue, while [experiment records](experiments/README.md)
+define the public pre-registration and result format.
+
+The code follows the same two-part boundary:
+
+- **Tilde:** `Sources/TildeCore`, `Sources/TildeApp`, and
+  `Sources/InlineGhostIME`.
+- **Tilde Lab:** `Sources/TildeLabKit`, `Sources/TildeLab`,
+  `Sources/TildeLabCLI`, and `Sources/TildeLabRunner`.
+
+The names inside each group describe implementation components, not additional
+products.
+
+Read [AGENTS.md](../AGENTS.md) before changing behavior.
+
