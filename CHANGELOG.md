@@ -3,7 +3,11 @@
 All notable changes to Tilde. Versions follow the app's
 `CFBundleShortVersionString`; the build number is the commit count at packaging.
 
-## Unreleased
+## 0.1.0-beta.1 — 2026-09-02
+
+First downloadable build. Apple Silicon, macOS 26 or newer. The app
+downloads the pinned Gemma 4 E2B model on first run; nothing you type leaves
+your Mac.
 
 ### Added
 - Screen Memory master toggle in Privacy & Data; turning it off drops every held
@@ -28,7 +32,3 @@ All notable changes to Tilde. Versions follow the app's
   outcome ledger.
 - A restore path that would have discarded pre-upgrade personal history.
 - A newer keyboard failing every response from an older app.
-
-## 0.1.0 — unreleased beta
-
-First public beta. See README.md for status and requirements.
