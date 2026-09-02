@@ -72,13 +72,16 @@ final class ScaffoldPrewarmer: @unchecked Sendable {
         warmIfNeeded()
     }
 
-    /// A real completion is running. It owns the slot now, and its own
-    /// prompt decides what the cache holds afterwards, so nothing is assumed
-    /// about which scaffold is warm.
+    /// A real completion is running. It owns the slot now. Its prompt opens
+    /// with the scaffold of its own register, so whatever was warm before
+    /// stays a fair guess: when the writer comes back to an app of the same
+    /// register the prefix is still cached, and a different register warms
+    /// on the switch as usual. Clearing the guess here made the prewarm fire
+    /// after every app switch that followed a completion (56 times in the
+    /// first live hour) for no gain.
     func noteCompletionActivity() {
         let task: Task<Void, Never>? = lock.withLock {
             lastCompletionAt = now()
-            warmedRegister = nil
             defer { inflight = nil }
             return inflight
         }
