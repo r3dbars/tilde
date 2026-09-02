@@ -51,6 +51,34 @@ struct LabProductionEventBridgeTests {
         #expect(bridged.retentionAtSegmentClose == event.retentionAtSegmentClose)
     }
 
+    @Test("The configuration digest rides the live line into the Lab")
+    func configurationDigestBridges() throws {
+        let digest = TildeEffectiveConfiguration.resolve(
+            build: .preview9B, completionProfile: .preview9B, modelIdentifier: "qwen-3.5-9b-base-q4km"
+        ).digestSHA256
+        let opportunity = LiveOnlineOpportunity(
+            shownAt: Date(timeIntervalSince1970: 1_700_000_000),
+            sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "bridge"),
+            appCategory: "chat",
+            register: "chat",
+            boundary: "word-boundary",
+            safeOpportunity: true,
+            candidateCharacters: 6,
+            candidateWordCount: 1,
+            candidateSource: .baseModel,
+            opportunityCharacters: 4,
+            configurationDigestSHA256: digest
+        )
+        let line = try TextFreeOnlineEvent.encodeJSONL(try opportunity.eventWithoutAcceptedSpan())
+        try LabOnlineEventPrivacy.validateJSON(line.dropLast())
+        let bridged = try LabOnlineExperimentEvent.decodeProductionLine(line.dropLast())
+        #expect(bridged.configurationDigestSHA256 == digest)
+        let roundTrip = try JSONDecoder().decode(
+            LabOnlineExperimentEvent.self, from: JSONEncoder().encode(bridged)
+        )
+        #expect(roundTrip.configurationDigestSHA256 == digest)
+    }
+
     @Test("A live line with a Lab-only key does not enter through the production path")
     func labOnlyKeyRefusedOnProductionPath() throws {
         let line = try TextFreeOnlineEvent.encodeJSONL(

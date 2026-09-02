@@ -421,6 +421,24 @@ same zero-then-pending retention shape as a shown-and-ignored ghost, so a
 missing horizon is never a zero. `online-report` already counts hidden and
 unavailable events, deadline misses, and failures by reason.
 
+A sixth rule, the configuration digest (2026-09-02): `TildeProductProfile`
+now names only the build (bundle identifiers, ports, directories). How Tilde
+behaves is three policy objects in `TildeConfiguration.swift` —
+`GeneratorProfile` (model, temperature, token budget), `DecisionPolicy`
+(visible cap, echo floor, grounding, scene gates, window title) and
+`InteractionPolicy` (chained accept, calm reveal floor, punctuation
+boundaries) — assembled by the app into one
+`TildeEffectiveConfiguration` whose `digestSHA256` is the canonical-JSON
+hash of all three. The app stamps the digest and the interaction policy on
+every response line; the keyboard adopts the served interaction policy
+instead of reading its own bundle, so the two processes cannot disagree;
+and every outcome event carries `configurationDigestSHA256`. Production
+with Gemma, production with Qwen (tuned generation and decision,
+conservative interaction), and the 9B preview (tuned everything) are three
+digests, so a report can finally separate the model from the filters from
+the keyboard behaviour it was served with. An event without a digest was
+written before this rule, or before the first response of its session.
+
 A soak requires sustained active duration, enough events, p99 first-stable-word
 at or below one second, zero crashes, timeouts, wrong insertions, committed-text
 corruption, or network egress, and explicit exercise of network denial, memory

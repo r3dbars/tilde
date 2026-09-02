@@ -57,7 +57,8 @@ struct TextFreeCandidateSourceTests {
             generatorMilliseconds: 90,
             firstStableWordMilliseconds: 60,
             nextActionMilliseconds: 300,
-            opportunityCharacters: 4
+            opportunityCharacters: 4,
+            configurationDigestSHA256: String(repeating: "b", count: 64)
         )
         let silentLine = try TextFreeOnlineEvent.encodeJSONL(silent)
         let silentObject = try #require(JSONSerialization.jsonObject(with: silentLine) as? [String: Any])
@@ -91,7 +92,8 @@ struct TextFreeCandidateSourceTests {
             candidateSource: .dictionary,
             opportunityCharacters: 8,
             generatorMilliseconds: 110,
-            firstStableWordMilliseconds: 70
+            firstStableWordMilliseconds: 70,
+            configurationDigestSHA256: String(repeating: "a", count: 64)
         )
         opportunity.noteTyped(at: Date(timeIntervalSince1970: 1_000.5))
         return try opportunity.eventWithoutAcceptedSpan()

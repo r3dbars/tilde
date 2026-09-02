@@ -14,7 +14,10 @@ final class GhostInputController: IMKInputController {
     /// Chained accept: once the ghost is fully consumed by Tab or the whole-
     /// accept key, ask for the next continuation right away. See
     /// `TildeProductProfile.chainsCompletionAfterAccept`.
-    private static let chainsAfterAccept = TildeProductProfile.current.chainsCompletionAfterAccept
+    /// Interaction behaviour comes from the app's served configuration, not
+    /// this bundle: the same request in the same app must never chain,
+    /// reveal, or start on punctuation differently in two processes.
+    private static var chainsAfterAccept: Bool { ServedConfiguration.interaction.chainsCompletionAfterAccept }
     /// The schedule revision of the request a consumed accept chained, while
     /// it is still the live one. A Tab that lands before that ghost appears
     /// is held rather than handed to the host: the writer is mid-chain, and
@@ -40,8 +43,8 @@ final class GhostInputController: IMKInputController {
     /// edge check. Keystroke requests never hit this because the next key
     /// arrives after the host has caught up.
     private static let chainedCalmSettleNanoseconds: UInt64 = 90_000_000
-    private static let calmRevealDelays = TildeProductProfile.current.calmRevealDelays
-    private static let requestsAfterPunctuation = TildeProductProfile.current.requestsAfterPunctuation
+    private static var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays { ServedConfiguration.interaction.calmRevealDelays }
+    private static var requestsAfterPunctuation: Bool { ServedConfiguration.interaction.requestsAfterPunctuation }
 
     struct SlowKeyTiming {
         let totalMilliseconds: Int
@@ -1050,6 +1053,7 @@ final class GhostInputController: IMKInputController {
                     // `present` is what discards a partial that arrives late.
                     let provenance = GhostProvenance(receipt: partial, hostBundleIdentifier: bundleIdentifier)
                     Task { @MainActor [weak self] in
+                        ServedConfiguration.adopt(partial)
                         self?.present(
                             separator + (partial.suggestion ?? ""),
                             ticket: requestTicket,
@@ -1061,6 +1065,7 @@ final class GhostInputController: IMKInputController {
             )
             guard !Task.isCancelled else { return }
             Self.logRoundTrip(startedAt: startedAt, outcome: result.outcome)
+            await MainActor.run { ServedConfiguration.adopt(result) }
             let receipt = GhostDecisionReceipt(result)
             switch result.outcome {
             case .suggestion:
