@@ -1,6 +1,6 @@
 {
   "schema": "tilde-lab.learning-ledger.v1",
-  "updatedAt": "2026-08-29T15:30:00Z",
+  "updatedAt": "2026-09-02T02:00:00Z",
   "mission": "Build the most useful, quiet, fast, private, and trustworthy autocomplete system for macOS by preserving what every experiment actually taught us.",
   "privacy": {
     "aggregateOnly": true,
@@ -104,6 +104,69 @@
     }
   ],
   "entries": [
+    {
+      "id": "fixed-cost-speed-cuts-live-directional",
+      "recordedAt": "2026-09-02T01:30:00Z",
+      "area": "runtime",
+      "status": "directional",
+      "title": "Cutting fixed costs around the model halved the live Qwen 9B tail",
+      "finding": "Four output-identical changes shipped to every profile on 2026-09-01: the helper stream is cut once the display cap has settled the visible text, peer code-signing identities are cached per live process instance, the frontmost register's scaffold is prewarmed and the context window start is quantized, and the installed model is hashed once per process. On the same diagnostics log and Mac, the old build's pooled history versus 91 completions on the new builds moved model latency from 203/381/518 to 122/249/280 milliseconds at p50/p95/p99, first stable word from 89/280/443 to 82/219/227, the socket request total from 125/349/454 to 99/241/260, and the per-request handshake from 6/9/10 to 0/0/4. The stream cut fired on 69 of 91 completions.",
+      "decision": "Keep the four changes as the production control for the 9B path and re-read the report at 200 completions before calling this a live speed result. Speed work on the small model should keep targeting fixed overhead and the host reveal floor, not decode: every latency-hiding mechanism tested so far (prompt cache, branch lattice, early start) engaged and delivered no product value.",
+      "comparisonGroupID": null,
+      "evaluationCount": 91,
+      "metrics": [
+        { "subjectID": "old-build", "key": "model-p99", "value": 518, "unit": "milliseconds" },
+        { "subjectID": "new-builds", "key": "model-p99", "value": 280, "unit": "milliseconds" },
+        { "subjectID": "old-build", "key": "first-stable-word-p95", "value": 280, "unit": "milliseconds" },
+        { "subjectID": "new-builds", "key": "first-stable-word-p95", "value": 219, "unit": "milliseconds" },
+        { "subjectID": "new-builds", "key": "stream-cut-fired", "value": 69, "unit": "completions" }
+      ],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/model-lessons.md" },
+        { "kind": "documentation", "id": "docs/research/platform-audit-2026-09-01.md" },
+        { "kind": "pull-request", "id": "461" },
+        { "kind": "source-file", "id": "Sources/TildeApp/Runtime/LlamaCompletionEngine.swift" },
+        { "kind": "source-file", "id": "Sources/TildeCore/Runtime/ProcessPeerIdentityCache.swift" }
+      ],
+      "limitations": [
+        "Below the 200-completion verdict floor; the old column pools days of mixed load while the new column had the GPU to itself.",
+        "Operational latency only; nothing here measures whether the ghosts were useful or retained.",
+        "One deliberate parity exception: a rejection that depended only on text past the cap no longer silences a suggestion."
+      ],
+      "tags": [
+        "speed",
+        "live-dogfood",
+        "fixed-cost",
+        "no-promotion"
+      ]
+    },
+    {
+      "id": "electron-caret-lag-after-insert",
+      "recordedAt": "2026-09-02T01:45:00Z",
+      "area": "system",
+      "status": "adopted",
+      "title": "Electron hosts report the caret late after an insert; read the field only after it settles",
+      "finding": "A chained request issued immediately after an accepted insert produced no request at all in Claude Desktop while the same code worked in Notes. Electron updates the caret and document length asynchronously after insertText, so the keyboard's immediate read saw the pre-insert caret, judged the just-inserted ghost as trailing text, and bailed at the growing-edge check. Keystroke-driven requests never see this because the next key arrives after the host has caught up. A 90 millisecond settle before the read in calm hosts fixed it live; a second mechanism, the non-actionable scene gate silencing chained requests whose sentence lacked a reply cue, was found first and is a separate lesson.",
+      "decision": "Any request the keyboard issues without a keystroke in between must wait for calm hosts to commit the preceding insert before reading the field, and the keyboard must log why a schedule bailed, reason codes only. Treat a chain that dies in one host and not another as a host-timing question before a policy question.",
+      "comparisonGroupID": null,
+      "evaluationCount": null,
+      "metrics": [],
+      "evidence": [
+        { "kind": "documentation", "id": "docs/research/lab-log.md" },
+        { "kind": "pull-request", "id": "462" },
+        { "kind": "source-file", "id": "Sources/InlineGhostIME/GhostInputController.swift" }
+      ],
+      "limitations": [
+        "The 90 millisecond settle is a value that worked live in Claude Desktop, not a measured minimum, and no other Electron host has been checked.",
+        "The chained accept itself is an owner trial on the preview identity, not a registered interaction result."
+      ],
+      "tags": [
+        "interaction",
+        "electron",
+        "chained-accept",
+        "host-timing"
+      ]
+    },
     {
       "id": "future-lattice-k16-independent-branches-rejected",
       "recordedAt": "2026-08-29T12:05:20Z",
