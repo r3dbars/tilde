@@ -104,8 +104,8 @@ struct ScaffoldPrewarmerTests {
         #expect(recorder.count == 2)
     }
 
-    @Test("A completion forgets what was warm, so the next switch warms even the same register")
-    func completionResetsWarmedRegister() async {
+    @Test("A completion keeps the warm register, so switching within the same register does not re-warm")
+    func completionKeepsWarmedRegister() async {
         let clock = Clock(), recorder = Recorder()
         let prewarmer = make(clock: clock, recorder: recorder)
         prewarmer.noteHelperReady()
@@ -114,6 +114,9 @@ struct ScaffoldPrewarmerTests {
         prewarmer.noteCompletionActivity()
         clock.advance(3)
         prewarmer.noteFrontmostApp(bundleIdentifier: "com.apple.Notes")
+        await prewarmer.settle()
+        #expect(recorder.count == 1)
+        prewarmer.noteFrontmostApp(bundleIdentifier: "com.apple.mail")
         await prewarmer.settle()
         #expect(recorder.count == 2)
     }
