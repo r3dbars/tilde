@@ -415,10 +415,14 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // The gate must learn the answer as soon as it exists rather than
             // after generation finishes; its waiter is released by the same
             // deadline the terminal await uses.
+            // Its clock is the request's, not the 250 ms terminal deadline: a
+            // late answer that still precedes a slow model's first partial
+            // must reach the gate. The waiter leaves the race when this task
+            // is cancelled at the end of the request.
             let personalObserver: Task<Void, Never>? = personalRace.map { race in
                 Task { [weak partials] in
                     if case let .predicted(prediction) = await race.value(
-                        deadlineNanoseconds: Self.personalPredictionDeadlineNanoseconds
+                        deadlineNanoseconds: Self.personalObserverCeilingNanoseconds
                     ) {
                         partials?.resolvePersonal(prediction)
                     }
@@ -454,6 +458,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 personalPrediction = nil
             }
             personalObserver?.cancel()
+            // Whatever the terminal wait decided, the provider's work is over:
+            // a lookup that missed its deadline must not queue behind the
+            // next request's on the shared actor.
+            personalPredictionTask?.cancel()
             if personalSuggestionsEnabled, completionRequest.supportsStreamingResponses {
                 DiagnosticsLog.shared.record(
                     "personal-stream-hold",
@@ -574,6 +582,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// shipped digests for a number no default configuration can reach.
     static let personalStreamHoldNanoseconds: UInt64 = 60_000_000
 
+    /// The streaming observer's ceiling: generous, because it is bounded by
+    /// the request's own lifetime (the observer is cancelled when the
+    /// terminal line is written) and exists only so an abandoned race can
+    /// never hold a waiter forever.
+    static let personalObserverCeilingNanoseconds: UInt64 = 30_000_000_000
+
     /// One arm of the 250ms race actually decided the request; the other
     /// resolving too (or not at all) is irrelevant to the outcome. A plain
     /// `PersonalNextWordPrediction??` cannot tell "the model resolved with
@@ -658,22 +672,28 @@ final class GhostBrainServerHost: @unchecked Sendable {
             for waiter in released { waiter.resume(returning: .predicted(prediction)) }
         }
 
+        /// Resumes with the answer, or `.timedOut` at the deadline or when
+        /// the waiting task is cancelled — either way the waiter is removed.
         func value(deadlineNanoseconds: UInt64) async -> PersonalLookupRaceResult {
             let ticket = UUID()
-            return await withCheckedContinuation { continuation in
-                let immediate: PersonalLookupRaceResult? = lock.withLock {
-                    if let result { return result }
-                    waiters[ticket] = continuation
-                    return nil
+            return await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    let immediate: PersonalLookupRaceResult? = lock.withLock {
+                        if let result { return result }
+                        waiters[ticket] = continuation
+                        return nil
+                    }
+                    if let immediate {
+                        continuation.resume(returning: immediate)
+                        return
+                    }
+                    Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: deadlineNanoseconds)
+                        self?.timeOut(ticket)
+                    }
                 }
-                if let immediate {
-                    continuation.resume(returning: immediate)
-                    return
-                }
-                Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: deadlineNanoseconds)
-                    self?.timeOut(ticket)
-                }
+            } onCancel: {
+                timeOut(ticket)
             }
         }
 

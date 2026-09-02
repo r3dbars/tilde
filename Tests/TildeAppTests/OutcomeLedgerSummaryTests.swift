@@ -259,7 +259,7 @@ struct OutcomeLedgerReasonTests {
         // the line must not claim the whole day was silent.
         #expect(blocked == "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back.")
         #expect(OutcomeLedgerPresentation.heldBackLine(summary: .empty, screenAccessGranted: false)
-            == "Tilde stayed silent today: Screen Access is off. Turn it on to get suggestions back.")
+            == "Screen Access is off now, so Tilde is not suggesting. Turn it on to get suggestions back.")
 
         // A quiet, healthy day says nothing at all.
         #expect(OutcomeLedgerPresentation.heldBackLine(
@@ -307,7 +307,7 @@ struct OutcomeLedgerReasonTests {
             summary: .empty,
             wordsToday: 40,
             screenAccessGranted: false
-        ) == "Screen Access is off — Tilde stays silent")
+        ) == "Screen Access is off now — Tilde is not suggesting")
     }
 
     @Test("The menu bar renders the ledger through the same presentation")

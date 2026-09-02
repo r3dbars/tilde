@@ -1261,8 +1261,7 @@ final class GhostInputController: IMKInputController {
         // took over); a rejected model answer never lends its timings to a
         // dictionary ghost.
         if provenance.source != .dictionary, let receipt = provenance.receipt {
-            let grew = effects.contains { if case .show = $0 { return true } else { return false } }
-            if grew || !wasVisible { GhostOutcomeLedger.noteReceipt(receipt) }
+            GhostOutcomeLedger.noteReceipt(receipt)
         }
     }
 
