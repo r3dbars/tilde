@@ -25,6 +25,12 @@ public enum LabDecisionReason: String, Codable, CaseIterable, Sendable {
     case lowConfidence = "low-confidence"
     case timeout
     case protocolError = "protocol-error"
+    // Live-ledger terminal reasons (`SuggestionDecisionReason`, 2026-09-02).
+    case runtimeUnavailable = "runtime-unavailable"
+    case suggestionsPaused = "suggestions-paused"
+    case fieldTargetLost = "field-target-lost"
+    case supersededByTyping = "superseded-by-typing"
+    case notAtGrowingEdge = "not-at-growing-edge"
 }
 
 extension LabDecisionReason {

@@ -28,12 +28,19 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
     public let acceptedCharacters: Int
     public let replacedCharactersWithin5Seconds: Int
     public let nextActionMilliseconds: Int?
+    /// The app's receipt: model time and time to the first stable word, when
+    /// a model ran for this opportunity.
+    public let generatorMilliseconds: Int?
+    public let firstStableWordMilliseconds: Int?
     public let settledVisibleMilliseconds: Int?
     public let deadlineMissed: Bool
     public let candidateCharacters: Int
     public let candidateSourceBucket: String
     public let candidateLengthBucket: String
     public let championDisagreed: Bool
+    /// `SuggestionDecisionReason` raw value for an opportunity that ended
+    /// without a display; `nil` for a shown ghost.
+    public let guardReason: String?
     public let crashed: Bool
     public let timedOut: Bool
     public let opportunityCharacters: Int
@@ -59,12 +66,15 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         acceptedCharacters: Int,
         replacedCharactersWithin5Seconds: Int = 0,
         nextActionMilliseconds: Int? = nil,
+        generatorMilliseconds: Int? = nil,
+        firstStableWordMilliseconds: Int? = nil,
         settledVisibleMilliseconds: Int? = nil,
         deadlineMissed: Bool = false,
         candidateCharacters: Int,
         candidateSourceBucket: String,
         candidateLengthBucket: String,
         championDisagreed: Bool = false,
+        guardReason: String? = nil,
         crashed: Bool = false,
         timedOut: Bool = false,
         opportunityCharacters: Int,
@@ -90,12 +100,15 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         self.acceptedCharacters = acceptedCharacters
         self.replacedCharactersWithin5Seconds = replacedCharactersWithin5Seconds
         self.nextActionMilliseconds = nextActionMilliseconds
+        self.generatorMilliseconds = generatorMilliseconds
+        self.firstStableWordMilliseconds = firstStableWordMilliseconds
         self.settledVisibleMilliseconds = settledVisibleMilliseconds
         self.deadlineMissed = deadlineMissed
         self.candidateCharacters = candidateCharacters
         self.candidateSourceBucket = candidateSourceBucket
         self.candidateLengthBucket = candidateLengthBucket
         self.championDisagreed = championDisagreed
+        self.guardReason = guardReason
         self.crashed = crashed
         self.timedOut = timedOut
         self.opportunityCharacters = opportunityCharacters
@@ -114,9 +127,10 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         "appCategory", "register", "boundary", "typingSpeedBucket", "safeOpportunity",
         "generated", "displayed", "policyHidden", "outcome",
         "acceptedCharacters", "replacedCharactersWithin5Seconds",
-        "nextActionMilliseconds", "settledVisibleMilliseconds", "deadlineMissed",
+        "nextActionMilliseconds", "generatorMilliseconds", "firstStableWordMilliseconds",
+        "settledVisibleMilliseconds", "deadlineMissed",
         "candidateCharacters", "candidateSourceBucket", "candidateLengthBucket",
-        "championDisagreed", "crashed", "timedOut", "opportunityCharacters",
+        "championDisagreed", "guardReason", "crashed", "timedOut", "opportunityCharacters",
         "retentionAt5Seconds", "retentionAt30Seconds", "retentionAtSegmentClose",
     ]
 
@@ -135,6 +149,56 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(TextFreeOnlineEvent.self, from: data)
+    }
+
+    /// An eligible opportunity that ended without a ghost. `generated` says
+    /// whether the model produced text at all; `policyHidden` and the
+    /// outcome word follow from the reason; the retention horizons are the
+    /// same zero-then-pending shape a shown-and-ignored ghost writes.
+    public static func silent(
+        id: UUID,
+        occurredAt: Date,
+        sessionDigestSHA256: String,
+        variant: String,
+        appCategory: String,
+        register: String,
+        boundary: String,
+        reason: SuggestionDecisionReason,
+        generated: Bool,
+        deadlineMissed: Bool,
+        generatorMilliseconds: Int?,
+        firstStableWordMilliseconds: Int?,
+        nextActionMilliseconds: Int?,
+        opportunityCharacters: Int
+    ) throws -> TextFreeOnlineEvent {
+        TextFreeOnlineEvent(
+            id: id,
+            occurredAt: occurredAt,
+            sessionDigestSHA256: sessionDigestSHA256,
+            variant: variant,
+            appCategory: appCategory,
+            register: register,
+            boundary: boundary,
+            safeOpportunity: true,
+            generated: generated,
+            displayed: false,
+            policyHidden: reason.isPolicyHidden,
+            outcome: reason.silentOutcome,
+            acceptedCharacters: 0,
+            nextActionMilliseconds: nextActionMilliseconds,
+            generatorMilliseconds: generatorMilliseconds,
+            firstStableWordMilliseconds: firstStableWordMilliseconds,
+            deadlineMissed: deadlineMissed,
+            candidateCharacters: 0,
+            candidateSourceBucket: (generated ? TextFreeCandidateSource.baseModel : .unknownLegacy).rawValue,
+            candidateLengthBucket: TextFreeLengthBucket.unknown.rawValue,
+            guardReason: reason.rawValue,
+            timedOut: reason == .timeout,
+            opportunityCharacters: opportunityCharacters,
+            retentionAt5Seconds: try RetainedCharacterObservation(retainedCharacters: 0),
+            retentionAt30Seconds: RetainedCharacterObservation(missingness: .notYetObserved),
+            retentionAtSegmentClose: RetainedCharacterObservation(missingness: .notYetObserved)
+        )
     }
 
     public static func sessionDigest(sessionIdentifier: String) -> String {

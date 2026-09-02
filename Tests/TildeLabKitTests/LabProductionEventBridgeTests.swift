@@ -82,6 +82,57 @@ struct LabProductionEventBridgeTests {
         #expect(authored == 50)
     }
 
+    @Test("Silent opportunities enter the Lab with their reason and count as hidden, unavailable, or late")
+    func silentOpportunitiesReachTheReport() async throws {
+        let cases: [(SuggestionDecisionReason, Bool, Bool)] = [
+            (.nonActionableScene, false, false),   // gate before inference
+            (.sceneEcho, true, false),             // model spoke, policy hid it
+            (.supersededByTyping, true, true),     // answer came too late
+            (.timeout, false, false),              // could not answer
+        ]
+        var events: [LabOnlineExperimentEvent] = []
+        for (reason, generated, late) in cases {
+            let production = try TextFreeOnlineEvent.silent(
+                id: UUID(),
+                occurredAt: Date(timeIntervalSince1970: 1_700_000_000),
+                sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "bridge"),
+                variant: "champion",
+                appCategory: "chat",
+                register: "chat",
+                boundary: "word-boundary",
+                reason: reason,
+                generated: generated,
+                deadlineMissed: late,
+                generatorMilliseconds: generated ? 130 : nil,
+                firstStableWordMilliseconds: generated ? 80 : nil,
+                nextActionMilliseconds: 250,
+                opportunityCharacters: 5
+            )
+            let line = try TextFreeOnlineEvent.encodeJSONL(production)
+            try LabOnlineEventPrivacy.validateJSON(line.dropLast())
+            let bridged = try LabOnlineExperimentEvent.decodeProductionLine(line.dropLast())
+            #expect(bridged.guardReason?.rawValue == reason.rawValue)
+            #expect(bridged.generated == generated)
+            #expect(bridged.policyHidden == reason.isPolicyHidden)
+            #expect(!bridged.displayed)
+            events.append(bridged)
+        }
+        let shown = try LabOnlineExperimentEvent(
+            production: try liveEvent(register: .chat, source: .baseModel, opportunityCharacters: 5)
+        )
+        events.append(shown)
+        let plan = try LabInstrumentCampaign.makePlan(covering: events.map(\.occurredAt))
+        for event in events { try event.validated(for: plan) }
+        let report = try LabOnlineExperimentAnalyzer.analyze(events)
+        #expect(report.events == 5)
+        #expect(report.displayed == 1)
+        #expect(report.policyHidden == 2)
+        #expect(report.failureReasonCounts["superseded-by-typing"] == 1)
+        #expect(report.failureReasonCounts["timeout"] == 2)
+        #expect(report.failureReasonCounts["scene-echo"] == 1)
+        #expect(report.failureReasonCounts["non-actionable-scene"] == 1)
+    }
+
     private func liveEvent(
         register: ContinuationRegister,
         source: TextFreeCandidateSource,

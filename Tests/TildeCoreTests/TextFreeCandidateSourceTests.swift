@@ -35,21 +35,43 @@ struct TextFreeCandidateSourceTests {
 
     @Test("The production event writes exactly its declared keys")
     func encodedKeysMatchAllowedKeys() throws {
-        let event = try sampleEvent()
-        let line = try TextFreeOnlineEvent.encodeJSONL(event)
-        let object = try #require(JSONSerialization.jsonObject(with: line) as? [String: Any])
-        #expect(Set(object.keys) == TextFreeOnlineEvent.allowedKeys)
-        let decoded = try TextFreeOnlineEvent.decodeProductionLine(line.dropLast())
-        #expect(decoded == event)
+        // A shown ghost carries every key but the reason; a silent
+        // opportunity carries the reason. Together they are the contract.
+        let shown = try sampleEvent()
+        let shownLine = try TextFreeOnlineEvent.encodeJSONL(shown)
+        let shownObject = try #require(JSONSerialization.jsonObject(with: shownLine) as? [String: Any])
+        #expect(Set(shownObject.keys) == TextFreeOnlineEvent.allowedKeys.subtracting(["guardReason"]))
+        #expect(try TextFreeOnlineEvent.decodeProductionLine(shownLine.dropLast()) == shown)
+
+        let silent = try TextFreeOnlineEvent.silent(
+            id: UUID(),
+            occurredAt: Date(timeIntervalSince1970: 1_000),
+            sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: "s"),
+            variant: "champion",
+            appCategory: "prose",
+            register: "prose",
+            boundary: "word-boundary",
+            reason: .emptyOutput,
+            generated: false,
+            deadlineMissed: false,
+            generatorMilliseconds: 90,
+            firstStableWordMilliseconds: 60,
+            nextActionMilliseconds: 300,
+            opportunityCharacters: 4
+        )
+        let silentLine = try TextFreeOnlineEvent.encodeJSONL(silent)
+        let silentObject = try #require(JSONSerialization.jsonObject(with: silentLine) as? [String: Any])
+        #expect(Set(silentObject.keys) == TextFreeOnlineEvent.allowedKeys.subtracting(["settledVisibleMilliseconds"]))
+        #expect(Set(shownObject.keys).union(silentObject.keys) == TextFreeOnlineEvent.allowedKeys)
     }
 
     @Test("A live line carrying a Lab-only field is refused by name")
     func labOnlyKeyIsRefused() throws {
         let line = try TextFreeOnlineEvent.encodeJSONL(try sampleEvent())
         var object = try #require(JSONSerialization.jsonObject(with: line) as? [String: Any])
-        object["generatorMilliseconds"] = 42
+        object["cacheHit"] = true
         let data = try JSONSerialization.data(withJSONObject: object)
-        #expect(throws: TextFreeOnlineEventError.unexpectedKey("generatorMilliseconds")) {
+        #expect(throws: TextFreeOnlineEventError.unexpectedKey("cacheHit")) {
             try TextFreeOnlineEvent.decodeProductionLine(data)
         }
     }
@@ -67,7 +89,9 @@ struct TextFreeCandidateSourceTests {
             candidateCharacters: 3,
             candidateWordCount: 1,
             candidateSource: .dictionary,
-            opportunityCharacters: 8
+            opportunityCharacters: 8,
+            generatorMilliseconds: 110,
+            firstStableWordMilliseconds: 70
         )
         opportunity.noteTyped(at: Date(timeIntervalSince1970: 1_000.5))
         return try opportunity.eventWithoutAcceptedSpan()
