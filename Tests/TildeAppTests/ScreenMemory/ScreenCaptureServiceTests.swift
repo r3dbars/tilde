@@ -179,7 +179,7 @@ struct ScreenCaptureServiceTests {
         let slack = "com.tinyspeck.slackmacgap"
         let session = UUID().uuidString
         let service = ScreenCaptureService(
-            enabled: { false },
+            enabled: { true },
             excludedApps: { [] },
             permissionGranted: { false },
             screenLocked: { false },
@@ -289,9 +289,13 @@ struct ScreenCaptureServiceTests {
 
     // MARK: - freshScene (Screen Memory plan Phase 2 PR 2b)
 
+    /// `enabled` is on and `permissionGranted` is off: `freshScene` now
+    /// honors the master toggle itself (an off toggle must not keep serving
+    /// a snapshot taken while it was on), while the missing permission is
+    /// what keeps every one of these tests away from ScreenCaptureKit.
     private func makeService() -> ScreenCaptureService {
         ScreenCaptureService(
-            enabled: { false },
+            enabled: { true },
             excludedApps: { [] },
             permissionGranted: { false },
             screenLocked: { false },
@@ -299,6 +303,101 @@ struct ScreenCaptureServiceTests {
             recognizeText: { _ in [] },
             now: { Date() },
             diagnostics: { _, _ in }
+        )
+    }
+
+    /// Covenant regression for the Settings master toggle: turning Screen
+    /// Memory off has to mean Tilde stops seeing the screen NOW, not once
+    /// the last snapshot ages out of the 20s staleness window.
+    @Test("Turning the master toggle off stops the held snapshot from being served, and clearing drops it")
+    func disablingScreenMemoryStopsServingHeldScene() async {
+        let enabled = LockedFlag(true)
+        let service = ScreenCaptureService(
+            enabled: { enabled.value },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { Date() },
+            diagnostics: { _, _ in }
+        )
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let slack = "com.tinyspeck.slackmacgap"
+        let frame = NormalizedDisplayRect(x: 0, y: 0, width: 1, height: 1)
+        let snapshot = ScreenSnapshot(capturedAt: t0, displayID: 1, blocks: [
+            ScreenSnapshot.TextBlock(
+                text: "want me to grab it for you today?",
+                boundingBox: NormalizedDisplayRect(x: 0.05, y: 0.30, width: 0.35, height: 0.05),
+                windowOwnerBundleIdentifier: slack,
+                windowFrame: frame
+            ),
+            ScreenSnapshot.TextBlock(
+                text: "yes please, that would be great",
+                boundingBox: NormalizedDisplayRect(x: 0.55, y: 0.60, width: 0.35, height: 0.05),
+                windowOwnerBundleIdentifier: slack,
+                windowFrame: frame
+            ),
+        ])
+        await service.setLatestSnapshotForTesting(snapshot)
+        await service.setLatestWindowSnapshotForTesting(snapshot)
+        #expect(
+            await service.freshScene(
+                frontmostBundleID: slack,
+                fieldText: "",
+                now: t0.addingTimeInterval(2)
+            )?.mode == .replying
+        )
+
+        // The toggle alone silences serving, with the snapshot still well
+        // inside the staleness window.
+        enabled.value = false
+        #expect(
+            await service.freshScene(
+                frontmostBundleID: slack,
+                fieldText: "",
+                now: t0.addingTimeInterval(3)
+            ) == nil
+        )
+
+        // And the app's follow-up clears what is still held, so turning the
+        // toggle back on cannot resurrect the old look at the screen.
+        await service.forgetCapturedScreenState(now: t0.addingTimeInterval(3))
+        #expect(await service.latestSnapshot == nil)
+        #expect(await service.latestWindowSnapshot == nil)
+        enabled.value = true
+        #expect(
+            await service.freshScene(
+                frontmostBundleID: slack,
+                fieldText: "",
+                now: t0.addingTimeInterval(4)
+            ) == nil
+        )
+    }
+
+    @Test("Clearing captured state also drops the snapshot the toggle was never off for")
+    func forgettingCapturedStateDropsEverythingHeld() async {
+        let service = makeService()
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = ScreenSnapshot(capturedAt: t0, displayID: 1, blocks: [])
+        await service.setLatestSnapshotForTesting(snapshot)
+        await service.setLatestWindowSnapshotForTesting(snapshot)
+
+        await service.forgetCapturedScreenState(now: t0)
+
+        #expect(await service.latestSnapshot == nil)
+        #expect(await service.latestWindowSnapshot == nil)
+        // A capture that lands after the clear is behind the reset
+        // watermark, so it is the wrong conversation and never served.
+        await service.setLatestSnapshotForTesting(
+            ScreenSnapshot(capturedAt: t0.addingTimeInterval(-1), displayID: 1, blocks: [])
+        )
+        #expect(
+            await service.freshScene(
+                frontmostBundleID: "com.apple.TextEdit",
+                fieldText: "",
+                now: t0
+            ) == nil
         )
     }
 
@@ -420,7 +519,7 @@ struct ScreenCaptureServiceTests {
     func freshSceneLogsCountOnlyDiagnostic() async {
         let (sink, events) = recordingDiagnostics()
         let service = ScreenCaptureService(
-            enabled: { false },
+            enabled: { true },
             excludedApps: { [] },
             permissionGranted: { false },
             screenLocked: { false },
@@ -472,7 +571,7 @@ struct ScreenCaptureServiceTests {
     func freshSceneLogsNothingWithoutASnapshot() async {
         let (sink, events) = recordingDiagnostics()
         let service = ScreenCaptureService(
-            enabled: { false },
+            enabled: { true },
             excludedApps: { [] },
             permissionGranted: { false },
             screenLocked: { false },
@@ -502,7 +601,7 @@ struct ScreenCaptureServiceTests {
     func freshSceneFiltersNewlyExcludedAppBlocks() async {
         let excluded = LockedSet<String>([])
         let service = ScreenCaptureService(
-            enabled: { false },
+            enabled: { true },
             excludedApps: { excluded.value },
             permissionGranted: { false },
             screenLocked: { false },

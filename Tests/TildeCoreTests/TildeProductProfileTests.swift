@@ -97,4 +97,18 @@ struct TildeProductProfileTests {
             !$0.displayName.isEmpty && !$0.approximateSize.isEmpty && !$0.resourceGuidance.isEmpty
         })
     }
+
+    /// The picker must not imply the bigger model is simply the better one.
+    /// Gemma is the model every shipped measurement was taken on; Qwen is
+    /// larger and has not been through the same evidence, and the one line
+    /// each model gets says exactly that.
+    @Test func modelPickerCopyNamesTheMeasuredDefaultAndTheUnstudiedOption() {
+        #expect(TildeModelChoice.gemma4E2B.resourceGuidance.contains("Measured default"))
+        #expect(TildeModelChoice.qwen35B9B.resourceGuidance.contains("still under study"))
+        #expect(TildeModelChoice.qwen35B9B.resourceGuidance.contains("more memory and storage"))
+        // One line, not a paragraph.
+        #expect(TildeModelChoice.allCases.allSatisfy {
+            !$0.resourceGuidance.contains("\n") && $0.resourceGuidance.count <= 60
+        })
+    }
 }

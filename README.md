@@ -6,6 +6,7 @@ Tilde is an open-source macOS input method that offers quiet inline writing
 suggestions. Type normally, then use:
 
 - `Tab` to accept the next word; press it again to keep advancing
+- `~`, the key above `Tab`, to accept the whole visible suggestion at once
 - `Esc` to dismiss
 
 Suggestions are IMKit marked text inside the app where you are writing. Tilde
@@ -45,9 +46,9 @@ Tilde ships as a small signed package:
    not install or run a model server.
 4. `ModelManager` downloads the selected pinned model to Tilde's external
    app-support storage, verifies its exact size and SHA-256, and starts the
-   helper only with that verified path. Gemma 4 E2B is the lower-resource
-   default; Qwen 3.5 9B is the higher-resource option. GGUF files are never
-   part of `Tilde.app`.
+   helper only with that verified path. Gemma 4 E2B is the measured default
+   and uses less memory and storage; Qwen 3.5 9B needs more of both and is
+   still under study. GGUF files are never part of `Tilde.app`.
 
 The official picker offers exactly two immutable assets and requires no
 Hugging Face login:
