@@ -209,6 +209,8 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
     public let candidateLengthBucket: LabCandidateLengthBucket
     public let championDisagreed: Bool
     public let guardReason: LabDecisionReason?
+    /// The production configuration digest the event was served under.
+    public let configurationDigestSHA256: String?
     public let crashed: Bool
     public let timedOut: Bool
     public let opportunityCharacters: Int
@@ -275,6 +277,7 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
         retentionAt5Seconds: RetainedCharacterObservation? = nil,
         retentionAt30Seconds: RetainedCharacterObservation? = nil,
         retentionAtSegmentClose: RetainedCharacterObservation? = nil,
+        configurationDigestSHA256: String? = nil,
         schema: String = LabOnlineExperimentEvent.currentSchema
     ) {
         self.schema = schema
@@ -307,6 +310,7 @@ public struct LabOnlineExperimentEvent: Codable, Equatable, Identifiable, Sendab
             ?? LabCandidateLengthBucket.from(wordCount: confidenceFeatures?.suggestionWords)
         self.championDisagreed = championDisagreed
         self.guardReason = guardReason
+        self.configurationDigestSHA256 = configurationDigestSHA256
         self.crashed = crashed
         self.timedOut = timedOut
         self.opportunityCharacters = opportunityCharacters
@@ -428,7 +432,7 @@ extension LabOnlineExperimentEvent {
         case settledVisibleMilliseconds, recentInterventionCount
         case deadlineMissed, confidence, candidateCharacters
         case candidateSourceBucket, candidateLengthBucket
-        case championDisagreed, guardReason, crashed, timedOut, opportunityCharacters
+        case championDisagreed, guardReason, configurationDigestSHA256, crashed, timedOut, opportunityCharacters
         case wrongInsertionCount, insertionCorruptionCount, networkEgressDetected
         case networkDenied, residentMemoryMegabytes, memoryPressureObserved
         case thermalLevel, runtimeRestarted, sleepWakeObserved, appSwitchObserved
@@ -542,6 +546,9 @@ extension LabOnlineExperimentEvent {
             retentionAt5Seconds: retention5,
             retentionAt30Seconds: retention30,
             retentionAtSegmentClose: retentionSegment,
+            configurationDigestSHA256: try container.decodeIfPresent(
+                String.self, forKey: .configurationDigestSHA256
+            ),
             schema: schema
         )
     }
@@ -571,6 +578,7 @@ extension LabOnlineExperimentEvent {
         try container.encode(candidateCharacters, forKey: .candidateCharacters)
         try container.encode(championDisagreed, forKey: .championDisagreed)
         try container.encodeIfPresent(guardReason, forKey: .guardReason)
+        try container.encodeIfPresent(configurationDigestSHA256, forKey: .configurationDigestSHA256)
         try container.encode(crashed, forKey: .crashed)
         try container.encode(timedOut, forKey: .timedOut)
         try container.encode(opportunityCharacters, forKey: .opportunityCharacters)

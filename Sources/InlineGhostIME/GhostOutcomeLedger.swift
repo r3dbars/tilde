@@ -92,6 +92,7 @@ enum GhostOutcomeLedger {
         lastActivity = time
         lock.unlock()
         let register = receipt?.register ?? open.hostRegister
+        let digest = receipt?.configurationDigest ?? ServedConfiguration.digest
         let elapsed = Int((max(0, time.timeIntervalSince(open.openedAt)) * 1_000).rounded())
         guard let event = try? TextFreeOnlineEvent.silent(
             id: open.id,
@@ -107,7 +108,8 @@ enum GhostOutcomeLedger {
             generatorMilliseconds: receipt?.generatorMilliseconds,
             firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds,
             nextActionMilliseconds: min(300_000, elapsed),
-            opportunityCharacters: opportunityCharacters
+            opportunityCharacters: opportunityCharacters,
+            configurationDigestSHA256: digest
         ) else { return }
         let diary = LocalOutcomeDiaryEntry(
             id: event.id,
@@ -188,7 +190,8 @@ enum GhostOutcomeLedger {
             candidateSource: source,
             opportunityCharacters: opportunityCharacters,
             generatorMilliseconds: receipt?.generatorMilliseconds,
-            firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds
+            firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds,
+            configurationDigestSHA256: receipt?.configurationDigest ?? ServedConfiguration.digest
         )
         lastActivity = time
         lock.unlock()

@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let activeProductionModel: TildeModelChoice?
     private let activePreviewModel: PreviewModelChoice?
     private let completionProductProfile: TildeProductProfile
+    let effectiveConfiguration: TildeEffectiveConfiguration
     private let modelManager: ModelManager
     private let llamaServerHost: LlamaServerProcessHost
     /// Keeps the frontmost app's register scaffold in the helper's prompt
@@ -122,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionsGate: Self.suggestionsGate,
         personalSuggestionsGate: Self.personalSuggestionsGate,
         personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController),
+        configuration: effectiveConfiguration,
         productProfile: completionProductProfile
     )
 
@@ -260,16 +262,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let activePreviewModel = PreviewModelSelection.choice(for: profile)
         self.activeProductionModel = activeProductionModel
         self.activePreviewModel = activePreviewModel
-        self.completionProductProfile = TildeModelSelection.completionProfile(
+        let completionProductProfile = TildeModelSelection.completionProfile(
             for: profile,
             productionChoice: activeProductionModel
         )
-        let modelManager = ModelManager(
-            descriptor: TildeModelSelection.descriptor(
-                for: profile,
-                productionChoice: activeProductionModel
-            )
+        self.completionProductProfile = completionProductProfile
+        let descriptor = TildeModelSelection.descriptor(
+            for: profile,
+            productionChoice: activeProductionModel
         )
+        // One configuration for both processes: the build's interaction
+        // policy, the model choice's generator and decision policies.
+        self.effectiveConfiguration = TildeEffectiveConfiguration.resolve(
+            build: profile,
+            completionProfile: completionProductProfile,
+            modelIdentifier: descriptor.identifier
+        )
+        let modelManager = ModelManager(descriptor: descriptor)
         self.modelManager = modelManager
         self.llamaServerHost = LlamaServerProcessHost(
             port: launchMode.llamaServerPort,

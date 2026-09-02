@@ -13,7 +13,7 @@ import Foundation
 /// share one implementation rather than two that can drift; the Lab judge
 /// calls straight into it.
 public enum FactualGroundingPolicy {
-    public enum Mode: String, Equatable, Sendable {
+    public enum Mode: String, Codable, Equatable, Sendable {
         case off
         case numbersAndNames = "numbers-and-names"
         case allAnchors = "all-anchors"

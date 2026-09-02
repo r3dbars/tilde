@@ -41,6 +41,10 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
     /// `SuggestionDecisionReason` raw value for an opportunity that ended
     /// without a display; `nil` for a shown ghost.
     public let guardReason: String?
+    /// `TildeEffectiveConfiguration.digestSHA256` the app served this
+    /// opportunity under, from the response receipt; `nil` before the first
+    /// receipt of a session and for events written before the digest.
+    public let configurationDigestSHA256: String?
     public let crashed: Bool
     public let timedOut: Bool
     public let opportunityCharacters: Int
@@ -75,6 +79,7 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         candidateLengthBucket: String,
         championDisagreed: Bool = false,
         guardReason: String? = nil,
+        configurationDigestSHA256: String? = nil,
         crashed: Bool = false,
         timedOut: Bool = false,
         opportunityCharacters: Int,
@@ -109,6 +114,7 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         self.candidateLengthBucket = candidateLengthBucket
         self.championDisagreed = championDisagreed
         self.guardReason = guardReason
+        self.configurationDigestSHA256 = configurationDigestSHA256
         self.crashed = crashed
         self.timedOut = timedOut
         self.opportunityCharacters = opportunityCharacters
@@ -130,7 +136,8 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         "nextActionMilliseconds", "generatorMilliseconds", "firstStableWordMilliseconds",
         "settledVisibleMilliseconds", "deadlineMissed",
         "candidateCharacters", "candidateSourceBucket", "candidateLengthBucket",
-        "championDisagreed", "guardReason", "crashed", "timedOut", "opportunityCharacters",
+        "championDisagreed", "guardReason", "configurationDigestSHA256", "crashed", "timedOut",
+        "opportunityCharacters",
         "retentionAt5Seconds", "retentionAt30Seconds", "retentionAtSegmentClose",
     ]
 
@@ -169,7 +176,8 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         generatorMilliseconds: Int?,
         firstStableWordMilliseconds: Int?,
         nextActionMilliseconds: Int?,
-        opportunityCharacters: Int
+        opportunityCharacters: Int,
+        configurationDigestSHA256: String? = nil
     ) throws -> TextFreeOnlineEvent {
         TextFreeOnlineEvent(
             id: id,
@@ -193,6 +201,7 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
             candidateSourceBucket: (generated ? TextFreeCandidateSource.baseModel : .unknownLegacy).rawValue,
             candidateLengthBucket: TextFreeLengthBucket.unknown.rawValue,
             guardReason: reason.rawValue,
+            configurationDigestSHA256: configurationDigestSHA256,
             timedOut: reason == .timeout,
             opportunityCharacters: opportunityCharacters,
             retentionAt5Seconds: try RetainedCharacterObservation(retainedCharacters: 0),

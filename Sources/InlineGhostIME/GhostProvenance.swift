@@ -38,6 +38,7 @@ struct GhostDecisionReceipt: Equatable, Sendable {
     let generated: Bool?
     let generatorMilliseconds: Int?
     let firstStableWordMilliseconds: Int?
+    let configurationDigest: String?
 
     init(_ response: GhostBrainResponse) {
         register = response.register.flatMap(ContinuationRegister.init(rawValue:))
@@ -47,12 +48,13 @@ struct GhostDecisionReceipt: Equatable, Sendable {
         generated = response.generated ?? (response.suggestion?.isEmpty == false ? true : nil)
         generatorMilliseconds = response.generatorMilliseconds
         firstStableWordMilliseconds = response.firstStableWordMilliseconds
+        configurationDigest = response.configurationDigest
     }
 
     /// The keyboard's own verdicts carry no app fields.
     static let none = GhostDecisionReceipt(
         register: nil, reason: nil, generated: nil,
-        generatorMilliseconds: nil, firstStableWordMilliseconds: nil
+        generatorMilliseconds: nil, firstStableWordMilliseconds: nil, configurationDigest: nil
     )
 
     private init(
@@ -60,12 +62,28 @@ struct GhostDecisionReceipt: Equatable, Sendable {
         reason: SuggestionDecisionReason?,
         generated: Bool?,
         generatorMilliseconds: Int?,
-        firstStableWordMilliseconds: Int?
+        firstStableWordMilliseconds: Int?,
+        configurationDigest: String?
     ) {
         self.register = register
         self.reason = reason
         self.generated = generated
         self.generatorMilliseconds = generatorMilliseconds
         self.firstStableWordMilliseconds = firstStableWordMilliseconds
+        self.configurationDigest = configurationDigest
+    }
+}
+
+/// The keyboard's copy of the app's interaction policy and configuration
+/// digest, adopted from every response line. Until the first line of a
+/// process the build's own default applies. Main thread only.
+enum ServedConfiguration {
+    private static var served = ServedInteractionPolicy(default: TildeProductProfile.current.interactionPolicy)
+
+    static var interaction: InteractionPolicy { served.policy }
+    static var digest: String? { served.configurationDigest }
+
+    static func adopt(_ response: GhostBrainResponse) {
+        served.adopt(response)
     }
 }
