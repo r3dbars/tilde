@@ -97,6 +97,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         excludedApps: { TildeSettings().personalHistoryExcludedApps }
     )
     private var frontmostAppObserver: NSObjectProtocol?
+    /// The most recent app that was frontmost and is not Tilde itself, kept
+    /// so the menu can offer "Ignore <App>" for what the user was actually
+    /// writing in. Clicking the status item activates Tilde, so by the time
+    /// the menu opens `NSWorkspace.frontmostApplication` is Tilde and this
+    /// is the only honest answer. Identity only — bundle identifier and the
+    /// app's own display name. Window titles are never read or stored.
+    private var lastForegroundApplication: ForegroundApplication?
     // Backstop for `frontmostAppObserver`: NSWorkspace only tells us when a
     // DIFFERENT app becomes frontmost, never when the focused window changes
     // within the SAME app (e.g. Cmd+`, clicking a different document window,
@@ -458,13 +465,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// comment), so a lightweight poll backs it up.
     private func startObservingFrontmostAppForScreenMemory() {
         let prewarmer = scaffoldPrewarmer
+        lastForegroundApplication = Self.foregroundApplication(
+            from: NSWorkspace.shared.frontmostApplication
+        ) ?? lastForegroundApplication
         frontmostAppObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [screenCaptureService] notification in
+        ) { [weak self, screenCaptureService] notification in
             let activated = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             prewarmer.noteFrontmostApp(bundleIdentifier: activated?.bundleIdentifier)
+            // `ForegroundApplication` is a plain Sendable value, so the
+            // identity is extracted here and only the value crosses to the
+            // main actor — `NSRunningApplication` itself never does.
+            if let foreground = Self.foregroundApplication(from: activated) {
+                Task { @MainActor [weak self] in
+                    self?.lastForegroundApplication = foreground
+                }
+            }
             Task {
                 await screenCaptureService.noteWindowChanged(
                     target: Self.currentTypingTarget(sessionIdentifier: "")
@@ -490,6 +508,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 target: identity.map { Self.typingTarget(from: $0, sessionIdentifier: "") }
             )
         }
+    }
+
+    /// The frontmost non-Tilde app the menu may offer to ignore, or `nil`
+    /// when nothing else has been frontmost since launch.
+    func foregroundApplication() -> ForegroundApplication? { lastForegroundApplication }
+
+    /// Tilde's own processes are never offered as something to ignore, and
+    /// an app without a usable bundle identifier is not offered either — the
+    /// exclusion list is keyed by bundle identifier, so an app that has none
+    /// could not be excluded even if the menu pretended otherwise. Only the
+    /// identifier and the app's own display name are read; the window title
+    /// is deliberately never touched.
+    private nonisolated static func foregroundApplication(
+        from application: NSRunningApplication?
+    ) -> ForegroundApplication? {
+        guard let application,
+              let bundleIdentifier = application.bundleIdentifier,
+              PersonalHistoryEvent.validBundleIdentifier(bundleIdentifier),
+              bundleIdentifier != Bundle.main.bundleIdentifier,
+              bundleIdentifier != TildeProductProfile.current.inputMethodBundleIdentifier
+        else { return nil }
+        return ForegroundApplication(
+            bundleIdentifier: bundleIdentifier,
+            name: application.localizedName ?? bundleIdentifier
+        )
+    }
+
+    /// The Screen Memory master toggle changed. Turning it off must stop
+    /// capture AND leave nothing behind: the service's `enabled` closure
+    /// already refuses the next capture and `freshScene`, and this drops the
+    /// snapshots, baselines, and typing target it is still holding so no
+    /// completion can be answered from a scene captured while it was on.
+    /// The menu is refreshed either way — the status line and icon both
+    /// depend on this flag.
+    func screenMemoryEnabledDidChange(_ enabled: Bool) {
+        if !enabled {
+            Task { [screenCaptureService] in
+                await screenCaptureService.forgetCapturedScreenState()
+            }
+        }
+        DiagnosticsLog.shared.record(
+            "screen-memory-toggled",
+            // "status" and both values are in the redactor's allowlist; a
+            // key it does not know prints as a redacted length instead.
+            metadata: ["status": enabled ? "enabled" : "disabled"]
+        )
+        statusMenuHost.refresh()
     }
 
     struct FrontWindowIdentity: Equatable, Sendable {

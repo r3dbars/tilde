@@ -10,6 +10,23 @@ struct PrivacyAndDataView: View {
         Form {
             Section("Privacy & Data") {
                 Text("Your screen, writing, and learning stay on this Mac.")
+
+                // The Screen Memory covenant's mandatory master toggle. It
+                // is bound exactly like the suggestions and personalization
+                // toggles, and its caption states the real consequence
+                // rather than a softer one.
+                VStack(alignment: .leading, spacing: 5) {
+                    Toggle("Screen Memory", isOn: Binding(
+                        get: { model.screenMemoryEnabled },
+                        set: { model.setScreenMemoryEnabled($0) }
+                    ))
+
+                    Text(model.screenMemoryExplanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Button("Apps Tilde Ignores…") { showIgnoredApps = true }
                 Button("Manage Local Data…") { showLocalData = true }
             }
@@ -23,7 +40,7 @@ struct PrivacyAndDataView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 240)
+        .frame(width: 460, height: 380)
         .sheet(isPresented: $showIgnoredApps) {
             IgnoredAppsView(model: model)
         }
@@ -172,6 +189,20 @@ struct TroubleshootingView: View {
             }
 
             Section("Help") {
+                // Both accept keys, in the one place a puzzled user looks.
+                // The tilde key has always accepted the whole suggestion and
+                // has never been written down anywhere they would find it.
+                LabeledContent(
+                    TildeAcceptKeys.wordLabel,
+                    value: TildeAcceptKeys.wordShortcut
+                )
+                LabeledContent(
+                    TildeAcceptKeys.wholeSuggestionLabel,
+                    value: TildeAcceptKeys.wholeSuggestionShortcut
+                )
+                Text("\(TildeAcceptKeys.wholeSuggestionKeyDescription) is Tilde's own key.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button("Run Setup Again…") { model.runSetupAgain() }
                 Button("Export Diagnostics…") { model.exportDiagnostics() }
                 LabeledContent("Version", value: model.versionText)
@@ -186,7 +217,7 @@ struct TroubleshootingView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 500)
+        .frame(width: 480, height: 580)
         .confirmationDialog(
             "Redownload the local model?",
             isPresented: $confirmDeleteModel
