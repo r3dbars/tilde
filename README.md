@@ -15,7 +15,7 @@ one Tab, one ~, one Esc. Record at 2x, crop to the composer. -->
 
 Want to see it without installing anything into your real apps? Open
 [`demo/index.html`](demo/index.html) in Chrome or Safari with the Tilde
-keyboard selected: seven mock apps (Slack, Mail, Messages, Notes, GitHub, an
+keyboard selected: six mock apps (Slack, Mail, Messages, GitHub, an
 assistant chat, Discord), each pre-loaded with a conversation and a card that
 tells you what to type. Nothing on the page talks to a network.
 

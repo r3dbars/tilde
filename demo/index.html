@@ -93,20 +93,6 @@
   #messages .field { display: flex; align-items: center; gap: 10px; padding: 10px 16px 16px; }
   #messages .field textarea { flex: 1; border: 1px solid #c9ccd1; border-radius: 20px; padding: 8px 14px; font-size: 15px; line-height: 1.35; height: 38px; outline: 0; }
 
-  /* ---------- Notes ---------- */
-  #notes { grid-template-columns: 200px 260px 1fr; background: #fff; }
-  #notes .folders { background: #f2f2f4; border-right: 1px solid var(--line); padding: 46px 10px; color: #444; }
-  #notes .folders .f.on { background: #ffd60a; border-radius: 6px; padding: 4px 8px; }
-  #notes .list { border-right: 1px solid var(--line); padding-top: 46px; }
-  #notes .list .n { padding: 10px 14px; border-bottom: 1px solid #eee; }
-  #notes .list .n.on { background: #ffe9a3; }
-  #notes .list .n b { display: block; } #notes .list .n span { color: var(--muted); font-size: 12px; }
-  #notes .doc { padding: 46px 40px; overflow: auto; }
-  #notes .doc h1 { font-size: 22px; margin: 0 0 10px; }
-  #notes .doc .date { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
-  #notes .doc [contenteditable] { outline: 0; font-size: 15.5px; line-height: 1.6; min-height: 300px; }
-  #notes .doc ul { margin: 6px 0 12px; }
-
   /* ---------- GitHub ---------- */
   #github { grid-template-rows: 46px 1fr; background: #f6f8fa; }
   #github .top { background: #24292f; color: #fff; display: flex; align-items: center; padding: 0 18px; gap: 14px; font-size: 14px; }
@@ -157,7 +143,6 @@
   <button data-app="slack" aria-pressed="true">Slack</button>
   <button data-app="mail">Mail</button>
   <button data-app="messages">Messages</button>
-  <button data-app="notes">Notes</button>
   <button data-app="github">GitHub</button>
   <button data-app="assistant">Assistant</button>
   <button data-app="discord">Discord</button>
@@ -270,34 +255,6 @@ Dana</div>
     </div>
   </section>
 
-  <!-- ===================== NOTES ===================== -->
-  <section id="notes" class="app">
-    <div class="folders"><div class="f on">Notes</div><div class="f">Travel</div><div class="f">Work</div></div>
-    <div class="list">
-      <div class="n on"><b>Lisbon — 4 days in October</b><span>Today · Trip planning</span></div>
-      <div class="n"><b>Design review prep</b><span>Yesterday</span></div>
-      <div class="n"><b>Groceries</b><span>Sunday</span></div>
-    </div>
-    <div class="doc">
-      <h1>Lisbon — 4 days in October</h1>
-      <div class="date">September 2, 2026 at 6:10 PM</div>
-      <div contenteditable="true" data-field spellcheck="false"><b>Flights</b>
-<ul><li>Out Thursday Oct 15, back Monday Oct 19</li><li>Sam found seats at $412 round trip, book by Friday</li></ul>
-<b>Where to stay</b>
-<ul><li>Alfama or Príncipe Real, walking distance to the river</li></ul>
-<b>Day 1 — Friday</b>
-<ul><li>Morning: tram 28 to the castle before the crowds</li><li>Lunch near Time Out Market</li></ul>
-<b>Day 2 — Saturday</b>
-<ul><li></li></ul></div>
-    </div>
-    <div class="hint">
-      <h4>Try typing (in the empty Day 2 bullet)</h4>
-      <div class="type">Take the train to Sintra and</div>
-      <p>This is <b>prose</b>, not a reply, so Tilde uses the document itself. Ghosts should read like the bullets above: short, concrete, in your voice.</p>
-      <div class="actions"><button data-reset>Reset field</button></div>
-    </div>
-  </section>
-
   <!-- ===================== GITHUB ===================== -->
   <section id="github" class="app">
     <div class="top">🐙 <span>meridianlabs / onboarding-web</span> <span style="opacity:.6">Pull requests</span></div>
@@ -381,7 +338,7 @@ Dana</div>
 
 <script>
 (function () {
-  const apps = ['slack','mail','messages','notes','github','assistant','discord'];
+  const apps = ['slack','mail','messages','github','assistant','discord'];
   const buttons = Array.from(document.querySelectorAll('#bar button[data-app]'));
   function show(name) {
     apps.forEach(a => document.getElementById(a).classList.toggle('active', a === name));
@@ -413,7 +370,7 @@ Dana</div>
   document.addEventListener('keydown', (e) => {
     const inField = e.target && (e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
     if (inField) return;
-    if (e.key >= '1' && e.key <= '7') show(apps[Number(e.key) - 1]);
+    if (e.key >= '1' && e.key <= '6') show(apps[Number(e.key) - 1]);
     if (e.key === 'h' || e.key === 'H') toggleHints();
     if (e.key === 'r' || e.key === 'R') resetActive();
   });
