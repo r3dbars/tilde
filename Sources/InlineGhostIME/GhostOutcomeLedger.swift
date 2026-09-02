@@ -216,7 +216,14 @@ enum GhostOutcomeLedger {
     /// of becoming a second, falsely superseded event.
     static func noteModelExtendedVisibleCandidate(opportunityID: UUID?, receipt: GhostDecisionReceipt?) {
         lock.lock()
-        if let opportunityID, pending?.id == opportunityID { pending = nil }
+        if let opportunityID, let open = pending, open.id == opportunityID {
+            pending = nil
+            opportunity?.adoptModelOpportunity(
+                id: open.id,
+                register: receipt?.register ?? open.hostRegister,
+                configurationDigestSHA256: receipt?.configurationDigest ?? ServedConfiguration.digest
+            )
+        }
         opportunity?.noteReceipt(
             source: .baseModel,
             generatorMilliseconds: receipt?.generatorMilliseconds,

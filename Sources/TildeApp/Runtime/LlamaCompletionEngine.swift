@@ -88,7 +88,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             appBundleIdentifier: appBundleIdentifier,
             scene: scene,
             experimentArm: nil,
-            onPartialSuggestion: { _ in }
+            onPartialSuggestion: { _, _ in }
         )
     }
 
@@ -100,7 +100,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?,
         experimentArm: String? = nil,
-        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion, Int) -> Void
     ) async throws -> CompletionSuggestion? {
         try await decide(
             textBeforeCursor: textBeforeCursor,
@@ -138,7 +138,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?,
         experimentArm: String? = nil,
-        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion, Int) -> Void
     ) async throws -> Decision {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let cleaner = visibleCleaner(forExperimentArm: experimentArm)
@@ -245,7 +245,11 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                                 firstPartialMilliseconds = Self.milliseconds(since: startedAt)
                             }
                             lastPartialVisibleText = partial.visibleText
-                            onPartialSuggestion(partial)
+                            // The second value is the time to the FIRST stable
+                            // word, repeated on every partial, so a keyboard
+                            // that shows a partial and then loses the terminal
+                            // line still records the timing it saw.
+                            onPartialSuggestion(partial, firstPartialMilliseconds ?? Self.milliseconds(since: startedAt))
                         }
                         // Everything the display cap can show has arrived, or
                         // the output is already rejected for a reason later

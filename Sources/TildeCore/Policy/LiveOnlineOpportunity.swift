@@ -20,14 +20,14 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         case observerStopped = "observer-stopped"
     }
 
-    public let id: UUID
+    public private(set) var id: UUID
     public let shownAt: Date
     public let sessionDigestSHA256: String
     /// H01 arm tag. `champion` unless the disabled-by-default block
     /// randomization harness is running, so ordinary events are unchanged.
     public let variant: String
-    public let appCategory: String
-    public let register: String
+    public private(set) var appCategory: String
+    public private(set) var register: String
     public let boundary: String
     public let safeOpportunity: Bool
     public var candidateCharacters: Int
@@ -44,7 +44,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     /// dictionary ghost or an app older than the receipt.
     public private(set) var generatorMilliseconds: Int?
     public private(set) var firstStableWordMilliseconds: Int?
-    public let configurationDigestSHA256: String?
+    public private(set) var configurationDigestSHA256: String?
     public var typedAfterShow: Bool
     public var acceptedKind: AcceptKind?
     public var accepted: String
@@ -95,6 +95,22 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     }
 
     public var didAccept: Bool { acceptedKind != nil }
+
+    /// The model took over a ghost the dictionary opened: the record keeps
+    /// its interaction history (shown time, typing, acceptance) but is
+    /// re-keyed to the model opportunity the app answered — its id, the
+    /// register the generator composed with, and the configuration digest —
+    /// so the event reads as what it now is: a model ghost.
+    public mutating func adoptModelOpportunity(
+        id: UUID,
+        register: ContinuationRegister,
+        configurationDigestSHA256: String?
+    ) {
+        self.id = id
+        self.register = register.rawValue
+        appCategory = TextFreeAppCategory.from(register: register).rawValue
+        if let configurationDigestSHA256 { self.configurationDigestSHA256 = configurationDigestSHA256 }
+    }
 
     /// A later receipt for the same ghost: the terminal line after a
     /// streamed partial opened the record, or the model extending a

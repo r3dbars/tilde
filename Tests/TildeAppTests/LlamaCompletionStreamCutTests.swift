@@ -132,7 +132,7 @@ struct LlamaCompletionStreamCutTests {
             textBeforeCursor: "That ",
             appBundleIdentifier: "com.apple.TextEdit",
             scene: nil,
-            onPartialSuggestion: { partials.append($0.visibleText) }
+            onPartialSuggestion: { partial, _ in partials.append(partial.visibleText) }
         )
         #expect(partials.values == ["sounds", "sounds pretty"])
         #expect(final?.visibleText == "sounds pretty good")
