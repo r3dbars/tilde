@@ -28,6 +28,93 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Paired same-day anchor: the campaign gates buy precision with silence, not value
+
+- **Try:** Rerun the simulated typist on the same 240 scenarios, five
+  personas, and Luna decision brain as the morning run, this time pinned
+  to the Q13 campaign-nominated arm (identical generation and filters
+  plus the Lab confidence gate at 0.475 mean token probability and the
+  extended ordinary-silence gate), so the live-stack number has a
+  same-day paired anchor instead of a cross-day one.
+- **Learn:** A tie on the metric that matters and a clear trade underneath
+  it. Retained-character potential: live 33.9% vs campaign 33.8%. Accepts:
+  27.1% vs 29.0%. Wrong-when-shown: 44.9% vs 42.2%. Silent moments: 267
+  vs 625 — the two gates more than double how often the writer sees
+  nothing, and displays fall 2,950 → 2,808, for 2.7 points less wrong
+  and no retained value. Per persona the campaign arm is flatter
+  (29.1–35.3% vs 30.6–36.9%). Correction characters ran 405 vs 178,
+  opposite to what a "more precise" arm should produce, which reads as
+  the confidence gate keeping the longer, riskier accepts. Silence has a
+  cost this instrument cannot price; on what it can see, the live stack
+  without either gate is not worse.
+- **Fail:** Discovery-grade on an uncalibrated simulator, permanently
+  fenced. The morning run lost 25 prose-drafter sessions to one skipped
+  batch; this run lost none, so the pair is not perfectly matched. A
+  single seed each; no error bars. Both arms use the same prompt, so
+  nothing here says anything about context quality, and the simulator
+  still cannot see the keyboard-side preview behaviors.
+- **Where:** owner-local `Tilde Lab/SimulatedTypist/2026-09-02-luna-preview9b/reports/`
+  (two aggregate-only reports, arm files, run.sh).
+- **Next:** Wrong-when-shown near 45% is the number to attack, and this
+  pair says another threshold is not the way: it should be a display-policy
+  or context campaign aimed at the chronic wrong categories, read on the
+  repaired live ledger once the opportunity receipt records silent
+  opportunities too.
+
+## 2026-09-02 — Make the ruler honest: four live-ledger bugs fixed before the next experiment
+
+- **Try:** An outside review of the whole path (input method → socket →
+  app → model → Screen Memory → Personal History → outcome ledger → Lab)
+  named four measurement bugs. All four checked out in the code, so they
+  were fixed together, with fixtures, before any further experiment is
+  read off the live ledger: (1) the ledger derived `register` from the
+  host bundle while the app served a Screen-Memory chat reply in a
+  browser as `chat`; (2) `candidateSourceBucket` was always `unknown`, so
+  dictionary suffixes and model phrases shared one number; (3)
+  `opportunityCharacters` was the bounded-context length at each show, so
+  a long document counted its whole body once per ghost; (4) production's
+  `TextFreeOnlineEvent` and the Lab's `LabOnlineExperimentEvent` were two
+  definitions of the v3 event, and live lines were decoded straight into
+  the Lab's.
+- **Learn:** The fix is a receipt, not a recalculation. Every completion
+  response line now carries the register the generator composed with and
+  the served candidate's source (`GhostBrainResponse.register` / `.source`,
+  optional on the wire so a pre-receipt peer still works); the keyboard
+  records exactly that on the event, and the dictionary path names itself.
+  `OpportunityCharacterMeter` counts typed and accepted characters once
+  between ghosts: the deterministic fixture that used to sum ten ghosts in
+  a 2,000-character document to 20,000 now sums to the 50 characters
+  authored. `TextFreeOnlineEvent.allowedKeys` plus a strict
+  `decodeProductionLine` make the production type the one definition of a
+  live event; `ingest-events --instrument` decodes through it and bridges
+  field by field with no defaulting, refusing a Lab-only key by name, and
+  a parity test pins the bridge to the Lab decoder. The `unknown-legacy`
+  source bucket exists only for lines written before today.
+- **Fail:** Nothing here is a result; it is the precondition for one. The
+  ledger is now inconsistent across the cut: events before this build carry
+  the host-bundle register, `unknown` source, and the context-length
+  denominator, so register, source, and per-1,000-character slices must be
+  cut at the build that ships this (retention and outcome fields are
+  comparable across it). Silent opportunities — no ghost shown because of
+  a gate, silence, timeout, or a superseded request — are still not
+  recorded at all; that is the opportunity-id and decision-receipt work,
+  registered next. The interaction profile split brain (the production
+  keyboard reads chaining, reveal, and punctuation from its bundle profile
+  while the app serves Qwen under the 9B completion policy) is confirmed
+  and unfixed.
+- **Where:** `Sources/TildeCore/Policy/TextFreeOnlineEvent.swift`,
+  `OpportunityCharacterMeter.swift`, `LiveOnlineOpportunity.swift`;
+  `Sources/TildeCore/Engine/GhostBrainWire.swift`;
+  `Sources/TildeApp/App/GhostBrainServerHost.swift`;
+  `Sources/InlineGhostIME/GhostProvenance.swift`, `GhostOutcomeLedger.swift`,
+  `GhostInputController.swift`, `GhostBrainClient.swift`;
+  `Sources/TildeLabKit/Models/LabProductionEventBridge.swift`;
+  `docs/tilde-lab.md` § four rules of the live ledger.
+- **Next:** Ship it to the daily driver, then the opportunity id and
+  decision receipt so silent opportunities end with a terminal reason;
+  then split `TildeProductProfile` into build identity, generator,
+  decision policy, and interaction policy with one digest per request.
+
 ## 2026-09-02 — Luna judges the live 9B preview stack: 33.9% simulated retained value
 
 - **Try:** Point the simulated typist at exactly the arm the live 9B

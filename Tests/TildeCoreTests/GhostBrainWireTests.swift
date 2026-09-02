@@ -67,6 +67,28 @@ struct GhostBrainWireTests {
         #expect(GhostBrainResponse.decode(Data(#"{"outcome":"silence"}"#.utf8)).final)
     }
 
+    @Test("Responses carry the generator's register and the candidate's source as a receipt")
+    func responseReceipt() throws {
+        let final = GhostBrainResponse.suggestion("world", register: .chat, source: .basePersonalAgreement)
+        let decodedFinal = try JSONDecoder().decode(GhostBrainResponse.self, from: JSONEncoder().encode(final))
+        #expect(decodedFinal.register == "chat")
+        #expect(decodedFinal.source == "base-personal-agreement")
+        #expect(decodedFinal.final)
+
+        // A partial precedes arbitration and can only be the base model's.
+        let partial = GhostBrainResponse.partial("wor", register: .email)
+        let decodedPartial = try JSONDecoder().decode(GhostBrainResponse.self, from: JSONEncoder().encode(partial))
+        #expect(decodedPartial.register == "email")
+        #expect(decodedPartial.source == "base-model")
+        #expect(!decodedPartial.final)
+
+        // A pre-receipt app sends neither field; nothing is invented.
+        let legacy = GhostBrainResponse.decode(Data(#"{"outcome":"suggestion","suggestion":"x"}"#.utf8))
+        #expect(legacy.register == nil)
+        #expect(legacy.source == nil)
+        #expect(GhostBrainResponse.partial("x").source == nil)
+    }
+
     @Test("Screen Memory field events carry lifecycle only, never text")
     func screenMemoryLifecycleRequest() throws {
         let event = ScreenMemoryInputEvent(

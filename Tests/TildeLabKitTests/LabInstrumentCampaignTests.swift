@@ -56,6 +56,7 @@ struct LabInstrumentCampaignTests {
             safeOpportunity: true,
             candidateCharacters: 10,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted("alpha beta", kind: .all, at: Date(timeIntervalSince1970: 1_501))
@@ -99,6 +100,7 @@ struct LabInstrumentCampaignTests {
             safeOpportunity: true,
             candidateCharacters: accepted.count,
             candidateWordCount: accepted.split(whereSeparator: \Character.isWhitespace).count,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted(accepted, kind: .all, at: shownAt.addingTimeInterval(0.4))

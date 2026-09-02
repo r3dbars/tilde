@@ -64,6 +64,7 @@ struct RetainedSpanWatchTests {
             safeOpportunity: true,
             candidateCharacters: text.count,
             candidateWordCount: 1,
+            candidateSource: .baseModel,
             opportunityCharacters: 10
         )
         opportunity.noteAccepted(text, kind: .all, at: shownAt.addingTimeInterval(1))
@@ -113,6 +114,7 @@ struct RetainedSpanWatchTests {
             safeOpportunity: true,
             candidateCharacters: 10,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted("alpha beta", kind: .all, at: shownAt.addingTimeInterval(0.4))
@@ -161,6 +163,7 @@ struct RetainedSpanWatchTests {
             safeOpportunity: true,
             candidateCharacters: 10,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted("alpha beta", kind: .all, at: shownAt.addingTimeInterval(0.5))
@@ -195,6 +198,7 @@ struct RetainedSpanWatchTests {
             safeOpportunity: true,
             candidateCharacters: 10,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted("alpha beta", kind: .word, at: Date(timeIntervalSince1970: 1_501))
@@ -218,6 +222,7 @@ struct RetainedSpanWatchTests {
             safeOpportunity: true,
             candidateCharacters: 10,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.noteAccepted("alpha beta", kind: .all, at: Date(timeIntervalSince1970: 1_501))
@@ -244,6 +249,7 @@ struct RetainedSpanWatchTests {
             safeOpportunity: true,
             candidateCharacters: 10,
             candidateWordCount: 2,
+            candidateSource: .baseModel,
             opportunityCharacters: 20
         )
         opportunity.settleVisible(at: Date(timeIntervalSince1970: 1_501))
