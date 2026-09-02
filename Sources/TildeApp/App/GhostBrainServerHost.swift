@@ -365,16 +365,29 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 scene: scene,
                 hostBundleIdentifier: completionRequest.app
             )
+            let personalPredictionTask: Task<PersonalNextWordPrediction?, Never>? = {
+                guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
+                    return nil
+                }
+                let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
+                guard !tailWords.isEmpty else { return nil }
+                return Task { await provider(tailWords, completionRequest.app) }
+            }()
             // Stream stable complete-word prefixes to peers that asked for
-            // them. Personal suggestions may replace the base prefix, so
-            // those requests stay final-only: a visible stream is never
-            // rewritten underneath the writer.
+            // them. A personal prediction may replace the base ghost's first
+            // word, so when one is actually racing the sink holds the first
+            // prefix for a bounded window rather than giving up streaming
+            // for the whole request (see `PartialResponseSink`).
+            let configuration = self.configuration
             let partials = PartialResponseSink(
-                connection: connection,
-                enabled: completionRequest.supportsStreamingResponses && !personalSuggestionsEnabled,
+                enabled: completionRequest.supportsStreamingResponses,
+                holdingForPersonal: personalPredictionTask != nil,
                 register: register,
-                configuration: self.configuration,
-                targetIsCurrent: targetIsCurrent
+                holdDeadlineNanoseconds: Self.personalStreamHoldNanoseconds,
+                targetIsCurrent: targetIsCurrent,
+                write: { response in
+                    Self.write(response.stamped(configuration: configuration), to: connection)
+                }
             )
             let completion = Task {
                 try await self.engine.decide(
@@ -386,14 +399,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 )
             }
             partials.onWriteFailure = { completion.cancel() }
-            let personalPredictionTask: Task<PersonalNextWordPrediction?, Never>? = {
-                guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
-                    return nil
+            // The sink and `awaitPersonalPrediction` below share the one
+            // lookup task: awaiting a task's value twice is safe, and the
+            // gate must learn the answer as soon as it exists rather than
+            // after generation finishes.
+            let personalObserver: Task<Void, Never>? = personalPredictionTask.map { task in
+                Task { [weak partials] in
+                    let prediction = await task.value
+                    partials?.resolvePersonal(prediction)
                 }
-                let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
-                guard !tailWords.isEmpty else { return nil }
-                return Task { await provider(tailWords, completionRequest.app) }
-            }()
+            }
             let disconnect = DispatchSource.makeReadSource(
                 fileDescriptor: connection,
                 queue: .global(qos: .userInitiated)
@@ -408,6 +423,10 @@ final class GhostBrainServerHost: @unchecked Sendable {
             }
             disconnect.resume()
             let result = await completion.result
+            // No partial may be written from here on: the terminal line is
+            // next, and a held prefix flushed after it would land inside or
+            // behind the answer it is supposed to precede.
+            partials.finish()
             let personalPrediction: PersonalNextWordPrediction?
             switch result {
             case .success:
@@ -418,6 +437,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 // way — don't let a slow personal lookup hold up writing it.
                 personalPredictionTask?.cancel()
                 personalPrediction = nil
+            }
+            personalObserver?.cancel()
+            if personalSuggestionsEnabled, completionRequest.supportsStreamingResponses {
+                DiagnosticsLog.shared.record(
+                    "personal-stream-hold",
+                    metadata: partials.holdDiagnostics()
+                )
             }
             await withCheckedContinuation { continuation in
                 disconnect.setCancelHandler { continuation.resume() }
@@ -439,9 +465,14 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 } ?? ""
                 var text = baseText
                 if personalSuggestionsEnabled {
-                    let applied = PersonalSuggestionPolicy.apply(
+                    // `streamedPrefix` is the grow-only promise: a prefix
+                    // already on screen is never replaced, so a personal
+                    // answer that arrives after the stream opened loses to
+                    // the base ghost the writer is reading.
+                    let applied = PersonalSuggestionPolicy.finalSuggestion(
                         baseGhost: baseText,
-                        personalPrediction: personalPrediction
+                        personalPrediction: personalPrediction,
+                        streamedPrefix: partials.didStream
                     )
                     text = applied.text
                     source = applied.source
@@ -508,6 +539,22 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// budget — past the deadline the base ghost serves alone (`.base`
     /// source), exactly as if personal suggestions had produced nothing.
     private static let personalPredictionDeadlineNanoseconds: UInt64 = 250_000_000
+
+    /// The most the FIRST streamed prefix may be held while the personal
+    /// lookup races (`PartialResponseSink`). Deliberately far shorter than
+    /// the 250ms terminal deadline above: that budget protects a finished
+    /// answer nobody is looking at yet, this one delays a ghost the writer
+    /// would otherwise already be reading. The lookup it waits on is one
+    /// read of an in-memory table behind a shared actor — sub-millisecond
+    /// unless that actor is busy with ingest or training — so tens of
+    /// milliseconds covers the ordinary case, and anything slower simply
+    /// streams and lets the terminal line honour the base ghost.
+    ///
+    /// Not an `InteractionPolicy`/`DecisionPolicy` knob: it is inert unless
+    /// the owner-visible "Personal suggestions (experimental)" toggle is on,
+    /// so putting it in the configuration digest would re-key all three
+    /// shipped digests for a number no default configuration can reach.
+    static let personalStreamHoldNanoseconds: UInt64 = 60_000_000
 
     /// One arm of the 250ms race actually decided the request; the other
     /// resolving too (or not at all) is irrelevant to the outcome. A plain
@@ -671,34 +718,95 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// Serializes partial writes from the engine's stream loop. A failed
     /// write means the input method is gone or wedged; the sink then cancels
     /// inference instead of letting the helper run for nobody.
-    private final class PartialResponseSink: @unchecked Sendable {
-        private let connection: Int32
+    ///
+    /// It is also the streaming gate for "Personal suggestions
+    /// (experimental)". A personal answer may replace the base ghost's first
+    /// word, and the keyboard grows a visible ghost rather than rewriting it
+    /// — which is why this sink used to be constructed disabled outright
+    /// whenever the toggle was on, silently costing every request its
+    /// word-by-word ghost. Instead the sink now holds the FIRST stable
+    /// prefix, and only that one, for a short bounded window while the
+    /// personal lookup races:
+    ///
+    /// - a replacement that wins inside the window closes the stream and the
+    ///   request answers with one final line (nothing was shown, so nothing
+    ///   is rewritten);
+    /// - a base or agreed answer, or an expired window, releases the held
+    ///   prefix and streaming continues exactly as it does with the toggle
+    ///   off;
+    /// - once anything has been written the terminal line honours the base
+    ///   ghost (`PersonalSuggestionPolicy.finalSuggestion`), so a late
+    ///   personal answer can never rewrite what the writer is reading.
+    ///
+    /// Internal, not private, so the state machine is provable without a
+    /// live socket: `write` is injected, and `expireHold` is the window
+    /// firing.
+    final class PartialResponseSink: @unchecked Sendable {
+        /// One event per request, fixed vocabulary, no candidate text.
+        enum HoldOutcome: String {
+            /// The peer did not ask for streaming.
+            case unstreamed
+            /// Streamed with nothing ever held — the toggle was off, no
+            /// personal lookup ran, or it answered before the first prefix.
+            case notHeld = "not-held"
+            /// A prefix was held and the personal answer released it in time.
+            case streamed
+            /// A prefix was held until the window expired, then released.
+            case expired
+            /// A personal replacement won while holding; final-only.
+            case finalOnly = "final-only"
+        }
+
+        private enum GateState { case streaming, holding, closed }
+
         private let enabled: Bool
         private let register: ContinuationRegister
-        private let configuration: TildeEffectiveConfiguration
+        private let holdDeadlineNanoseconds: UInt64
         private let targetIsCurrent: @Sendable () -> Bool
+        private let write: @Sendable (GhostBrainResponse) -> Bool
+        private let now: @Sendable () -> Date
         private let lock = NSLock()
+        private var state: GateState
         private var failed = false
         private var failureHandler: (() -> Void)?
+        private var heldPartial: String?
+        private var holdStartedAt: Date?
+        private var heldMilliseconds = 0
+        private var wroteAnything = false
+        private var personalResolved: Bool
+        private var personalPrediction: PersonalNextWordPrediction?
+        private var outcome: HoldOutcome
+        private var expiryTimer: Task<Void, Never>?
 
         init(
-            connection: Int32,
             enabled: Bool,
+            holdingForPersonal: Bool,
             register: ContinuationRegister,
-            configuration: TildeEffectiveConfiguration,
-            targetIsCurrent: @escaping @Sendable () -> Bool
+            holdDeadlineNanoseconds: UInt64,
+            targetIsCurrent: @escaping @Sendable () -> Bool,
+            now: @escaping @Sendable () -> Date = Date.init,
+            write: @escaping @Sendable (GhostBrainResponse) -> Bool
         ) {
-            self.connection = connection
             self.enabled = enabled
             self.register = register
-            self.configuration = configuration
+            self.holdDeadlineNanoseconds = holdDeadlineNanoseconds
             self.targetIsCurrent = targetIsCurrent
+            self.now = now
+            self.write = write
+            let holding = enabled && holdingForPersonal
+            state = holding ? .holding : .streaming
+            personalResolved = !holding
+            outcome = enabled ? .notHeld : .unstreamed
         }
 
         var onWriteFailure: (() -> Void)? {
             get { lock.withLock { failureHandler } }
             set { lock.withLock { failureHandler = newValue } }
         }
+
+        /// Whether any prefix reached the keyboard. The terminal line must
+        /// honour the base ghost whenever this is true.
+        var didStream: Bool { lock.withLock { wroteAnything } }
 
         func send(_ partial: CompletionSuggestion) {
             guard enabled else { return }
@@ -714,11 +822,113 @@ final class GhostBrainServerHost: @unchecked Sendable {
             guard !text.isEmpty else { return }
             lock.lock()
             defer { lock.unlock() }
-            guard !failed else { return }
-            if !GhostBrainServerHost.write(
-                GhostBrainResponse.partial(text, register: register).stamped(configuration: configuration),
-                to: connection
+            guard !failed, state != .closed else { return }
+            if state == .holding {
+                heldPartial = text
+                applyDecisionLocked()
+                return
+            }
+            writeLocked(text)
+        }
+
+        /// The personal lookup answered. Called at most once per request,
+        /// from the observer that shares the lookup task with
+        /// `awaitPersonalPrediction`.
+        func resolvePersonal(_ prediction: PersonalNextWordPrediction?) {
+            lock.lock()
+            defer { lock.unlock() }
+            personalResolved = true
+            personalPrediction = prediction
+            guard state == .holding else { return }
+            applyDecisionLocked()
+        }
+
+        /// The bounded hold window elapsed: release the prefix and stream.
+        /// A personal answer that lands after this can no longer replace it.
+        func expireHold() {
+            lock.lock()
+            defer { lock.unlock() }
+            guard state == .holding else { return }
+            releaseLocked(outcome: .expired)
+        }
+
+        /// No further partials may be written for this request. Taken before
+        /// the terminal line is written so a held prefix can never be
+        /// flushed into the middle of it.
+        func finish() {
+            let timer: Task<Void, Never>? = lock.withLock {
+                if state == .holding { stopHoldClockLocked() }
+                state = .closed
+                heldPartial = nil
+                let timer = expiryTimer
+                expiryTimer = nil
+                return timer
+            }
+            timer?.cancel()
+        }
+
+        /// The request's one hold event. Fixed words and a duration only.
+        func holdDiagnostics() -> [String: String] {
+            lock.withLock {
+                ["outcome": outcome.rawValue, "heldMilliseconds": String(heldMilliseconds)]
+            }
+        }
+
+        private func applyDecisionLocked() {
+            switch PersonalSuggestionPolicy.streamDecision(
+                basePrefix: heldPartial,
+                personalPrediction: personalPrediction,
+                personalResolved: personalResolved
             ) {
+            case .hold:
+                startHoldClockLocked()
+            case .stream:
+                releaseLocked(outcome: holdStartedAt == nil ? .notHeld : .streamed)
+            case .finalOnly:
+                stopHoldClockLocked()
+                state = .closed
+                heldPartial = nil
+                outcome = .finalOnly
+            }
+        }
+
+        private func releaseLocked(outcome released: HoldOutcome) {
+            stopHoldClockLocked()
+            state = .streaming
+            outcome = released
+            if let heldPartial {
+                self.heldPartial = nil
+                writeLocked(heldPartial)
+            }
+        }
+
+        /// Only a prefix that actually exists starts the clock — a personal
+        /// lookup still running while the generator has produced nothing has
+        /// delayed no ghost, and must not be reported as if it had.
+        private func startHoldClockLocked() {
+            guard heldPartial != nil, holdStartedAt == nil, expiryTimer == nil else { return }
+            holdStartedAt = now()
+            expiryTimer = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: self?.holdDeadlineNanoseconds ?? 0)
+                guard !Task.isCancelled else { return }
+                self?.expireHold()
+            }
+        }
+
+        private func stopHoldClockLocked() {
+            if let holdStartedAt {
+                heldMilliseconds = GhostBrainServerHost.milliseconds(from: holdStartedAt, to: now())
+                self.holdStartedAt = nil
+            }
+            expiryTimer?.cancel()
+            expiryTimer = nil
+        }
+
+        private func writeLocked(_ text: String) {
+            guard !failed else { return }
+            if write(GhostBrainResponse.partial(text, register: register)) {
+                wroteAnything = true
+            } else {
                 failed = true
                 DiagnosticsLog.shared.record("ghost-partial-write-failed", metadata: [:])
                 failureHandler?()
