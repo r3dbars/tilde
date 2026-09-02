@@ -106,12 +106,34 @@ public struct CompletionOutputCleaner: Sendable {
         clean(rawOutput, after: textBeforeCursor).result
     }
 
+    /// The prepared-context form of `cleanWithReason`.
+    public func cleanWithReason(
+        _ rawOutput: String,
+        in context: PreparedTypedContext
+    ) -> CompletionCleanResult {
+        clean(rawOutput, in: context).result
+    }
+
     /// `cleanWithReason` plus the settlement bit a streaming caller needs to
     /// decide whether the helper should keep decoding. See
     /// `CompletionCleanOutcome`.
+    ///
+    /// Convenience entry point: it reduces the context and calls the
+    /// prepared form below. A caller that cleans the same context more than
+    /// once — every streaming caller — should build a `PreparedTypedContext`
+    /// once and use that form instead, so the context is tokenized once per
+    /// request rather than once per partial.
     public func clean(
         _ rawOutput: String,
         after textBeforeCursor: String?
+    ) -> CompletionCleanOutcome {
+        clean(rawOutput, in: PreparedTypedContext(textBeforeCursor: textBeforeCursor))
+    }
+
+    /// The cleaning pass itself, against a context reduced once per request.
+    public func clean(
+        _ rawOutput: String,
+        in context: PreparedTypedContext
     ) -> CompletionCleanOutcome {
         guard !containsUnsafeCharacter(rawOutput) else {
             return CompletionCleanOutcome(
@@ -137,23 +159,20 @@ public struct CompletionOutputCleaner: Sendable {
         }
 
         var continuation = candidate.first?.isWhitespace == true ? candidate : " " + candidate
-        // Tokenize the typed context once. `trimTypedPrefix` (and its
-        // `stripLeadingWordEcho` branch) and `replaysContext` below all want
-        // exactly this list off exactly this string, and each used to derive
-        // it independently — over the whole bounded context, on every streamed
-        // word of every request.
-        let contextWords = textBeforeCursor.map { normalizedWords(in: $0) } ?? []
-        if let textBeforeCursor {
-            continuation = trimTypedPrefix(
-                continuation, after: textBeforeCursor, contextWords: contextWords
-            )
+        // `trimTypedPrefix` (and its `stripLeadingWordEcho` branch) and
+        // `replaysContext` below both want the typed context's normalized
+        // words, and each used to derive them independently — over the whole
+        // bounded context, on every streamed word of every request. They now
+        // read one `PreparedTypedContext` built once per request.
+        if context.isPresent {
+            continuation = trimTypedPrefix(continuation, in: context)
         }
         guard !continuation.trimmingCharacters(in: .whitespaces).isEmpty else {
             return .unsettled(.rejected(.emptyAfterPrefixTrimming))
         }
         if policy.rejectsContextReplay,
-           textBeforeCursor != nil,
-           replaysContext(continuation, contextWords: contextWords) {
+           context.isPresent,
+           replaysContext(continuation, contextWords: context.words) {
             return CompletionCleanOutcome(
                 result: .rejected(.replaysContext),
                 visibleTextIsSettled: true
@@ -240,9 +259,10 @@ public struct CompletionOutputCleaner: Sendable {
     }
 
     private func trimTypedPrefix(
-        _ suggestion: String, after context: String, contextWords: [String]
+        _ suggestion: String, in context: PreparedTypedContext
     ) -> String {
-        if context.last?.isWhitespace == true {
+        let contextWords = context.words
+        if context.endsWithWhitespace {
             let dropped = String(suggestion.drop(while: \.isWhitespace))
             // The word-boundary-only echo guard: when the cursor sits right
             // after whitespace, the last typed word is complete, so unlike
@@ -261,7 +281,7 @@ public struct CompletionOutputCleaner: Sendable {
         }
         // A punctuation-only trailing token has no fragment. Treating its
         // normalized empty string as a prefix used to drop the first character.
-        guard context.last?.isLetter == true else { return suggestion }
+        guard context.endsWithLetter else { return suggestion }
 
         let suggestionRanges = wordRanges(in: suggestion)
         let suggestionWords = suggestionRanges.map { normalized(String(suggestion[$0])) }
@@ -455,27 +475,18 @@ public struct CompletionOutputCleaner: Sendable {
         }
     }
 
+    // The tokenizer lives in `CompletionContextWords` so that the prepared
+    // context and the per-output passes below split words the same way.
     private func normalizedWords(in text: String) -> [String] {
-        wordRanges(in: text).map { normalized(String(text[$0])) }.filter { !$0.isEmpty }
+        CompletionContextWords.normalizedWords(in: text)
     }
 
     private func wordRanges(in text: String) -> [Range<String.Index>] {
-        var ranges: [Range<String.Index>] = []
-        var start: String.Index?
-        for index in text.indices {
-            if text[index].isWhitespace {
-                if let start { ranges.append(start..<index) }
-                start = nil
-            } else if start == nil {
-                start = index
-            }
-        }
-        if let start { ranges.append(start..<text.endIndex) }
-        return ranges
+        CompletionContextWords.wordRanges(in: text)
     }
 
     private func normalized(_ word: String) -> String {
-        word.trimmingCharacters(in: .punctuationCharacters).lowercased()
+        CompletionContextWords.normalized(word)
     }
 }
 
