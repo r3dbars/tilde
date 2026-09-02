@@ -93,17 +93,29 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
     public let calmRevealPostSpaceMilliseconds: Int
     public let calmRevealMidWordMilliseconds: Int
     public let requestsAfterPunctuation: Bool
+    /// Whether the model may be asked to finish a word the writer is still
+    /// typing. Off, the only thing between spaces is the system dictionary's
+    /// completion of a 3+ letter partial (`GhostInputController`'s spell
+    /// checker) and the model is asked only at word or punctuation
+    /// boundaries. On, the same 3+ letter partial also issues a throttled
+    /// model request, the app accepts a mid-word context on the wire, and a
+    /// model answer may only *grow* a visible dictionary ghost — never
+    /// shrink or rewrite it. Personal serving stays word-boundary only
+    /// either way (`GhostBrainServerHost.personalTailWords`).
+    public let requestsMidWordContinuation: Bool
 
     public init(
         chainsCompletionAfterAccept: Bool,
         calmRevealPostSpaceMilliseconds: Int,
         calmRevealMidWordMilliseconds: Int,
-        requestsAfterPunctuation: Bool
+        requestsAfterPunctuation: Bool,
+        requestsMidWordContinuation: Bool
     ) {
         self.chainsCompletionAfterAccept = chainsCompletionAfterAccept
         self.calmRevealPostSpaceMilliseconds = calmRevealPostSpaceMilliseconds
         self.calmRevealMidWordMilliseconds = calmRevealMidWordMilliseconds
         self.requestsAfterPunctuation = requestsAfterPunctuation
+        self.requestsMidWordContinuation = requestsMidWordContinuation
     }
 
     /// The measured production interaction.
@@ -111,16 +123,20 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         chainsCompletionAfterAccept: false,
         calmRevealPostSpaceMilliseconds: 200,
         calmRevealMidWordMilliseconds: 120,
-        requestsAfterPunctuation: false
+        requestsAfterPunctuation: false,
+        requestsMidWordContinuation: false
     )
 
     /// The owner's 9B preview trial of 2026-09-01/02: chained accept, the
-    /// shorter Electron reveal floor, punctuation as a request boundary.
+    /// shorter Electron reveal floor, punctuation as a request boundary, and
+    /// (2026-09-02) mid-word model continuation. Production stays on the
+    /// conservative interaction until a live result promotes any of them.
     public static let tuned9B = InteractionPolicy(
         chainsCompletionAfterAccept: true,
         calmRevealPostSpaceMilliseconds: 120,
         calmRevealMidWordMilliseconds: 80,
-        requestsAfterPunctuation: true
+        requestsAfterPunctuation: true,
+        requestsMidWordContinuation: true
     )
 
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {

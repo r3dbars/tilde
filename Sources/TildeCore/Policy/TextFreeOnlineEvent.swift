@@ -279,10 +279,24 @@ public enum TextFreeCursorBoundary: String, Sendable {
     case wordBoundary = "word-boundary"
     case sentenceBoundary = "sentence-boundary"
 
+    /// `midWord` must mean the caret is inside a word, and nothing else.
+    ///
+    /// Clause punctuation used to fall through to `midWord` because nothing
+    /// could ask from there: mid-word requests did not exist and a comma is
+    /// neither whitespace nor a sentence end. Now that both a comma request
+    /// (`InteractionPolicy.requestsAfterPunctuation`) and a partial-word
+    /// request (`requestsMidWordContinuation`) exist — and are on together in
+    /// the same 9B preview — leaving them to share one label would make the
+    /// two trials indistinguishable in the flight recorder. A finished clause
+    /// is a boundary; only letters are mid-word. Production, which asks at
+    /// neither, records exactly what it recorded before.
     public static func from(precedingCharacter: Character?) -> TextFreeCursorBoundary {
         guard let precedingCharacter else { return .wordBoundary }
         if ".!?".contains(precedingCharacter) { return .sentenceBoundary }
         if precedingCharacter.isWhitespace { return .wordBoundary }
+        if RawContinuationPrompt.requestPunctuation.contains(precedingCharacter) {
+            return .wordBoundary
+        }
         return .midWord
     }
 }
