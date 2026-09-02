@@ -28,16 +28,14 @@ public enum SceneEchoPolicy {
         minimumWords: Int = defaultMinimumWords,
         minimumCharacters: Int = defaultMinimumCharacters
     ) -> Bool {
-        guard let scene else { return false }
-        let candidate = normalized(suggestionText)
-        guard candidate.count >= minimumCharacters,
-              candidate.split(separator: " ").count >= minimumWords else { return false }
-        let sources = scene.conversationTurns.map(\.text) + scene.referenceSnippets
-        for source in sources {
-            let text = normalized(source)
-            if text.contains(candidate) { return true }
-        }
-        return false
+        isEcho(
+            suggestionText,
+            in: prepared(
+                scene: scene,
+                minimumWords: minimumWords,
+                minimumCharacters: minimumCharacters
+            )
+        )
     }
 
     /// The profile-derived form the live completion path uses.
@@ -46,12 +44,61 @@ public enum SceneEchoPolicy {
         scene: ScreenScene.Scene?,
         profile: TildeProductProfile
     ) -> Bool {
-        isEcho(
-            suggestionText,
+        isEcho(suggestionText, in: prepared(scene: scene, profile: profile))
+    }
+
+    /// One request's scene, normalized once.
+    ///
+    /// Every turn and snippet is lowercased and stripped of punctuation
+    /// before the containment test; that result depends only on the scene, so
+    /// a streaming request derives it once here instead of on every partial.
+    public struct PreparedScene: Sendable {
+        let normalizedSources: [String]
+        let minimumWords: Int
+        let minimumCharacters: Int
+
+        /// No scene: nothing can be an echo, exactly as `scene == nil` meant
+        /// before.
+        public static let absent = PreparedScene(
+            normalizedSources: [],
+            minimumWords: defaultMinimumWords,
+            minimumCharacters: defaultMinimumCharacters
+        )
+    }
+
+    public static func prepared(
+        scene: ScreenScene.Scene?,
+        minimumWords: Int = defaultMinimumWords,
+        minimumCharacters: Int = defaultMinimumCharacters
+    ) -> PreparedScene {
+        guard let scene else { return .absent }
+        let sources = scene.conversationTurns.map(\.text) + scene.referenceSnippets
+        return PreparedScene(
+            normalizedSources: sources.map(normalized),
+            minimumWords: minimumWords,
+            minimumCharacters: minimumCharacters
+        )
+    }
+
+    public static func prepared(
+        scene: ScreenScene.Scene?,
+        profile: TildeProductProfile
+    ) -> PreparedScene {
+        prepared(
             scene: scene,
             minimumWords: profile.sceneEchoMinimumWords,
             minimumCharacters: profile.sceneEchoMinimumCharacters
         )
+    }
+
+    public static func isEcho(_ suggestionText: String, in scene: PreparedScene) -> Bool {
+        let candidate = normalized(suggestionText)
+        guard candidate.count >= scene.minimumCharacters,
+              candidate.split(separator: " ").count >= scene.minimumWords else { return false }
+        for source in scene.normalizedSources where source.contains(candidate) {
+            return true
+        }
+        return false
     }
 
     private static func normalized(_ text: String) -> String {

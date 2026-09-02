@@ -153,6 +153,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             )
             return .silent(SuggestionDecisionReason(scene: reason))
         }
+        // Everything this request's context implies for the cleaner, the
+        // echo check, and the grounding check — derived once, here, and then
+        // handed to every streamed partial and to the final pass. None of it
+        // depends on model output, and a request can produce a dozen
+        // partials.
+        let prepared = PreparedCompletionContext(
+            textBeforeCursor: textBeforeCursor,
+            scene: scene,
+            profile: productProfile
+        )
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
@@ -227,8 +237,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                         let stable = stablePartial(
                             rawOutput,
                             recipe: recipe,
-                            textBeforeCursor: textBeforeCursor,
-                            scene: scene,
+                            context: prepared,
                             cleaner: cleaner
                         )
                         if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
@@ -261,14 +270,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         }
 
         let normalized = recipe.normalizedContinuation(content)
-        let clean = cleaner.cleanWithReason(normalized, after: textBeforeCursor)
+        let clean = cleaner.cleanWithReason(normalized, in: prepared.typed)
         var suggestion = clean.suggestion
         var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
         var decisionReason: SuggestionDecisionReason = clean.rejectionReason.map(
             SuggestionDecisionReason.init(cleaner:)
         ) ?? .shown
         if let candidate = suggestion,
-           SceneEchoPolicy.isEcho(candidate.visibleText, scene: scene, profile: productProfile) {
+           SceneEchoPolicy.isEcho(candidate.visibleText, in: prepared.sceneEcho) {
             suggestion = nil
             rejectionReason = "replaysScene"
             decisionReason = .sceneEcho
@@ -276,9 +285,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         if let candidate = suggestion,
            FactualGroundingPolicy.containsUnsupportedFact(
                candidate.visibleText,
-               typedContext: textBeforeCursor,
-               scene: scene,
-               mode: productProfile.factualGrounding
+               in: prepared.grounding
            ) {
             suggestion = nil
             rejectionReason = "unsupportedFact"
@@ -334,24 +341,27 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     /// is independent of whether a partial is shown: an echo- or
     /// grounding-rejected prefix still settles once the cap has bitten,
     /// because the final pass judges the same capped text.
+    ///
+    /// It takes the request's `PreparedCompletionContext` rather than the
+    /// context string and the scene: everything all three checks derive from
+    /// those is already computed, so a partial cannot re-tokenize the
+    /// context or re-normalize the scene no matter how many partials arrive.
     private func stablePartial(
         _ rawOutput: String,
         recipe: RawContinuationPrompt,
-        textBeforeCursor: String,
-        scene: ScreenScene.Scene?,
+        context: PreparedCompletionContext,
         cleaner: CompletionOutputCleaner
     ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
         let outcome = cleaner.clean(
             recipe.normalizedContinuation(rawOutput),
-            after: textBeforeCursor
+            in: context.typed
         )
         guard let cleaned = outcome.result.suggestion else {
             return (nil, outcome.visibleTextIsSettled)
         }
         guard !SceneEchoPolicy.isEcho(
             cleaned.visibleText,
-            scene: scene,
-            profile: productProfile
+            in: context.sceneEcho
         ) else { return (nil, outcome.visibleTextIsSettled) }
         guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else {
             return (nil, outcome.visibleTextIsSettled)
@@ -361,9 +371,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         // which is the text that would assert the fact.
         guard !FactualGroundingPolicy.containsUnsupportedFact(
             prefix,
-            typedContext: textBeforeCursor,
-            scene: scene,
-            mode: productProfile.factualGrounding
+            in: context.grounding
         ) else { return (nil, outcome.visibleTextIsSettled) }
         return (CompletionSuggestion(text: prefix), outcome.visibleTextIsSettled)
     }

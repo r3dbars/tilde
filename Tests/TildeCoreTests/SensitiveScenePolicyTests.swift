@@ -9,6 +9,12 @@ private func turn(_ speaker: ScreenScene.Speaker, _ text: String) -> ScreenScene
     ScreenScene.ConversationTurn(speaker: speaker, text: text)
 }
 
+/// The `.referencing` shape `ScreenScene.classify` produces: no conversation
+/// turns at all, just visible text from a window beside the composer.
+private func referencingScene(_ snippets: [String]) -> ScreenScene.Scene {
+    ScreenScene.Scene(mode: .referencing, conversationTurns: [], referenceSnippets: snippets)
+}
+
 @Suite("Sensitive scene policy")
 struct SensitiveScenePolicyTests {
     // MARK: - The two live 2026-08-16 dogfood cases (build 2705)
@@ -122,6 +128,72 @@ struct SensitiveScenePolicyTests {
         let s = scene([turn(.other, "FUNERAL is next week, please come")])
         #expect(SensitiveScenePolicy.isSensitive(scene: s))
     }
+
+    // MARK: - The referencing mode (composing beside a visible window)
+
+    @Test("A crisis phrase visible only in a reference snippet suppresses")
+    func referenceSnippetSuppresses() {
+        // Same failure shape as Case B, one window over: the writer is
+        // composing in one app while a document or thread beside it carries
+        // the grief. That text reaches the prompt through the Reference
+        // block, so the same phrase table has to cover it.
+        let s = referencingScene(["Draft: the funeral is going to be next week, details to follow"])
+        #expect(SensitiveScenePolicy.isSensitive(scene: s))
+        #expect(SensitiveScenePolicy.matchedCategory(scene: s) == .bereavement)
+    }
+
+    @Test("Every sensitivity class fires from a reference snippet, not just bereavement")
+    func referenceSnippetCoversEveryCategory() {
+        let cases: [(String, SensitiveScenePolicy.Category)] = [
+            ("dad passed away this morning", .bereavement),
+            ("she is in the icu tonight", .medicalCrisis),
+            ("there was a car accident on the bridge", .emergency),
+            ("we broke up last weekend", .relationshipEnding),
+            ("I got laid off yesterday", .jobLoss),
+        ]
+        for (text, expected) in cases {
+            let s = referencingScene([text])
+            #expect(SensitiveScenePolicy.isSensitive(scene: s), "did not fire: \(text)")
+            #expect(SensitiveScenePolicy.matchedCategory(scene: s) == expected)
+        }
+    }
+
+    @Test("A crisis phrase in a later reference snippet still suppresses")
+    func laterReferenceSnippetSuppresses() {
+        let s = referencingScene([
+            "quarterly roadmap notes",
+            "reply to the team about the memorial service on Friday",
+        ])
+        #expect(SensitiveScenePolicy.isSensitive(scene: s))
+    }
+
+    @Test("An ordinary referencing scene does not suppress")
+    func benignReferenceSnippetDoesNotFire() {
+        let s = referencingScene([
+            "Release checklist: confirm the build number, then update the changelog",
+        ])
+        #expect(!SensitiveScenePolicy.isSensitive(scene: s))
+        #expect(SensitiveScenePolicy.matchedCategory(scene: s) == nil)
+    }
+
+    @Test("Reference snippets keep the same word boundaries as turns")
+    func referenceSnippetRespectsWordBoundaries() {
+        let s = referencingScene(["the strawberries are finally ripe and the jeans got stripped"])
+        #expect(!SensitiveScenePolicy.isSensitive(scene: s))
+    }
+
+    @Test("A matching conversation turn still reports its own category ahead of any snippet")
+    func conversationTurnWinsOverSnippet() {
+        // Turns are scanned first, so a `.replying` scene reports exactly the
+        // category it reported before snippets were scanned at all.
+        let s = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [turn(.other, "my dad passed away this morning")],
+            referenceSnippets: ["I got laid off yesterday"]
+        )
+        #expect(SensitiveScenePolicy.isSensitive(scene: s))
+        #expect(SensitiveScenePolicy.matchedCategory(scene: s) == .bereavement)
+    }
 }
 
 @Suite("Sensitive scene phrase table")
@@ -138,6 +210,19 @@ struct SensitiveScenePhraseTableTests {
                 #expect(
                     SensitiveScenePolicy.isSensitive(scene: s),
                     "\(category) phrase stopped matching: \(phrase)"
+                )
+            }
+        }
+    }
+
+    @Test("Every phrase in the table also fires from a reference snippet")
+    func everyShippedPhraseFiresFromAReferenceSnippet() {
+        for (category, phrases) in SensitiveScenePolicy.phrasesByCategory {
+            for phrase in phrases {
+                let s = referencingScene(["so anyway, \(phrase) yesterday."])
+                #expect(
+                    SensitiveScenePolicy.isSensitive(scene: s),
+                    "\(category) phrase does not cover the referencing mode: \(phrase)"
                 )
             }
         }
