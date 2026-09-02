@@ -36,7 +36,7 @@ Non-negotiables that survive from the old covenant:
 
 ## Prior art to port, not rebuild
 
-- July lineage (checkout `/Users/redbars/redbars/code/transcripted-autocomplete-lab`):
+- July lineage (the earlier `transcripted-autocomplete-lab` checkout):
   `script/ocr_probe.swift` (capture+Vision spike), `script/ocr_eval.py`
   (context-arm eval), docs/quiz-lessons.md "Screen context (OCR) is worth a
   lot" (EM@1 14.5%→17.2% with OCR context). Port concepts and prompt shapes;

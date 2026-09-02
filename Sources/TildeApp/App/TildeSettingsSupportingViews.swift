@@ -27,6 +27,15 @@ struct PrivacyAndDataView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                LabeledContent("Exact Screen Text", value: model.exactScreenTextGranted ? "On" : "Off")
+                if !model.exactScreenTextGranted {
+                    Button("Enable Exact Screen Text…") { model.enableExactScreenText() }
+                    Text("With Accessibility access Tilde reads the window's text exactly instead of recognizing it from pixels. Reading only; Tilde never types through Accessibility.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Button("Apps Tilde Ignores…") { showIgnoredApps = true }
                 Button("Manage Local Data…") { showLocalData = true }
             }
@@ -40,7 +49,7 @@ struct PrivacyAndDataView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 380)
+        .frame(width: 460, height: 440)
         .sheet(isPresented: $showIgnoredApps) {
             IgnoredAppsView(model: model)
         }

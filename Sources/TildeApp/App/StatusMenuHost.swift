@@ -143,9 +143,7 @@ final class StatusMenuHost: NSObject {
     private var pauseItem: NSMenuItem?
     private var ignoreAppItem: NSMenuItem?
     private var setupOrTildeItem: NSMenuItem?
-    private var accessibilityItem: NSMenuItem?
     private var modelPickerItem: NSMenuItem?
-    private var productionModelChoiceItems: [TildeModelChoice: NSMenuItem] = [:]
     private var modelChoiceItems: [PreviewModelChoice: NSMenuItem] = [:]
     private var h01Item: NSMenuItem?
 
@@ -176,19 +174,12 @@ final class StatusMenuHost: NSObject {
         todayItem = addAction(to: menu, "0 words with Tilde today", #selector(openYourTilde(_:)))
         menu.addItem(.separator())
 
-        if TildeProductProfile.current == .production {
-            let picker = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
-            let submenu = NSMenu(title: "Model")
-            for choice in TildeModelChoice.allCases {
-                let choiceItem = addAction(to: submenu, choice.displayName, #selector(selectModel(_:)))
-                choiceItem.representedObject = choice.rawValue
-                productionModelChoiceItems[choice] = choiceItem
-            }
-            picker.submenu = submenu
-            menu.addItem(picker)
-            modelPickerItem = picker
-            menu.addItem(.separator())
-        } else if TildeProductProfile.current == .modelPreview {
+        // The menu is for the three things a writer does in a hurry: see the
+        // state, pause, and ignore the app in front of them. Everything else
+        // — the model choice, permissions, data — lives in the Tilde window.
+        // The Model Preview build keeps its research controls here because
+        // it is a research build.
+        if TildeProductProfile.current == .modelPreview {
             let picker = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
             let submenu = NSMenu(title: "Model")
             for choice in PreviewModelChoice.allCases {
@@ -221,7 +212,6 @@ final class StatusMenuHost: NSObject {
         // alike. Hidden until some other app has actually been frontmost.
         ignoreAppItem = addAction(to: menu, "Ignore App", #selector(ignoreForegroundApplication(_:)))
         ignoreAppItem?.isHidden = true
-        accessibilityItem = addAction(to: menu, "Exact Screen Text", #selector(enableExactScreenText(_:)))
         setupOrTildeItem = addAction(to: menu, "Open \(productName)", #selector(openTilde(_:)))
         menu.addItem(.separator())
         addAction(to: menu, "Quit \(productName)", #selector(quit(_:)), key: "q")
@@ -253,12 +243,7 @@ final class StatusMenuHost: NSObject {
         pauseItem?.title = presentation.primaryAction ?? ""
         pauseItem?.isHidden = presentation.primaryAction == nil
         setupOrTildeItem?.title = "Open \(TildeProductProfile.current.displayName)"
-        if let active = appDelegate.selectedProductionModel() {
-            modelPickerItem?.title = "Model: \(active.shortName)"
-            for (choice, item) in productionModelChoiceItems {
-                item.state = choice == active ? .on : .off
-            }
-        } else if let active = appDelegate.selectedPreviewModel() {
+        if let active = appDelegate.selectedPreviewModel() {
             modelPickerItem?.title = "Model: \(active.shortName)"
             for (choice, item) in modelChoiceItems {
                 item.state = choice == active ? .on : .off
@@ -284,11 +269,6 @@ final class StatusMenuHost: NSObject {
         }
 
         h01Item?.state = settings.h01BlockRandomizationEnabled ? .on : .off
-        let exactTextGranted = AccessibilityPermission.isGranted()
-        accessibilityItem?.title = exactTextGranted
-            ? "Exact Screen Text: On"
-            : "Enable Exact Screen Text (Accessibility)…"
-        accessibilityItem?.state = exactTextGranted ? .on : .off
 
         refreshIcon(for: state.iconAppearance)
         tildeWindow?.refresh()
@@ -355,15 +335,6 @@ final class StatusMenuHost: NSObject {
     /// Exact screen text reads the focused window's text through the
     /// Accessibility API instead of OCR. Asks the system prompt, then opens
     /// the pane so a previously dismissed prompt still has a path.
-    @objc private func enableExactScreenText(_ sender: Any?) {
-        guard let appDelegate else { return }
-        if !AccessibilityPermission.isGranted() {
-            appDelegate.requestAccessibilityAccess()
-            if !AccessibilityPermission.isGranted() { appDelegate.openAccessibilitySettings() }
-        }
-        refresh()
-    }
-
     /// Adds the last frontmost non-Tilde app to the shared excluded-apps
     /// list. Same list, same writer, same normalization as the Settings
     /// "Add App…" panel, so the exclusion applies everywhere it applies
@@ -385,10 +356,7 @@ final class StatusMenuHost: NSObject {
 
     @objc private func selectModel(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String else { return }
-        if TildeProductProfile.current == .production,
-           let choice = TildeModelChoice(rawValue: rawValue) {
-            appDelegate?.selectProductionModel(choice)
-        } else if let choice = PreviewModelChoice(rawValue: rawValue) {
+        if let choice = PreviewModelChoice(rawValue: rawValue) {
             appDelegate?.selectPreviewModel(choice)
         }
     }
