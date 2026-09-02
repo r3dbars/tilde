@@ -44,6 +44,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     /// dictionary ghost or an app older than the receipt.
     public let generatorMilliseconds: Int?
     public let firstStableWordMilliseconds: Int?
+    public let configurationDigestSHA256: String?
     public var typedAfterShow: Bool
     public var acceptedKind: AcceptKind?
     public var accepted: String
@@ -66,7 +67,8 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         candidateSource: TextFreeCandidateSource,
         opportunityCharacters: Int,
         generatorMilliseconds: Int? = nil,
-        firstStableWordMilliseconds: Int? = nil
+        firstStableWordMilliseconds: Int? = nil,
+        configurationDigestSHA256: String? = nil
     ) {
         self.id = id
         self.shownAt = shownAt
@@ -82,6 +84,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         self.opportunityCharacters = max(1, opportunityCharacters)
         self.generatorMilliseconds = generatorMilliseconds.map { min(300_000, max(0, $0)) }
         self.firstStableWordMilliseconds = firstStableWordMilliseconds.map { min(300_000, max(0, $0)) }
+        self.configurationDigestSHA256 = configurationDigestSHA256
         typedAfterShow = false
         acceptedKind = nil
         accepted = ""
@@ -174,6 +177,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
             candidateCharacters: max(candidateCharacters, isAccept ? acceptedCount : 0),
             candidateSourceBucket: candidateSource,
             candidateLengthBucket: TextFreeLengthBucket.from(wordCount: candidateWordCount).rawValue,
+            configurationDigestSHA256: configurationDigestSHA256,
             opportunityCharacters: opportunityCharacters,
             retentionAt5Seconds: try retentionAt5Seconds.validated(),
             retentionAt30Seconds: try retentionAt30Seconds.validated(),

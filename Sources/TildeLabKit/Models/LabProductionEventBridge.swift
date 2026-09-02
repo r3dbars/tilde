@@ -65,6 +65,7 @@ extension LabOnlineExperimentEvent {
             retentionAt5Seconds: event.retentionAt5Seconds,
             retentionAt30Seconds: event.retentionAt30Seconds,
             retentionAtSegmentClose: event.retentionAtSegmentClose,
+            configurationDigestSHA256: event.configurationDigestSHA256,
             schema: event.schema
         )
     }
