@@ -28,6 +28,60 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-09-02 — Make the ruler honest: four live-ledger bugs fixed before the next experiment
+
+- **Try:** An outside review of the whole path (input method → socket →
+  app → model → Screen Memory → Personal History → outcome ledger → Lab)
+  named four measurement bugs. All four checked out in the code, so they
+  were fixed together, with fixtures, before any further experiment is
+  read off the live ledger: (1) the ledger derived `register` from the
+  host bundle while the app served a Screen-Memory chat reply in a
+  browser as `chat`; (2) `candidateSourceBucket` was always `unknown`, so
+  dictionary suffixes and model phrases shared one number; (3)
+  `opportunityCharacters` was the bounded-context length at each show, so
+  a long document counted its whole body once per ghost; (4) production's
+  `TextFreeOnlineEvent` and the Lab's `LabOnlineExperimentEvent` were two
+  definitions of the v3 event, and live lines were decoded straight into
+  the Lab's.
+- **Learn:** The fix is a receipt, not a recalculation. Every completion
+  response line now carries the register the generator composed with and
+  the served candidate's source (`GhostBrainResponse.register` / `.source`,
+  optional on the wire so a pre-receipt peer still works); the keyboard
+  records exactly that on the event, and the dictionary path names itself.
+  `OpportunityCharacterMeter` counts typed and accepted characters once
+  between ghosts: the deterministic fixture that used to sum ten ghosts in
+  a 2,000-character document to 20,000 now sums to the 50 characters
+  authored. `TextFreeOnlineEvent.allowedKeys` plus a strict
+  `decodeProductionLine` make the production type the one definition of a
+  live event; `ingest-events --instrument` decodes through it and bridges
+  field by field with no defaulting, refusing a Lab-only key by name, and
+  a parity test pins the bridge to the Lab decoder. The `unknown-legacy`
+  source bucket exists only for lines written before today.
+- **Fail:** Nothing here is a result; it is the precondition for one. The
+  ledger is now inconsistent across the cut: events before this build carry
+  the host-bundle register, `unknown` source, and the context-length
+  denominator, so register, source, and per-1,000-character slices must be
+  cut at the build that ships this (retention and outcome fields are
+  comparable across it). Silent opportunities — no ghost shown because of
+  a gate, silence, timeout, or a superseded request — are still not
+  recorded at all; that is the opportunity-id and decision-receipt work,
+  registered next. The interaction profile split brain (the production
+  keyboard reads chaining, reveal, and punctuation from its bundle profile
+  while the app serves Qwen under the 9B completion policy) is confirmed
+  and unfixed.
+- **Where:** `Sources/TildeCore/Policy/TextFreeOnlineEvent.swift`,
+  `OpportunityCharacterMeter.swift`, `LiveOnlineOpportunity.swift`;
+  `Sources/TildeCore/Engine/GhostBrainWire.swift`;
+  `Sources/TildeApp/App/GhostBrainServerHost.swift`;
+  `Sources/InlineGhostIME/GhostProvenance.swift`, `GhostOutcomeLedger.swift`,
+  `GhostInputController.swift`, `GhostBrainClient.swift`;
+  `Sources/TildeLabKit/Models/LabProductionEventBridge.swift`;
+  `docs/tilde-lab.md` § four rules of the live ledger.
+- **Next:** Ship it to the daily driver, then the opportunity id and
+  decision receipt so silent opportunities end with a terminal reason;
+  then split `TildeProductProfile` into build identity, generator,
+  decision policy, and interaction policy with one digest per request.
+
 ## 2026-09-02 — Luna judges the live 9B preview stack: 33.9% simulated retained value
 
 - **Try:** Point the simulated typist at exactly the arm the live 9B

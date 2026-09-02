@@ -133,7 +133,10 @@ final class GhostInputController: IMKInputController {
     private var lastScheduledContextTail = ""
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
-    private var bufferedReveal: (text: String, ticket: InlineSuggestionTicket)?
+    private var bufferedReveal: (text: String, ticket: InlineSuggestionTicket, provenance: GhostProvenance)?
+    /// The app's receipt for the ghost most recently handed to the reducer,
+    /// read back by `recordOutcomeShown` when the `.shown` effect fires.
+    private var presentedProvenance: (ticket: InlineSuggestionTicket, provenance: GhostProvenance)?
     private var screenMemoryTypingTask: Task<Void, Never>?
     private var calmRevealByBundle = [String: Bool]()
 
@@ -368,12 +371,22 @@ final class GhostInputController: IMKInputController {
         let field = fieldSnapshot(client)
         guard !Self.isOutcomeExcluded(bundleIdentifier: field.bundleIdentifier) else { return }
         let context = contextBeforeCaret(client, selection: field.selection)
+        // The receipt travels with the presentation that produced this
+        // `.shown`; a mismatch can only mean a ghost the reducer showed
+        // without passing through `present`, which does not exist today,
+        // so the fallback is labelled legacy rather than guessed at.
+        let provenance = presentedProvenance.flatMap { presented in
+            presented.ticket == state.visibleTicket ? presented.provenance : nil
+        } ?? GhostProvenance(
+            register: ContinuationRegister.from(bundleIdentifier: field.bundleIdentifier),
+            source: .unknownLegacy
+        )
         GhostOutcomeLedger.noteShown(
             sessionIdentifier: suggestionSessionIdentifier,
-            bundleIdentifier: field.bundleIdentifier,
+            register: provenance.register,
+            source: provenance.source,
             candidateCharacters: state.visibleText.count,
             candidateWordCount: state.visibleText.split(whereSeparator: \Character.isWhitespace).count,
-            opportunityCharacters: max(1, context.count),
             precedingCharacter: context.last,
             excluded: false,
             variant: h01SessionArm()?.eventVariant ?? "champion"
@@ -869,11 +882,18 @@ final class GhostInputController: IMKInputController {
 
         if context.last?.isLetter == true {
             let suffix = spellCheckerSuffix(for: context)
+            // No model runs here, so the register is the host's own and
+            // the source is the dictionary, never the base model's credit.
+            let provenance = GhostProvenance(
+                register: ContinuationRegister.from(bundleIdentifier: field.bundleIdentifier),
+                source: .dictionary
+            )
             Task { @MainActor [weak self] in
                 self?.present(
                     suffix,
                     ticket: requestTicket,
-                    revealNotBefore: revealNotBefore
+                    revealNotBefore: revealNotBefore,
+                    provenance: provenance
                 )
             }
         } else if RawContinuationPrompt.endsAtRequestBoundary(
@@ -965,14 +985,16 @@ final class GhostInputController: IMKInputController {
                 app: bundle,
                 fieldSessionIdentifier: fieldSessionIdentifier,
                 experimentArm: experimentArm,
-                onPartial: { [weak self] text in
+                onPartial: { [weak self] partial in
                     // Called on the socket worker; the ticket check in
                     // `present` is what discards a partial that arrives late.
+                    let provenance = GhostProvenance(receipt: partial, hostBundleIdentifier: bundleIdentifier)
                     Task { @MainActor [weak self] in
                         self?.present(
-                            separator + text,
+                            separator + (partial.suggestion ?? ""),
                             ticket: requestTicket,
-                            revealNotBefore: revealNotBefore
+                            revealNotBefore: revealNotBefore,
+                            provenance: provenance
                         )
                     }
                 }
@@ -985,7 +1007,8 @@ final class GhostInputController: IMKInputController {
                     await self?.present(
                         separator + text,
                         ticket: requestTicket,
-                        revealNotBefore: revealNotBefore
+                        revealNotBefore: revealNotBefore,
+                        provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier)
                     )
                 } else {
                     await self?.settle(ticket: requestTicket)
@@ -1009,7 +1032,8 @@ final class GhostInputController: IMKInputController {
     private func present(
         _ text: String,
         ticket requestTicket: InlineSuggestionTicket,
-        revealNotBefore: Date = .distantPast
+        revealNotBefore: Date = .distantPast,
+        provenance: GhostProvenance
     ) {
         guard let liveClient = client() else { return }
         guard !stopForSecureInput(liveClient) else { return }
@@ -1026,10 +1050,11 @@ final class GhostInputController: IMKInputController {
             return
         }
         if Date() < revealNotBefore {
-            bufferReveal(text, ticket: requestTicket, until: revealNotBefore)
+            bufferReveal(text, ticket: requestTicket, until: revealNotBefore, provenance: provenance)
             return
         }
         if bufferedReveal?.ticket == requestTicket { bufferedReveal = nil }
+        presentedProvenance = (requestTicket, provenance)
         apply(state.reduce(.update(text, requestTicket)), to: liveClient)
     }
 
@@ -1037,14 +1062,15 @@ final class GhostInputController: IMKInputController {
     private func bufferReveal(
         _ text: String,
         ticket: InlineSuggestionTicket,
-        until deadline: Date
+        until deadline: Date,
+        provenance: GhostProvenance
     ) {
         guard !text.isEmpty else { return }
         if let bufferedReveal, bufferedReveal.ticket == ticket {
             guard text.count > bufferedReveal.text.count,
                   text.hasPrefix(bufferedReveal.text) else { return }
         }
-        bufferedReveal = (text, ticket)
+        bufferedReveal = (text, ticket, provenance)
         revealTask?.cancel()
         let nanoseconds = UInt64(max(0, deadline.timeIntervalSinceNow) * 1_000_000_000)
         revealTask = Task { @MainActor [weak self] in
@@ -1054,7 +1080,7 @@ final class GhostInputController: IMKInputController {
                   let buffered = self.bufferedReveal,
                   buffered.ticket == ticket else { return }
             self.bufferedReveal = nil
-            self.present(buffered.text, ticket: buffered.ticket)
+            self.present(buffered.text, ticket: buffered.ticket, provenance: buffered.provenance)
         }
     }
 

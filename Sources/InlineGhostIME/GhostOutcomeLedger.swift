@@ -15,19 +15,25 @@ enum GhostOutcomeLedger {
     private static var contextProvider: (@Sendable () -> String?)?
     private static var excluded = false
     private static var seenGeneration: Int?
+    /// Writing volume between ghosts; see `OpportunityCharacterMeter`.
+    private static var meter = OpportunityCharacterMeter()
 
     static func configure(contextProvider: @escaping @Sendable () -> String?) {
         lock.lock()
         self.contextProvider = contextProvider
+        meter.reset()
         lock.unlock()
     }
 
+    /// `register` and `source` are the app's receipt for this ghost (or the
+    /// dictionary path's own values); the ledger never derives a register
+    /// from the host bundle.
     static func noteShown(
         sessionIdentifier: String,
-        bundleIdentifier: String,
+        register: ContinuationRegister,
+        source: TextFreeCandidateSource,
         candidateCharacters: Int,
         candidateWordCount: Int,
-        opportunityCharacters: Int,
         precedingCharacter: Character?,
         excluded: Bool,
         variant: String = "champion",
@@ -35,15 +41,16 @@ enum GhostOutcomeLedger {
     ) {
         _ = dropIfWiped()
         closeOpenOpportunity(at: time)
-        let register = ContinuationRegister.from(bundleIdentifier: bundleIdentifier)
         lock.lock()
         self.excluded = excluded
         guard !excluded else {
             opportunity = nil
+            meter.reset()
             lastActivity = time
             lock.unlock()
             return
         }
+        let opportunityCharacters = meter.takeForOpportunity()
         opportunity = LiveOnlineOpportunity(
             shownAt: time,
             sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(
@@ -56,6 +63,7 @@ enum GhostOutcomeLedger {
             safeOpportunity: !excluded,
             candidateCharacters: candidateCharacters,
             candidateWordCount: candidateWordCount,
+            candidateSource: source,
             opportunityCharacters: opportunityCharacters
         )
         lastActivity = time
@@ -70,6 +78,7 @@ enum GhostOutcomeLedger {
 
     static func noteTyped(at time: Date = Date()) {
         lock.lock()
+        meter.noteTyped()
         opportunity?.noteTyped(at: time)
         lastActivity = time
         let stillVisible = opportunity != nil
@@ -90,6 +99,7 @@ enum GhostOutcomeLedger {
     ) {
         if dropIfWiped() { return }
         lock.lock()
+        meter.noteAccepted(characters: text.count)
         opportunity?.noteAccepted(text, kind: kind, at: time)
         lastActivity = time
         let ready = remainderVisible ? nil : opportunity
@@ -110,6 +120,7 @@ enum GhostOutcomeLedger {
     static func markPrivacyExcluded() {
         lock.lock()
         excluded = true
+        meter.reset()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
             watches[index].markPrivacyExcluded()
@@ -151,6 +162,7 @@ enum GhostOutcomeLedger {
             }
         }
         watches.removeAll { $0.isComplete }
+        meter.reset()
         lastActivity = time
         lock.unlock()
         for var watch in completed {
@@ -282,6 +294,7 @@ enum GhostOutcomeLedger {
         seenGeneration = current
         opportunity = nil
         watches = []
+        meter.reset()
         excluded = true
         return true
     }

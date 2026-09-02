@@ -108,15 +108,32 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
     /// Every socket line is an event. `final == false` is a stable streamed
     /// prefix; the terminal line always carries `final == true`.
     public let final: Bool
+    /// The register the generator actually composed with
+    /// (`ContinuationRegister` raw value). The input method records it on
+    /// the outcome event instead of re-deriving one from the host bundle,
+    /// which disagrees whenever Screen Memory routes a browser reply to
+    /// the chat register. Absent from a pre-receipt app.
+    public let register: String?
+    /// `TextFreeCandidateSource` raw value for the served text. Absent from
+    /// a pre-receipt app and from partial lines that precede arbitration.
+    public let source: String?
 
-    public init(outcome: Outcome, suggestion: String?, final: Bool = true) {
+    public init(
+        outcome: Outcome,
+        suggestion: String?,
+        final: Bool = true,
+        register: String? = nil,
+        source: String? = nil
+    ) {
         self.outcome = outcome
         self.suggestion = suggestion
         self.final = final
+        self.register = register
+        self.source = source
     }
 
     private enum CodingKeys: String, CodingKey {
-        case outcome, suggestion, final
+        case outcome, suggestion, final, register, source
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,14 +142,36 @@ public struct GhostBrainResponse: Codable, Equatable, Sendable {
         suggestion = try container.decodeIfPresent(String.self, forKey: .suggestion)
         // A response from the pre-stream protocol was necessarily terminal.
         final = try container.decodeIfPresent(Bool.self, forKey: .final) ?? true
+        register = try container.decodeIfPresent(String.self, forKey: .register)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
-    public static func suggestion(_ text: String) -> Self {
-        text.isEmpty ? .silence : Self(outcome: .suggestion, suggestion: text)
+    public static func suggestion(
+        _ text: String,
+        register: ContinuationRegister? = nil,
+        source: TextFreeCandidateSource? = nil
+    ) -> Self {
+        text.isEmpty
+            ? .silence
+            : Self(
+                outcome: .suggestion,
+                suggestion: text,
+                register: register?.rawValue,
+                source: source?.rawValue
+            )
     }
 
-    public static func partial(_ text: String) -> Self {
-        Self(outcome: .suggestion, suggestion: text, final: false)
+    /// Streamed prefixes precede personal arbitration, and a stream is only
+    /// ever enabled when personal serving is off, so a partial is always the
+    /// base model's own text.
+    public static func partial(_ text: String, register: ContinuationRegister? = nil) -> Self {
+        Self(
+            outcome: .suggestion,
+            suggestion: text,
+            final: false,
+            register: register?.rawValue,
+            source: register == nil ? nil : TextFreeCandidateSource.baseModel.rawValue
+        )
     }
 
     public static let silence = Self(outcome: .silence, suggestion: nil)

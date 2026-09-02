@@ -46,7 +46,16 @@ Production Gemma is byte-identical and pinned by `ProfileSceneOptionsTests`.
 None of the preview changes is a registered result. The ordered causal
 queue below is unchanged; what changed is that the build the owner types
 on now produces the F03 events this page is about, and the outcome ledger
-can additionally compare chained ghosts against opening ghosts. The
+can additionally compare chained ghosts against opening ghosts.
+
+On 2026-09-02 the ledger's four measurement bugs were fixed (see
+[`docs/tilde-lab.md`](../tilde-lab.md), "Four rules of the live ledger"):
+events written by builds from that date carry the register the generator
+served and a real candidate source, and `opportunityCharacters` is the
+writing authored since the previous ghost. Events written before it carry
+the host-bundle register, `unknown` source, and the bounded-context
+length, so a register, source, or per-1,000-character slice must be cut at
+that build; retention and outcome fields are comparable across it. The
 dated read behind all of it is
 [`platform-audit-2026-09-01.md`](platform-audit-2026-09-01.md); the
 attempts are in [`lab-log.md`](lab-log.md).
