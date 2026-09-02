@@ -281,6 +281,13 @@ actor ScreenCaptureService {
         expectedTarget: TypingTargetIdentity? = nil,
         now: Date = Date()
     ) -> ScreenScene.Scene? {
+        // The master toggle is re-checked here, not only in the app's scene
+        // provider: this actor is the object that holds the screen text, so
+        // it is also the object that refuses to hand it over. Anything still
+        // in memory when the toggle went off is dropped by
+        // `forgetCapturedScreenState()`; this closes the same door for a
+        // capture that lands between the two.
+        guard enabled() else { return nil }
         guard latestSnapshot != nil else { return nil }
         let target = activeTypingTarget
         if let fieldSessionIdentifier,
@@ -364,6 +371,50 @@ actor ScreenCaptureService {
             ])
         }
         return scene
+    }
+
+    /// Turning the Screen Memory master toggle off has to do more than stop
+    /// the next capture. A snapshot can be served for up to
+    /// `ScreenScene.defaultStalenessCapSeconds` after it was taken, so a
+    /// toggle that only blocked future captures would leave the last look at
+    /// the screen answering completions for another twenty seconds. This
+    /// drops everything the actor is holding — both snapshots, both reuse
+    /// baselines, the pending capture task, and the typing target they were
+    /// attributed to — so there is nothing left to serve or to diff against
+    /// if the toggle comes back on.
+    ///
+    /// `lastContentResetAt` is moved forward rather than cleared: it is the
+    /// "anything older than this is the wrong conversation" watermark, and a
+    /// capture already in flight must not be able to land behind it.
+    func forgetCapturedScreenState(now moment: Date = Date()) {
+        pendingTextFieldCaptureTask?.cancel()
+        pendingTextFieldCaptureTask = nil
+        latestSnapshot = nil
+        latestWindowSnapshot = nil
+        windowBaseline = nil
+        displayBaseline = nil
+        activeTypingTarget = nil
+        activeTextFieldSessionIdentifier = nil
+        textFieldRequiresFullRefresh = false
+        lastWindowSceneHadConversation = nil
+        lastFullDisplayCaptureAt = nil
+        lastContentResetAt = moment
+    }
+
+    /// The last gate before recognized screen text is retained in memory.
+    /// `enabled()` is re-read here instead of being inherited from
+    /// `attemptCapture`'s check because OCR suspends the capture for tens of
+    /// milliseconds and the master toggle can go off inside that window; a
+    /// capture that started while enabled must not land afterwards. Paired
+    /// with `forgetCapturedScreenState()`, which runs after the setting is
+    /// written: either this read already sees the new value and drops the
+    /// snapshot, or the snapshot is stored first and the clear removes it.
+    private func retainsCapturedScreenText() -> Bool {
+        guard enabled() else {
+            record(.skip(.disabled))
+            return false
+        }
+        return true
     }
 
     /// Test seam: injects a snapshot directly, bypassing the entire
@@ -647,6 +698,7 @@ actor ScreenCaptureService {
                         target: target
                     )
                 )
+                guard retainsCapturedScreenText() else { return .skipped(.disabled) }
                 latestSnapshot = snapshot
                 latestWindowSnapshot = snapshot
                 commitCaptureSlot(at: moment)
@@ -903,6 +955,7 @@ actor ScreenCaptureService {
                     target: target
                 )
             )
+            guard retainsCapturedScreenText() else { return .skipped(.disabled) }
             latestSnapshot = snapshot
             latestWindowSnapshot = snapshot
             commitCaptureSlot(at: moment)
@@ -1167,6 +1220,7 @@ actor ScreenCaptureService {
                     target: target
                 )
             )
+            guard retainsCapturedScreenText() else { return .skipped(.disabled) }
             latestSnapshot = snapshot
             commitCaptureSlot(at: moment)
             lastFullDisplayCaptureAt = moment

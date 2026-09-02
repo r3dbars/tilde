@@ -335,7 +335,7 @@ private struct TildeSetupView: View {
             model.showInputSourceFallback
                 ? "Choose Tilde from the keyboard menu, then return here."
                 : "Tilde needs to be selected once before setup is complete."
-        case .ready: "Start typing anywhere. Press Tab to accept a suggestion."
+        case .ready: TildeAcceptKeys.readySummary
         case let .recoverableError(target): recoveryExplanation(for: target)
         }
     }

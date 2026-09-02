@@ -1,6 +1,44 @@
 import AppKit
 import TildeCore
 
+/// A frontmost app, as the menu needs to talk about it: the bundle
+/// identifier the exclusion list is keyed by, and the app's own display
+/// name. Nothing else about the app is read — never its window title, never
+/// anything it is displaying, never anything typed into it.
+struct ForegroundApplication: Equatable, Sendable {
+    let bundleIdentifier: String
+    let name: String
+}
+
+/// The pure half of the menu's one-click "Ignore <App>" affordance, kept out
+/// of the AppKit class so both the wording and the list arithmetic are
+/// testable.
+enum IgnoreApplicationMenuItem {
+    /// `nil` hides the item — there is nothing to offer until some other app
+    /// has been frontmost. An app that is already ignored keeps a line in
+    /// the menu (with a checkmark) rather than vanishing: silently removing
+    /// the row would read as "the click did nothing".
+    static func title(for application: ForegroundApplication?, isIgnored: Bool) -> String? {
+        guard let application else { return nil }
+        let name = application.name.isEmpty ? application.bundleIdentifier : application.name
+        return isIgnored ? "Ignoring \(name)" : "Ignore \(name)"
+    }
+
+    /// Adds one bundle identifier to the same excluded-apps list the
+    /// Settings file panel writes, normalized exactly the way that flow
+    /// normalizes it. Idempotent: adding an app already on the list returns
+    /// the list unchanged, so a second click cannot rotate the consent
+    /// identifier or grow the stored array. An identifier the shared
+    /// contract would reject is dropped rather than stored — the exclusion
+    /// would silently never match.
+    static func adding(_ bundleIdentifier: String, to excluded: Set<String>) -> Set<String> {
+        guard PersonalHistoryEvent.validBundleIdentifier(bundleIdentifier) else { return excluded }
+        return Set(
+            PersonalHistoryCapturePolicy.normalizedExcludedApps(excluded.union([bundleIdentifier]))
+        )
+    }
+}
+
 /// Tilde stays quiet in the menu bar. Personal progress and controls live in
 /// one unified window opened from a single menu action.
 @MainActor
@@ -10,10 +48,17 @@ final class StatusMenuHost: NSObject {
         let detail: String
         let primaryAction: String?
 
+        /// `screenMemoryEnabled` is not cosmetic here. `.disabled` covers two
+        /// different user choices — suggestions off, or the Screen Memory
+        /// master toggle off — and the resume action turns both back on. A
+        /// button labelled only "Resume Tilde" would quietly undo an explicit
+        /// privacy choice, so when Screen Memory is the reason, the menu says
+        /// so and the action names what it will switch on.
         static func make(
             state: TildeApplicationState,
             model: ModelState,
-            wordsToday: Int
+            wordsToday: Int,
+            screenMemoryEnabled: Bool = true
         ) -> Self {
             if state.requiresUserAttention {
                 return Self(
@@ -47,6 +92,12 @@ final class StatusMenuHost: NSObject {
                     detail: "\(wordsToday.formatted()) words with Tilde today",
                     primaryAction: "Pause for 1 Hour"
                 )
+            case .disabled where !screenMemoryEnabled:
+                return Self(
+                    status: "Screen Memory is Off",
+                    detail: "Tilde suggests nothing until it can read the screen",
+                    primaryAction: "Turn Screen Memory Back On"
+                )
             case .paused, .disabled:
                 return Self(
                     status: "Tilde is Paused",
@@ -74,6 +125,7 @@ final class StatusMenuHost: NSObject {
     private var statusLineItem: NSMenuItem?
     private var todayItem: NSMenuItem?
     private var pauseItem: NSMenuItem?
+    private var ignoreAppItem: NSMenuItem?
     private var setupOrTildeItem: NSMenuItem?
     private var accessibilityItem: NSMenuItem?
     private var modelPickerItem: NSMenuItem?
@@ -139,6 +191,12 @@ final class StatusMenuHost: NSObject {
         }
 
         pauseItem = addAction(to: menu, "Pause for 1 Hour", #selector(togglePause(_:)))
+        // One click to exclude whatever the user was just writing in, from
+        // the same list the Settings file panel writes — so it applies to
+        // Screen Memory capture, Personal History, and the outcome ledger
+        // alike. Hidden until some other app has actually been frontmost.
+        ignoreAppItem = addAction(to: menu, "Ignore App", #selector(ignoreForegroundApplication(_:)))
+        ignoreAppItem?.isHidden = true
         accessibilityItem = addAction(to: menu, "Exact Screen Text", #selector(enableExactScreenText(_:)))
         setupOrTildeItem = addAction(to: menu, "Open \(productName)", #selector(openTilde(_:)))
         menu.addItem(.separator())
@@ -156,7 +214,8 @@ final class StatusMenuHost: NSObject {
         let presentation = Presentation.make(
             state: state,
             model: appDelegate.modelState(),
-            wordsToday: TildeStats.todayWordsAccepted()
+            wordsToday: TildeStats.todayWordsAccepted(),
+            screenMemoryEnabled: settings.screenMemoryEnabled
         )
         statusLineItem?.title = switch TildeProductProfile.current {
         case .production: "\(appDelegate.selectedProductionModel()?.shortName ?? "Gemma E2B") · \(presentation.status)"
@@ -180,6 +239,24 @@ final class StatusMenuHost: NSObject {
             }
         }
 
+        let foreground = appDelegate.foregroundApplication()
+        let foregroundIsIgnored = foreground.map {
+            DefaultExcludedApps.isExcluded(
+                $0.bundleIdentifier,
+                configuredExcludedApps: personalHistory.excludedApps
+            )
+        } ?? false
+        if let ignoreTitle = IgnoreApplicationMenuItem.title(
+            for: foreground,
+            isIgnored: foregroundIsIgnored
+        ) {
+            ignoreAppItem?.title = ignoreTitle
+            ignoreAppItem?.state = foregroundIsIgnored ? .on : .off
+            ignoreAppItem?.isHidden = false
+        } else {
+            ignoreAppItem?.isHidden = true
+        }
+
         h01Item?.state = settings.h01BlockRandomizationEnabled ? .on : .off
         let exactTextGranted = AccessibilityPermission.isGranted()
         accessibilityItem?.title = exactTextGranted
@@ -197,9 +274,14 @@ final class StatusMenuHost: NSObject {
         } else if settings.pausedUntil != nil {
             settings.resume()
         } else if appDelegate?.applicationState() == .disabled {
+            let screenMemoryWasOff = !settings.screenMemoryEnabled
             settings.suggestionsEnabled = true
             settings.screenMemoryEnabled = true
             settings.resume()
+            // The menu item says which switch this flips (see
+            // `Presentation.make`), and the app still has to hear about it:
+            // the capture service and the status icon both key off it.
+            if screenMemoryWasOff { appDelegate?.screenMemoryEnabledDidChange(true) }
         } else {
             settings.pause(for: 3_600)
         }
@@ -231,6 +313,19 @@ final class StatusMenuHost: NSObject {
             appDelegate.requestAccessibilityAccess()
             if !AccessibilityPermission.isGranted() { appDelegate.openAccessibilitySettings() }
         }
+        refresh()
+    }
+
+    /// Adds the last frontmost non-Tilde app to the shared excluded-apps
+    /// list. Same list, same writer, same normalization as the Settings
+    /// "Add App…" panel, so the exclusion applies everywhere it applies
+    /// today: Screen Memory capture, Personal History, and the outcome
+    /// ledger. Only the bundle identifier is stored.
+    @objc private func ignoreForegroundApplication(_ sender: Any?) {
+        guard let application = appDelegate?.foregroundApplication() else { return }
+        let excluded = personalHistory.excludedApps
+        let updated = IgnoreApplicationMenuItem.adding(application.bundleIdentifier, to: excluded)
+        if updated != excluded { personalHistory.excludedApps = updated }
         refresh()
     }
 
