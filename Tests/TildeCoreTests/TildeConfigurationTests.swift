@@ -17,6 +17,10 @@ struct TildeConfigurationTests {
         #expect(!interaction.chainsCompletionAfterAccept)
         #expect(interaction.calmRevealDelays == .production)
         #expect(!interaction.requestsAfterPunctuation)
+        // Between spaces, production's only predictor stays the system
+        // dictionary: the model is asked at boundaries and nowhere else.
+        #expect(!interaction.requestsMidWordContinuation)
+        #expect(!TildeProductProfile.production.requestsMidWordContinuation)
         #expect(TildeProductProfile.production.decisionPolicy == .conservative)
         #expect(TildeProductProfile.production.interactionPolicy == .conservative)
     }
@@ -31,6 +35,8 @@ struct TildeConfigurationTests {
         #expect(InteractionPolicy.tuned9B.calmRevealDelays == .preview)
         #expect(InteractionPolicy.tuned9B.chainsCompletionAfterAccept)
         #expect(InteractionPolicy.tuned9B.requestsAfterPunctuation)
+        #expect(InteractionPolicy.tuned9B.requestsMidWordContinuation)
+        #expect(TildeProductProfile.preview9B.requestsMidWordContinuation)
         #expect(TildeProductProfile.preview9B.decisionPolicy == .tuned9B)
         #expect(TildeProductProfile.preview9B.interactionPolicy == .tuned9B)
     }
@@ -51,6 +57,11 @@ struct TildeConfigurationTests {
         #expect(gemma.generator.temperature == 0)
         #expect(qwen.decision == .tuned9B)
         #expect(qwen.interaction == .conservative)
+        // The official Qwen choice runs the tuned filters in the production
+        // build, so it must not pick up the preview's keyboard behaviour:
+        // mid-word requests are the 9B preview's trial alone.
+        #expect(!qwen.interaction.requestsMidWordContinuation)
+        #expect(preview.interaction.requestsMidWordContinuation)
         #expect(qwen.generator.temperature == 0.10)
         #expect(qwen.generator.generatedTokenBudget == 12)
         #expect(preview.decision == .tuned9B)
@@ -76,6 +87,11 @@ struct TildeConfigurationTests {
         let changed = served.adopt(decoded)
         #expect(changed)
         #expect(served.policy == .tuned9B)
+        // The keyboard learns mid-word from the app, never from its own
+        // bundle: a conservative default that adopted a tuned line now
+        // requests mid-word, and the app that told it so is the one that
+        // will accept the request on the wire.
+        #expect(served.policy.requestsMidWordContinuation)
         #expect(served.configurationDigest == configuration.digestSHA256)
         let changedAgain = served.adopt(decoded)
         #expect(!changedAgain)
