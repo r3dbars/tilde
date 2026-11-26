@@ -129,7 +129,7 @@ public enum PersonalVoiceScaffoldBuilder {
                 continue
             }
             let words = sentence.split(separator: " ").map(String.init)
-            guard (10...22).contains(words.count) else { continue }
+            guard (6...22).contains(words.count) else { continue }
             // Reject non-ASCII digits too, plus mid-sentence uppercase chars
             // (proper nouns, camelCase product names like iPhone/macOS,
             // hyphenated names) and ALL-CAPS acronyms anywhere (e.g. AWS).
@@ -147,9 +147,9 @@ public enum PersonalVoiceScaffoldBuilder {
             }
             guard !hasProperNoun else { continue }
 
-            let continuationCount = min(5, max(3, words.count / 3))
+            let continuationCount = min(5, max(2, words.count / 3))
             let splitIndex = words.count - continuationCount
-            guard splitIndex >= 5 else { continue }
+            guard splitIndex >= 3 else { continue }
             let prefix = words[..<splitIndex].joined(separator: " ")
             let continuation = words[splitIndex...].joined(separator: " ")
             results.append(ExamplePair(prefix: prefix, continuation: continuation))

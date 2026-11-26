@@ -1305,7 +1305,10 @@ final class GhostInputController: IMKInputController {
             pendingChainedRevision = nil
         }
 
-        if context.last?.isLetter == true {
+        // Skip synchronous NSSpellChecker guesses when a mid-word LLM request
+        // is already in flight: dictionary completions arrive in 3-5 ms and
+        // occupy the grow-only slot, blocking context-aware model completions.
+        if context.last?.isLetter == true, boundary != .midWord {
             let suffix = spellCheckerSuffix(for: context)
             // No model runs here, so the register is the host's own and
             // the source is the dictionary, never the base model's credit.

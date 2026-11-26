@@ -147,6 +147,29 @@ struct MindReaderAccuracyTests {
         #expect(chat?.contains("Continuation:") == true)
         // Prose had 0 examples -> falls back to nil (stock scaffold).
         #expect(set.scaffold(for: .prose) == nil)
+
+        // Real 6-9 word chat sentences also qualify cleanly.
+        let shortChatEvents: [PersonalHistoryEvent] = [
+            PersonalHistoryEvent(
+                id: "s1", timestampMilliseconds: now + 10,
+                historyIdentifier: "h1", consentIdentifier: "c1", sessionIdentifier: "s2",
+                appBundleIdentifier: "com.apple.MobileSMS", source: .typed,
+                text: "sounds good I will check that soon."
+            )!,
+            PersonalHistoryEvent(
+                id: "s2", timestampMilliseconds: now + 11,
+                historyIdentifier: "h1", consentIdentifier: "c1", sessionIdentifier: "s3",
+                appBundleIdentifier: "com.apple.MobileSMS", source: .typed,
+                text: "yeah that makes total sense to me."
+            )!,
+            PersonalHistoryEvent(
+                id: "s3", timestampMilliseconds: now + 12,
+                historyIdentifier: "h1", consentIdentifier: "c1", sessionIdentifier: "s4",
+                appBundleIdentifier: "com.apple.MobileSMS", source: .typed,
+                text: "let me take a quick look now."
+            )!,
+        ]
+        #expect(PersonalVoiceScaffoldBuilder.build(from: shortChatEvents).scaffold(for: .chat) != nil)
     }
 
     @Test("RawContinuationPrompt customScaffold stays byte-identical between prewarmPrefix and live prompt")

@@ -46,7 +46,7 @@ final class ScaffoldPrewarmer: @unchecked Sendable {
     init(
         baseURL: URL,
         apiKey: String? = nil,
-        quietPeriod: TimeInterval = 2.0,
+        quietPeriod: TimeInterval = 0.35,
         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         verifyHelperReady: (@Sendable () async -> Bool)? = nil,
         scenePrewarmGate: (@Sendable () -> Bool)? = nil,

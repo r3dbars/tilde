@@ -193,6 +193,11 @@ private final class PersonalVoiceScaffoldState: @unchecked Sendable {
     private let lock = NSLock()
     private var scaffolds: PersonalVoiceScaffoldSet = .empty
     private var biasTerms: [WeightedBiasTerm] = []
+    private var onUpdatedHandler: (@Sendable () -> Void)?
+
+    func setUpdatedHandler(_ handler: (@Sendable () -> Void)?) {
+        lock.withLock { onUpdatedHandler = handler }
+    }
 
     func snapshot() -> PersonalVoiceScaffoldSet {
         lock.withLock { scaffolds }
@@ -203,10 +208,12 @@ private final class PersonalVoiceScaffoldState: @unchecked Sendable {
     }
 
     func update(_ next: PersonalVoiceScaffoldSet, biasTerms nextBiasTerms: [WeightedBiasTerm]) {
-        lock.withLock {
+        let handler: (@Sendable () -> Void)? = lock.withLock {
             scaffolds = next
             biasTerms = nextBiasTerms
+            return onUpdatedHandler
         }
+        handler?()
     }
 
     func updateBiasTerms(_ nextBiasTerms: [WeightedBiasTerm]) {
@@ -241,6 +248,10 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
 
     func setCachesInvalidatedHandler(_ handler: (@Sendable () -> Void)?) {
         invalidationLock.withLock { onCachesInvalidatedHandler = handler }
+    }
+
+    func setVoiceScaffoldUpdatedHandler(_ handler: (@Sendable () -> Void)?) {
+        voiceScaffoldState.setUpdatedHandler(handler)
     }
 
     private func notifyCachesInvalidated() {

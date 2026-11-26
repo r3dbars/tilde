@@ -257,10 +257,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         )
                     }
                 case .typingPaused:
-                    _ = await service.noteTypingPaused(
+                    let target = Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                    let outcome = await service.noteTypingPaused(
                         sessionIdentifier: event.sessionIdentifier,
-                        target: Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                        target: target
                     )
+                    if case .captured = outcome {
+                        await Self.prewarmFreshSceneIfAvailable(
+                            service: service,
+                            prewarmer: prewarmer,
+                            bundleIdentifier: target?.bundleIdentifier,
+                            fieldSessionIdentifier: event.sessionIdentifier,
+                            expectedTarget: target,
+                            includesWindowTitle: includesWindowTitle
+                        )
+                    }
                 case .textFieldBlurred:
                     await service.noteTextFieldBlurred(sessionIdentifier: event.sessionIdentifier)
                 case .contentReset:
@@ -407,6 +418,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             personalHistoryController.setCachesInvalidatedHandler {
                 prewarmer.clearAllTargets()
                 brainHost.clearTokenBiasCache()
+            }
+            personalHistoryController.setVoiceScaffoldUpdatedHandler {
+                Task { @MainActor in
+                    prewarmer.noteFrontmostApp(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+                }
             }
             prewarmer.noteFrontmostApp(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
             llamaServerHost.setReadinessObserver { ready in
