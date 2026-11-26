@@ -79,6 +79,21 @@ struct TildeModelSelectionTests {
         ) == .production)
     }
 
+    @Test func productionQwen4BUsesPinnedDescriptorAndProductionProfile() {
+        let defaults = isolatedDefaults()
+        TildeModelSelection.persist(.qwen35B4B, defaults: defaults)
+        let choice = TildeModelSelection.choice(for: .production, defaults: defaults)
+        #expect(choice == .qwen35B4B)
+        #expect(TildeModelSelection.descriptor(
+            for: .production,
+            productionChoice: choice
+        ) == .qwen35B4BQ4KM)
+        #expect(TildeModelSelection.completionProfile(
+            for: .production,
+            productionChoice: choice
+        ) == .production)
+    }
+
     @Test func previewsCannotReadTheProductionPreference() {
         let defaults = isolatedDefaults()
         TildeModelSelection.persist(.qwen35B9B, defaults: defaults)

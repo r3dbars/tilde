@@ -75,6 +75,16 @@ struct ModelDescriptor: Equatable, Sendable {
         sha256: PreviewModelAsset.sha256
     )
 
+    static let qwen35B4BQ4KM = ModelDescriptor(
+        identifier: Qwen4BModelAsset.identifier,
+        version: Qwen4BModelAsset.revision,
+        repository: Qwen4BModelAsset.repository,
+        revision: Qwen4BModelAsset.revision,
+        fileName: Qwen4BModelAsset.fileName,
+        expectedBytes: Qwen4BModelAsset.expectedBytes,
+        sha256: Qwen4BModelAsset.sha256
+    )
+
     static let qwen35B9BQ4KM = ModelDescriptor(
         identifier: Qwen9BModelAsset.identifier,
         version: Qwen9BModelAsset.revision,

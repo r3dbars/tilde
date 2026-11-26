@@ -90,9 +90,12 @@ struct TildeProductProfileTests {
         #expect(TildeModelChoice.resolve(persistedValue: nil) == .gemma4E2B)
         #expect(TildeModelChoice.resolve(persistedValue: "unknown") == .gemma4E2B)
         #expect(TildeModelChoice.resolve(
+            persistedValue: TildeModelChoice.qwen35B4B.rawValue
+        ) == .qwen35B4B)
+        #expect(TildeModelChoice.resolve(
             persistedValue: TildeModelChoice.qwen35B9B.rawValue
         ) == .qwen35B9B)
-        #expect(TildeModelChoice.allCases == [.gemma4E2B, .qwen35B9B])
+        #expect(TildeModelChoice.allCases == [.gemma4E2B, .qwen35B4B, .qwen35B9B])
         #expect(TildeModelChoice.allCases.allSatisfy {
             !$0.displayName.isEmpty && !$0.approximateSize.isEmpty && !$0.resourceGuidance.isEmpty
         })
