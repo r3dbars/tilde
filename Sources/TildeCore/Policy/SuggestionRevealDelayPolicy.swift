@@ -40,7 +40,7 @@ public enum SuggestionRevealDelayPolicy {
             self.midWordNanoseconds = midWordNanoseconds
         }
 
-        public static let production = CalmDelays(postSpaceNanoseconds: 120_000_000, midWordNanoseconds: 80_000_000)
+        public static let production = CalmDelays(postSpaceNanoseconds: 60_000_000, midWordNanoseconds: 50_000_000)
         public static let preview = CalmDelays(postSpaceNanoseconds: 80_000_000, midWordNanoseconds: 50_000_000)
     }
 

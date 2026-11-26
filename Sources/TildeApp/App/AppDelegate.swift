@@ -175,9 +175,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private nonisolated static func personalBiasTermsProvider(
         for controller: PersonalHistoryController
-    ) -> @Sendable ([String], String?) async -> [WeightedBiasTerm] {
+    ) -> @Sendable ([String], String?) -> [WeightedBiasTerm] {
         { tailWords, appBundleIdentifier in
-            await controller.personalBiasTerms(
+            controller.personalBiasTerms(
                 afterTailWords: tailWords,
                 appBundleIdentifier: appBundleIdentifier
             )
@@ -404,6 +404,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startObservingFrontmostAppForScreenMemory()
             let prewarmer = scaffoldPrewarmer
             let brainHost = ghostBrainServerHost
+            personalHistoryController.setCachesInvalidatedHandler {
+                prewarmer.clearAllTargets()
+                brainHost.clearTokenBiasCache()
+            }
             prewarmer.noteFrontmostApp(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
             llamaServerHost.setReadinessObserver { ready in
                 if ready {
@@ -658,6 +662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The menu is refreshed either way — the status line and icon both
     /// depend on this flag.
     func clearPersonalRuntimeCaches() {
+        scaffoldPrewarmer.clearAllTargets()
         ghostBrainServerHost.clearTokenBiasCache()
     }
 

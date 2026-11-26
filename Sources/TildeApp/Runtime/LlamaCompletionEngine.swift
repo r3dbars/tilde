@@ -20,7 +20,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         }
     }
 
-    struct StreamTokenProbabilityItem: Decodable {
+    struct StreamTokenProbabilityEntry: Decodable {
         let token: String?
         let tokStr: String?
         let prob: Double?
@@ -31,35 +31,20 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             case tokStr = "tok_str"
         }
 
-        var resolvedProbability: Double? {
-            if let prob { return prob }
-            if let logprob { return exp(logprob) }
-            return nil
-        }
-    }
-
-    struct StreamTokenProbabilityEntry: Decodable {
-        let token: String?
-        let tokStr: String?
-        let prob: Double?
-        let logprob: Double?
-        let topProbs: [StreamTokenProbabilityItem]?
-        let topLogprobs: [StreamTokenProbabilityItem]?
-        let probs: [StreamTokenProbabilityItem]?
-
-        enum CodingKeys: String, CodingKey {
-            case token, prob, logprob, probs
-            case tokStr = "tok_str"
-            case topProbs = "top_probs"
-            case topLogprobs = "top_logprobs"
+        var pieceText: String? {
+            token ?? tokStr
         }
 
+        /// Resolves the emitted token's own probability strictly without ever
+        /// falling back to `top_logprobs[0]` (which would replace a null/`-inf`
+        /// probability with an unchosen token's high probability).
         var resolvedProbability: Double? {
-            if let prob { return prob }
-            if let logprob { return exp(logprob) }
-            if let first = topProbs?.first?.resolvedProbability { return first }
-            if let first = topLogprobs?.first?.resolvedProbability { return first }
-            if let first = probs?.first?.resolvedProbability { return first }
+            if let prob, prob.isFinite, (0.0...1.0).contains(prob) {
+                return prob
+            }
+            if let logprob, logprob.isFinite, logprob <= 0.0 {
+                return exp(logprob)
+            }
             return nil
         }
     }
@@ -81,6 +66,23 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             case stoppedWord = "stopped_word"
             case tokensPredicted = "tokens_predicted"
             case completionProbabilities = "completion_probabilities"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            content = try c.decodeIfPresent(String.self, forKey: .content)
+            stop = try c.decodeIfPresent(Bool.self, forKey: .stop)
+            stoppedEOS = try c.decodeIfPresent(Bool.self, forKey: .stoppedEOS)
+            stoppedLimit = try c.decodeIfPresent(Bool.self, forKey: .stoppedLimit)
+            stoppedWord = try c.decodeIfPresent(Bool.self, forKey: .stoppedWord)
+            tokensPredicted = try c.decodeIfPresent(Int.self, forKey: .tokensPredicted)
+            timings = try? c.decodeIfPresent(StreamTimings.self, forKey: .timings)
+            // Decode probability telemetry lossily so any schema shift fails
+            // open instead of aborting/restarting llama-server.
+            completionProbabilities = try? c.decodeIfPresent(
+                [StreamTokenProbabilityEntry].self,
+                forKey: .completionProbabilities
+            )
         }
 
         var hasRecognizedField: Bool {
@@ -323,8 +325,29 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                     if firstTokenMilliseconds == nil {
                         firstTokenMilliseconds = Self.milliseconds(since: startedAt)
                     }
-                    if let prob = frame.completionProbabilities?.first?.resolvedProbability {
-                        streamedTokens.append(StreamedTokenProbability(piece: piece, probability: prob))
+                    if let entries = frame.completionProbabilities, !entries.isEmpty {
+                        if entries.count == 1, let entry = entries.first, let prob = entry.resolvedProbability {
+                            streamedTokens.append(StreamedTokenProbability(
+                                piece: entry.pieceText ?? piece,
+                                probability: prob
+                            ))
+                        } else {
+                            // Multi-token frames (e.g. --spec-type ngram-simple):
+                            // record every token's own text and probability.
+                            var appendedAny = false
+                            for entry in entries {
+                                guard let prob = entry.resolvedProbability,
+                                      let tokenPiece = entry.pieceText, !tokenPiece.isEmpty else { continue }
+                                streamedTokens.append(StreamedTokenProbability(
+                                    piece: tokenPiece,
+                                    probability: prob
+                                ))
+                                appendedAny = true
+                            }
+                            if !appendedAny, let prob = entries.first?.resolvedProbability {
+                                streamedTokens.append(StreamedTokenProbability(piece: piece, probability: prob))
+                            }
+                        }
                     }
                     // llama.cpp emits token deltas. Always append: a repeated
                     // token can legitimately equal the text so far (" is" + " is").
@@ -334,7 +357,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             rawOutput,
                             recipe: recipe,
                             context: prepared,
-                            cleaner: cleaner
+                            cleaner: cleaner,
+                            hasLogitBias: !logitBiasEntries.isEmpty,
+                            streamedTokens: streamedTokens
                         )
                         if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
                             if firstPartialMilliseconds == nil {
@@ -348,13 +373,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             onPartialSuggestion(partial, firstPartialMilliseconds ?? Self.milliseconds(since: startedAt))
                         }
                         // Everything the display cap can show has arrived, or
-                        // the output is already rejected for a reason later
-                        // tokens cannot undo, or a tail word dropped below our
-                        // confidence floor. Stop paying for wasted tail tokens.
-                        let earlyConfidenceStop = WordConfidenceTruncator.shouldStopStreamingEarly(
-                            tokens: streamedTokens
-                        )
-                        if stable.settled || earlyConfidenceStop {
+                        // confidence collapsed / a repeated nudged word trimmed
+                        // the tail, or the output is already rejected. Stop
+                        // paying for wasted tail tokens.
+                        if stable.settled {
                             settledMilliseconds = Self.milliseconds(since: startedAt)
                             stoppedAtCap = true
                             stream.cancel()
@@ -370,13 +392,19 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             stream.cancel()
         }
 
-        let normalizedRaw = recipe.normalizedContinuation(content)
-        let normalized = logitBiasEntries.isEmpty
-            ? normalizedRaw
-            : DecodeBiasPolicy.trimRepeatedContentWord(normalizedRaw)
+        let normalized = recipe.normalizedContinuation(content)
         let clean = cleaner.cleanWithReason(normalized, in: prepared.typed)
-        var suggestion = clean.suggestion.map {
-            WordConfidenceTruncator.trim(suggestion: $0, tokens: streamedTokens)
+        var suggestion = clean.suggestion.map { cleaned -> CompletionSuggestion in
+            let deduped: CompletionSuggestion
+            if !logitBiasEntries.isEmpty {
+                let trimmed = DecodeBiasPolicy.trimRepeatedContentWord(cleaned.visibleText)
+                deduped = trimmed != cleaned.visibleText && !trimmed.trimmingCharacters(in: .whitespaces).isEmpty
+                    ? CompletionSuggestion(text: trimmed, maxVisibleWords: productProfile.maximumVisibleWords)
+                    : cleaned
+            } else {
+                deduped = cleaned
+            }
+            return WordConfidenceTruncator.trim(suggestion: deduped, tokens: streamedTokens)
         }
         var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
         var decisionReason: SuggestionDecisionReason = clean.rejectionReason.map(
@@ -469,7 +497,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         _ rawOutput: String,
         recipe: RawContinuationPrompt,
         context: PreparedCompletionContext,
-        cleaner: CompletionOutputCleaner
+        cleaner: CompletionOutputCleaner,
+        hasLogitBias: Bool = false,
+        streamedTokens: [StreamedTokenProbability] = []
     ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
         let outcome = cleaner.clean(
             recipe.normalizedContinuation(rawOutput),
@@ -485,14 +515,41 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else {
             return (nil, outcome.visibleTextIsSettled)
         }
+        var candidateText = prefix
+        var tailTrimmed = false
+        if hasLogitBias {
+            let deduped = DecodeBiasPolicy.trimRepeatedContentWord(candidateText)
+            if deduped != candidateText {
+                tailTrimmed = true
+                candidateText = deduped
+            }
+        }
+        guard !candidateText.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return (nil, outcome.visibleTextIsSettled || tailTrimmed)
+        }
+        var suggestion = CompletionSuggestion(
+            text: candidateText,
+            maxVisibleWords: productProfile.maximumVisibleWords
+        )
+        if !streamedTokens.isEmpty {
+            let trimmed = WordConfidenceTruncator.trim(
+                suggestion: suggestion,
+                tokens: streamedTokens
+            )
+            if trimmed.visibleText != suggestion.visibleText {
+                tailTrimmed = true
+                suggestion = trimmed
+            }
+        }
         // The partial is what the writer actually sees first, so it must clear
         // the same grounding bar as the final — judged on the revealed prefix,
         // which is the text that would assert the fact.
         guard !FactualGroundingPolicy.containsUnsupportedFact(
-            prefix,
+            suggestion.visibleText,
             in: context.grounding
-        ) else { return (nil, outcome.visibleTextIsSettled) }
-        return (CompletionSuggestion(text: prefix), outcome.visibleTextIsSettled)
+        ) else { return (nil, outcome.visibleTextIsSettled || tailTrimmed) }
+        let collapsedTail = WordConfidenceTruncator.shouldStopStreamingEarly(tokens: streamedTokens)
+        return (suggestion, outcome.visibleTextIsSettled || tailTrimmed || collapsedTail)
     }
 
     static func promptByAddingIntentFutures(

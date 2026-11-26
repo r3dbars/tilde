@@ -198,17 +198,19 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     }
 
     func stop() {
-        let (child, shouldRemoveKey): (Process?, Bool) = lifecycle.sync {
+        let (child, shouldRemoveKey, observer): (Process?, Bool, (@Sendable (Bool) -> Void)?) = lifecycle.sync {
             stopped = true
             preparing = false
             healthTask?.cancel()
             healthTask = nil
             let removeKey = wroteRuntimeAPIKey
             wroteRuntimeAPIKey = false
+            let observer = readinessObserver
             defer { process = nil }
-            return (process, removeKey)
+            return (process, removeKey, observer)
         }
         Self.shutDownNow(child)
+        observer?(false)
         if shouldRemoveKey {
             Self.removeRuntimeAPIKey()
         }

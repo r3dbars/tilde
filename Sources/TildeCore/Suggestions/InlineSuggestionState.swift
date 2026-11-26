@@ -40,16 +40,17 @@ public struct InlineSuggestionTicket: Equatable, Sendable {
         boundedContext: String,
         utf16Limit: Int
     ) -> Self {
+        let utf16Count = text.utf16.count
+        let nextLocation = selectionLocation < 0 ? selectionLocation : selectionLocation + utf16Count
         let nextContext = Self.boundedContext(
             boundedContext + text,
             utf16Limit: utf16Limit
         )
-        let utf16Count = text.utf16.count
         return Self(
             clientIdentifier: clientIdentifier,
             bundleIdentifier: bundleIdentifier,
             contextFingerprint: Self.fingerprint(nextContext),
-            selectionLocation: selectionLocation < 0 ? selectionLocation : selectionLocation + utf16Count,
+            selectionLocation: nextLocation,
             selectionLength: 0,
             requestIdentifier: requestIdentifier
         )

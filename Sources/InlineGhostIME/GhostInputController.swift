@@ -1174,6 +1174,9 @@ final class GhostInputController: IMKInputController {
                   self.scheduleRevision == revision,
                   let liveClient = self.client() else {
                 if chained { Self.chainLogger.info("chain-bailed reason=superseded") }
+                if let self, self.pendingChainedRevision == revision {
+                    self.pendingChainedRevision = nil
+                }
                 return
             }
             let field = self.fieldSnapshot(liveClient)
@@ -1419,12 +1422,16 @@ final class GhostInputController: IMKInputController {
             if opportunityID == nil, boundary == .midWord {
                 // A keystroke can land between the throttle check and this
                 // hop; re-check on the actor so a cancelled request never
-                // opens a record nothing will close.
-                opportunityID = await MainActor.run {
-                    guard let self, !Task.isCancelled, self.isCurrentSchedule(revision) else { return nil }
-                    return self.openOpportunity(ticket: requestTicket, context: context, field: field)
+                // opens a record nothing will close, without aborting valid
+                // mid-word requests in outcome-excluded apps.
+                let checked: (stillCurrent: Bool, id: UUID?) = await MainActor.run {
+                    guard let self, !Task.isCancelled, self.isCurrentSchedule(revision) else {
+                        return (false, nil)
+                    }
+                    return (true, self.openOpportunity(ticket: requestTicket, context: context, field: field))
                 }
-                guard opportunityID != nil else { return }
+                guard checked.stillCurrent else { return }
+                opportunityID = checked.id
             }
             let startedAt = ProcessInfo.processInfo.systemUptime
             let result = await GhostBrainClient.complete(
@@ -1571,8 +1578,15 @@ final class GhostInputController: IMKInputController {
     ) {
         guard !text.isEmpty else { return }
         if let bufferedReveal, bufferedReveal.ticket == ticket {
-            guard text.count > bufferedReveal.text.count,
-                  text.hasPrefix(bufferedReveal.text) else { return }
+            // Before anything has rendered to marked text, a model suggestion
+            // may replace an unshown dictionary guess cleanly; otherwise stay
+            // grow-only so partials never shrink on screen.
+            let replacesUnshownDictionary = bufferedReveal.provenance.source == .dictionary
+                && provenance.source != .dictionary
+            if !replacesUnshownDictionary {
+                guard text.count > bufferedReveal.text.count,
+                      text.hasPrefix(bufferedReveal.text) else { return }
+            }
         }
         bufferedReveal = (text, ticket, provenance)
         revealTask?.cancel()

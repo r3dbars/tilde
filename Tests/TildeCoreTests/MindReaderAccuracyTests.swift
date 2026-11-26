@@ -30,8 +30,26 @@ struct MindReaderAccuracyTests {
         #expect(postgres != nil)
         #expect(postgres!.weight < thursday!.weight)
         #expect(lowered.contains("terraform"))
-        // Secret scrubbed — raw token never enters bias terms.
+        // Secret scrubbed — raw token AND redaction placeholder never enter bias terms.
         #expect(!terms.contains { $0.term.lowercased().contains("sk-123456") })
+        #expect(!terms.contains { $0.term.lowercased().contains("redacted") })
+    }
+
+    @Test("DecodeBiasPolicy excludes active mid-word prefixes and digit-leading terms")
+    func excludesMidWordPrefixAndDigits() {
+        let scene = ScreenScene.Scene(
+            mode: .replying,
+            conversationTurns: [.init(speaker: .other, text: "Can we ship Kubernetes at 10am on Thursday?")],
+            referenceSnippets: []
+        )
+        let midWordTyped = PreparedTypedContext(textBeforeCursor: "Yes let's ship Kube")
+        let terms = DecodeBiasPolicy.extractSceneTerms(scene: scene, typed: midWordTyped)
+        let lowered = Set(terms.map { $0.term.lowercased() })
+        // "Kubernetes" starts with active partial "kube" -> excluded so leading-space bias never causes "Kube Kubernetes".
+        #expect(!lowered.contains("kubernetes"))
+        // "10am" starts with a digit -> excluded so BPE space token is never biased.
+        #expect(!lowered.contains("10am"))
+        #expect(lowered.contains("thursday"))
     }
 
     @Test("DecodeBiasPolicy merges scene and personal terms deterministically and clamps bias")

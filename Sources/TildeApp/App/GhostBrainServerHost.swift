@@ -72,7 +72,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// covenant). `nil` means "no personal serving available" (release-
     /// proof mode and tests).
     private let personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)?
-    private let personalBiasTermsProvider: (@Sendable ([String], String?) async -> [WeightedBiasTerm])?
+    private let personalBiasTermsProvider: (@Sendable ([String], String?) -> [WeightedBiasTerm])?
     private let personalVoiceScaffoldProvider: (@Sendable (ContinuationRegister, String?) -> String?)?
     private let productProfile: TildeProductProfile
     /// The whole behaviour the app serves, stamped on every response line
@@ -98,7 +98,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         screenMemoryToggleGate: (@Sendable () -> Bool)? = nil,
         personalSuggestionsGate: (@Sendable () -> Bool)? = nil,
         personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil,
-        personalBiasTermsProvider: (@Sendable ([String], String?) async -> [WeightedBiasTerm])? = nil,
+        personalBiasTermsProvider: (@Sendable ([String], String?) -> [WeightedBiasTerm])? = nil,
         personalVoiceScaffoldProvider: (@Sendable (ContinuationRegister, String?) -> String?)? = nil,
         configuration: TildeEffectiveConfiguration? = nil,
         productProfile: TildeProductProfile = PreviewModelSelection.completionProfile(
@@ -432,9 +432,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
             )
             let personalVoiceScaffold = self.personalVoiceScaffoldProvider?(register, completionRequest.app)
             let personalBiasTerms: [WeightedBiasTerm]
-            if personalSuggestionsEnabled, let biasProvider = self.personalBiasTermsProvider {
+            if personalSuggestionsEnabled, !midWordContext, let biasProvider = self.personalBiasTermsProvider {
                 let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
-                personalBiasTerms = await biasProvider(tailWords, completionRequest.app)
+                personalBiasTerms = biasProvider(tailWords, completionRequest.app)
             } else {
                 personalBiasTerms = []
             }
@@ -971,6 +971,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private var holdStartedAt: Date?
         private var heldMilliseconds = 0
         private var wroteAnything = false
+        private var lastWrittenLength = 0
         private var personalLookup: PersonalLookupState
         private var outcome: HoldOutcome
         private var expiryTimer: Task<Void, Never>?
@@ -1032,7 +1033,8 @@ final class GhostBrainServerHost: @unchecked Sendable {
             lock.lock()
             defer { lock.unlock() }
             lastTargetCheckAt = now
-            guard !failed, state == .streaming, permission == .allowed else { return }
+            guard !failed, state == .streaming, permission == .allowed,
+                  queuedToFlush.count > lastWrittenLength else { return }
             writeLocked(queuedToFlush)
         }
 
@@ -1189,6 +1191,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 firstStableWordMilliseconds: firstStableWordMilliseconds
             )) {
                 wroteAnything = true
+                lastWrittenLength = max(lastWrittenLength, text.count)
             } else {
                 failed = true
                 DiagnosticsLog.shared.record("ghost-partial-write-failed", metadata: [:])

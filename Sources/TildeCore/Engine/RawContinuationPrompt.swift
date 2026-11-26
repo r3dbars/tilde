@@ -49,7 +49,7 @@ public enum ContinuationRegister: String, Sendable {
     /// removed by owner decision 2026-08-18: stacked with other shortening
     /// they read as one-word ghosts, and the register scaffolds already set
     /// the voice.
-    public var generatedTokenBudget: Int { 20 }
+    public var generatedTokenBudget: Int { 28 }
 }
 
 public struct RawContinuationPrompt: Equatable, Sendable {

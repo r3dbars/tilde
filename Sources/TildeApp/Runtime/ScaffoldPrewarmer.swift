@@ -100,6 +100,21 @@ final class ScaffoldPrewarmer: @unchecked Sendable {
         task?.cancel()
     }
 
+    /// Drops ALL retained targets (both personal-voice scaffolds and scenes)
+    /// and cancels any in-flight warm-up. Called when Personal History is
+    /// disabled, wiped, or an app is added to the exclusion list so personal
+    /// sentences can never be replayed on helper restart.
+    func clearAllTargets() {
+        let task: Task<Void, Never>? = lock.withLock {
+            currentTarget = nil
+            warmedFingerprint = nil
+            inflightToken = nil
+            defer { inflight = nil }
+            return inflight
+        }
+        task?.cancel()
+    }
+
     /// The frontmost app changed. Its register decides which bare scaffold
     /// the next real request will need if no scene is captured yet.
     func noteFrontmostApp(bundleIdentifier: String?) {

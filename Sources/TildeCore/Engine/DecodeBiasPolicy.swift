@@ -28,7 +28,7 @@ public enum DecodeBiasPolicy {
     public static let personalContextWeight = 0.65
     public static let personalLexiconWeight = 0.50
 
-    private static let trailingEchoExclusionWindow = 6
+    private static let trailingEchoExclusionWindow = 10
 
     private static let stopwords: Set<String> = [
         "the", "and", "that", "have", "with", "this", "from", "they", "will",
@@ -62,6 +62,7 @@ public enum DecodeBiasPolicy {
     ) -> [WeightedBiasTerm] {
         guard let scene, maxTerms > 0 else { return [] }
         let trailingTyped = Set(typed.words.suffix(trailingEchoExclusionWindow))
+        let activePartial: String? = typed.endsWithWhitespace ? nil : typed.words.last
         var weightsByFolded: [String: (surface: String, weight: Double, order: Int)] = [:]
         var nextOrder = 0
 
@@ -69,9 +70,13 @@ public enum DecodeBiasPolicy {
             let scrubbed = SecretRules.scrub(rawText, config: .forPersistence).clean
             for range in CompletionContextWords.wordRanges(in: scrubbed) {
                 let rawToken = String(scrubbed[range])
+                guard !rawToken.contains("⟨"), !rawToken.contains("⟩") else { continue }
                 let cleanedSurface = rawToken.trimmingCharacters(in: .punctuationCharacters)
+                guard isEligibleBiasSurface(cleanedSurface) else { continue }
                 let folded = CompletionContextWords.normalized(cleanedSurface)
-                guard isEligibleBiasWord(folded), !trailingTyped.contains(folded) else { continue }
+                guard isEligibleBiasWord(folded),
+                      !trailingTyped.contains(folded),
+                      !(activePartial.map { folded.hasPrefix($0) } ?? false) else { continue }
                 if let existing = weightsByFolded[folded] {
                     if weight > existing.weight {
                         weightsByFolded[folded] = (cleanedSurface, weight, existing.order)
@@ -119,13 +124,17 @@ public enum DecodeBiasPolicy {
     ) -> [WeightedBiasTerm] {
         guard maxTerms > 0, maxBias > 0 else { return [] }
         let trailingTyped = Set(typed?.words.suffix(trailingEchoExclusionWindow) ?? [])
+        let activePartial: String? = (typed?.endsWithWhitespace == false) ? typed?.words.last : nil
         var merged: [String: (surface: String, weight: Double, order: Int)] = [:]
         var nextOrder = 0
 
         for entry in scene + personal {
             let surface = entry.term.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isEligibleBiasSurface(surface) else { continue }
             let folded = CompletionContextWords.normalized(surface)
-            guard isEligibleBiasWord(folded), !trailingTyped.contains(folded) else { continue }
+            guard isEligibleBiasWord(folded),
+                  !trailingTyped.contains(folded),
+                  !(activePartial.map { folded.hasPrefix($0) } ?? false) else { continue }
             let clamped = min(maxBias, max(0.05, entry.weight))
             if let existing = merged[folded] {
                 if clamped > existing.weight {
@@ -166,6 +175,16 @@ public enum DecodeBiasPolicy {
             }
         }
         return continuation
+    }
+
+    /// Surface guard: rejects `SecretRules` placeholders (`redacted:api-key`),
+    /// URLs, emails, and digit/symbol-leading tokens (`10am`, `$100k`) whose
+    /// leading space never merges in BPE tokenizers like Qwen 3.5.
+    public static func isEligibleBiasSurface(_ surface: String) -> Bool {
+        guard let first = surface.first, first.isLetter, surface.count >= 4 else { return false }
+        return surface.allSatisfy { ch in
+            ch.isLetter || ch == "-" || ch == "'" || ch == "’"
+        }
     }
 
     public static func isEligibleBiasWord(_ folded: String) -> Bool {

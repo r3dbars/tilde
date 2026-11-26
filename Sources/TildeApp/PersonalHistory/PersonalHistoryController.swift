@@ -192,17 +192,32 @@ struct OrderedAsyncTaskTail: Sendable {
 private final class PersonalVoiceScaffoldState: @unchecked Sendable {
     private let lock = NSLock()
     private var scaffolds: PersonalVoiceScaffoldSet = .empty
+    private var biasTerms: [WeightedBiasTerm] = []
 
     func snapshot() -> PersonalVoiceScaffoldSet {
         lock.withLock { scaffolds }
     }
 
-    func update(_ next: PersonalVoiceScaffoldSet) {
-        lock.withLock { scaffolds = next }
+    func biasSnapshot() -> [WeightedBiasTerm] {
+        lock.withLock { biasTerms }
+    }
+
+    func update(_ next: PersonalVoiceScaffoldSet, biasTerms nextBiasTerms: [WeightedBiasTerm]) {
+        lock.withLock {
+            scaffolds = next
+            biasTerms = nextBiasTerms
+        }
+    }
+
+    func updateBiasTerms(_ nextBiasTerms: [WeightedBiasTerm]) {
+        lock.withLock { biasTerms = nextBiasTerms }
     }
 
     func clear() {
-        lock.withLock { scaffolds = .empty }
+        lock.withLock {
+            scaffolds = .empty
+            biasTerms = []
+        }
     }
 }
 
@@ -221,6 +236,18 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
     private let voiceScaffoldState = PersonalVoiceScaffoldState()
+    private let invalidationLock = NSLock()
+    private var onCachesInvalidatedHandler: (@Sendable () -> Void)?
+
+    func setCachesInvalidatedHandler(_ handler: (@Sendable () -> Void)?) {
+        invalidationLock.withLock { onCachesInvalidatedHandler = handler }
+    }
+
+    private func notifyCachesInvalidated() {
+        voiceScaffoldState.clear()
+        let handler = invalidationLock.withLock { onCachesInvalidatedHandler }
+        handler?()
+    }
 
     init(
         store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
@@ -271,6 +298,9 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             )
             settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
             settings.personalHistoryEnabled = newValue
+            if !newValue {
+                notifyCachesInvalidated()
+            }
             scheduleConfiguration(configuration)
         }
     }
@@ -287,6 +317,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
             settings.personalNextWordExperimentIdentifier = configuration.experimentIdentifier
             settings.personalHistoryExcludedApps = normalized
+            notifyCachesInvalidated()
             scheduleConfiguration(configuration)
         }
     }
@@ -331,34 +362,36 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         return await operations.predictNextWord(afterTailWords: tailWords, configuration: configuration)
     }
 
-    /// Non-mutating personal vocabulary + context-conditioned bias terms for
-    /// decode-time Word Nudge (`logit_bias`). Strictly respects master toggle
-    /// and per-app exclusions.
+    /// Non-blocking (<1 µs) personal vocabulary bias terms for decode-time
+    /// Word Nudge (`logit_bias`). Reads from the lock-guarded snapshot so it
+    /// can never stall behind `PersistenceOperations` replay or model saves,
+    /// and strictly enforces master toggle and per-app exclusions.
     func personalBiasTerms(
-        afterTailWords tailWords: [String],
+        afterTailWords _: [String],
         appBundleIdentifier: String?
-    ) async -> [WeightedBiasTerm] {
+    ) -> [WeightedBiasTerm] {
         let configuration = configurationState.snapshot()
         guard configuration.enabled,
               let appBundleIdentifier, PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
               !DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
         else { return [] }
-        return await operations.topBiasTerms(afterTailWords: tailWords, configuration: configuration)
+        return voiceScaffoldState.biasSnapshot()
     }
 
     /// Non-blocking (<1 µs) lookup for the cached fact-free Personal-Voice
-    /// scaffold for `register`. Returns `nil` when Personal History is off,
-    /// the app is excluded, or fewer than 3 clean fact-free examples exist.
+    /// scaffold for `register`. Fails closed when Personal History is off,
+    /// `appBundleIdentifier` is nil/invalid/excluded, or fewer than 3 clean
+    /// fact-free examples exist.
     func personalVoiceScaffold(
         for register: ContinuationRegister,
         appBundleIdentifier: String?
     ) -> String? {
         let configuration = configurationState.snapshot()
-        guard configuration.enabled else { return nil }
-        if let appBundleIdentifier,
-           DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps) {
-            return nil
-        }
+        guard configuration.enabled,
+              let appBundleIdentifier,
+              PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
+              !DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        else { return nil }
         return voiceScaffoldState.snapshot().scaffold(for: register)
     }
 
@@ -391,6 +424,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
         settings.personalNextWordExperimentIdentifier = configuration.experimentIdentifier
         settings.personalHistoryEnabled = false
+        notifyCachesInvalidated()
         let nextIdentifier = UUID().uuidString
         settings.personalHistoryIdentifier = nextIdentifier
         try await operations.deleteAll(
@@ -655,7 +689,11 @@ private actor PersistenceOperations {
             $0.historyIdentifier == historyIdentifier
                 && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
         }
-        voiceScaffoldState.update(PersonalVoiceScaffoldBuilder.build(from: allAllowedEvents))
+        let biasTerms = rebuilt.topBiasTerms(afterTailWords: [])
+        voiceScaffoldState.update(
+            PersonalVoiceScaffoldBuilder.build(from: allAllowedEvents),
+            biasTerms: biasTerms
+        )
         nextWord = rebuilt
         nextWordPhase = .ready
     }

@@ -19,12 +19,13 @@ public struct StreamedTokenProbability: Equatable, Sendable {
 ///   `E_n = (prod_{i=1}^n q_i) * (C_n + clauseBonus) - lambda * (1 - prod_{i=1}^n q_i)`
 /// where `q_i = p_i^(1 / T)`.
 ///
-/// Fails open cleanly when token probabilities are unavailable (returning the
-/// input suggestion untouched).
+/// Any word collapsing below `earlyStopWordFloor` terminates the prefix before
+/// that word regardless of its character length. Fails open cleanly when token
+/// probabilities are unavailable or cannot be aligned.
 public enum WordConfidenceTruncator {
-    public static let defaultTemperature = 2.5
-    public static let defaultRiskPenalty = 1.2
-    public static let earlyStopWordFloor = 0.06
+    public static let defaultTemperature = 2.8
+    public static let defaultRiskPenalty = 0.45
+    public static let earlyStopWordFloor = 0.04
 
     struct WordConfidence: Equatable {
         let text: String
@@ -38,7 +39,8 @@ public enum WordConfidenceTruncator {
         suggestion: CompletionSuggestion,
         tokens: [StreamedTokenProbability],
         temperature: Double = defaultTemperature,
-        riskPenalty: Double = defaultRiskPenalty
+        riskPenalty: Double = defaultRiskPenalty,
+        wordFloor: Double = earlyStopWordFloor
     ) -> CompletionSuggestion {
         let visibleWords = CompletionContextWords.wordRanges(in: suggestion.visibleText)
         guard visibleWords.count >= 2, !tokens.isEmpty else { return suggestion }
@@ -46,7 +48,8 @@ public enum WordConfidenceTruncator {
         let tokenWords = wordConfidences(from: tokens)
         guard tokenWords.count >= 2 else { return suggestion }
 
-        // Align visible words against emitted token words (skipping any trimmed leading echo).
+        // Align visible words against emitted token words (strictly; fail open
+        // rather than shifting mismatched probabilities across words).
         let aligned = align(visibleWords: visibleWords, in: suggestion.visibleText, to: tokenWords)
         guard aligned.count == visibleWords.count else { return suggestion }
 
@@ -58,17 +61,22 @@ public enum WordConfidenceTruncator {
 
         for (index, word) in aligned.enumerated() {
             let n = index + 1
+            // Never retain a collapsed tail word even if it is long.
+            if n >= 2, word.geometricMeanProbability < wordFloor {
+                break
+            }
+            let visibleWord = String(suggestion.visibleText[visibleWords[index]])
             let calibrated = min(0.99, max(0.05, pow(word.geometricMeanProbability, 1.0 / safeTemp)))
             cumulativeConfidence *= calibrated
-            cumulativeChars += word.text.count + (n > 1 ? 1 : 0)
-            let clauseBonus: Double = word.text.last.map { ".!?,".contains($0) } == true ? 2.0 : 0.0
-            let expectedSaved = max(0.0, Double(cumulativeChars - 1)) + clauseBonus
+            cumulativeChars += visibleWord.count + (n > 1 ? 1 : 0)
+            let clauseBonus: Double = visibleWord.last.map { ".!?,".contains($0) } == true ? 2.0 : 0.0
+            let expectedSaved = max(1.0, Double(cumulativeChars)) + clauseBonus
             let utility = cumulativeConfidence * expectedSaved - riskPenalty * (1.0 - cumulativeConfidence)
             if utility > bestUtility {
                 bestUtility = utility
                 bestCount = n
             }
-            if word.text.last.map({ ".!?".contains($0) }) == true, n >= 2 {
+            if visibleWord.last.map({ ".!?".contains($0) }) == true, n >= 2 {
                 break
             }
         }
@@ -89,15 +97,13 @@ public enum WordConfidenceTruncator {
     }
 
     /// Returns `true` when streaming has already emitted at least one word and
-    /// a subsequent complete word collapsed below `minimumWordProbability`,
+    /// a subsequent completed word collapsed below `minimumWordProbability`,
     /// signaling the caller can stop paying for tail tokens early.
     public static func shouldStopStreamingEarly(
         tokens: [StreamedTokenProbability],
         minimumWordProbability: Double = earlyStopWordFloor
     ) -> Bool {
         let words = wordConfidences(from: tokens)
-        // Require at least 2 completed words plus a following boundary so the
-        // word being judged is finished (not mid-subword).
         guard words.count >= 3 else { return false }
         for word in words.dropFirst().dropLast() {
             if word.geometricMeanProbability < minimumWordProbability {
@@ -107,39 +113,52 @@ public enum WordConfidenceTruncator {
         return false
     }
 
+    /// Groups streamed token probabilities into word-level geometric means.
+    /// Properly splits internal/trailing whitespace (e.g. speculative multi-token
+    /// frames) and preserves text preceding `\n` / `\r`.
     static func wordConfidences(from tokens: [StreamedTokenProbability]) -> [WordConfidence] {
         var result: [WordConfidence] = []
         var currentText = ""
         var currentLogProbs: [Double] = []
-        var started = false
 
-        for token in tokens {
-            if token.piece.contains("\n") || token.piece.contains("\r") { break }
-            let trimmed = token.piece.trimmingCharacters(in: .whitespaces)
-            if !started {
-                guard !trimmed.isEmpty else { continue }
-                started = true
-            }
-            let startsWithWhitespace = token.piece.first?.isWhitespace == true
-            if !currentText.isEmpty, startsWithWhitespace {
-                let gm = exp(currentLogProbs.reduce(0, +) / Double(currentLogProbs.count))
-                result.append(WordConfidence(text: currentText, geometricMeanProbability: gm))
-                currentText = String(token.piece.drop(while: \.isWhitespace))
-                currentLogProbs = currentText.isEmpty ? [] : [log(token.probability)]
-            } else {
-                let piece = currentText.isEmpty
-                    ? String(token.piece.drop(while: \.isWhitespace))
-                    : token.piece
-                if !piece.isEmpty {
-                    currentText += piece
-                    currentLogProbs.append(log(token.probability))
-                }
-            }
-        }
-        if !currentText.isEmpty, !currentLogProbs.isEmpty {
+        func flushCurrent() {
+            guard !currentText.isEmpty, !currentLogProbs.isEmpty else { return }
             let gm = exp(currentLogProbs.reduce(0, +) / Double(currentLogProbs.count))
             result.append(WordConfidence(text: currentText, geometricMeanProbability: gm))
+            currentText = ""
+            currentLogProbs = []
         }
+
+        for token in tokens {
+            let logP = log(token.probability)
+            var hitNewline = false
+            var segment = ""
+            for ch in token.piece {
+                if ch == "\n" || ch == "\r" {
+                    hitNewline = true
+                    break
+                }
+                if ch.isWhitespace {
+                    if !segment.isEmpty {
+                        currentText += segment
+                        currentLogProbs.append(logP)
+                        segment = ""
+                    }
+                    flushCurrent()
+                } else {
+                    segment.append(ch)
+                }
+            }
+            if !segment.isEmpty {
+                currentText += segment
+                currentLogProbs.append(logP)
+            }
+            if hitNewline {
+                flushCurrent()
+                break
+            }
+        }
+        flushCurrent()
         return result
     }
 
@@ -151,23 +170,26 @@ public enum WordConfidenceTruncator {
         let targetNormalized = visibleWords.map {
             CompletionContextWords.normalized(String(text[$0]))
         }
-        guard !targetNormalized.isEmpty else { return [] }
+        guard !targetNormalized.isEmpty, tokenWords.count >= targetNormalized.count else { return [] }
         let tokenNormalized = tokenWords.map { CompletionContextWords.normalized($0.text) }
+        let maxStart = tokenNormalized.count - targetNormalized.count
 
-        // Find the first subsequence match (handles trimmed leading echoes cleanly).
-        if tokenNormalized.count >= targetNormalized.count {
-            let maxStart = tokenNormalized.count - targetNormalized.count
-            for start in 0...maxStart {
-                let slice = Array(tokenNormalized[start..<(start + targetNormalized.count)])
-                if slice == targetNormalized {
-                    return Array(tokenWords[start..<(start + targetNormalized.count)])
-                }
+        // 1. Exact subsequence match (handles trimmed leading echoes cleanly).
+        for start in 0...maxStart {
+            if Array(tokenNormalized[start..<(start + targetNormalized.count)]) == targetNormalized {
+                return Array(tokenWords[start..<(start + targetNormalized.count)])
             }
         }
-        // Fallback: align from the start when prefix-trimming altered only word 1's prefix.
-        if tokenWords.count >= visibleWords.count {
-            return Array(tokenWords.prefix(visibleWords.count))
+        // 2. Mid-word suffix match on word 0 (e.g. token "writing" -> visible "ting")
+        //    with exact matches for all remaining words.
+        let tailTarget = Array(targetNormalized.dropFirst())
+        for start in 0...maxStart {
+            if tokenNormalized[start].hasSuffix(targetNormalized[0]),
+               Array(tokenNormalized[(start + 1)..<(start + targetNormalized.count)]) == tailTarget {
+                return Array(tokenWords[start..<(start + targetNormalized.count)])
+            }
         }
+        // Fail open when unaligned rather than attaching shifted probabilities.
         return []
     }
 }

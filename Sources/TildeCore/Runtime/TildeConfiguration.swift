@@ -54,13 +54,15 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         self.includesWindowTitleInScene = includesWindowTitleInScene
     }
 
-    /// The measured production stack: Gemma's gates, byte for byte.
+    /// The production decision stack: full phrase window with sentence-anchored
+    /// reply cue detection so active paragraphs are not silenced by
+    /// `non-actionable-scene`.
     public static let conservative = DecisionPolicy(
         maximumVisibleWords: CompletionSuggestion.defaultMaxVisibleWords,
         sceneEchoMinimumWords: SceneEchoPolicy.defaultMinimumWords,
         sceneEchoMinimumCharacters: SceneEchoPolicy.defaultMinimumCharacters,
         factualGrounding: .off,
-        replyCueAnchoredToCurrentSentence: false,
+        replyCueAnchoredToCurrentSentence: true,
         extendedOrdinarySilenceGate: false,
         includesWindowTitleInScene: false
     )
@@ -143,14 +145,16 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         midWordRequestThrottleMilliseconds = try c.decodeIfPresent(Int.self, forKey: .midWordRequestThrottleMilliseconds) ?? 0
     }
 
-    /// The measured production interaction (120/80 ms Electron calm floor,
-    /// proven jitter-free in daily-driver Chromium/Electron hosts).
+    /// Responsive production interaction: instant Tab-to-Tab chaining,
+    /// 60/50 ms Electron calm floor (fast without per-keystroke caret ping-pong),
+    /// punctuation boundaries, and throttled mid-word model continuations.
     public static let conservative = InteractionPolicy(
-        chainsCompletionAfterAccept: false,
-        calmRevealPostSpaceMilliseconds: 120,
-        calmRevealMidWordMilliseconds: 80,
-        requestsAfterPunctuation: false,
-        requestsMidWordContinuation: false
+        chainsCompletionAfterAccept: true,
+        calmRevealPostSpaceMilliseconds: 60,
+        calmRevealMidWordMilliseconds: 50,
+        requestsAfterPunctuation: true,
+        requestsMidWordContinuation: true,
+        midWordRequestThrottleMilliseconds: 90
     )
 
     /// The owner's 9B preview trial: chained accept, tighter Electron reveal

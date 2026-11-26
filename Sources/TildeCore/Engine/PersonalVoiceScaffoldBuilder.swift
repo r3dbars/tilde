@@ -36,7 +36,9 @@ public enum PersonalVoiceScaffoldBuilder {
     private static let allowedMidSentenceCapitalized: Set<String> = [
         "I", "I'm", "I'll", "I've", "I'd", "I’m", "I’ll", "I’ve", "I’d",
     ]
-    private static let forbiddenCharacters = CharacterSet(charactersIn: "0123456789@#/:$€£\"'`<>[]{}()\\|")
+    private static let forbiddenCharacters = CharacterSet(
+        charactersIn: "0123456789@#/:$€£¥₹\"'`“”‘’—–<>[]{}()\\|"
+    )
 
     public struct ExamplePair: Equatable, Sendable {
         public let prefix: String
@@ -45,15 +47,37 @@ public enum PersonalVoiceScaffoldBuilder {
 
     /// Builds per-register scaffolds strictly from user-authored `.typed` events
     /// (never `.accepted` suggestions, preventing self-reinforcement loops).
+    /// Coalesces contiguous `.typed` flushes within the same typing session so
+    /// 0.75s capture batches reconstruct full sentences.
     public static func build(from events: [PersonalHistoryEvent]) -> PersonalVoiceScaffoldSet {
         var chatCandidates: [ExamplePair] = []
         var emailCandidates: [ExamplePair] = []
         var proseCandidates: [ExamplePair] = []
 
-        for event in events where event.source == .typed {
-            let pairs = extractFactFreeExamples(from: event.text)
+        var coalesced: [(bundleIdentifier: String, text: String, sessionKey: String)] = []
+        for event in events {
+            guard event.source == .typed else {
+                // Non-typed event breaks contiguous user-typed stream.
+                if let last = coalesced.last, !last.sessionKey.isEmpty {
+                    coalesced.append(("", "", ""))
+                }
+                continue
+            }
+            let key = "\(event.historyIdentifier)|\(event.consentIdentifier)|\(event.sessionIdentifier)|\(event.appBundleIdentifier)"
+            if var last = coalesced.last,
+               last.sessionKey == key,
+               last.text.count + event.text.count <= 4_096 {
+                last.text += event.text
+                coalesced[coalesced.count - 1] = last
+            } else {
+                coalesced.append((event.appBundleIdentifier, event.text, key))
+            }
+        }
+
+        for item in coalesced where !item.bundleIdentifier.isEmpty {
+            let pairs = extractFactFreeExamples(from: item.text)
             guard !pairs.isEmpty else { continue }
-            switch ContinuationRegister.from(bundleIdentifier: event.appBundleIdentifier) {
+            switch ContinuationRegister.from(bundleIdentifier: item.bundleIdentifier) {
             case .chat:
                 chatCandidates.append(contentsOf: pairs)
             case .email:
@@ -106,10 +130,18 @@ public enum PersonalVoiceScaffoldBuilder {
             }
             let words = sentence.split(separator: " ").map(String.init)
             guard (10...22).contains(words.count) else { continue }
-            // Reject mid-sentence capitalized tokens (proper nouns, product names,
-            // days/months) so examples teach cadence without leaking specific facts.
+            // Reject non-ASCII digits too, plus mid-sentence uppercase chars
+            // (proper nouns, camelCase product names like iPhone/macOS,
+            // hyphenated names) and ALL-CAPS acronyms anywhere (e.g. AWS).
+            guard !sentence.contains(where: \.isNumber) else { continue }
+            let hasLeadingAcronym: Bool = {
+                guard let firstWord = words.first else { return false }
+                let letters = firstWord.filter(\.isLetter)
+                return letters.count >= 2 && letters.allSatisfy(\.isUppercase)
+            }()
+            guard !hasLeadingAcronym else { continue }
             let hasProperNoun = words.dropFirst().contains { word in
-                guard let first = word.first, first.isUppercase else { return false }
+                guard word.contains(where: \.isUppercase) else { return false }
                 let trimmed = word.trimmingCharacters(in: .punctuationCharacters)
                 return !allowedMidSentenceCapitalized.contains(trimmed)
             }

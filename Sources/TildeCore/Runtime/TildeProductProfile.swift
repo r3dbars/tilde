@@ -99,7 +99,7 @@ public enum TildeProductProfile: String, Equatable, Sendable {
 
     public var generatedTokenBudget: Int {
         switch self {
-        case .production: 20
+        case .production: 28
         case .preview26B: 8
         case .preview9B: 12
         case .modelPreview: 8

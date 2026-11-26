@@ -65,7 +65,7 @@ struct TildeProductProfileTests {
             #expect(preview.llamaServerPort != production.llamaServerPort)
             #expect(preview.personalHistoryKeychainService != production.personalHistoryKeychainService)
         }
-        #expect(production.generatedTokenBudget == 20)
+        #expect(production.generatedTokenBudget == 28)
         #expect(TildeProductProfile.preview26B.generatedTokenBudget == 8)
         #expect(TildeProductProfile.modelPreview.generatedTokenBudget == 8)
         #expect(TildeProductProfile.preview9B.generatedTokenBudget == 12)
