@@ -1057,6 +1057,63 @@ public struct PersonalNextWordShadow: Sendable {
         return prediction
     }
 
+    /// Non-mutating read of high-support personal vocabulary and context-matched
+    /// continuations for decode-time Word Nudge (`logit_bias`). Never alters
+    /// shadow scoring or model state.
+    public func topBiasTerms(
+        afterTailWords tailWords: [String],
+        limit: Int = 12
+    ) -> [WeightedBiasTerm] {
+        guard limit > 0 else { return [] }
+        let foldedHistory = tailWords.suffix(Self.maximumContextWords).map(Self.folded)
+        var candidates: [String: (surface: String, weight: Double, support: Int)] = [:]
+
+        // 1. Context-conditioned continuations (order 2 -> order 1) get higher nudge.
+        let maxOrder = min(2, foldedHistory.count)
+        if maxOrder >= 1 {
+            for order in stride(from: maxOrder, through: 1, by: -1) {
+                guard let bag = model[Self.contextKey(order: order, history: Array(foldedHistory))] else {
+                    continue
+                }
+                for (surface, count) in bag.counts where count >= 2 {
+                    let folded = Self.folded(surface)
+                    guard DecodeBiasPolicy.isEligibleBiasWord(folded),
+                          !Self.contractionFragments.contains(folded) else { continue }
+                    let weight = DecodeBiasPolicy.personalContextWeight
+                    if let existing = candidates[folded] {
+                        if weight > existing.weight || (weight == existing.weight && count > existing.support) {
+                            candidates[folded] = (surface, weight, count)
+                        }
+                    } else {
+                        candidates[folded] = (surface, weight, count)
+                    }
+                }
+            }
+        }
+
+        // 2. High-support personal salient lexicon words (order 0) fill remaining slots.
+        if let unigramBag = model[Self.contextKey(order: 0, history: [])] {
+            for (surface, count) in unigramBag.counts where count >= 4 {
+                let folded = Self.folded(surface)
+                guard DecodeBiasPolicy.isEligibleBiasWord(folded),
+                      !Self.contractionFragments.contains(folded) else { continue }
+                let weight = DecodeBiasPolicy.personalLexiconWeight
+                if candidates[folded] == nil {
+                    candidates[folded] = (surface, weight, count)
+                }
+            }
+        }
+
+        return candidates.values
+            .sorted { lhs, rhs in
+                if lhs.weight != rhs.weight { return lhs.weight > rhs.weight }
+                if lhs.support != rhs.support { return lhs.support > rhs.support }
+                return lhs.surface < rhs.surface
+            }
+            .prefix(limit)
+            .map { WeightedBiasTerm(term: $0.surface, weight: $0.weight) }
+    }
+
     private static func winningPrediction(
         in model: [ContextKey: TargetBag],
         after history: [String],

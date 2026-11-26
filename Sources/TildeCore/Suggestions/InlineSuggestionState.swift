@@ -254,3 +254,68 @@ public struct InlineSuggestionState: Equatable, Sendable {
         return String(text[..<nextSeparator])
     }
 }
+
+/// Pure identity & projected-context math for speculative chained-Tab prefetch.
+/// While the user is accepting a multi-word ghost word-by-word (Tab), the
+/// keyboard already knows the exact bounded context that exhausting the visible
+/// ghost will produce (`currentContext + accepted + remainder + " "`). Keying
+/// the prefetched continuation on `(clientIdentifier, bundleIdentifier,
+/// contextFingerprint)` guarantees a stale or mismatched field can never
+/// consume a speculative result.
+public struct SpeculativeChainKey: Equatable, Sendable {
+    public let clientIdentifier: String
+    public let bundleIdentifier: String
+    public let contextFingerprint: UInt64
+
+    public init(
+        clientIdentifier: String,
+        bundleIdentifier: String,
+        contextFingerprint: UInt64
+    ) {
+        self.clientIdentifier = clientIdentifier
+        self.bundleIdentifier = bundleIdentifier
+        self.contextFingerprint = contextFingerprint
+    }
+
+    public init(clientIdentifier: String, bundleIdentifier: String, context: String) {
+        self.init(
+            clientIdentifier: clientIdentifier,
+            bundleIdentifier: bundleIdentifier,
+            contextFingerprint: InlineSuggestionTicket.fingerprint(context)
+        )
+    }
+
+    /// Computes the exact bounded context after accepting `accepted` and the
+    /// remaining visible words `remainder` (plus the trailing separator that
+    /// word-accept / chaining appends). When `selectionLocation` is known
+    /// (>= 0), mirrors `RawContinuationPrompt.stableWindowStart` so crossing
+    /// `utf16Limit` produces the exact quantized window `contextBeforeCaret`
+    /// will read from the host field.
+    public static func projectedContext(
+        beforeAccept: String,
+        accepted: String,
+        remainder: String,
+        utf16Limit: Int,
+        selectionLocation: Int = -1
+    ) -> String {
+        let inserted: String
+        if remainder.isEmpty {
+            inserted = accepted
+        } else {
+            let suffix = remainder.last?.isWhitespace == true ? remainder : remainder + " "
+            inserted = accepted + suffix
+        }
+        let combined = beforeAccept + inserted
+        guard selectionLocation >= 0 else {
+            return InlineSuggestionTicket.boundedContext(combined, utf16Limit: utf16Limit)
+        }
+        let beforeNS = beforeAccept as NSString
+        let combinedNS = combined as NSString
+        let oldStart = max(0, selectionLocation - beforeNS.length)
+        let newEnd = selectionLocation + (inserted as NSString).length
+        let newStart = RawContinuationPrompt.stableWindowStart(end: newEnd, limit: utf16Limit)
+        let dropUTF16 = max(0, newStart - oldStart)
+        guard dropUTF16 < combinedNS.length else { return "" }
+        return combinedNS.substring(from: dropUTF16)
+    }
+}

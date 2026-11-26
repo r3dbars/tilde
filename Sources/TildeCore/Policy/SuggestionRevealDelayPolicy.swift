@@ -40,14 +40,14 @@ public enum SuggestionRevealDelayPolicy {
             self.midWordNanoseconds = midWordNanoseconds
         }
 
-        public static let production = CalmDelays(postSpaceNanoseconds: 200_000_000, midWordNanoseconds: 120_000_000)
-        public static let preview = CalmDelays(postSpaceNanoseconds: 120_000_000, midWordNanoseconds: 80_000_000)
+        public static let production = CalmDelays(postSpaceNanoseconds: 120_000_000, midWordNanoseconds: 80_000_000)
+        public static let preview = CalmDelays(postSpaceNanoseconds: 80_000_000, midWordNanoseconds: 50_000_000)
     }
 
     /// `chained` marks a request issued by an accept rather than a
-    /// keystroke: no key is being processed, so the shorter mid-word wait is
-    /// enough to keep a Chromium caret still, and every millisecond here is
-    /// dead air between one Tab and the next ghost.
+    /// keystroke: no key is being processed, so native editors reveal
+    /// immediately (0 ms) and Chromium/Electron hosts use the shorter calm
+    /// window so every millisecond of dead air between Tab presses is minimized.
     public static func nanoseconds(
         afterUserTyped grapheme: String,
         calmMarkedText: Bool,
@@ -58,7 +58,7 @@ public enum SuggestionRevealDelayPolicy {
         if calmMarkedText {
             return short ? calm.midWordNanoseconds : calm.postSpaceNanoseconds
         }
-        return short ? 10_000_000 : 50_000_000
+        return short ? 0 : 15_000_000
     }
 
     /// Model work always begins with the keystroke. Chromium/Electron only

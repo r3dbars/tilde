@@ -189,6 +189,23 @@ struct OrderedAsyncTaskTail: Sendable {
     }
 }
 
+private final class PersonalVoiceScaffoldState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scaffolds: PersonalVoiceScaffoldSet = .empty
+
+    func snapshot() -> PersonalVoiceScaffoldSet {
+        lock.withLock { scaffolds }
+    }
+
+    func update(_ next: PersonalVoiceScaffoldSet) {
+        lock.withLock { scaffolds = next }
+    }
+
+    func clear() {
+        lock.withLock { scaffolds = .empty }
+    }
+}
+
 final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Sendable {
     /// How often the trained table is written back. It is a whole-file
     /// record — hundreds of kilobytes on a well-trained model — so writing
@@ -203,6 +220,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     private let operations: PersistenceOperations
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
+    private let voiceScaffoldState = PersonalVoiceScaffoldState()
 
     init(
         store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
@@ -234,6 +252,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             historyIdentifier: historyIdentifier,
             configurationState: initialConfiguration,
             storageHealthState: storageHealthState,
+            voiceScaffoldState: voiceScaffoldState,
             diagnostics: diagnostics,
             modelPersistenceInterval: modelPersistenceInterval
         )
@@ -312,6 +331,37 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         return await operations.predictNextWord(afterTailWords: tailWords, configuration: configuration)
     }
 
+    /// Non-mutating personal vocabulary + context-conditioned bias terms for
+    /// decode-time Word Nudge (`logit_bias`). Strictly respects master toggle
+    /// and per-app exclusions.
+    func personalBiasTerms(
+        afterTailWords tailWords: [String],
+        appBundleIdentifier: String?
+    ) async -> [WeightedBiasTerm] {
+        let configuration = configurationState.snapshot()
+        guard configuration.enabled,
+              let appBundleIdentifier, PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
+              !DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        else { return [] }
+        return await operations.topBiasTerms(afterTailWords: tailWords, configuration: configuration)
+    }
+
+    /// Non-blocking (<1 µs) lookup for the cached fact-free Personal-Voice
+    /// scaffold for `register`. Returns `nil` when Personal History is off,
+    /// the app is excluded, or fewer than 3 clean fact-free examples exist.
+    func personalVoiceScaffold(
+        for register: ContinuationRegister,
+        appBundleIdentifier: String?
+    ) -> String? {
+        let configuration = configurationState.snapshot()
+        guard configuration.enabled else { return nil }
+        if let appBundleIdentifier,
+           DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps) {
+            return nil
+        }
+        return voiceScaffoldState.snapshot().scaffold(for: register)
+    }
+
     func nextWordStatus() async -> PersonalNextWordShadowStatus {
         let configuration = configurationState.snapshot()
         let status = await operations.nextWordStatus(configuration: configuration)
@@ -361,6 +411,7 @@ private actor PersistenceOperations {
     private let store: any PersonalHistoryStore
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
+    private let voiceScaffoldState: PersonalVoiceScaffoldState
     private let diagnostics: DiagnosticsLog
     private let modelPersistenceInterval: TimeInterval
     private var historyIdentifier: String
@@ -383,6 +434,7 @@ private actor PersistenceOperations {
         historyIdentifier: String,
         configurationState: PersonalHistoryConfigurationState,
         storageHealthState: PersonalHistoryStorageHealthState,
+        voiceScaffoldState: PersonalVoiceScaffoldState,
         diagnostics: DiagnosticsLog,
         modelPersistenceInterval: TimeInterval
     ) {
@@ -390,6 +442,7 @@ private actor PersistenceOperations {
         self.historyIdentifier = historyIdentifier
         self.configurationState = configurationState
         self.storageHealthState = storageHealthState
+        self.voiceScaffoldState = voiceScaffoldState
         self.diagnostics = diagnostics
         self.modelPersistenceInterval = modelPersistenceInterval
     }
@@ -537,6 +590,7 @@ private actor PersistenceOperations {
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
         nextWord.reset()
+        voiceScaffoldState.clear()
         nextWordPhase = configuration.enabled ? .loading : .inactive
         guard configuration.enabled else { return }
 
@@ -597,6 +651,11 @@ private actor PersistenceOperations {
             lastAppendedSequence,
             replay.records.map(\.sequence).max() ?? 0
         )
+        let allAllowedEvents = replay.events.filter {
+            $0.historyIdentifier == historyIdentifier
+                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        }
+        voiceScaffoldState.update(PersonalVoiceScaffoldBuilder.build(from: allAllowedEvents))
         nextWord = rebuilt
         nextWordPhase = .ready
     }
@@ -610,6 +669,7 @@ private actor PersistenceOperations {
         storageHealthState.recordFailure(error, duringReplay: true)
         replayBacklog.removeAll(keepingCapacity: true)
         nextWord.reset()
+        voiceScaffoldState.clear()
         nextWordPhase = .unavailable
     }
 
@@ -624,6 +684,14 @@ private actor PersistenceOperations {
     ) -> PersonalNextWordPrediction? {
         guard configuration.revision == configurationRevision, nextWordPhase == .ready else { return nil }
         return nextWord.predictNextWord(afterTailWords: tailWords)
+    }
+
+    func topBiasTerms(
+        afterTailWords tailWords: [String],
+        configuration: PersonalHistoryConfiguration
+    ) -> [WeightedBiasTerm] {
+        guard configuration.revision == configurationRevision, nextWordPhase == .ready else { return [] }
+        return nextWord.topBiasTerms(afterTailWords: tailWords)
     }
 
     func nextWordStatus(
@@ -646,6 +714,7 @@ private actor PersistenceOperations {
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
         nextWord.reset()
+        voiceScaffoldState.clear()
         nextWordPhase = .inactive
         historyIdentifier = nextHistoryIdentifier
         // The log and the trained table both go; positions restart with the

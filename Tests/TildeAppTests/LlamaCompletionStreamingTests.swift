@@ -52,6 +52,54 @@ struct LlamaCompletionStreamingTests {
         #expect(StreamingURLProtocol.probe.wasStopped)
     }
 
+    @Test("Persistent URLSession transport serves sequential requests without invalidating its session")
+    func persistentURLSessionServesMultipleRequests() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CompletingSSEURLProtocol.self]
+        let transport = URLSessionLlamaCompletionTransport(configuration: configuration)
+        let engine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: transport
+        )
+        let first = try await engine.suggestion(
+            textBeforeCursor: "That was ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        let second = try await engine.suggestion(
+            textBeforeCursor: "This looks ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        #expect(first?.visibleText == "great")
+        #expect(second?.visibleText == "great")
+    }
+
+    @Test("Persistent URLSession transport serves sequential requests and attaches bearer auth when configured")
+    func persistentTransportAndBearerAuth() async throws {
+        let capture = AuthHeaderCaptureTransport()
+        let engine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            apiKey: "unit-test-bearer",
+            diagnostics: .disabled,
+            transport: capture
+        )
+        let first = try await engine.suggestion(
+            textBeforeCursor: "That was ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        let second = try await engine.suggestion(
+            textBeforeCursor: "This looks ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        #expect(first?.visibleText == "great")
+        #expect(second?.visibleText == "great")
+        #expect(capture.authHeaders == ["Bearer unit-test-bearer", "Bearer unit-test-bearer"])
+    }
+
     @Test("A decision names its reason: shown with timings, or empty output with none generated")
     func decisionCarriesReasonAndTimings() async throws {
         let served = LlamaCompletionEngine(
@@ -263,6 +311,28 @@ private final class StreamingURLProtocol: URLProtocol, @unchecked Sendable {
     }
 }
 
+private final class CompletingSSEURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "text/event-stream"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        let payload = Data(
+            "data: {\"content\":\" great\"}\n\ndata: {\"stop\":true,\"tokens_predicted\":1}\n\n".utf8
+        )
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 private final class URLProtocolCancellationProbe: @unchecked Sendable {
     private let lock = NSLock()
     private var started = false
@@ -351,6 +421,26 @@ private struct ProbeTransport: LlamaCompletionStreamingTransport {
             statusCode: 200,
             lines: lines,
             cancel: { probe.cancel() }
+        )
+    }
+}
+
+private final class AuthHeaderCaptureTransport: LlamaCompletionStreamingTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var headers: [String] = []
+    var authHeaders: [String] { lock.withLock { headers } }
+
+    func open(request: URLRequest) async throws -> LlamaCompletionHTTPStream {
+        let auth = request.value(forHTTPHeaderField: "Authorization") ?? ""
+        lock.withLock { headers.append(auth) }
+        return LlamaCompletionHTTPStream(
+            statusCode: 200,
+            lines: AsyncThrowingStream { continuation in
+                continuation.yield(#"data: {"content":" great"}"#)
+                continuation.yield(#"data: {"stop":true,"tokens_predicted":1,"timings":{"prompt_n":12,"cache_n":100,"predicted_n":1}}"#)
+                continuation.finish()
+            },
+            cancel: {}
         )
     }
 }

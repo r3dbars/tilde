@@ -143,23 +143,24 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         midWordRequestThrottleMilliseconds = try c.decodeIfPresent(Int.self, forKey: .midWordRequestThrottleMilliseconds) ?? 0
     }
 
-    /// The measured production interaction.
+    /// The measured production interaction (120/80 ms Electron calm floor,
+    /// proven jitter-free in daily-driver Chromium/Electron hosts).
     public static let conservative = InteractionPolicy(
         chainsCompletionAfterAccept: false,
-        calmRevealPostSpaceMilliseconds: 200,
-        calmRevealMidWordMilliseconds: 120,
+        calmRevealPostSpaceMilliseconds: 120,
+        calmRevealMidWordMilliseconds: 80,
         requestsAfterPunctuation: false,
         requestsMidWordContinuation: false
     )
 
-    /// The owner's 9B preview trial of 2026-09-01/02: chained accept, the
-    /// shorter Electron reveal floor, punctuation as a request boundary, and
-    /// (2026-09-02) mid-word model continuation. Production stays on the
-    /// conservative interaction until a live result promotes any of them.
+    /// The owner's 9B preview trial: chained accept, tighter Electron reveal
+    /// floor (80/50 ms), punctuation as a request boundary, and mid-word model
+    /// continuation. Production stays on the conservative interaction until a
+    /// live result promotes any of them.
     public static let tuned9B = InteractionPolicy(
         chainsCompletionAfterAccept: true,
-        calmRevealPostSpaceMilliseconds: 120,
-        calmRevealMidWordMilliseconds: 80,
+        calmRevealPostSpaceMilliseconds: 80,
+        calmRevealMidWordMilliseconds: 50,
         requestsAfterPunctuation: true,
         requestsMidWordContinuation: true,
         midWordRequestThrottleMilliseconds: 120

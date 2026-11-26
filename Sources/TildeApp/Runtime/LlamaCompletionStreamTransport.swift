@@ -13,16 +13,45 @@ protocol LlamaCompletionStreamingTransport: Sendable {
     func open(request: URLRequest) async throws -> LlamaCompletionHTTPStream
 }
 
-struct URLSessionLlamaCompletionTransport: LlamaCompletionStreamingTransport, @unchecked Sendable {
-    private let configuration: URLSessionConfiguration
+/// Persistent localhost streaming transport backed by one shared `URLSession`.
+///
+/// Creating and invalidating a fresh `URLSession` per completion request forced
+/// an `OperationQueue`, connection-pool teardown, and fresh TCP handshake on
+/// every typed word. Multiplexing data tasks through one delegate keeps the
+/// session and connection pool warm while preserving exact per-task
+/// `URLSessionDataTask.cancel()` semantics so stale requests still abort
+/// `llama-server` inference immediately.
+final class URLSessionLlamaCompletionTransport: LlamaCompletionStreamingTransport, @unchecked Sendable {
+    private let multiplexer: URLSessionStreamMultiplexer
+    private let session: URLSession
 
     init(configuration: URLSessionConfiguration = .ephemeral) {
-        self.configuration = configuration
+        let prepared = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
+        prepared.requestCachePolicy = .reloadIgnoringLocalCacheData
+        prepared.urlCache = nil
+        prepared.httpCookieStorage = nil
+        prepared.httpShouldSetCookies = false
+        prepared.urlCredentialStorage = nil
+        prepared.connectionProxyDictionary = [:]
+        prepared.httpMaximumConnectionsPerHost = 4
+        let multiplexer = URLSessionStreamMultiplexer()
+        self.multiplexer = multiplexer
+        self.session = URLSession(configuration: prepared, delegate: multiplexer, delegateQueue: nil)
+    }
+
+    deinit {
+        session.finishTasksAndInvalidate()
     }
 
     func open(request: URLRequest) async throws -> LlamaCompletionHTTPStream {
         let operation = URLSessionStreamOperation()
-        operation.start(request: request, configuration: configuration)
+        let task = session.dataTask(with: request)
+        let taskID = task.taskIdentifier
+        multiplexer.register(operation, for: taskID)
+        operation.attach(task: task) { [weak multiplexer] in
+            multiplexer?.remove(taskIdentifier: taskID)
+        }
+        task.resume()
         let statusCode = try await operation.waitForResponse()
         return LlamaCompletionHTTPStream(
             statusCode: statusCode,
@@ -32,7 +61,60 @@ struct URLSessionLlamaCompletionTransport: LlamaCompletionStreamingTransport, @u
     }
 }
 
-private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+private final class URLSessionStreamMultiplexer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var operations: [Int: URLSessionStreamOperation] = [:]
+
+    func register(_ operation: URLSessionStreamOperation, for taskIdentifier: Int) {
+        lock.withLock { operations[taskIdentifier] = operation }
+    }
+
+    func remove(taskIdentifier: Int) {
+        _ = lock.withLock { operations.removeValue(forKey: taskIdentifier) }
+    }
+
+    private func operation(for task: URLSessionTask) -> URLSessionStreamOperation? {
+        lock.withLock { operations[task.taskIdentifier] }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let operation = operation(for: dataTask) else {
+            completionHandler(.cancel)
+            return
+        }
+        operation.didReceive(response: response, completionHandler: completionHandler)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        operation(for: dataTask)?.didReceive(data: data)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        let operation = lock.withLock { operations.removeValue(forKey: task.taskIdentifier) }
+        operation?.didComplete(withError: error)
+    }
+}
+
+private final class URLSessionStreamOperation: @unchecked Sendable {
     let lines: AsyncThrowingStream<String, Error>
 
     private let lock = NSLock()
@@ -41,34 +123,30 @@ private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate,
     private var receivedStatusCode: Int?
     private var responseError: Error?
     private var buffer = Data()
-    private var session: URLSession?
     private var task: URLSessionDataTask?
+    private var unregister: (@Sendable () -> Void)?
     private var finished = false
 
-    override init() {
+    init() {
         var captured: AsyncThrowingStream<String, Error>.Continuation!
         lines = AsyncThrowingStream<String, Error> { captured = $0 }
         lineContinuation = captured
-        super.init()
         lineContinuation.onTermination = { @Sendable [weak self] termination in
             if case .cancelled = termination { self?.cancel() }
         }
     }
 
-    func start(request: URLRequest, configuration: URLSessionConfiguration) {
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        configuration.httpCookieStorage = nil
-        configuration.httpShouldSetCookies = false
-        configuration.urlCredentialStorage = nil
-        configuration.connectionProxyDictionary = [:]
-        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-        let task = session.dataTask(with: request)
-        lock.lock()
-        self.session = session
-        self.task = task
-        lock.unlock()
-        task.resume()
+    func attach(task: URLSessionDataTask, unregister: @escaping @Sendable () -> Void) {
+        let alreadyFinished: Bool = lock.withLock {
+            if finished { return true }
+            self.task = task
+            self.unregister = unregister
+            return false
+        }
+        if alreadyFinished {
+            task.cancel()
+            unregister()
+        }
     }
 
     func waitForResponse() async throws -> Int {
@@ -95,24 +173,17 @@ private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate,
         finish(throwing: CancellationError(), cancelTask: true)
     }
 
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping @Sendable (URLRequest?) -> Void
-    ) {
-        completionHandler(nil)
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        dataTask: URLSessionDataTask,
-        didReceive response: URLResponse,
+    func didReceive(
+        response: URLResponse,
         completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
     ) {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         lock.lock()
+        guard !finished else {
+            lock.unlock()
+            completionHandler(.cancel)
+            return
+        }
         receivedStatusCode = status
         let continuation = responseContinuation
         responseContinuation = nil
@@ -121,7 +192,7 @@ private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate,
         completionHandler(.allow)
     }
 
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    func didReceive(data: Data) {
         lock.lock()
         guard !finished else {
             lock.unlock()
@@ -138,11 +209,7 @@ private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate,
         for line in ready { lineContinuation.yield(line) }
     }
 
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didCompleteWithError error: Error?
-    ) {
+    func didComplete(withError error: Error?) {
         finish(throwing: error, cancelTask: false)
     }
 
@@ -154,9 +221,9 @@ private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate,
         }
         finished = true
         let task = self.task
-        let session = self.session
+        let unregister = self.unregister
         self.task = nil
-        self.session = nil
+        self.unregister = nil
         let responseContinuation = self.responseContinuation
         self.responseContinuation = nil
         if receivedStatusCode == nil { responseError = error ?? URLError(.badServerResponse) }
@@ -164,8 +231,8 @@ private final class URLSessionStreamOperation: NSObject, URLSessionDataDelegate,
         buffer.removeAll(keepingCapacity: false)
         lock.unlock()
 
+        unregister?()
         if cancelTask { task?.cancel() }
-        session?.invalidateAndCancel()
         if receivedStatusCode == nil {
             responseContinuation?.resume(throwing: error ?? URLError(.badServerResponse))
         }

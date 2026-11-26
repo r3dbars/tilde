@@ -19,10 +19,9 @@ final class GhostInputController: IMKInputController {
     /// reveal, or start on punctuation differently in two processes.
     private static var chainsAfterAccept: Bool { ServedConfiguration.interaction.chainsCompletionAfterAccept }
     /// The schedule revision of the request a consumed accept chained, while
-    /// it is still the live one. A Tab that lands before that ghost appears
-    /// is held rather than handed to the host: the writer is mid-chain, and
-    /// in an Electron composer a stray Tab moves focus out of the field.
-    private var chainedRequestRevision: Int?
+    /// it is still actively in flight. Cleared on every exit of the matching
+    /// revision so an ordinary Tab after completion/bail is never held.
+    private var pendingChainedRevision: Int?
     private static let slowKeyLogger = Logger(
         subsystem: TildeProductProfile.current.inputMethodBundleIdentifier,
         category: "typing-performance"
@@ -150,8 +149,15 @@ final class GhostInputController: IMKInputController {
     private var historyOwner: FallbackOwner?
     private var scheduleRevision = 0
     private var lastScheduledContextTail = ""
+    private struct SpeculativeChainState {
+        let key: SpeculativeChainKey
+        let task: Task<GhostBrainResponse, Never>
+        var completedResponse: GhostBrainResponse?
+    }
+
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
+    private var speculativeChain: SpeculativeChainState?
     private var bufferedReveal: (text: String, ticket: InlineSuggestionTicket, provenance: GhostProvenance)?
     /// The app's receipt for the ghost most recently handed to the reducer,
     /// read back by `recordOutcomeShown` when the `.shown` effect fires.
@@ -238,9 +244,11 @@ final class GhostInputController: IMKInputController {
                 dismiss(client)
                 return false
             }
+            if !state.isVisible, awaitingChainedGhost() {
+                return true
+            }
             let accepted = acceptSuggestion(client, observation: insertionObservation)
             if !accepted {
-                if awaitingChainedGhost() { return true }
                 breakHistorySegment()
             }
             return accepted
@@ -644,7 +652,7 @@ final class GhostInputController: IMKInputController {
             return false
         }
         let match = matchingVisibleState(for: client)
-        cancelPendingWork()
+        cancelPendingWork(preservingSpeculativeChain: true)
         let effects = state.reduce(.acceptNextWord(
             current: match?.ticket,
             boundedContext: match?.context ?? "",
@@ -654,6 +662,7 @@ final class GhostInputController: IMKInputController {
             if case .insert = $0 { return true }
             return false
         }) else {
+            cancelSpeculativeChain()
             apply(effects, to: client)
             return false
         }
@@ -672,30 +681,280 @@ final class GhostInputController: IMKInputController {
             kind: .word,
             remainderVisible: state.isVisible
         )
-        chainAfterAcceptIfConsumed(client)
+        if state.isVisible {
+            prefetchChainedContinuationIfEligible(
+                bundleIdentifier: observation.bundle,
+                beforeAccept: match?.context ?? "",
+                accepted: accepted,
+                remainder: state.visibleText,
+                selectionLocation: match?.ticket.selectionLocation ?? -1
+            )
+        } else {
+            chainAfterAcceptIfConsumed(
+                client,
+                bundleIdentifier: observation.bundle,
+                beforeAccept: match?.context ?? "",
+                accepted: accepted,
+                selectionLocation: match?.ticket.selectionLocation ?? -1
+            )
+        }
         return true
+    }
+
+    /// Speculatively computes chunk N+1 while the writer is still stepping
+    /// through chunk N with Tab. Triggered only after an explicit Tab accept
+    /// with a remaining visible word, so ordinary continuous typing never
+    /// contends for the helper's single slot. Any non-accept keystroke cancels
+    /// the background task immediately.
+    private func prefetchChainedContinuationIfEligible(
+        bundleIdentifier: String,
+        beforeAccept: String,
+        accepted: String,
+        remainder: String,
+        selectionLocation: Int
+    ) {
+        guard Self.chainsAfterAccept, !beforeAccept.isEmpty else { return }
+        let projected = SpeculativeChainKey.projectedContext(
+            beforeAccept: beforeAccept,
+            accepted: accepted,
+            remainder: remainder,
+            utf16Limit: Self.contextLimit,
+            selectionLocation: selectionLocation
+        )
+        guard RawContinuationPrompt.endsAtRequestBoundary(
+            projected,
+            allowingPunctuation: Self.requestsAfterPunctuation
+        ) else { return }
+        let key = SpeculativeChainKey(
+            clientIdentifier: suggestionSessionIdentifier,
+            bundleIdentifier: bundleIdentifier,
+            context: projected
+        )
+        if speculativeChain?.key == key { return }
+        cancelSpeculativeChain()
+        let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
+        let fieldSessionIdentifier = suggestionSessionIdentifier
+        let experimentArm = h01SessionArm()?.rawValue
+        let task = Task<GhostBrainResponse, Never> { [weak self] in
+            let response = await GhostBrainClient.complete(
+                context: projected,
+                app: bundle,
+                fieldSessionIdentifier: fieldSessionIdentifier,
+                experimentArm: experimentArm
+            )
+            guard !Task.isCancelled else { return response }
+            await MainActor.run {
+                if self?.speculativeChain?.key == key {
+                    self?.speculativeChain?.completedResponse = response
+                }
+            }
+            return response
+        }
+        speculativeChain = SpeculativeChainState(key: key, task: task, completedResponse: nil)
     }
 
     /// The reward for a correct ghost used to be silence: accepting its last
     /// word left the caret at a word boundary with nothing scheduled until
-    /// the next keystroke. When the profile chains, the accepted text (which
-    /// ends in the separator) is the new context and the next three words
-    /// are requested at once, through the ordinary schedule path with its
-    /// reveal delay, activation checks, and ticket rules intact.
-    private func chainAfterAcceptIfConsumed(_ client: IMKTextInput) {
+    /// the next keystroke. When the profile chains, we first consume any
+    /// matching speculative prefetch (0 ms inference wait); otherwise, in
+    /// Chromium/Electron hosts we launch inference immediately in parallel
+    /// with the host's caret-settle window instead of sleeping 90 ms before
+    /// even sending the request.
+    private func chainAfterAcceptIfConsumed(
+        _ client: IMKTextInput,
+        bundleIdentifier: String,
+        beforeAccept: String,
+        accepted: String,
+        selectionLocation: Int
+    ) {
         guard Self.chainsAfterAccept, !state.isVisible else { return }
-        scheduleSuggestion(for: client, afterUserTyped: " ", chained: true)
-        chainedRequestRevision = scheduleRevision
+        let projected = SpeculativeChainKey.projectedContext(
+            beforeAccept: beforeAccept,
+            accepted: accepted,
+            remainder: "",
+            utf16Limit: Self.contextLimit,
+            selectionLocation: selectionLocation
+        )
+        let expectedKey = SpeculativeChainKey(
+            clientIdentifier: suggestionSessionIdentifier,
+            bundleIdentifier: bundleIdentifier,
+            context: projected
+        )
+        if let hit = speculativeChain, hit.key == expectedKey {
+            speculativeChain = nil
+            presentSpeculativeOrOverlappedChain(
+                client: client,
+                bundleIdentifier: bundleIdentifier,
+                expectedKey: expectedKey,
+                prefetched: hit,
+                projectedContext: projected
+            )
+            return
+        }
+        cancelSpeculativeChain()
+        if usesCalmReveal(for: bundleIdentifier),
+           !beforeAccept.isEmpty,
+           RawContinuationPrompt.endsAtRequestBoundary(
+               projected,
+               allowingPunctuation: Self.requestsAfterPunctuation
+           ) {
+            let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
+            let fieldSessionIdentifier = suggestionSessionIdentifier
+            let experimentArm = h01SessionArm()?.rawValue
+            let overlappedTask = Task<GhostBrainResponse, Never> {
+                await GhostBrainClient.complete(
+                    context: projected,
+                    app: bundle,
+                    fieldSessionIdentifier: fieldSessionIdentifier,
+                    experimentArm: experimentArm
+                )
+            }
+            presentSpeculativeOrOverlappedChain(
+                client: client,
+                bundleIdentifier: bundleIdentifier,
+                expectedKey: expectedKey,
+                prefetched: SpeculativeChainState(
+                    key: expectedKey,
+                    task: overlappedTask,
+                    completedResponse: nil
+                ),
+                projectedContext: projected
+            )
+            return
+        }
+        scheduleSuggestion(for: client, afterUserTyped: " ", chained: true, expectedBundle: bundleIdentifier)
+        pendingChainedRevision = scheduleRevision
     }
 
-    /// True while the request a consumed accept chained is still pending.
-    /// Any newer schedule (a keystroke, a dismissal) moves the revision on,
-    /// so an ordinary Tab is never held.
+    /// Presents a speculatively prefetched (or settle-overlapped) chained
+    /// continuation once the host field has settled, verifying live caret,
+    /// secure-input, fingerprint, and growing-edge invariants before touching
+    /// marked text. Falls back to a fresh request if the live window drifted
+    /// (for example across a quantized UTF-16 boundary).
+    private func presentSpeculativeOrOverlappedChain(
+        client: IMKTextInput,
+        bundleIdentifier: String,
+        expectedKey: SpeculativeChainKey,
+        prefetched: SpeculativeChainState,
+        projectedContext: String
+    ) {
+        lastScheduledContextTail = String(projectedContext.suffix(Self.contextLimit))
+        cancelPendingWork(preservingSpeculativeChain: false)
+        scheduleRevision += 1
+        let revision = scheduleRevision
+        pendingChainedRevision = revision
+        let settleBeforeReading = usesCalmReveal(for: bundleIdentifier)
+        let wasAlreadyReady = prefetched.completedResponse != nil
+        let prefetchedTask = prefetched.task
+        let completedResponse = prefetched.completedResponse
+        modelTask = Task { @MainActor [weak self] in
+            defer {
+                if let self, self.pendingChainedRevision == revision {
+                    self.pendingChainedRevision = nil
+                }
+            }
+            if settleBeforeReading {
+                try? await Task.sleep(nanoseconds: Self.chainedCalmSettleNanoseconds)
+            }
+            let result: GhostBrainResponse
+            if let completedResponse {
+                result = completedResponse
+            } else {
+                result = await withTaskCancellationHandler {
+                    await prefetchedTask.value
+                } onCancel: {
+                    prefetchedTask.cancel()
+                }
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  self.scheduleRevision == revision,
+                  let liveClient = self.client(),
+                  !self.stopForSecureInput(liveClient) else {
+                Self.chainLogger.info("chain-bailed reason=superseded")
+                return
+            }
+            let field = self.fieldSnapshot(liveClient)
+            guard field.bundleIdentifier == bundleIdentifier,
+                  field.selection.location != NSNotFound,
+                  field.selection.length == 0 else {
+                Self.chainLogger.info("chain-bailed reason=selection")
+                return
+            }
+            let liveContext = self.contextBeforeCaret(liveClient, selection: field.selection)
+            guard InlineSuggestionTicket.fingerprint(liveContext) == expectedKey.contextFingerprint else {
+                Self.chainLogger.info("chain-bailed reason=context-drift")
+                // Advance scheduleRevision through scheduleSuggestion so this
+                // task's defer (for the old revision) does not clear the
+                // fallback chain's pendingChainedRevision.
+                self.scheduleSuggestion(
+                    for: liveClient,
+                    afterUserTyped: " ",
+                    chained: true,
+                    expectedBundle: bundleIdentifier
+                )
+                self.pendingChainedRevision = self.scheduleRevision
+                return
+            }
+            let trailingText = self.trailingTextAfterCaret(liveClient, selection: field.selection)
+            let requestTicket = self.ticket(context: liveContext, field: field)
+            _ = self.openOpportunity(ticket: requestTicket, context: liveContext, field: field)
+            guard SuggestionActivationPolicy.allowsSuggestions(
+                afterUserTyped: self.typedFallback,
+                trailingTextAfterCaret: trailingText
+            ) else {
+                Self.chainLogger.info(
+                    "chain-bailed reason=activation trailingChars=\(trailingText.count, privacy: .public)"
+                )
+                self.endOpenOpportunity(.notAtGrowingEdge, ticket: requestTicket)
+                self.dismiss(liveClient)
+                return
+            }
+            self.apply(self.state.reduce(.awaitSuggestion(requestTicket)), to: liveClient)
+            ServedConfiguration.adopt(result)
+            Self.chainLogger.info(
+                "chain-prefetch hit=true readyBeforeConsume=\(wasAlreadyReady, privacy: .public)"
+            )
+            let receipt = GhostDecisionReceipt(result)
+            switch result.outcome {
+            case .suggestion:
+                if let text = result.suggestion, !text.isEmpty {
+                    self.present(
+                        text,
+                        ticket: requestTicket,
+                        revealNotBefore: .distantPast,
+                        provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier)
+                    )
+                } else {
+                    self.endOpenOpportunity(.emptyOutput, ticket: requestTicket, receipt: receipt)
+                    self.settle(ticket: requestTicket)
+                }
+            case .unavailable:
+                self.endOpenOpportunity(.runtimeUnavailable, ticket: requestTicket, receipt: receipt)
+                self.settle(ticket: requestTicket)
+                Self.summonBrainIfNeeded()
+            case .error, .timeout, .invalidRequest:
+                self.endOpenOpportunity(
+                    result.outcome == .timeout ? .timeout : .protocolError,
+                    ticket: requestTicket,
+                    receipt: receipt
+                )
+                self.settle(ticket: requestTicket)
+                GhostStats.recordFailure(result.outcome)
+            case .silence, .recorded:
+                self.endOpenOpportunity(.noSuggestion, ticket: requestTicket, receipt: receipt)
+                self.settle(ticket: requestTicket)
+            }
+        }
+    }
+
+    /// True while the request a consumed accept chained is still actively in
+    /// flight. Cleared on every completion/bail/cancellation so an ordinary
+    /// Tab is never held after a chain settles.
     private func awaitingChainedGhost() -> Bool {
         guard Self.chainsAfterAccept,
-              let chained = chainedRequestRevision,
-              chained == scheduleRevision,
-              state.pendingTicket != nil else { return false }
+              let chained = pendingChainedRevision,
+              chained == scheduleRevision else { return false }
         return true
     }
 
@@ -708,7 +967,7 @@ final class GhostInputController: IMKInputController {
             return false
         }
         let match = matchingVisibleState(for: client)
-        cancelPendingWork()
+        cancelPendingWork(preservingSpeculativeChain: true)
         let effects = state.reduce(.acceptAll(
             current: match?.ticket,
             appendsSeparator: Self.chainsAfterAccept
@@ -717,6 +976,7 @@ final class GhostInputController: IMKInputController {
             if case .insert = $0 { return true }
             return false
         }) else {
+            cancelSpeculativeChain()
             apply(effects, to: client)
             return false
         }
@@ -735,7 +995,13 @@ final class GhostInputController: IMKInputController {
             kind: .all,
             remainderVisible: state.isVisible
         )
-        chainAfterAcceptIfConsumed(client)
+        chainAfterAcceptIfConsumed(
+            client,
+            bundleIdentifier: observation.bundle,
+            beforeAccept: match?.context ?? "",
+            accepted: accepted,
+            selectionLocation: match?.ticket.selectionLocation ?? -1
+        )
         return true
     }
 
@@ -881,54 +1147,48 @@ final class GhostInputController: IMKInputController {
     private func scheduleSuggestion(
         for client: IMKTextInput,
         afterUserTyped grapheme: String,
-        chained: Bool = false
+        chained: Bool = false,
+        expectedBundle providedBundle: String? = nil
     ) {
-        // Same field, different conversation: tell Screen Memory so the
-        // next capture happens now-ish instead of serving the old thread.
-        let contextTail = String(contextBeforeCaret(client).suffix(Self.contextLimit))
-        if ContextResetDetector.isReset(previous: lastScheduledContextTail, current: contextTail) {
-            notifyScreenMemory(.contentReset)
-        }
-        lastScheduledContextTail = contextTail
         cancelPendingWork()
         scheduleRevision += 1
         let revision = scheduleRevision
-        let expectedBundle = client.bundleIdentifier() ?? ""
+        let expectedBundle = providedBundle ?? fallbackOwner?.bundle ?? client.bundleIdentifier() ?? ""
+        let calm = usesCalmReveal(for: expectedBundle)
         let timing = SuggestionRevealDelayPolicy.schedule(
             afterUserTyped: grapheme,
-            calmMarkedText: usesCalmReveal(for: expectedBundle),
+            calmMarkedText: calm,
             chained: chained,
             calm: Self.calmRevealDelays
         )
-        guard scheduleRevision == revision,
-              (client.bundleIdentifier() ?? "") == expectedBundle else { return }
+        guard scheduleRevision == revision else { return }
         let revealNotBefore = Date().addingTimeInterval(
             Double(timing.revealDelayNanoseconds) / 1_000_000_000
         )
-        // Yield only until the key callback returns; there is no timing
-        // sleep before inference. Only marked-text presentation waits for
-        // the calm-caret window in Chromium/Electron editors. The one
-        // exception is a chained request in such a host, which must let the
-        // host commit the accepted text before the field is read at all.
-        let settleBeforeReading = chained && usesCalmReveal(for: expectedBundle)
+        let settleBeforeReading = chained && calm
         Task { @MainActor [weak self] in
             if settleBeforeReading {
                 try? await Task.sleep(nanoseconds: Self.chainedCalmSettleNanoseconds)
             }
             guard let self,
                   self.scheduleRevision == revision,
-                  let liveClient = self.client(),
-                  (liveClient.bundleIdentifier() ?? "") == expectedBundle else {
+                  let liveClient = self.client() else {
                 if chained { Self.chainLogger.info("chain-bailed reason=superseded") }
                 return
             }
-            self.updateSuggestion(for: liveClient, revealNotBefore: revealNotBefore)
+            let field = self.fieldSnapshot(liveClient)
+            guard field.bundleIdentifier == expectedBundle else {
+                if chained { Self.chainLogger.info("chain-bailed reason=superseded") }
+                if self.pendingChainedRevision == revision { self.pendingChainedRevision = nil }
+                return
+            }
+            self.updateSuggestion(for: liveClient, field: field, revealNotBefore: revealNotBefore)
         }
     }
 
     /// Whether the current schedule is the one a consumed accept chained.
     private var isChainedSchedule: Bool {
-        chainedRequestRevision == scheduleRevision
+        pendingChainedRevision == scheduleRevision
     }
 
     /// Whether `revision` is still the live schedule. A throttled request
@@ -960,18 +1220,33 @@ final class GhostInputController: IMKInputController {
         return calm
     }
 
-    private func updateSuggestion(for client: IMKTextInput, revealNotBefore: Date) {
-        guard !stopForSecureInput(client) else { return }
-        let field = fieldSnapshot(client)
+    private func updateSuggestion(
+        for client: IMKTextInput,
+        field providedField: FieldSnapshot? = nil,
+        revealNotBefore: Date
+    ) {
+        guard !stopForSecureInput(client) else {
+            if isChainedSchedule { pendingChainedRevision = nil }
+            return
+        }
+        let field = providedField ?? fieldSnapshot(client)
         let selection = field.selection
         guard selection.location != NSNotFound, selection.length == 0 else {
-            if isChainedSchedule { Self.chainLogger.info("chain-bailed reason=selection") }
+            if isChainedSchedule {
+                Self.chainLogger.info("chain-bailed reason=selection")
+                pendingChainedRevision = nil
+            }
             breakHistorySegment()
             dismiss(client)
             resetFallback()
             return
         }
         let context = contextBeforeCaret(client, selection: field.selection)
+        let contextTail = String(context.suffix(Self.contextLimit))
+        if ContextResetDetector.isReset(previous: lastScheduledContextTail, current: contextTail) {
+            notifyScreenMemory(.contentReset)
+        }
+        lastScheduledContextTail = contextTail
         let trailingText = trailingTextAfterCaret(client, selection: field.selection)
         let requestTicket = ticket(context: context, field: field)
         // A model request is the unit the flight recorder explains. A
@@ -997,6 +1272,7 @@ final class GhostInputController: IMKInputController {
                 Self.chainLogger.info(
                     "chain-bailed reason=activation trailingChars=\(trailingText.count, privacy: .public)"
                 )
+                pendingChainedRevision = nil
             }
             endOpenOpportunity(.notAtGrowingEdge, ticket: requestTicket)
             dismiss(client)
@@ -1007,6 +1283,24 @@ final class GhostInputController: IMKInputController {
             Self.chainLogger.info("chain-request tail=\(tail, privacy: .public)")
         }
         apply(state.reduce(.awaitSuggestion(requestTicket)), to: client)
+
+        // Launch the async model request BEFORE the synchronous 3–5 ms
+        // NSSpellChecker lookup so mid-word requests leave immediately; the
+        // reducer is grow-only, so a model partial or final can still extend a
+        // dictionary ghost cleanly regardless of arrival order.
+        if let boundary {
+            requestPhrase(
+                bundleIdentifier: field.bundleIdentifier,
+                context: context,
+                field: field,
+                ticket: requestTicket,
+                revealNotBefore: revealNotBefore,
+                boundary: boundary,
+                opportunityID: opportunityID
+            )
+        } else if isChainedSchedule {
+            pendingChainedRevision = nil
+        }
 
         if context.last?.isLetter == true {
             let suffix = spellCheckerSuffix(for: context)
@@ -1024,22 +1318,6 @@ final class GhostInputController: IMKInputController {
                     provenance: provenance
                 )
             }
-        }
-        // Mid-word, the dictionary has had its say and the model may now
-        // guess at the rest of the word. It cannot take anything back: the
-        // reducer only ever grows a visible ghost, so an answer that does not
-        // extend the dictionary's suffix is dropped rather than rewriting
-        // what the writer is already reading.
-        if let boundary {
-            requestPhrase(
-                bundleIdentifier: field.bundleIdentifier,
-                context: context,
-                field: field,
-                ticket: requestTicket,
-                revealNotBefore: revealNotBefore,
-                boundary: boundary,
-                opportunityID: opportunityID
-            )
         }
     }
 
@@ -1125,6 +1403,13 @@ final class GhostInputController: IMKInputController {
         let experimentArm = h01SessionArm()?.rawValue
         let revision = scheduleRevision
         modelTask = Task { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    if self?.pendingChainedRevision == revision {
+                        self?.pendingChainedRevision = nil
+                    }
+                }
+            }
             var opportunityID = openedOpportunityID
             if throttleNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: throttleNanoseconds)
@@ -1313,14 +1598,23 @@ final class GhostInputController: IMKInputController {
         apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
     }
 
-    private func cancelPendingWork() {
+    private func cancelPendingWork(preservingSpeculativeChain: Bool = false) {
         endOpenOpportunity(.supersededByTyping, deadlineMissed: true)
         scheduleRevision += 1
+        pendingChainedRevision = nil
         revealTask?.cancel()
         revealTask = nil
         bufferedReveal = nil
         modelTask?.cancel()
         modelTask = nil
+        if !preservingSpeculativeChain {
+            cancelSpeculativeChain()
+        }
+    }
+
+    private func cancelSpeculativeChain() {
+        speculativeChain?.task.cancel()
+        speculativeChain = nil
     }
 
     private func breakHistorySegment() {

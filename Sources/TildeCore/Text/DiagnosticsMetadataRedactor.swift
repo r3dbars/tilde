@@ -27,9 +27,10 @@ public enum DiagnosticsMetadataRedactor {
         // diagnostic (`ScreenCaptureService.freshScene`) so a classification
         // is never opaque — mode only, never any of the OCR'd text itself.
         "replying", "referencing", "composing",
-        // `scaffold-prewarm`'s outcome (`ScaffoldPrewarmer`): whether the
-        // register scaffold was prefilled into the helper's slot. No text.
-        "warmed", "failed",
+        // `scaffold-prewarm`'s outcome and kind (`ScaffoldPrewarmer`): whether
+        // the register scaffold or scene prefix was prefilled into the helper's
+        // slot. No text.
+        "warmed", "failed", "scaffold", "scene",
         // `SensitiveScenePolicy`'s suppression reason, logged by the
         // `suggestion-suppressed` diagnostic (`GhostBrainServerHost`) —
         // count-only, never the matched category or any scene text.
@@ -85,9 +86,14 @@ public enum DiagnosticsMetadataRedactor {
              // code-signature handshake plus the wire read, before
              // `ghost-request-timing` starts. A whole millisecond count, no text.
              "handshakeMilliseconds",
-             // Streaming split on `llama-completion-timing`: first token and
-             // first complete-word partial, whole milliseconds, no text.
-             "firstTokenMilliseconds", "firstPartialMilliseconds",
+             // Streaming split on `llama-completion-timing`: first token,
+             // first complete-word partial, settled/3-word ready time, and
+             // llama-server prompt/cache/decode token counts. Whole numbers only.
+             "firstTokenMilliseconds", "firstPartialMilliseconds", "settledMilliseconds",
+             "promptTokens", "cachedTokens", "predictedTokens",
+             // Pre-inference overhead inside `ghost-request-timing`
+             // (readiness + target + scene lookup before llama-server).
+             "preInferenceMilliseconds",
              // `personal-stream-hold`: how long the first prefix was held.
              "heldMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)

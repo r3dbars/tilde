@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import TildeCore
 
 enum LlamaRuntimeSnapshot: Equatable, Sendable {
     enum FailureReason: Equatable, Sendable {
@@ -48,9 +49,99 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     static let modelMinimumBytes: Int64 = 1_500_000_000
 
     let port: Int
+    let apiKey: String?
 
     var baseURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
     var snapshot: LlamaRuntimeSnapshot { lifecycle.sync { runtimeSnapshot } }
+
+    /// Owner-only (`0600`) runtime bearer-token file so authorized local
+    /// evaluators (`ReplayEvalCommand`, `golden_eval.py`) can authenticate to
+    /// the running helper without putting secrets in argv.
+    static func runtimeAPIKeyURL(profile: TildeProductProfile = .current) -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support")
+            .appendingPathComponent(profile.supportDirectoryName)
+            .appendingPathComponent("llama.key")
+    }
+
+    static func readRuntimeAPIKey(profile: TildeProductProfile = .current) -> String? {
+        let path = runtimeAPIKeyURL(profile: profile).path
+        let fd = open(path, O_RDONLY | O_NOFOLLOW)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0,
+              info.st_mode & S_IFMT == S_IFREG,
+              info.st_uid == getuid(),
+              info.st_mode & 0o777 == 0o600 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: 256)
+        let count = Darwin.read(fd, &buffer, buffer.count)
+        guard count > 0 else { return nil }
+        let token = String(decoding: buffer[0..<count], as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
+    }
+
+    private static func writeRuntimeAPIKey(_ key: String, profile: TildeProductProfile = .current) {
+        let url = runtimeAPIKeyURL(profile: profile)
+        let directory = url.deletingLastPathComponent().path
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        _ = chmod(directory, 0o700)
+        let tempPath = url.path + ".tmp.\(getpid())"
+        unlink(tempPath)
+        let fd = open(tempPath, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return }
+        _ = fchmod(fd, S_IRUSR | S_IWUSR)
+        let data = Data((key + "\n").utf8)
+        let wrote = data.withUnsafeBytes { bytes -> Bool in
+            guard let base = bytes.baseAddress else { return false }
+            return Darwin.write(fd, base, bytes.count) == bytes.count
+        }
+        close(fd)
+        if wrote {
+            _ = rename(tempPath, url.path)
+        } else {
+            unlink(tempPath)
+        }
+    }
+
+    private static func removeRuntimeAPIKey(profile: TildeProductProfile = .current) {
+        unlink(runtimeAPIKeyURL(profile: profile).path)
+    }
+
+    /// Random 256-bit bearer token passed to `llama-server` via `LLAMA_API_KEY`
+    /// in the child's environment (never on the command line).
+    static func generateAPIKey() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status == errSecSuccess {
+            return bytes.map { String(format: "%02x", $0) }.joined()
+        }
+        return UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    }
+
+    /// Tuned Apple Silicon helper arguments. Empirically benchmarked on M5 Max
+    /// across Gemma 4 E2B and Qwen 3.5 9B: `--cache-reuse 64`, `-np 1`,
+    /// `-fa on`, `--ctx-checkpoints 32`, and `--spec-type ngram-simple` cut
+    /// warm p95 TTFT by 50–76% and warm 3-word p95 by 25–49% over the old
+    /// `--cache-reuse 256` defaults while keeping f16 KV cache (q8_0 KV was
+    /// slower on both models). `--no-webui` disables unused web UI routes.
+    static func helperArguments(model: String, port: Int) -> [String] {
+        [
+            "-m", model,
+            "--host", "127.0.0.1",
+            "--port", String(port),
+            "-c", "4096",
+            "-np", "1",
+            "-fa", "on",
+            "--swa-full",
+            "--cache-reuse", "64",
+            "--ctx-checkpoints", "32",
+            "--spec-type", "ngram-simple",
+            "--no-webui",
+        ]
+    }
 
     struct Assets: Sendable {
         let binary: String
@@ -72,17 +163,20 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var runtimeSnapshot = LlamaRuntimeSnapshot.starting
     private var stopped = false
     private var preparing = false
+    private var wroteRuntimeAPIKey = false
     private var launchedAt = Date.distantPast
     private var restartPolicy = LlamaRestartPolicy()
     private var readinessObserver: (@Sendable (Bool) -> Void)?
 
     init(
         port: Int,
+        apiKey: String? = nil,
         modelFileProvider: @escaping @Sendable () -> VerifiedModelFile? = developmentModelFile,
         assetResolver: (@Sendable () -> Assets?)? = nil
     ) {
         precondition((1...65_535).contains(port))
         self.port = port
+        self.apiKey = apiKey
         self.assetResolver = assetResolver ?? {
             Self.resolveAssets(modelFileProvider: modelFileProvider)
         }
@@ -104,15 +198,20 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     }
 
     func stop() {
-        let child: Process? = lifecycle.sync {
+        let (child, shouldRemoveKey): (Process?, Bool) = lifecycle.sync {
             stopped = true
             preparing = false
             healthTask?.cancel()
             healthTask = nil
+            let removeKey = wroteRuntimeAPIKey
+            wroteRuntimeAPIKey = false
             defer { process = nil }
-            return process
+            return (process, removeKey)
         }
         Self.shutDownNow(child)
+        if shouldRemoveKey {
+            Self.removeRuntimeAPIKey()
+        }
     }
 
     /// A transport/protocol failure means the owned helper is not serving a
@@ -223,14 +322,18 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         guard !stopped, process == nil else { return }
         let child = Process()
         child.executableURL = URL(fileURLWithPath: assets.binary)
-        child.arguments = [
-            "-m", assets.model,
-            "--host", "127.0.0.1",
-            "--port", String(port),
-            "-c", "4096",
-            "--swa-full",
-            "--cache-reuse", "256",
-        ]
+        child.arguments = Self.helperArguments(model: assets.model, port: port)
+        var environment = ProcessInfo.processInfo.environment
+        if let apiKey {
+            environment["LLAMA_API_KEY"] = apiKey
+            Self.writeRuntimeAPIKey(apiKey)
+            wroteRuntimeAPIKey = true
+        } else {
+            // Explicitly strip any inherited shell export so unauthenticated
+            // release-proof probes never fail with HTTP 401.
+            environment.removeValue(forKey: "LLAMA_API_KEY")
+        }
+        child.environment = environment
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice
         if let modelInput = assets.modelInput { child.standardInput = modelInput }

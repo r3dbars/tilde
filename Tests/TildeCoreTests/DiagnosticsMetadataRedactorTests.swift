@@ -114,6 +114,14 @@ struct DiagnosticsMetadataRedactorTests {
         // Accept-to-parsed handshake on its own timing event: the peer
         // code-signature verification plus the wire read.
         #expect(field("handshakeMilliseconds", "12") == "handshakeMilliseconds=12")
+        // Pre-inference overhead, settled time, and prompt/cache token counts.
+        #expect(field("preInferenceMilliseconds", "3") == "preInferenceMilliseconds=3")
+        #expect(field("settledMilliseconds", "43") == "settledMilliseconds=43")
+        #expect(field("promptTokens", "18") == "promptTokens=18")
+        #expect(field("cachedTokens", "512") == "cachedTokens=512")
+        #expect(field("predictedTokens", "6") == "predictedTokens=6")
+        #expect(field("kind", "scaffold") == "kind=scaffold")
+        #expect(field("kind", "scene") == "kind=scene")
         // Nothing free-text ever gets through any of these keys either.
         #expect(field("milliseconds", "private") == "milliseconds=String(7 chars)")
         #expect(field("waitedMilliseconds", "-5") == "waitedMilliseconds=String(2 chars)")

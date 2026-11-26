@@ -172,6 +172,8 @@ public enum ScreenScene {
         // `LlamaCompletionEngine` picks once mode is known (see
         // `RawContinuationPrompt`/`LlamaCompletionEngine` — register follows
         // scene, host app is the fallback).
+        let normalizedField = normalizedForDedupe(fieldText)
+
         if let frontmostBundleID {
             // Only positively-attributed frontmost-window blocks may enter a
             // reply thread. `nil` attribution means "unknown," and treating
@@ -185,7 +187,7 @@ public enum ScreenScene {
                 return $0.windowIdentifier == targetWindowIdentifier
             }
             if looksLikeMessageList(ownWindowBlocks) {
-                let turns = conversationTurns(from: ownWindowBlocks, fieldText: fieldText)
+                let turns = conversationTurns(from: ownWindowBlocks, normalizedField: normalizedField)
                 if !turns.isEmpty {
                     return Scene(
                         mode: .replying,
@@ -197,7 +199,12 @@ public enum ScreenScene {
             }
         }
 
-        let snippets = referenceSnippets(from: blocks, frontmostBundleID: frontmostBundleID, fieldText: fieldText)
+        let snippets = referenceSnippets(
+            from: blocks,
+            frontmostBundleID: frontmostBundleID,
+            fieldText: fieldText,
+            normalizedField: normalizedField
+        )
         if !snippets.isEmpty {
             return Scene(mode: .referencing, conversationTurns: [], referenceSnippets: snippets)
         }
@@ -275,15 +282,15 @@ public enum ScreenScene {
     /// for a naturally-readable transcript, and spends the shared character
     /// budget from the newest turn backward so the freshest message never
     /// gets truncated ahead of older ones.
-    private static func conversationTurns(from blocks: [OCRBlock], fieldText: String) -> [ConversationTurn] {
+    private static func conversationTurns(from blocks: [OCRBlock], normalizedField: String) -> [ConversationTurn] {
         // The compose field is the floor of the conversation: the line
         // where the user's own typed text appears, and everything under
         // it (a placeholder, "Delivered", a hint label), is not a message.
         // Live 2026-08-23: the bottom-4 rule read the typed text back as
         // "Them" and a label under the field as the last message.
-        let composeFloor = composeFieldTop(in: blocks, fieldText: fieldText)
+        let composeFloor = composeFieldTop(in: blocks, normalizedField: normalizedField)
         let usable = blocks
-            .filter { isBubbleCandidate($0) && !isDuplicate($0.text, of: fieldText) }
+            .filter { isBubbleCandidate($0) && !isDuplicate($0.text, ofNormalizedField: normalizedField) }
             .filter { block in composeFloor.map { block.boundingBox.y < $0 } ?? true }
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { $0.boundingBox.y < $1.boundingBox.y }
@@ -393,7 +400,8 @@ public enum ScreenScene {
     private static func referenceSnippets(
         from blocks: [OCRBlock],
         frontmostBundleID: String?,
-        fieldText: String
+        fieldText: String,
+        normalizedField: String
     ) -> [String] {
         guard let frontmostBundleID else { return [] }
         let sentenceWords = rareWords(in: currentSentence(of: fieldText))
@@ -401,7 +409,7 @@ public enum ScreenScene {
 
         let candidates = blocks.filter { block in
             guard let owner = block.windowOwnerBundleID, owner != frontmostBundleID else { return false }
-            guard !isDuplicate(block.text, of: fieldText) else { return false }
+            guard !isDuplicate(block.text, ofNormalizedField: normalizedField) else { return false }
             return !rareWords(in: block.text).isDisjoint(with: sentenceWords)
         }
 
@@ -486,8 +494,7 @@ public enum ScreenScene {
     /// scrolled out of view). A wrapped compose field yields several
     /// fragments; any fragment of two or more words found in the field
     /// text counts, so the floor sits at the first such line.
-    private static func composeFieldTop(in blocks: [OCRBlock], fieldText: String) -> Double? {
-        let field = normalizedForDedupe(fieldText)
+    private static func composeFieldTop(in blocks: [OCRBlock], normalizedField field: String) -> Double? {
         guard field.count >= dedupeMinimumLength else { return nil }
         let matches = blocks.filter { block in
             let candidate = normalizedForDedupe(block.text)
@@ -508,10 +515,10 @@ public enum ScreenScene {
         return (block.boundingBox.y - frame.y) / frame.height
     }
 
-    private static func isDuplicate(_ candidateText: String, of fieldText: String) -> Bool {
+    private static func isDuplicate(_ candidateText: String, ofNormalizedField field: String) -> Bool {
+        guard !field.isEmpty else { return false }
         let candidate = normalizedForDedupe(candidateText)
-        let field = normalizedForDedupe(fieldText)
-        guard !candidate.isEmpty, !field.isEmpty else { return false }
+        guard !candidate.isEmpty else { return false }
         if candidate.count >= dedupeMinimumLength, field.contains(candidate) { return true }
         if field.count >= dedupeMinimumLength, candidate.contains(field) { return true }
         return false

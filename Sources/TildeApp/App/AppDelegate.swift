@@ -68,10 +68,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let effectiveConfiguration: TildeEffectiveConfiguration
     private let modelManager: ModelManager
     private let llamaServerHost: LlamaServerProcessHost
-    /// Keeps the frontmost app's register scaffold in the helper's prompt
-    /// cache so the first suggestion after launch, a helper restart, or an
-    /// app switch pays only for the scene block and field text.
-    private lazy var scaffoldPrewarmer = ScaffoldPrewarmer(baseURL: llamaServerHost.baseURL)
+    /// Keeps the frontmost app's register scaffold — and focused window's
+    /// classified scene block — warm in the helper's prompt cache so the first
+    /// suggestion after launch, a helper restart, or a thread switch pays only
+    /// for the field text.
+    private lazy var scaffoldPrewarmer = ScaffoldPrewarmer(
+        baseURL: llamaServerHost.baseURL,
+        apiKey: llamaServerHost.apiKey,
+        verifyHelperReady: { [llamaServerHost] in await llamaServerHost.isReadyForCompletion() },
+        scenePrewarmGate: Self.suggestionsGate,
+        customScaffoldProvider: Self.personalVoiceScaffoldProvider(for: personalHistoryController)
+    )
     private lazy var personalHistoryController = PersonalHistoryController()
     private lazy var statusMenuHost = StatusMenuHost(
         appDelegate: self,
@@ -126,10 +133,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: screenCaptureService,
             prewarmer: scaffoldPrewarmer
         ),
-        onScreenMemoryEvent: Self.screenMemoryEventHandler(for: screenCaptureService),
+        onScreenMemoryEvent: Self.screenMemoryEventHandler(
+            for: screenCaptureService,
+            prewarmer: scaffoldPrewarmer,
+            includesWindowTitle: completionProductProfile.includesWindowTitleInScene
+        ),
         suggestionsGate: Self.suggestionsGate,
+        screenMemoryToggleGate: Self.screenMemoryToggleGate,
         personalSuggestionsGate: Self.personalSuggestionsGate,
         personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController),
+        personalBiasTermsProvider: Self.personalBiasTermsProvider(for: personalHistoryController),
+        personalVoiceScaffoldProvider: Self.personalVoiceScaffoldProvider(for: personalHistoryController),
         configuration: effectiveConfiguration,
         productProfile: completionProductProfile
     )
@@ -159,6 +173,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private nonisolated static func personalBiasTermsProvider(
+        for controller: PersonalHistoryController
+    ) -> @Sendable ([String], String?) async -> [WeightedBiasTerm] {
+        { tailWords, appBundleIdentifier in
+            await controller.personalBiasTerms(
+                afterTailWords: tailWords,
+                appBundleIdentifier: appBundleIdentifier
+            )
+        }
+    }
+
+    private nonisolated static func personalVoiceScaffoldProvider(
+        for controller: PersonalHistoryController
+    ) -> @Sendable (ContinuationRegister, String?) -> String? {
+        { register, appBundleIdentifier in
+            controller.personalVoiceScaffold(
+                for: register,
+                appBundleIdentifier: appBundleIdentifier
+            )
+        }
+    }
+
     /// 2026-08-16 owner directive: Screen Recording permission is now
     /// required for Tilde to suggest at all — see `GhostBrainServerHost`'s
     /// `suggestionsGate` doc comment for why this returns `.silence`
@@ -168,6 +204,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// disagree. Read fresh on every completion request (never cached), so
     /// this is deliberately a plain function, not a stored property
     /// capturing a snapshot at init time.
+    private nonisolated static func screenMemoryToggleGate() -> Bool {
+        TildeSettings().screenMemoryEnabled
+    }
+
     private nonisolated static func suggestionsGate() -> Bool {
         ScreenMemoryStatus.evaluate(
             enabled: TildeSettings().screenMemoryEnabled,
@@ -193,16 +233,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private nonisolated static func screenMemoryEventHandler(
-        for service: ScreenCaptureService
+        for service: ScreenCaptureService,
+        prewarmer: ScaffoldPrewarmer,
+        includesWindowTitle: Bool
     ) -> @Sendable (ScreenMemoryInputEvent) -> Void {
         { event in
             Task {
                 switch event.kind {
                 case .textFieldFocused:
-                    _ = await service.noteTextFieldFocused(
+                    let target = Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                    let outcome = await service.noteTextFieldFocused(
                         sessionIdentifier: event.sessionIdentifier,
-                        target: Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                        target: target
                     )
+                    if case .captured = outcome {
+                        await Self.prewarmFreshSceneIfAvailable(
+                            service: service,
+                            prewarmer: prewarmer,
+                            bundleIdentifier: target?.bundleIdentifier,
+                            fieldSessionIdentifier: event.sessionIdentifier,
+                            expectedTarget: target,
+                            includesWindowTitle: includesWindowTitle
+                        )
+                    }
                 case .typingPaused:
                     _ = await service.noteTypingPaused(
                         sessionIdentifier: event.sessionIdentifier,
@@ -211,13 +264,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .textFieldBlurred:
                     await service.noteTextFieldBlurred(sessionIdentifier: event.sessionIdentifier)
                 case .contentReset:
-                    _ = await service.noteContentReset(
+                    let target = Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                    let outcome = await service.noteContentReset(
                         sessionIdentifier: event.sessionIdentifier,
-                        target: Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
+                        target: target
                     )
+                    if case .captured = outcome {
+                        await Self.prewarmFreshSceneIfAvailable(
+                            service: service,
+                            prewarmer: prewarmer,
+                            bundleIdentifier: target?.bundleIdentifier,
+                            fieldSessionIdentifier: event.sessionIdentifier,
+                            expectedTarget: target,
+                            includesWindowTitle: includesWindowTitle
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private nonisolated static func prewarmFreshSceneIfAvailable(
+        service: ScreenCaptureService,
+        prewarmer: ScaffoldPrewarmer,
+        bundleIdentifier: String?,
+        fieldSessionIdentifier: String?,
+        expectedTarget: TypingTargetIdentity?,
+        includesWindowTitle: Bool
+    ) async {
+        guard TildeSettings().screenMemoryEnabled else { return }
+        let scene = await service.freshScene(
+            frontmostBundleID: bundleIdentifier,
+            fieldText: "",
+            fieldSessionIdentifier: fieldSessionIdentifier,
+            expectedTarget: expectedTarget
+        )
+        prewarmer.noteScene(
+            scene,
+            bundleIdentifier: bundleIdentifier,
+            includesWindowTitle: includesWindowTitle
+        )
     }
 
     /// Screen Memory plan Phase 2 PR 2b: the SAME settings gate
@@ -289,6 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.modelManager = modelManager
         self.llamaServerHost = LlamaServerProcessHost(
             port: launchMode.llamaServerPort,
+            apiKey: launchMode == .production ? LlamaServerProcessHost.generateAPIKey() : nil,
             modelFileProvider: { modelManager.verifiedInstalledModelFile() }
         )
     }
@@ -316,9 +403,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusMenuHost.start()
             startObservingFrontmostAppForScreenMemory()
             let prewarmer = scaffoldPrewarmer
+            let brainHost = ghostBrainServerHost
             prewarmer.noteFrontmostApp(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
             llamaServerHost.setReadinessObserver { ready in
-                if ready { prewarmer.noteHelperReady() } else { prewarmer.noteHelperUnavailable() }
+                if ready {
+                    prewarmer.noteHelperReady()
+                } else {
+                    prewarmer.noteHelperUnavailable()
+                    brainHost.clearTokenBiasCache()
+                }
             }
             if llamaServerHost.snapshot == .ready { prewarmer.noteHelperReady() }
             // Exact screen text: the Accessibility reader beats OCR on both
@@ -465,6 +558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// comment), so a lightweight poll backs it up.
     private func startObservingFrontmostAppForScreenMemory() {
         let prewarmer = scaffoldPrewarmer
+        let includesWindowTitle = completionProductProfile.includesWindowTitleInScene
         lastForegroundApplication = Self.foregroundApplication(
             from: NSWorkspace.shared.frontmostApplication
         ) ?? lastForegroundApplication
@@ -484,9 +578,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             Task {
-                await screenCaptureService.noteWindowChanged(
-                    target: Self.currentTypingTarget(sessionIdentifier: "")
-                )
+                let target = Self.currentTypingTarget(sessionIdentifier: "")
+                let outcome = await screenCaptureService.noteWindowChanged(target: target)
+                if case .captured = outcome {
+                    await Self.prewarmFreshSceneIfAvailable(
+                        service: screenCaptureService,
+                        prewarmer: prewarmer,
+                        bundleIdentifier: activated?.bundleIdentifier,
+                        fieldSessionIdentifier: nil,
+                        expectedTarget: nil,
+                        includesWindowTitle: includesWindowTitle
+                    )
+                }
             }
         }
         lastFrontWindowIdentity = Self.currentFrontWindowIdentity()
@@ -503,10 +606,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let identity = Self.currentFrontWindowIdentity()
         guard identity != lastFrontWindowIdentity else { return }
         lastFrontWindowIdentity = identity
+        let prewarmer = scaffoldPrewarmer
+        let includesWindowTitle = completionProductProfile.includesWindowTitleInScene
         Task { [screenCaptureService] in
-            await screenCaptureService.noteWindowChanged(
+            let outcome = await screenCaptureService.noteWindowChanged(
                 target: identity.map { Self.typingTarget(from: $0, sessionIdentifier: "") }
             )
+            if case .captured = outcome {
+                await Self.prewarmFreshSceneIfAvailable(
+                    service: screenCaptureService,
+                    prewarmer: prewarmer,
+                    bundleIdentifier: identity?.bundleIdentifier,
+                    fieldSessionIdentifier: nil,
+                    expectedTarget: nil,
+                    includesWindowTitle: includesWindowTitle
+                )
+            }
         }
     }
 
@@ -542,6 +657,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// completion can be answered from a scene captured while it was on.
     /// The menu is refreshed either way — the status line and icon both
     /// depend on this flag.
+    func clearPersonalRuntimeCaches() {
+        ghostBrainServerHost.clearTokenBiasCache()
+    }
+
     func setScreenMemoryEnabled(_ enabled: Bool) {
         let settings = TildeSettings()
         guard settings.screenMemoryEnabled != enabled else { return }
@@ -551,6 +670,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func screenMemoryEnabledDidChange(_ enabled: Bool) {
         if !enabled {
+            scaffoldPrewarmer.clearScene()
+            ghostBrainServerHost.clearTokenBiasCache()
             Task { [screenCaptureService] in
                 await screenCaptureService.forgetCapturedScreenState()
             }
@@ -570,26 +691,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleIdentifier: String?
     }
 
+    /// Caches `pid -> bundleIdentifier` per live process instance (pid + kernel
+    /// start time). `NSRunningApplication(processIdentifier:)` hits LaunchServices
+    /// and can spike >30 ms on the completion hot path, whereas a live process's
+    /// bundle identifier is immutable for its lifetime.
+    private nonisolated static let processBundleCache = ProcessPeerIdentityCache<String>(
+        timeToLive: 600,
+        capacity: 32
+    )
+
+    private nonisolated static func cachedBundleIdentifier(for pid: pid_t) -> String? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        let key: ProcessIdentityKey?
+        if proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size {
+            key = ProcessIdentityKey(
+                pid: pid,
+                startedAtSeconds: Int64(info.pbi_start_tvsec),
+                startedAtMicroseconds: Int64(info.pbi_start_tvusec)
+            )
+        } else {
+            key = nil
+        }
+        return processBundleCache.identity(for: key) {
+            NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        }
+    }
+
     /// The true frontmost on-screen window, system-wide, identified by owning
     /// process + window number — `CGWindowListCopyWindowInfo` documents its
     /// result as front-to-back ordered, so the first normal-layer (`0`)
-    /// window found is frontmost. Deliberately does not request window
-    /// names/titles: this only needs an identity to detect change, and
-    /// nothing here reads or stores what the window is titled.
+    /// window found is frontmost. Walks the CoreFoundation array directly to
+    /// avoid bridging every window dictionary into Swift (~0.25 ms vs ~0.51 ms).
     private nonisolated static func currentFrontWindowIdentity() -> FrontWindowIdentity? {
         guard let list = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
             kCGNullWindowID
-        ) as? [[String: Any]] else { return nil }
-        for info in list {
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0 else { continue }
-            guard let pid = info[kCGWindowOwnerPID as String] as? pid_t,
-                  let windowNumber = info[kCGWindowNumber as String] as? CGWindowID
+        ) else { return nil }
+        let count = CFArrayGetCount(list)
+        let layerKey = Unmanaged.passUnretained(kCGWindowLayer).toOpaque()
+        let pidKey = Unmanaged.passUnretained(kCGWindowOwnerPID).toOpaque()
+        let numberKey = Unmanaged.passUnretained(kCGWindowNumber).toOpaque()
+        for index in 0..<count {
+            guard let rawEntry = CFArrayGetValueAtIndex(list, index) else { continue }
+            let dict = Unmanaged<CFDictionary>.fromOpaque(rawEntry).takeUnretainedValue()
+            guard let rawLayer = CFDictionaryGetValue(dict, layerKey) else { continue }
+            let layerNumber = Unmanaged<CFNumber>.fromOpaque(rawLayer).takeUnretainedValue()
+            var layer: Int32 = -1
+            guard CFNumberGetValue(layerNumber, .sInt32Type, &layer), layer == 0 else { continue }
+            guard let rawPID = CFDictionaryGetValue(dict, pidKey),
+                  let rawNumber = CFDictionaryGetValue(dict, numberKey) else { continue }
+            var pid: pid_t = 0
+            var rawWindowNumber: Int64 = 0
+            guard CFNumberGetValue(Unmanaged<CFNumber>.fromOpaque(rawPID).takeUnretainedValue(), .sInt32Type, &pid),
+                  CFNumberGetValue(Unmanaged<CFNumber>.fromOpaque(rawNumber).takeUnretainedValue(), .sInt64Type, &rawWindowNumber),
+                  let windowNumber = CGWindowID(exactly: rawWindowNumber)
             else { continue }
             return FrontWindowIdentity(
                 ownerProcessIdentifier: pid,
                 windowNumber: windowNumber,
-                bundleIdentifier: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+                bundleIdentifier: cachedBundleIdentifier(for: pid)
             )
         }
         return nil

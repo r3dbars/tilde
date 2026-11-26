@@ -11,8 +11,10 @@ than end-to-end inline suggestion behavior.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -136,12 +138,40 @@ def normalize_model_output(raw, context):
     return first_line.lstrip(" ") if context[-1:].isspace() else first_line
 
 
+SUPPORT_DIR_BY_PORT = {
+    17872: "Tilde",
+    17874: "Tilde 26B Preview",
+    17875: "Tilde 9B Preview",
+    17876: "Tilde Model Preview",
+}
+
+
+def load_runtime_api_key(port):
+    env_key = os.environ.get("LLAMA_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    support_dir = SUPPORT_DIR_BY_PORT.get(port, "Tilde")
+    key_path = Path.home() / "Library/Application Support" / support_dir / "llama.key"
+    try:
+        info = key_path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or (info.st_mode & 0o777) != 0o600:
+            return None
+        token = key_path.read_text(encoding="utf-8").strip()
+        return token or None
+    except OSError:
+        return None
+
+
 def request_completion(context, port, timeout_seconds):
     body = json.dumps(model_request(context), separators=(",", ":")).encode()
+    headers = {"Content-Type": "application/json"}
+    api_key = load_runtime_api_key(port)
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/completion",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     started = time.monotonic()

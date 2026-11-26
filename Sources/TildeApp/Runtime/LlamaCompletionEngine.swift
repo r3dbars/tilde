@@ -8,6 +8,62 @@ import Foundation
 final class LlamaCompletionEngine: @unchecked Sendable {
     /// A llama.cpp `stream:true` line can omit `content` on its terminal
     /// timing frame, so it has a looser shape than a final response.
+    struct StreamTimings: Decodable {
+        let promptN: Int?
+        let predictedN: Int?
+        let cacheN: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case promptN = "prompt_n"
+            case predictedN = "predicted_n"
+            case cacheN = "cache_n"
+        }
+    }
+
+    struct StreamTokenProbabilityItem: Decodable {
+        let token: String?
+        let tokStr: String?
+        let prob: Double?
+        let logprob: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case token, prob, logprob
+            case tokStr = "tok_str"
+        }
+
+        var resolvedProbability: Double? {
+            if let prob { return prob }
+            if let logprob { return exp(logprob) }
+            return nil
+        }
+    }
+
+    struct StreamTokenProbabilityEntry: Decodable {
+        let token: String?
+        let tokStr: String?
+        let prob: Double?
+        let logprob: Double?
+        let topProbs: [StreamTokenProbabilityItem]?
+        let topLogprobs: [StreamTokenProbabilityItem]?
+        let probs: [StreamTokenProbabilityItem]?
+
+        enum CodingKeys: String, CodingKey {
+            case token, prob, logprob, probs
+            case tokStr = "tok_str"
+            case topProbs = "top_probs"
+            case topLogprobs = "top_logprobs"
+        }
+
+        var resolvedProbability: Double? {
+            if let prob { return prob }
+            if let logprob { return exp(logprob) }
+            if let first = topProbs?.first?.resolvedProbability { return first }
+            if let first = topLogprobs?.first?.resolvedProbability { return first }
+            if let first = probs?.first?.resolvedProbability { return first }
+            return nil
+        }
+    }
+
     struct StreamFrame: Decodable {
         let content: String?
         let stop: Bool?
@@ -15,13 +71,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let stoppedLimit: Bool?
         let stoppedWord: Bool?
         let tokensPredicted: Int?
+        let timings: StreamTimings?
+        let completionProbabilities: [StreamTokenProbabilityEntry]?
 
         enum CodingKeys: String, CodingKey {
-            case content, stop
+            case content, stop, timings
             case stoppedEOS = "stopped_eos"
             case stoppedLimit = "stopped_limit"
             case stoppedWord = "stopped_word"
             case tokensPredicted = "tokens_predicted"
+            case completionProbabilities = "completion_probabilities"
         }
 
         var hasRecognizedField: Bool {
@@ -31,26 +90,32 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     }
 
     private let baseURL: URL
+    private let apiKey: String?
     private let cleaner: CompletionOutputCleaner
     private let diagnostics: DiagnosticsLog
     private let productProfile: TildeProductProfile
     private let transport: any LlamaCompletionStreamingTransport
+    private let tokenBiasCache: LlamaTokenBiasCache?
     /// Owner settings shared with the input method. Only the H01 harness
     /// reads them, and only in the Model Preview profile.
     private let experimentDefaults: (any H01ExperimentDefaults)?
 
     init(
         baseURL: URL,
+        apiKey: String? = nil,
         diagnostics: DiagnosticsLog = .shared,
         transport: any LlamaCompletionStreamingTransport = URLSessionLlamaCompletionTransport(),
+        tokenBiasCache: LlamaTokenBiasCache? = nil,
         productProfile: TildeProductProfile = .current,
         experimentDefaults: (any H01ExperimentDefaults)? = UserDefaults(
             suiteName: PersonalHistorySettingsContract.keyboardSuiteName
         )
     ) {
         self.baseURL = baseURL
+        self.apiKey = apiKey
         self.diagnostics = diagnostics
         self.transport = transport
+        self.tokenBiasCache = tokenBiasCache
         self.productProfile = productProfile
         self.experimentDefaults = experimentDefaults
         cleaner = CompletionOutputCleaner(maxVisibleWords: productProfile.maximumVisibleWords)
@@ -138,6 +203,8 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?,
         experimentArm: String? = nil,
+        personalBiasTerms: [WeightedBiasTerm] = [],
+        personalVoiceScaffold: String? = nil,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion, Int) -> Void
     ) async throws -> Decision {
         let startedAt = ProcessInfo.processInfo.systemUptime
@@ -168,7 +235,8 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             textBeforeCursor: textBeforeCursor,
             register: register,
             scene: scene,
-            includesWindowTitle: productProfile.includesWindowTitleInScene
+            includesWindowTitle: productProfile.includesWindowTitleInScene,
+            customScaffold: personalVoiceScaffold
         )
         guard !recipe.prompt.isEmpty else { return .silent(.emptyPrompt) }
 
@@ -179,21 +247,40 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             textBeforeCursor: textBeforeCursor
         )
 
-        let body: [String: Any] = [
+        let sceneBiasTerms = DecodeBiasPolicy.extractSceneTerms(scene: scene, typed: prepared.typed)
+        let mergedBiasTerms = DecodeBiasPolicy.merge(
+            scene: sceneBiasTerms,
+            personal: personalBiasTerms,
+            typed: prepared.typed
+        )
+        let logitBiasEntries: [LlamaTokenBiasCache.TokenBiasEntry] = if let tokenBiasCache, !mergedBiasTerms.isEmpty {
+            await tokenBiasCache.logitBiasEntries(for: mergedBiasTerms)
+        } else {
+            []
+        }
+
+        var body: [String: Any] = [
             "prompt": prompt,
             "n_predict": productProfile == .production
                 ? register.generatedTokenBudget
                 : productProfile.generatedTokenBudget,
             "temperature": productProfile.completionTemperature,
             "cache_prompt": true,
+            "n_probs": 1,
             "stop": ["\n"],
             "stream": true,
         ]
+        if !logitBiasEntries.isEmpty {
+            body["logit_bias"] = logitBiasEntries.map { [$0.tokenID, $0.weight] as [Any] }
+        }
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        if let apiKey {
+            urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
         urlRequest.timeoutInterval = 8
 
@@ -205,7 +292,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         var firstTokenMilliseconds: Int?
         var firstPartialMilliseconds: Int?
+        var settledMilliseconds: Int?
+        var streamTimings: StreamTimings?
         var stoppedAtCap = false
+        var streamedTokens: [StreamedTokenProbability] = []
         let content = try await withTaskCancellationHandler {
             var rawOutput = ""
             var lastPartialVisibleText = ""
@@ -226,9 +316,15 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 }
                 guard frame.hasRecognizedField else { throw URLError(.cannotParseResponse) }
                 sawCompletionFrame = true
+                if let timings = frame.timings {
+                    streamTimings = timings
+                }
                 if let piece = frame.content, !piece.isEmpty {
                     if firstTokenMilliseconds == nil {
                         firstTokenMilliseconds = Self.milliseconds(since: startedAt)
+                    }
+                    if let prob = frame.completionProbabilities?.first?.resolvedProbability {
+                        streamedTokens.append(StreamedTokenProbability(piece: piece, probability: prob))
                     }
                     // llama.cpp emits token deltas. Always append: a repeated
                     // token can legitimately equal the text so far (" is" + " is").
@@ -253,12 +349,13 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                         }
                         // Everything the display cap can show has arrived, or
                         // the output is already rejected for a reason later
-                        // tokens cannot undo. Stop the helper decoding tokens
-                        // that can never reach the screen: on the 3-word Qwen
-                        // profile that is more than half of every request's
-                        // decode budget, and the single slot is freed for the
-                        // next word that much sooner.
-                        if stable.settled {
+                        // tokens cannot undo, or a tail word dropped below our
+                        // confidence floor. Stop paying for wasted tail tokens.
+                        let earlyConfidenceStop = WordConfidenceTruncator.shouldStopStreamingEarly(
+                            tokens: streamedTokens
+                        )
+                        if stable.settled || earlyConfidenceStop {
+                            settledMilliseconds = Self.milliseconds(since: startedAt)
                             stoppedAtCap = true
                             stream.cancel()
                             break
@@ -273,9 +370,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             stream.cancel()
         }
 
-        let normalized = recipe.normalizedContinuation(content)
+        let normalizedRaw = recipe.normalizedContinuation(content)
+        let normalized = logitBiasEntries.isEmpty
+            ? normalizedRaw
+            : DecodeBiasPolicy.trimRepeatedContentWord(normalizedRaw)
         let clean = cleaner.cleanWithReason(normalized, in: prepared.typed)
-        var suggestion = clean.suggestion
+        var suggestion = clean.suggestion.map {
+            WordConfidenceTruncator.trim(suggestion: $0, tokens: streamedTokens)
+        }
         var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
         var decisionReason: SuggestionDecisionReason = clean.rejectionReason.map(
             SuggestionDecisionReason.init(cleaner:)
@@ -301,8 +403,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 "reason": reason,
             ])
         }
+        let totalMilliseconds = Self.milliseconds(since: startedAt)
         var timing = [
-            "totalMilliseconds": String(Self.milliseconds(since: startedAt)),
+            "totalMilliseconds": String(totalMilliseconds),
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
         ]
         if let firstTokenMilliseconds {
@@ -311,13 +414,25 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         if let firstPartialMilliseconds {
             timing["firstPartialMilliseconds"] = String(firstPartialMilliseconds)
         }
+        if let settledMilliseconds {
+            timing["settledMilliseconds"] = String(settledMilliseconds)
+        }
+        if let promptTokens = streamTimings?.promptN {
+            timing["promptTokens"] = String(promptTokens)
+        }
+        if let cachedTokens = streamTimings?.cacheN {
+            timing["cachedTokens"] = String(cachedTokens)
+        }
+        if let predictedTokens = streamTimings?.predictedN {
+            timing["predictedTokens"] = String(predictedTokens)
+        }
         timing["stoppedAtCap"] = String(stoppedAtCap)
         diagnostics.record("llama-completion-timing", metadata: timing)
         return Decision(
             suggestion: suggestion,
             reason: decisionReason,
             generated: !content.isEmpty,
-            generatorMilliseconds: Self.milliseconds(since: startedAt),
+            generatorMilliseconds: totalMilliseconds,
             firstStableWordMilliseconds: firstPartialMilliseconds
         )
     }
