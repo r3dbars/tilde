@@ -229,6 +229,30 @@ struct LlamaCompletionStreamingTests {
         #expect(suggestion == nil)
     }
 
+    @Test("Short connector words at word 2 do not prematurely cut a multi-word clause mid-stream")
+    func connectorWordDoesNotKillStreamEarly() async throws {
+        let transport = FixedFrameTransport(lines: [
+            #"data: {"content":" probably","completion_probabilities":[{"token":" probably","prob":0.55}]}"#,
+            #"data: {"content":" to","completion_probabilities":[{"token":" to","prob":0.25}]}"#,
+            #"data: {"content":" wait","completion_probabilities":[{"token":" wait","prob":0.65}]}"#,
+            #"data: {"content":" until","completion_probabilities":[{"token":" until","prob":0.78}]}"#,
+            #"data: {"content":" tomorrow","completion_probabilities":[{"token":" tomorrow","prob":0.82}]}"#,
+            #"data: {"content":" morning.","completion_probabilities":[{"token":" morning.","prob":0.75}]}"#,
+            #"data: {"stop":true,"tokens_predicted":6,"stopped_eos":true}"#,
+        ])
+        let engine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: transport
+        )
+        let suggestion = try await engine.suggestion(
+            textBeforeCursor: "I think we should ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        #expect(suggestion?.visibleText == "probably to wait until tomorrow morning.")
+    }
+
     @Test("Hostile scene instructions are suppressed before opening the model transport")
     func promptInjectionSceneNeverReachesModel() async throws {
         let engine = LlamaCompletionEngine(

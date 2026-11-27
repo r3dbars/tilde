@@ -564,13 +564,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 // Weak first word: stay silent and cancel remaining tail tokens immediately.
                 return (nil, true)
             }
-            let trimmed = WordConfidenceTruncator.trim(
+            // Mid-stream: only trim truly collapsed words (< 0.04), never
+            // short healthy connectors like "to" or "the" that lead into a
+            // confident 5-8 word clause. Full E_n trimming runs on final settle.
+            let collapseCheck = WordConfidenceTruncator.trimCollapsedTail(
                 suggestion: suggestion,
                 tokens: streamedTokens
             )
-            if trimmed.visibleText != suggestion.visibleText {
+            if collapseCheck.collapsed {
                 tailTrimmed = true
-                suggestion = trimmed
+                suggestion = collapseCheck.suggestion
             }
         }
         // The partial is what the writer actually sees first, so it must clear
@@ -580,8 +583,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             suggestion.visibleText,
             in: context.grounding
         ) else { return (nil, outcome.visibleTextIsSettled || tailTrimmed) }
+        // Do NOT run `WordConfidenceTruncator.trim` mid-stream: a short
+        // connector like "to" or "the" at word 2 temporarily lowers prefix
+        // utility before the rest of a 5-8 word clause arrives, prematurely
+        // killing the stream into a 1-word stub. Final trimming runs once the
+        // full clause finishes; mid-stream we only cut on true collapse (<0.04)
+        // or a completed sentence (2+ words ending in . ! ?).
         let collapsedTail = WordConfidenceTruncator.shouldStopStreamingEarly(tokens: streamedTokens)
-        return (suggestion, outcome.visibleTextIsSettled || tailTrimmed || collapsedTail)
+        let sentenceEnded = suggestion.visibleText.split(whereSeparator: \.isWhitespace).count >= 2
+            && (suggestion.visibleText.trimmingCharacters(in: .whitespaces).last.map { ".!?".contains($0) } == true)
+        return (suggestion, outcome.visibleTextIsSettled || tailTrimmed || collapsedTail || sentenceEnded)
     }
 
     static func promptByAddingIntentFutures(

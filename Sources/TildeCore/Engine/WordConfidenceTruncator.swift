@@ -23,7 +23,7 @@ public struct StreamedTokenProbability: Equatable, Sendable {
 /// that word regardless of its character length. Fails open cleanly when token
 /// probabilities are unavailable or cannot be aligned.
 public enum WordConfidenceTruncator {
-    public static let defaultTemperature = 2.8
+    public static let defaultTemperature = 3.8
     public static let defaultRiskPenalty = 0.45
     public static let earlyStopWordFloor = 0.04
     /// First-word geometric-mean probability gate calibrated on held-out
@@ -73,7 +73,7 @@ public enum WordConfidenceTruncator {
             let calibrated = min(0.99, max(0.05, pow(word.geometricMeanProbability, 1.0 / safeTemp)))
             cumulativeConfidence *= calibrated
             cumulativeChars += visibleWord.count + (n > 1 ? 1 : 0)
-            let clauseBonus: Double = visibleWord.last.map { ".!?,".contains($0) } == true ? 2.0 : 0.0
+            let clauseBonus: Double = visibleWord.last.map { ".!?,".contains($0) } == true ? 4.0 : 0.0
             let expectedSaved = max(1.0, Double(cumulativeChars)) + clauseBonus
             let utility = cumulativeConfidence * expectedSaved - riskPenalty * (1.0 - cumulativeConfidence)
             if utility > bestUtility {
@@ -98,6 +98,44 @@ public enum WordConfidenceTruncator {
             maxVisibleWords: bestCount,
             repairsDanglingTail: true
         )
+    }
+
+    /// Trims `suggestion` only before any tail word (word 2+) whose probability
+    /// truly collapsed below `wordFloor` (default `0.04`). Safe for streaming
+    /// partials: never cuts normal connector words like "to" or "the" while
+    /// preventing garbage tail words from ever flashing on screen.
+    public static func trimCollapsedTail(
+        suggestion: CompletionSuggestion,
+        tokens: [StreamedTokenProbability],
+        wordFloor: Double = earlyStopWordFloor
+    ) -> (suggestion: CompletionSuggestion, collapsed: Bool) {
+        let visibleWords = CompletionContextWords.wordRanges(in: suggestion.visibleText)
+        guard visibleWords.count >= 2, !tokens.isEmpty else { return (suggestion, false) }
+        let tokenWords = wordConfidences(from: tokens)
+        guard tokenWords.count >= 2 else { return (suggestion, false) }
+        let aligned = align(visibleWords: visibleWords, in: suggestion.visibleText, to: tokenWords)
+        guard aligned.count == visibleWords.count else { return (suggestion, false) }
+
+        for index in 1..<aligned.count where aligned[index].geometricMeanProbability < wordFloor {
+            let prefix = CompletionSuggestion.acceptedPrefix(
+                in: suggestion.visibleText,
+                wordLimit: index
+            )
+            let repaired = RawContinuationPrompt.repairDanglingTail(prefix)
+            let finalText = repaired.trimmingCharacters(in: .whitespaces).isEmpty ? prefix : repaired
+            guard !finalText.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return (suggestion, true)
+            }
+            return (
+                CompletionSuggestion(
+                    text: finalText,
+                    maxVisibleWords: index,
+                    repairsDanglingTail: true
+                ),
+                true
+            )
+        }
+        return (suggestion, false)
     }
 
     /// Geometric-mean probability of the first visible word of `suggestion`,
