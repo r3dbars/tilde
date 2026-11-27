@@ -24,11 +24,11 @@ struct SuggestionRevealDelayPolicyTests {
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: "a",
             calmMarkedText: false
-        ) == 0)
+        ) == 60_000_000)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: " ",
             calmMarkedText: false
-        ) == 15_000_000)
+        ) == 45_000_000)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: " ",
             calmMarkedText: false,
@@ -37,11 +37,16 @@ struct SuggestionRevealDelayPolicyTests {
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: "a",
             calmMarkedText: true
-        ) == 50_000_000)
+        ) == 110_000_000)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: " ",
             calmMarkedText: true
-        ) == 60_000_000)
+        ) == 120_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(
+            afterUserTyped: " ",
+            calmMarkedText: true,
+            chained: true
+        ) == 40_000_000)
     }
 
     @Test("Chromium and Electron start inference immediately and delay only reveal")
@@ -51,18 +56,18 @@ struct SuggestionRevealDelayPolicyTests {
             calmMarkedText: true
         )
         #expect(timing.inferenceDelayNanoseconds == 0)
-        #expect(timing.revealDelayNanoseconds == 60_000_000)
+        #expect(timing.revealDelayNanoseconds == 120_000_000)
     }
 
-    @Test("The preview calm pair stays distinct and keeps native chained instant")
+    @Test("The preview calm pair stays distinct and keeps chained fast")
     func previewCalmDelays() {
         let preview = SuggestionRevealDelayPolicy.CalmDelays.preview
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, calm: preview) == 80_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: "a", calmMarkedText: true, calm: preview) == 50_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, chained: true, calm: preview) == 50_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: false, calm: preview) == 15_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, calm: preview) == 100_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: "a", calmMarkedText: true, calm: preview) == 90_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, chained: true, calm: preview) == 40_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: false, calm: preview) == 45_000_000)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: false, chained: true, calm: preview) == 0)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true) == 60_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true) == 120_000_000)
     }
 
     @Test("Punctuation is a request boundary only when allowed")

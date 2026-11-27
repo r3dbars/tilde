@@ -34,31 +34,49 @@ public enum SuggestionRevealDelayPolicy {
     public struct CalmDelays: Equatable, Sendable {
         public let postSpaceNanoseconds: UInt64
         public let midWordNanoseconds: UInt64
+        public let chainedNanoseconds: UInt64
 
-        public init(postSpaceNanoseconds: UInt64, midWordNanoseconds: UInt64) {
+        public init(
+            postSpaceNanoseconds: UInt64,
+            midWordNanoseconds: UInt64,
+            chainedNanoseconds: UInt64 = 40_000_000
+        ) {
             self.postSpaceNanoseconds = postSpaceNanoseconds
             self.midWordNanoseconds = midWordNanoseconds
+            self.chainedNanoseconds = chainedNanoseconds
         }
 
-        public static let production = CalmDelays(postSpaceNanoseconds: 60_000_000, midWordNanoseconds: 50_000_000)
-        public static let preview = CalmDelays(postSpaceNanoseconds: 80_000_000, midWordNanoseconds: 50_000_000)
+        public static let production = CalmDelays(
+            postSpaceNanoseconds: 120_000_000,
+            midWordNanoseconds: 110_000_000,
+            chainedNanoseconds: 40_000_000
+        )
+        public static let preview = CalmDelays(
+            postSpaceNanoseconds: 100_000_000,
+            midWordNanoseconds: 90_000_000,
+            chainedNanoseconds: 40_000_000
+        )
     }
 
     /// `chained` marks a request issued by an accept rather than a
     /// keystroke: no key is being processed, so native editors reveal
-    /// immediately (0 ms) and Chromium/Electron hosts use the shorter calm
-    /// window so every millisecond of dead air between Tab presses is minimized.
+    /// immediately (0 ms) and Chromium/Electron hosts use the short chained
+    /// floor (40 ms) so Tab-to-Tab flow feels instant while normal typing
+    /// waits for a genuine micro-pause instead of flashing mid-stride.
     public static func nanoseconds(
         afterUserTyped grapheme: String,
         calmMarkedText: Bool,
         chained: Bool = false,
         calm: CalmDelays = .production
     ) -> UInt64 {
-        let short = chained || grapheme.last?.isLetter == true
-        if calmMarkedText {
-            return short ? calm.midWordNanoseconds : calm.postSpaceNanoseconds
+        if chained {
+            return calmMarkedText ? calm.chainedNanoseconds : 0
         }
-        return short ? 0 : 15_000_000
+        let isLetter = grapheme.last?.isLetter == true
+        if calmMarkedText {
+            return isLetter ? calm.midWordNanoseconds : calm.postSpaceNanoseconds
+        }
+        return isLetter ? 60_000_000 : 45_000_000
     }
 
     /// Model work always begins with the keystroke. Chromium/Electron only

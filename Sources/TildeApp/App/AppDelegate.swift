@@ -258,20 +258,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 case .typingPaused:
                     let target = Self.currentTypingTarget(sessionIdentifier: event.sessionIdentifier)
-                    let outcome = await service.noteTypingPaused(
+                    // Refresh only when the pinned scene ages out; never fire a
+                    // competing prewarm mid-sentence on the single `-np 1` slot.
+                    _ = await service.noteTypingPaused(
                         sessionIdentifier: event.sessionIdentifier,
                         target: target
                     )
-                    if case .captured = outcome {
-                        await Self.prewarmFreshSceneIfAvailable(
-                            service: service,
-                            prewarmer: prewarmer,
-                            bundleIdentifier: target?.bundleIdentifier,
-                            fieldSessionIdentifier: event.sessionIdentifier,
-                            expectedTarget: target,
-                            includesWindowTitle: includesWindowTitle
-                        )
-                    }
                 case .textFieldBlurred:
                     await service.noteTextFieldBlurred(sessionIdentifier: event.sessionIdentifier)
                 case .contentReset:

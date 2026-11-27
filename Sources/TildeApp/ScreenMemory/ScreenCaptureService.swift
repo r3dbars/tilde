@@ -81,6 +81,13 @@ actor ScreenCaptureService {
     /// was freshly recognized forever. Periodically force a real pass.
     private static let maximumRecognitionAgeForReuse: TimeInterval = 5
     private static let maximumConsecutiveReuses = 3
+    /// While the user is continuously typing in the exact same window/field,
+    /// keep the already-captured scene pinned in llama-server's KV cache for
+    /// this long instead of re-OCR'ing every 2s (which captures the user's own
+    /// newly typed words, wipes ~350 cached KV tokens, spikes TTFT from ~25ms
+    /// to ~160ms, and triggers self-echo rejections). Focus, window switch,
+    /// content reset (Send/Enter), and longer pauses still refresh immediately.
+    static let typingPauseScenePinSeconds: TimeInterval = 12
     private var windowBaseline: CaptureBaseline?
     private var displayBaseline: CaptureBaseline?
 
@@ -234,15 +241,43 @@ actor ScreenCaptureService {
     ) async -> CaptureOutcome? {
         guard activeTextFieldSessionIdentifier == sessionIdentifier else { return nil }
         adoptTarget(target, sessionIdentifier: sessionIdentifier, forceNewGeneration: false)
-        lastActivityAt = now()
+        let currentNow = now()
+        lastActivityAt = currentNow
         pendingTextFieldCaptureTask?.cancel()
         pendingTextFieldCaptureTask = nil
+        if let pinnedRemaining = pinnedSceneRemainingSeconds(at: currentNow) {
+            return .skipped(.cadence(secondsRemaining: pinnedRemaining))
+        }
         let trigger = CaptureTriggerPolicy.Trigger.typingPause(
             elapsedSeconds: CaptureTriggerPolicy.typingPauseThresholdSeconds
         )
         let outcome = await attemptTextFieldCapture(trigger: trigger)
         scheduleRetryAfterCadenceIfNeeded(outcome, trigger: trigger)
         return outcome
+    }
+
+    /// Returns the remaining pin time when the active field already has a
+    /// verified, post-reset snapshot for the exact same window/field target
+    /// younger than `typingPauseScenePinSeconds`.
+    private func pinnedSceneRemainingSeconds(at moment: Date) -> TimeInterval? {
+        guard enabled(), !textFieldRequiresFullRefresh, let target = activeTypingTarget else {
+            return nil
+        }
+        let candidates = [latestWindowSnapshot, latestSnapshot].compactMap { $0 }
+        for snapshot in candidates {
+            if snapshot.evidence.source != .unspecified,
+               snapshot.evidence.target != target {
+                continue
+            }
+            if let resetAt = lastContentResetAt, snapshot.capturedAt < resetAt {
+                continue
+            }
+            let age = moment.timeIntervalSince(snapshot.capturedAt)
+            if age >= 0, age < Self.typingPauseScenePinSeconds {
+                return Self.typingPauseScenePinSeconds - age
+            }
+        }
+        return nil
     }
 
     /// Stops delayed refreshes for the field that actually lost focus. A

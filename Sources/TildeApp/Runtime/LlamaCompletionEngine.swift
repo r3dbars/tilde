@@ -232,6 +232,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             scene: scene,
             profile: productProfile
         )
+        let isMidWord = RawContinuationPrompt.endsMidWord(textBeforeCursor)
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
@@ -359,6 +360,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             context: prepared,
                             cleaner: cleaner,
                             hasLogitBias: !logitBiasEntries.isEmpty,
+                            isMidWord: isMidWord,
                             streamedTokens: streamedTokens
                         )
                         if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
@@ -410,6 +412,13 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         var decisionReason: SuggestionDecisionReason = clean.rejectionReason.map(
             SuggestionDecisionReason.init(cleaner:)
         ) ?? .shown
+        if let candidate = suggestion,
+           isMidWord,
+           candidate.visibleText.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+            suggestion = nil
+            rejectionReason = "emptyOutput"
+            decisionReason = .emptyOutput
+        }
         if let candidate = suggestion,
            WordConfidenceTruncator.isFirstWordBelowFloor(
                suggestion: candidate,
@@ -509,6 +518,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         context: PreparedCompletionContext,
         cleaner: CompletionOutputCleaner,
         hasLogitBias: Bool = false,
+        isMidWord: Bool = false,
         streamedTokens: [StreamedTokenProbability] = []
     ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
         let outcome = cleaner.clean(
@@ -521,7 +531,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         guard !SceneEchoPolicy.isEcho(
             cleaned.visibleText,
             in: context.sceneEcho
-        ) else { return (nil, outcome.visibleTextIsSettled) }
+        ) else { return (nil, true) }
         guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else {
             return (nil, outcome.visibleTextIsSettled)
         }
@@ -534,7 +544,11 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 candidateText = deduped
             }
         }
-        guard !candidateText.trimmingCharacters(in: .whitespaces).isEmpty else {
+        let trimmedCandidate = candidateText.trimmingCharacters(in: .whitespaces)
+        guard !trimmedCandidate.isEmpty else {
+            return (nil, outcome.visibleTextIsSettled || tailTrimmed)
+        }
+        if isMidWord, trimmedCandidate.count < 2 {
             return (nil, outcome.visibleTextIsSettled || tailTrimmed)
         }
         var suggestion = CompletionSuggestion(

@@ -210,6 +210,25 @@ struct LlamaCompletionStreamingTests {
         #expect(suggestion?.visibleText == "sounds really good")
     }
 
+    @Test("Single-character mid-word micro-fragments are suppressed")
+    func singleCharMidWordFragmentSuppressed() async throws {
+        let transport = FixedFrameTransport(lines: [
+            #"data: {"content":"s"}"#,
+            #"data: {"stop":true,"tokens_predicted":1,"stopped_eos":true}"#,
+        ])
+        let engine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: transport
+        )
+        let suggestion = try await engine.suggestion(
+            textBeforeCursor: "Let us run the test",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil
+        )
+        #expect(suggestion == nil)
+    }
+
     @Test("Hostile scene instructions are suppressed before opening the model transport")
     func promptInjectionSceneNeverReachesModel() async throws {
         let engine = LlamaCompletionEngine(

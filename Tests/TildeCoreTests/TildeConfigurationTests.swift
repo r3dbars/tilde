@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Effective configuration: four policies, one digest")
 struct TildeConfigurationTests {
-    @Test("Production enables responsive chaining, mid-word continuation, anchored reply cues, and 60/50ms calm delays")
+    @Test("Production enables responsive chaining, mid-word continuation after 240ms pause, anchored reply cues, and 120/110ms calm delays")
     func productionUnchanged() {
         let decision = DecisionPolicy.conservative
         #expect(decision.maximumVisibleWords == CompletionSuggestion.defaultMaxVisibleWords)
@@ -20,7 +20,7 @@ struct TildeConfigurationTests {
         #expect(interaction.calmRevealDelays == .production)
         #expect(interaction.requestsAfterPunctuation)
         #expect(interaction.requestsMidWordContinuation)
-        #expect(interaction.midWordRequestThrottleMilliseconds == 90)
+        #expect(interaction.midWordRequestThrottleMilliseconds == 240)
         #expect(TildeProductProfile.production.requestsMidWordContinuation)
         #expect(TildeProductProfile.production.decisionPolicy == .conservative)
         #expect(TildeProductProfile.production.interactionPolicy == .conservative)

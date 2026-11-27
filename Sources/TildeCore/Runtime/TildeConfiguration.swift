@@ -169,29 +169,28 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         midWordRequestThrottleMilliseconds = try c.decodeIfPresent(Int.self, forKey: .midWordRequestThrottleMilliseconds) ?? 0
     }
 
-    /// Responsive production interaction: instant Tab-to-Tab chaining,
-    /// 60/50 ms Electron calm floor (fast without per-keystroke caret ping-pong),
-    /// punctuation boundaries, and throttled mid-word model continuations.
+    /// Calm, flicker-free production interaction: instant Tab-to-Tab chaining
+    /// (40 ms calm / 0 ms native), 120/110 ms Chromium/Electron calm reveal
+    /// (above normal typing stride so ghosts never flash between letters while
+    /// inference still starts at 0 ms), punctuation boundaries, and mid-word
+    /// completion only after a genuine 240 ms mid-word pause.
     public static let conservative = InteractionPolicy(
         chainsCompletionAfterAccept: true,
-        calmRevealPostSpaceMilliseconds: 60,
-        calmRevealMidWordMilliseconds: 50,
+        calmRevealPostSpaceMilliseconds: 120,
+        calmRevealMidWordMilliseconds: 110,
         requestsAfterPunctuation: true,
         requestsMidWordContinuation: true,
-        midWordRequestThrottleMilliseconds: 90
+        midWordRequestThrottleMilliseconds: 240
     )
 
-    /// The owner's 9B preview trial: chained accept, tighter Electron reveal
-    /// floor (80/50 ms), punctuation as a request boundary, and mid-word model
-    /// continuation. Production stays on the conservative interaction until a
-    /// live result promotes any of them.
+    /// The owner's 9B preview trial: slightly tighter calm reveal & mid-word pause.
     public static let tuned9B = InteractionPolicy(
         chainsCompletionAfterAccept: true,
-        calmRevealPostSpaceMilliseconds: 80,
-        calmRevealMidWordMilliseconds: 50,
+        calmRevealPostSpaceMilliseconds: 100,
+        calmRevealMidWordMilliseconds: 90,
         requestsAfterPunctuation: true,
         requestsMidWordContinuation: true,
-        midWordRequestThrottleMilliseconds: 120
+        midWordRequestThrottleMilliseconds: 200
     )
 
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {

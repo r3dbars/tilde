@@ -1607,10 +1607,16 @@ final class GhostInputController: IMKInputController {
 
     /// The request ended without a longer suggestion. A partial that is
     /// already visible stays — it passed the same cleaner — and silence and
-    /// retraction are both worse than a shorter word-boundary ghost. Only a
-    /// still-pending ticket is released.
+    /// retraction are both worse than a shorter word-boundary ghost. Any
+    /// still-buffered (not yet rendered) partial for this rejected ticket MUST
+    /// be cancelled so a late reveal timer never pops an echo onto screen.
     @MainActor
     private func settle(ticket requestTicket: InlineSuggestionTicket) {
+        if bufferedReveal?.ticket == requestTicket {
+            revealTask?.cancel()
+            revealTask = nil
+            bufferedReveal = nil
+        }
         guard state.visibleTicket != requestTicket, let liveClient = client() else { return }
         apply(state.reduce(.dismissTicket(requestTicket)), to: liveClient)
     }
