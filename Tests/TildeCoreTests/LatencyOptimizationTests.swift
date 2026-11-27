@@ -111,4 +111,76 @@ struct LatencyOptimizationTests {
         let liveRead = (fullDocAfter as NSString).substring(from: liveStart)
         #expect(projected == liveRead)
     }
+
+    @Test("Chained ghost prefetch key matches both acceptAll and 1-word Tab accepts")
+    func chainedGhostPrefetchMatchesAcceptAllAndSingleWord() {
+        // Multi-word chained ghost pre-warmed on presentation (accepted: "")
+        // matches `~` acceptAll (appendsSeparator: true) and final Tab consume.
+        let onShowMulti = SpeculativeChainKey.projectedContext(
+            beforeAccept: "That ",
+            accepted: "",
+            remainder: "sounds really good",
+            utf16Limit: 3_000
+        )
+        let onAcceptAll = SpeculativeChainKey.projectedContext(
+            beforeAccept: "That ",
+            accepted: "sounds really good ",
+            remainder: "",
+            utf16Limit: 3_000
+        )
+        #expect(onShowMulti == "That sounds really good ")
+        #expect(onShowMulti == onAcceptAll)
+
+        // Single-word chained ghost pre-warmed on presentation matches Tab consume.
+        let onShowSingle = SpeculativeChainKey.projectedContext(
+            beforeAccept: "See you ",
+            accepted: "",
+            remainder: "tomorrow",
+            utf16Limit: 3_000
+        )
+        let onTabSingle = SpeculativeChainKey.projectedContext(
+            beforeAccept: "See you ",
+            accepted: "tomorrow ",
+            remainder: "",
+            utf16Limit: 3_000
+        )
+        #expect(onShowSingle == "See you tomorrow ")
+        #expect(onShowSingle == onTabSingle)
+    }
+
+    @Test("Speculative chain settle verdict distinguishes settled, still-settling, and drifted fields")
+    func speculativeChainSettleVerdict() {
+        let pre = InlineSuggestionTicket.fingerprint("That ")
+        let expected = InlineSuggestionTicket.fingerprint("That sounds good ")
+        let edited = InlineSuggestionTicket.fingerprint("That was different ")
+
+        #expect(
+            SpeculativeChainKey.settleVerdict(
+                liveFingerprint: expected,
+                expectedFingerprint: expected,
+                preAcceptFingerprint: pre
+            ) == .settled
+        )
+        #expect(
+            SpeculativeChainKey.settleVerdict(
+                liveFingerprint: pre,
+                expectedFingerprint: expected,
+                preAcceptFingerprint: pre
+            ) == .stillSettling
+        )
+        #expect(
+            SpeculativeChainKey.settleVerdict(
+                liveFingerprint: edited,
+                expectedFingerprint: expected,
+                preAcceptFingerprint: pre
+            ) == .drifted
+        )
+        #expect(
+            SpeculativeChainKey.settleVerdict(
+                liveFingerprint: pre,
+                expectedFingerprint: expected,
+                preAcceptFingerprint: nil
+            ) == .drifted
+        )
+    }
 }

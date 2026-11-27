@@ -31,19 +31,32 @@ public enum TextFreeTypingSpeedBucket: String, Codable, CaseIterable, Sendable {
 /// slow. Key auto-repeat should not be fed in; the caller filters it.
 public struct TypingCadenceTracker: Equatable, Sendable {
     public static let capacity = 24
+    public static let boundaryCapacity = 16
     public static let minimumStrides = 4
+    public static let minimumBoundaryStrides = 2
     public static let strideCeilingMilliseconds = 600
 
     public private(set) var strides: [Int] = []
+    /// Post-boundary inter-word strides (space/punctuation -> next key).
+    /// Fast typists roll intra-word digraphs far quicker than word-to-word
+    /// transitions, so tracking boundary transitions separately keeps the
+    /// word-boundary reveal gate above normal inter-word rhythm without
+    /// slowing intra-word cadence measurement or `speedBucket`.
+    public private(set) var boundaryStrides: [Int] = []
     public private(set) var lastKeystrokeUptime: TimeInterval?
     /// The interval that ended at the most recent keystroke, or `nil` after
     /// `breakRun()` or before a second keystroke.
     public private(set) var lastIntervalMilliseconds: Int?
+    private var pendingBoundaryStride = false
 
     public init() {}
 
-    public mutating func noteKeystroke(atUptime uptime: TimeInterval) {
-        defer { lastKeystrokeUptime = uptime }
+    public mutating func noteKeystroke(atUptime uptime: TimeInterval, startsBoundary: Bool = false) {
+        let wasBoundary = pendingBoundaryStride
+        defer {
+            lastKeystrokeUptime = uptime
+            pendingBoundaryStride = startsBoundary
+        }
         guard let previous = lastKeystrokeUptime, uptime >= previous else {
             lastIntervalMilliseconds = nil
             return
@@ -55,6 +68,12 @@ public struct TypingCadenceTracker: Equatable, Sendable {
         if strides.count > Self.capacity {
             strides.removeFirst(strides.count - Self.capacity)
         }
+        if wasBoundary {
+            boundaryStrides.append(interval)
+            if boundaryStrides.count > Self.boundaryCapacity {
+                boundaryStrides.removeFirst(boundaryStrides.count - Self.boundaryCapacity)
+            }
+        }
     }
 
     /// Focus moved or the field changed under the writer: the next interval
@@ -62,6 +81,7 @@ public struct TypingCadenceTracker: Equatable, Sendable {
     public mutating func breakRun() {
         lastKeystrokeUptime = nil
         lastIntervalMilliseconds = nil
+        pendingBoundaryStride = false
     }
 
     public var medianStrideMilliseconds: Int? {
@@ -81,6 +101,24 @@ public struct TypingCadenceTracker: Equatable, Sendable {
         guard strides.count >= Self.minimumStrides else { return nil }
         let sorted = strides.sorted()
         return sorted[min(sorted.count - 1, sorted.count * 9 / 10)]
+    }
+
+    /// The 90th-percentile post-boundary stride (space/punctuation -> next key).
+    public var boundaryUpperStrideMilliseconds: Int? {
+        guard boundaryStrides.count >= Self.minimumBoundaryStrides else { return nil }
+        let sorted = boundaryStrides.sorted()
+        return sorted[min(sorted.count - 1, sorted.count * 9 / 10)]
+    }
+
+    /// Upper stride used by reveal gating: protects against both intra-word
+    /// bursts and slower post-space inter-word transitions.
+    public var revealUpperStrideMilliseconds: Int? {
+        switch (upperStrideMilliseconds, boundaryUpperStrideMilliseconds) {
+        case let (all?, boundary?): return max(all, boundary)
+        case let (all?, nil): return all
+        case let (nil, boundary?): return boundary
+        case (nil, nil): return nil
+        }
     }
 
     public var speedBucket: TextFreeTypingSpeedBucket {
@@ -222,11 +260,13 @@ public struct FlowRevealPolicy: Codable, Equatable, Sendable {
         pauseResetMilliseconds: 0
     )
 
-    /// Reveal after 1.2x the upper stride (at most 300 ms), wait 1.5x it
-    /// (at most 360 ms) before a mid-word request, and after two rapid
-    /// rejects in a row hold reveals to a 450 ms pause for up to 12 keys.
+    /// Reveal after 1.35x the effective upper stride (at most 300 ms, covering
+    /// post-space inter-word transitions as well as intra-word bursts), wait
+    /// 1.5x the intra-word upper stride (at most 360 ms) before a mid-word
+    /// request, and after two rapid rejects in a row hold reveals to a 450 ms
+    /// pause for up to 12 keys.
     public static let production = FlowRevealPolicy(
-        strideRevealPercent: 120,
+        strideRevealPercent: 135,
         maximumStrideRevealMilliseconds: 300,
         midWordStridePercent: 150,
         maximumMidWordRequestMilliseconds: 360,
@@ -252,7 +292,7 @@ public struct FlowRevealPolicy: Codable, Equatable, Sendable {
         let base = max(0, baseMilliseconds)
         guard !chained else { return base }
         var gate = base
-        if strideRevealPercent > 0, let upper = cadence.upperStrideMilliseconds {
+        if strideRevealPercent > 0, let upper = cadence.revealUpperStrideMilliseconds {
             let stride = upper * strideRevealPercent / 100
             gate = max(gate, min(max(base, maximumStrideRevealMilliseconds), stride))
         }

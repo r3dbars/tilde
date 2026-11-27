@@ -80,4 +80,14 @@ struct SuggestionRevealDelayPolicyTests {
         #expect(!RawContinuationPrompt.endsAtRequestBoundary("word", allowingPunctuation: true))
         #expect(!RawContinuationPrompt.endsAtRequestBoundary("", allowingPunctuation: true))
     }
+
+    @Test("Adaptive calm chain settle starts at the 40 ms chained floor and stays bounded")
+    func adaptiveCalmChainSettleBounds() {
+        let intervals = SuggestionRevealDelayPolicy.calmChainSettleIntervalsNanoseconds
+        #expect(!intervals.isEmpty)
+        #expect(intervals.first == SuggestionRevealDelayPolicy.CalmDelays.production.chainedNanoseconds)
+        let total = intervals.reduce(0, +)
+        #expect(total >= 100_000_000)
+        #expect(total <= 150_000_000)
+    }
 }

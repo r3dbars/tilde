@@ -107,6 +107,30 @@ final class GhostInputController: IMKInputController {
         return keyCode == 50 && modifiers.intersection(shortcutModifiers).isEmpty
     }
 
+    /// Whether a key-down should feed `TypingCadenceTracker`. Auto-repeat and
+    /// active accept-all (`~`/`` ` `` while a ghost is visible) are excluded so
+    /// key repeat and read-and-accept pauses never distort the writer's stride.
+    static func shouldRecordCadence(
+        isRepeat: Bool,
+        typedGrapheme: String?,
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags,
+        isGhostVisible: Bool
+    ) -> Bool {
+        guard !isRepeat else { return false }
+        if isGhostVisible, shouldAcceptWholeSuggestion(keyCode: keyCode, modifiers: modifiers) {
+            return false
+        }
+        return typedGrapheme != nil || keyCode == 51 || keyCode == 117
+    }
+
+    /// Whether `typedGrapheme` places the caret at a word or punctuation
+    /// boundary whose following keystroke measures an inter-word stride.
+    static func startsCadenceBoundary(typedGrapheme: String?) -> Bool {
+        guard let last = typedGrapheme?.last else { return false }
+        return last.isWhitespace || RawContinuationPrompt.requestPunctuation.contains(last)
+    }
+
     static func trailingContextRange(
         selection: NSRange,
         markedRange: NSRange,
@@ -167,16 +191,26 @@ final class GhostInputController: IMKInputController {
     private var historyOwner: FallbackOwner?
     private var scheduleRevision = 0
     private var lastScheduledContextTail = ""
-    private struct SpeculativeChainState {
+    /// Main-thread-owned box for an in-flight or completed speculative chained
+    /// continuation. Holds streaming partials so a fast Tab-chain that settles
+    /// before final completion can display word 1 immediately instead of
+    /// waiting for the full multi-word response.
+    private final class SpeculativeChainState: @unchecked Sendable {
         let key: SpeculativeChainKey
-        let task: Task<GhostBrainResponse, Never>
+        var task: Task<GhostBrainResponse, Never>?
         var completedResponse: GhostBrainResponse?
+        var latestPartial: GhostBrainResponse?
+        var onPartial: (@MainActor (GhostBrainResponse) -> Void)?
+
+        init(key: SpeculativeChainKey) {
+            self.key = key
+        }
     }
 
     private var revealTask: Task<Void, Never>?
     private var modelTask: Task<Void, Never>?
     private var speculativeChain: SpeculativeChainState?
-    private var bufferedReveal: (text: String, ticket: InlineSuggestionTicket, provenance: GhostProvenance)?
+    private var bufferedReveal: (text: String, ticket: InlineSuggestionTicket, provenance: GhostProvenance, isChainedFinal: Bool)?
     /// The app's receipt for the ghost most recently handed to the reducer,
     /// read back by `recordOutcomeShown` when the `.shown` effect fires.
     private var presentedProvenance: (ticket: InlineSuggestionTicket, provenance: GhostProvenance)?
@@ -243,9 +277,20 @@ final class GhostInputController: IMKInputController {
         let typedGrapheme = printableGrapheme(from: event)
         let keyUptime = ProcessInfo.processInfo.systemUptime
         let idleBeforeMilliseconds = Self.cadence.idleMilliseconds(atUptime: keyUptime)
-        // Auto-repeat is the keyboard's rhythm, not the writer's.
-        if !event.isARepeat, typedGrapheme != nil || event.keyCode == 51 || event.keyCode == 117 {
-            Self.cadence.noteKeystroke(atUptime: keyUptime)
+        // Auto-repeat is the keyboard's rhythm, not the writer's, and an
+        // active accept-all (`~`/backtick) is a read-and-accept pause, not a
+        // typing stride.
+        if Self.shouldRecordCadence(
+            isRepeat: event.isARepeat,
+            typedGrapheme: typedGrapheme,
+            keyCode: event.keyCode,
+            modifiers: modifiers,
+            isGhostVisible: state.isVisible
+        ) {
+            Self.cadence.noteKeystroke(
+                atUptime: keyUptime,
+                startsBoundary: Self.startsCadenceBoundary(typedGrapheme: typedGrapheme)
+            )
         }
         let defaults = UserDefaults.standard
         let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
@@ -287,6 +332,7 @@ final class GhostInputController: IMKInputController {
             }
             let accepted = acceptSuggestion(client, observation: insertionObservation)
             if accepted {
+                Self.cadence.breakRun()
                 refractory.noteGhostClosed(.accepted, policy: Self.flowReveal)
             } else {
                 breakHistorySegment()
@@ -300,6 +346,7 @@ final class GhostInputController: IMKInputController {
             ) else { break }
             let accepted = acceptAllSuggestion(client, observation: insertionObservation)
             if accepted {
+                Self.cadence.breakRun()
                 refractory.noteGhostClosed(.accepted, policy: Self.flowReveal)
             } else {
                 breakHistorySegment()
@@ -329,7 +376,8 @@ final class GhostInputController: IMKInputController {
 
         if let grapheme = typedGrapheme {
             let match = matchingVisibleState(for: client)
-            cancelPendingWork()
+            let willTypeThrough = match != nil && state.visibleText.first.map(String.init) == grapheme
+            cancelPendingWork(preservingSpeculativeChain: willTypeThrough)
             let advanced = match.map { match in
                 match.ticket.advancing(
                     with: grapheme,
@@ -820,22 +868,29 @@ final class GhostInputController: IMKInputController {
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
         let fieldSessionIdentifier = suggestionSessionIdentifier
         let experimentArm = h01SessionArm()?.rawValue
-        let task = Task<GhostBrainResponse, Never> { [weak self] in
+        let stateBox = SpeculativeChainState(key: key)
+        stateBox.task = Task<GhostBrainResponse, Never> { [weak stateBox] in
             let response = await GhostBrainClient.complete(
                 context: projected,
                 app: bundle,
                 fieldSessionIdentifier: fieldSessionIdentifier,
-                experimentArm: experimentArm
+                experimentArm: experimentArm,
+                onPartial: { [weak stateBox] partial in
+                    Task { @MainActor [weak stateBox] in
+                        guard let stateBox else { return }
+                        stateBox.latestPartial = partial
+                        stateBox.onPartial?(partial)
+                    }
+                }
             )
             guard !Task.isCancelled else { return response }
+            let box = stateBox
             await MainActor.run {
-                if self?.speculativeChain?.key == key {
-                    self?.speculativeChain?.completedResponse = response
-                }
+                box?.completedResponse = response
             }
             return response
         }
-        speculativeChain = SpeculativeChainState(key: key, task: task, completedResponse: nil)
+        speculativeChain = stateBox
     }
 
     /// The reward for a correct ghost used to be silence: accepting its last
@@ -843,8 +898,8 @@ final class GhostInputController: IMKInputController {
     /// the next keystroke. When the profile chains, we first consume any
     /// matching speculative prefetch (0 ms inference wait); otherwise, in
     /// Chromium/Electron hosts we launch inference immediately in parallel
-    /// with the host's caret-settle window instead of sleeping 90 ms before
-    /// even sending the request.
+    /// with the host's caret-settle window instead of sleeping before even
+    /// sending the request.
     private func chainAfterAcceptIfConsumed(
         _ client: IMKTextInput,
         bundleIdentifier: String,
@@ -872,7 +927,8 @@ final class GhostInputController: IMKInputController {
                 bundleIdentifier: bundleIdentifier,
                 expectedKey: expectedKey,
                 prefetched: hit,
-                projectedContext: projected
+                projectedContext: projected,
+                preAcceptContext: beforeAccept
             )
             return
         }
@@ -886,24 +942,35 @@ final class GhostInputController: IMKInputController {
             let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier
             let fieldSessionIdentifier = suggestionSessionIdentifier
             let experimentArm = h01SessionArm()?.rawValue
-            let overlappedTask = Task<GhostBrainResponse, Never> {
-                await GhostBrainClient.complete(
+            let stateBox = SpeculativeChainState(key: expectedKey)
+            stateBox.task = Task<GhostBrainResponse, Never> { [weak stateBox] in
+                let response = await GhostBrainClient.complete(
                     context: projected,
                     app: bundle,
                     fieldSessionIdentifier: fieldSessionIdentifier,
-                    experimentArm: experimentArm
+                    experimentArm: experimentArm,
+                    onPartial: { [weak stateBox] partial in
+                        Task { @MainActor [weak stateBox] in
+                            guard let stateBox else { return }
+                            stateBox.latestPartial = partial
+                            stateBox.onPartial?(partial)
+                        }
+                    }
                 )
+                guard !Task.isCancelled else { return response }
+                let box = stateBox
+                await MainActor.run {
+                    box?.completedResponse = response
+                }
+                return response
             }
             presentSpeculativeOrOverlappedChain(
                 client: client,
                 bundleIdentifier: bundleIdentifier,
                 expectedKey: expectedKey,
-                prefetched: SpeculativeChainState(
-                    key: expectedKey,
-                    task: overlappedTask,
-                    completedResponse: nil
-                ),
-                projectedContext: projected
+                prefetched: stateBox,
+                projectedContext: projected,
+                preAcceptContext: beforeAccept
             )
             return
         }
@@ -914,14 +981,17 @@ final class GhostInputController: IMKInputController {
     /// Presents a speculatively prefetched (or settle-overlapped) chained
     /// continuation once the host field has settled, verifying live caret,
     /// secure-input, fingerprint, and growing-edge invariants before touching
-    /// marked text. Falls back to a fresh request if the live window drifted
-    /// (for example across a quantized UTF-16 boundary).
+    /// marked text. Uses adaptive settle polling in Chromium/Electron (first
+    /// check at 40 ms instead of a blind 90 ms stall, retrying up to 130 ms
+    /// while the pre-accept context is still settling) and streams partials as
+    /// soon as the field settles.
     private func presentSpeculativeOrOverlappedChain(
         client: IMKTextInput,
         bundleIdentifier: String,
         expectedKey: SpeculativeChainKey,
         prefetched: SpeculativeChainState,
-        projectedContext: String
+        projectedContext: String,
+        preAcceptContext: String
     ) {
         lastScheduledContextTail = String(projectedContext.suffix(Self.contextLimit))
         cancelPendingWork(preservingSpeculativeChain: false)
@@ -929,65 +999,125 @@ final class GhostInputController: IMKInputController {
         let revision = scheduleRevision
         pendingChainedRevision = revision
         let settleBeforeReading = usesCalmReveal(for: bundleIdentifier)
-        let wasAlreadyReady = prefetched.completedResponse != nil
-        let prefetchedTask = prefetched.task
-        let completedResponse = prefetched.completedResponse
+        let preAcceptFingerprint: UInt64? = preAcceptContext.isEmpty
+            ? nil
+            : InlineSuggestionTicket.fingerprint(preAcceptContext)
         modelTask = Task { @MainActor [weak self] in
             defer {
+                prefetched.onPartial = nil
                 if let self, self.pendingChainedRevision == revision {
                     self.pendingChainedRevision = nil
                 }
             }
+            let settledField: FieldSnapshot
+            let settledContext: String
             if settleBeforeReading {
-                try? await Task.sleep(nanoseconds: Self.chainedCalmSettleNanoseconds)
-            }
-            let result: GhostBrainResponse
-            if let completedResponse {
-                result = completedResponse
-            } else {
-                result = await withTaskCancellationHandler {
-                    await prefetchedTask.value
-                } onCancel: {
-                    prefetchedTask.cancel()
+                var matched: (FieldSnapshot, String)?
+                var drifted = false
+                for interval in SuggestionRevealDelayPolicy.calmChainSettleIntervalsNanoseconds {
+                    try? await Task.sleep(nanoseconds: interval)
+                    guard !Task.isCancelled,
+                          let self,
+                          self.scheduleRevision == revision,
+                          let liveClient = self.client(),
+                          !self.stopForSecureInput(liveClient) else {
+                        prefetched.task?.cancel()
+                        Self.chainLogger.info("chain-bailed reason=superseded")
+                        return
+                    }
+                    let field = self.fieldSnapshot(liveClient)
+                    guard field.bundleIdentifier == bundleIdentifier,
+                          field.selection.location != NSNotFound,
+                          field.selection.length == 0 else {
+                        prefetched.task?.cancel()
+                        Self.chainLogger.info("chain-bailed reason=selection")
+                        return
+                    }
+                    let liveContext = self.contextBeforeCaret(liveClient, selection: field.selection)
+                    let verdict = SpeculativeChainKey.settleVerdict(
+                        liveFingerprint: InlineSuggestionTicket.fingerprint(liveContext),
+                        expectedFingerprint: expectedKey.contextFingerprint,
+                        preAcceptFingerprint: preAcceptFingerprint
+                    )
+                    switch verdict {
+                    case .settled:
+                        matched = (field, liveContext)
+                    case .stillSettling:
+                        continue
+                    case .drifted:
+                        drifted = true
+                    }
+                    break
                 }
+                guard let self,
+                      !Task.isCancelled,
+                      self.scheduleRevision == revision,
+                      let liveClient = self.client(),
+                      !self.stopForSecureInput(liveClient) else {
+                    prefetched.task?.cancel()
+                    Self.chainLogger.info("chain-bailed reason=superseded")
+                    return
+                }
+                guard let (field, liveContext) = matched, !drifted else {
+                    prefetched.task?.cancel()
+                    Self.chainLogger.info("chain-bailed reason=context-drift")
+                    self.scheduleSuggestion(
+                        for: liveClient,
+                        afterUserTyped: " ",
+                        chained: true,
+                        expectedBundle: bundleIdentifier
+                    )
+                    self.pendingChainedRevision = self.scheduleRevision
+                    return
+                }
+                settledField = field
+                settledContext = liveContext
+            } else {
+                guard !Task.isCancelled,
+                      let self,
+                      self.scheduleRevision == revision,
+                      let liveClient = self.client(),
+                      !self.stopForSecureInput(liveClient) else {
+                    prefetched.task?.cancel()
+                    Self.chainLogger.info("chain-bailed reason=superseded")
+                    return
+                }
+                let field = self.fieldSnapshot(liveClient)
+                guard field.bundleIdentifier == bundleIdentifier,
+                      field.selection.location != NSNotFound,
+                      field.selection.length == 0 else {
+                    prefetched.task?.cancel()
+                    Self.chainLogger.info("chain-bailed reason=selection")
+                    return
+                }
+                let liveContext = self.contextBeforeCaret(liveClient, selection: field.selection)
+                guard InlineSuggestionTicket.fingerprint(liveContext) == expectedKey.contextFingerprint else {
+                    prefetched.task?.cancel()
+                    Self.chainLogger.info("chain-bailed reason=context-drift")
+                    self.scheduleSuggestion(
+                        for: liveClient,
+                        afterUserTyped: " ",
+                        chained: true,
+                        expectedBundle: bundleIdentifier
+                    )
+                    self.pendingChainedRevision = self.scheduleRevision
+                    return
+                }
+                settledField = field
+                settledContext = liveContext
             }
-            guard !Task.isCancelled,
-                  let self,
-                  self.scheduleRevision == revision,
-                  let liveClient = self.client(),
-                  !self.stopForSecureInput(liveClient) else {
-                Self.chainLogger.info("chain-bailed reason=superseded")
+            guard let self, let liveClient = self.client() else {
+                prefetched.task?.cancel()
                 return
             }
-            let field = self.fieldSnapshot(liveClient)
-            guard field.bundleIdentifier == bundleIdentifier,
-                  field.selection.location != NSNotFound,
-                  field.selection.length == 0 else {
-                Self.chainLogger.info("chain-bailed reason=selection")
-                return
-            }
-            let liveContext = self.contextBeforeCaret(liveClient, selection: field.selection)
-            guard InlineSuggestionTicket.fingerprint(liveContext) == expectedKey.contextFingerprint else {
-                Self.chainLogger.info("chain-bailed reason=context-drift")
-                // Advance scheduleRevision through scheduleSuggestion so this
-                // task's defer (for the old revision) does not clear the
-                // fallback chain's pendingChainedRevision.
-                self.scheduleSuggestion(
-                    for: liveClient,
-                    afterUserTyped: " ",
-                    chained: true,
-                    expectedBundle: bundleIdentifier
-                )
-                self.pendingChainedRevision = self.scheduleRevision
-                return
-            }
-            let trailingText = self.trailingTextAfterCaret(liveClient, selection: field.selection)
-            let requestTicket = self.ticket(context: liveContext, field: field)
-            _ = self.openOpportunity(ticket: requestTicket, context: liveContext, field: field)
+            let trailingText = self.trailingTextAfterCaret(liveClient, selection: settledField.selection)
+            let requestTicket = self.ticket(context: settledContext, field: settledField)
+            _ = self.openOpportunity(ticket: requestTicket, context: settledContext, field: settledField)
             guard SuggestionActivationPolicy.allowsSuggestions(
                 afterUserTyped: self.typedFallback,
                 trailingTextAfterCaret: trailingText
             ) else {
+                prefetched.task?.cancel()
                 Self.chainLogger.info(
                     "chain-bailed reason=activation trailingChars=\(trailingText.count, privacy: .public)"
                 )
@@ -996,6 +1126,54 @@ final class GhostInputController: IMKInputController {
                 return
             }
             self.apply(self.state.reduce(.awaitSuggestion(requestTicket)), to: liveClient)
+
+            let wasAlreadyReady = prefetched.completedResponse != nil
+            let result: GhostBrainResponse
+            if let completedResponse = prefetched.completedResponse {
+                result = completedResponse
+            } else {
+                // Stream any partial that already landed or lands before the
+                // final response so fast Tab-chains reveal word 1 immediately.
+                if let partial = prefetched.latestPartial,
+                   let text = partial.suggestion,
+                   !text.isEmpty {
+                    ServedConfiguration.adopt(partial)
+                    self.present(
+                        text,
+                        ticket: requestTicket,
+                        revealNotBefore: .distantPast,
+                        provenance: GhostProvenance(receipt: partial, hostBundleIdentifier: bundleIdentifier)
+                    )
+                }
+                prefetched.onPartial = { [weak self] partial in
+                    guard let self,
+                          self.scheduleRevision == revision,
+                          let text = partial.suggestion,
+                          !text.isEmpty else { return }
+                    ServedConfiguration.adopt(partial)
+                    self.present(
+                        text,
+                        ticket: requestTicket,
+                        revealNotBefore: .distantPast,
+                        provenance: GhostProvenance(receipt: partial, hostBundleIdentifier: bundleIdentifier)
+                    )
+                }
+                guard let prefetchedTask = prefetched.task else { return }
+                result = await withTaskCancellationHandler {
+                    await prefetchedTask.value
+                } onCancel: {
+                    prefetchedTask.cancel()
+                }
+            }
+            prefetched.onPartial = nil
+            guard !Task.isCancelled,
+                  self.scheduleRevision == revision,
+                  let liveClientAfter = self.client(),
+                  !self.stopForSecureInput(liveClientAfter) else {
+                self.endOpenOpportunity(.supersededByTyping, ticket: requestTicket, deadlineMissed: true)
+                Self.chainLogger.info("chain-bailed reason=superseded")
+                return
+            }
             ServedConfiguration.adopt(result)
             Self.chainLogger.info(
                 "chain-prefetch hit=true readyBeforeConsume=\(wasAlreadyReady, privacy: .public)"
@@ -1008,7 +1186,8 @@ final class GhostInputController: IMKInputController {
                         text,
                         ticket: requestTicket,
                         revealNotBefore: .distantPast,
-                        provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier)
+                        provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier),
+                        isChainedFinal: true
                     )
                 } else {
                     self.endOpenOpportunity(.emptyOutput, ticket: requestTicket, receipt: receipt)
@@ -1561,11 +1740,13 @@ final class GhostInputController: IMKInputController {
             switch result.outcome {
             case .suggestion:
                 if let text = result.suggestion {
+                    let chained = await MainActor.run { self?.pendingChainedRevision == revision }
                     await self?.present(
                         separator + text,
                         ticket: requestTicket,
                         revealNotBefore: revealNotBefore,
-                        provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier)
+                        provenance: GhostProvenance(receipt: result, hostBundleIdentifier: bundleIdentifier),
+                        isChainedFinal: chained
                     )
                 } else {
                     await MainActor.run { self?.endOpenOpportunity(.emptyOutput, ticket: requestTicket, receipt: receipt) }
@@ -1602,7 +1783,8 @@ final class GhostInputController: IMKInputController {
         _ text: String,
         ticket requestTicket: InlineSuggestionTicket,
         revealNotBefore: Date = .distantPast,
-        provenance: GhostProvenance
+        provenance: GhostProvenance,
+        isChainedFinal: Bool = false
     ) {
         guard let liveClient = client() else { return }
         guard !stopForSecureInput(liveClient) else { return }
@@ -1628,7 +1810,13 @@ final class GhostInputController: IMKInputController {
             return
         }
         if Date() < revealNotBefore {
-            bufferReveal(text, ticket: requestTicket, until: revealNotBefore, provenance: provenance)
+            bufferReveal(
+                text,
+                ticket: requestTicket,
+                until: revealNotBefore,
+                provenance: provenance,
+                isChainedFinal: isChainedFinal
+            )
             return
         }
         if bufferedReveal?.ticket == requestTicket { bufferedReveal = nil }
@@ -1659,6 +1847,19 @@ final class GhostInputController: IMKInputController {
         if provenance.source != .dictionary, let receipt = provenance.receipt {
             GhostOutcomeLedger.noteReceipt(receipt)
         }
+        // When a chained ghost settles on screen, the writer already opted
+        // into Tab/`~` chaining and the helper slot is idle. Pre-warm the next
+        // chunk immediately so both 1-word Tab chains and `~` full-accept
+        // chains hit cache in 0/40 ms instead of waiting for inference.
+        if isChainedFinal, !state.visibleText.isEmpty {
+            prefetchChainedContinuationIfEligible(
+                bundleIdentifier: field.bundleIdentifier,
+                beforeAccept: currentContext,
+                accepted: "",
+                remainder: state.visibleText,
+                selectionLocation: requestTicket.selectionLocation
+            )
+        }
     }
 
     @MainActor
@@ -1666,21 +1867,29 @@ final class GhostInputController: IMKInputController {
         _ text: String,
         ticket: InlineSuggestionTicket,
         until deadline: Date,
-        provenance: GhostProvenance
+        provenance: GhostProvenance,
+        isChainedFinal: Bool = false
     ) {
         guard !text.isEmpty else { return }
+        var preservedChainedFinal = isChainedFinal
         if let bufferedReveal, bufferedReveal.ticket == ticket {
+            preservedChainedFinal = preservedChainedFinal || bufferedReveal.isChainedFinal
             // Before anything has rendered to marked text, a model suggestion
             // may replace an unshown dictionary guess cleanly; otherwise stay
-            // grow-only so partials never shrink on screen.
+            // grow-only so partials never shrink on screen. A terminal frame
+            // matching the buffered partial still upgrades its receipt and
+            // chained-final flag.
             let replacesUnshownDictionary = bufferedReveal.provenance.source == .dictionary
                 && provenance.source != .dictionary
-            if !replacesUnshownDictionary {
+            let upgradesTerminalReceipt = text == bufferedReveal.text
+                && provenance.source != .dictionary
+                && (isChainedFinal || provenance.receipt?.generatorMilliseconds != nil)
+            if !replacesUnshownDictionary, !upgradesTerminalReceipt {
                 guard text.count > bufferedReveal.text.count,
                       text.hasPrefix(bufferedReveal.text) else { return }
             }
         }
-        bufferedReveal = (text, ticket, provenance)
+        bufferedReveal = (text, ticket, provenance, preservedChainedFinal)
         revealTask?.cancel()
         let nanoseconds = UInt64(max(0, deadline.timeIntervalSinceNow) * 1_000_000_000)
         revealTask = Task { @MainActor [weak self] in
@@ -1690,7 +1899,12 @@ final class GhostInputController: IMKInputController {
                   let buffered = self.bufferedReveal,
                   buffered.ticket == ticket else { return }
             self.bufferedReveal = nil
-            self.present(buffered.text, ticket: buffered.ticket, provenance: buffered.provenance)
+            self.present(
+                buffered.text,
+                ticket: buffered.ticket,
+                provenance: buffered.provenance,
+                isChainedFinal: buffered.isChainedFinal
+            )
         }
     }
 
@@ -1711,7 +1925,12 @@ final class GhostInputController: IMKInputController {
     }
 
     private func cancelPendingWork(preservingSpeculativeChain: Bool = false) {
-        endOpenOpportunity(.supersededByTyping, deadlineMissed: true)
+        let bufferedReceipt = bufferedReveal?.provenance.receipt
+        endOpenOpportunity(
+            .supersededByTyping,
+            receipt: bufferedReceipt,
+            deadlineMissed: bufferedReceipt == nil
+        )
         scheduleRevision += 1
         pendingChainedRevision = nil
         revealTask?.cancel()
@@ -1725,7 +1944,8 @@ final class GhostInputController: IMKInputController {
     }
 
     private func cancelSpeculativeChain() {
-        speculativeChain?.task.cancel()
+        speculativeChain?.onPartial = nil
+        speculativeChain?.task?.cancel()
         speculativeChain = nil
     }
 

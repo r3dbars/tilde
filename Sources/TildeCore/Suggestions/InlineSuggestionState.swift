@@ -319,4 +319,27 @@ public struct SpeculativeChainKey: Equatable, Sendable {
         guard dropUTF16 < combinedNS.length else { return "" }
         return combinedNS.substring(from: dropUTF16)
     }
+
+    /// Result of checking a Chromium/Electron host's live field after a
+    /// chained accept while awaiting asynchronous `insertText` settlement.
+    public enum SettleVerdict: Equatable, Sendable {
+        /// Live field matches the projected post-accept context: ready to present.
+        case settled
+        /// Live field still reflects the pre-accept context: host has not committed `insertText` yet.
+        case stillSettling
+        /// Live field moved elsewhere: bail to a fresh chained request.
+        case drifted
+    }
+
+    public static func settleVerdict(
+        liveFingerprint: UInt64,
+        expectedFingerprint: UInt64,
+        preAcceptFingerprint: UInt64?
+    ) -> SettleVerdict {
+        if liveFingerprint == expectedFingerprint { return .settled }
+        if let preAcceptFingerprint, liveFingerprint == preAcceptFingerprint {
+            return .stillSettling
+        }
+        return .drifted
+    }
 }

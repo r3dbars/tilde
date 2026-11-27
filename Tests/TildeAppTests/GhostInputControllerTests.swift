@@ -116,6 +116,33 @@ struct GhostInputControllerTests {
             )
         )
     }
+
+    @Test("Cadence excludes auto-repeat and active accept-all while flagging boundary keys")
+    func cadenceHygieneRules() {
+        #expect(GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "a", keyCode: 0, modifiers: [], isGhostVisible: false
+        ))
+        #expect(!GhostInputController.shouldRecordCadence(
+            isRepeat: true, typedGrapheme: "a", keyCode: 0, modifiers: [], isGhostVisible: false
+        ))
+        // Pressing `~`/backtick to accept a visible ghost must not pollute typing strides.
+        #expect(!GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "`", keyCode: 50, modifiers: [], isGhostVisible: true
+        ))
+        #expect(!GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "~", keyCode: 50, modifiers: [.shift], isGhostVisible: true
+        ))
+        // When no ghost is visible, typing literal backtick/tilde still records normally.
+        #expect(GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "`", keyCode: 50, modifiers: [], isGhostVisible: false
+        ))
+        // Word and punctuation boundaries flag the following keystroke as an inter-word stride.
+        #expect(GhostInputController.startsCadenceBoundary(typedGrapheme: " "))
+        #expect(GhostInputController.startsCadenceBoundary(typedGrapheme: "."))
+        #expect(GhostInputController.startsCadenceBoundary(typedGrapheme: ","))
+        #expect(!GhostInputController.startsCadenceBoundary(typedGrapheme: "a"))
+        #expect(!GhostInputController.startsCadenceBoundary(typedGrapheme: nil))
+    }
 }
 
 /// Where a request may start, and what the flight recorder files it under.
