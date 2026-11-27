@@ -55,6 +55,9 @@ extension ResearchCoordinator {
         if let path = arguments.value("model-file") {
             configuration.modelPath = path.expandedResearchPath
         }
+        if let path = arguments.value("lora-file") {
+            configuration.loraPath = path.expandedResearchPath
+        }
         return try configuration.validated()
     }
 

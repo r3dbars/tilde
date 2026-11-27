@@ -99,7 +99,7 @@ public enum TildeProductProfile: String, Equatable, Sendable {
 
     public var generatedTokenBudget: Int {
         switch self {
-        case .production: 20
+        case .production: 28
         case .preview26B: 8
         case .preview9B: 12
         case .modelPreview: 8
@@ -140,6 +140,8 @@ public enum TildeProductProfile: String, Equatable, Sendable {
     public var factualGrounding: FactualGroundingPolicy.Mode { decisionPolicy.factualGrounding }
     public var sceneSuggestionOptions: SceneSuggestionPolicy.Options { decisionPolicy.sceneSuggestionOptions }
     public var includesWindowTitleInScene: Bool { decisionPolicy.includesWindowTitleInScene }
+    public var minimumFirstWordProbability: Double { decisionPolicy.minimumFirstWordProbability }
+    public var quietGate: SuggestionQuietGate.Configuration? { decisionPolicy.quietGate }
     public var chainsCompletionAfterAccept: Bool { interactionPolicy.chainsCompletionAfterAccept }
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays { interactionPolicy.calmRevealDelays }
     public var requestsAfterPunctuation: Bool { interactionPolicy.requestsAfterPunctuation }

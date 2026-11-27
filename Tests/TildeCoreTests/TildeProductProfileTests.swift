@@ -65,7 +65,7 @@ struct TildeProductProfileTests {
             #expect(preview.llamaServerPort != production.llamaServerPort)
             #expect(preview.personalHistoryKeychainService != production.personalHistoryKeychainService)
         }
-        #expect(production.generatedTokenBudget == 20)
+        #expect(production.generatedTokenBudget == 28)
         #expect(TildeProductProfile.preview26B.generatedTokenBudget == 8)
         #expect(TildeProductProfile.modelPreview.generatedTokenBudget == 8)
         #expect(TildeProductProfile.preview9B.generatedTokenBudget == 12)
@@ -90,9 +90,12 @@ struct TildeProductProfileTests {
         #expect(TildeModelChoice.resolve(persistedValue: nil) == .gemma4E2B)
         #expect(TildeModelChoice.resolve(persistedValue: "unknown") == .gemma4E2B)
         #expect(TildeModelChoice.resolve(
+            persistedValue: TildeModelChoice.qwen35B4B.rawValue
+        ) == .qwen35B4B)
+        #expect(TildeModelChoice.resolve(
             persistedValue: TildeModelChoice.qwen35B9B.rawValue
         ) == .qwen35B9B)
-        #expect(TildeModelChoice.allCases == [.gemma4E2B, .qwen35B9B])
+        #expect(TildeModelChoice.allCases == [.gemma4E2B, .qwen35B4B, .qwen35B9B])
         #expect(TildeModelChoice.allCases.allSatisfy {
             !$0.displayName.isEmpty && !$0.approximateSize.isEmpty && !$0.resourceGuidance.isEmpty
         })

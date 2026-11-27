@@ -41,15 +41,26 @@ struct ProfileDisplayFilterTests {
         #"data: {"stop":true,"tokens_predicted":3,"stopped_eos":true}"#,
     ]
 
-    @Test("Shipping profiles still reject a short scene echo at the 10-character floor")
-    func shippingProfilesKeepTheNarrowEchoFloor() async throws {
+    private static let longEchoFrames = [
+        #"data: {"content":" the deck is ready for review"}"#,
+        #"data: {"stop":true,"tokens_predicted":6,"stopped_eos":true}"#,
+    ]
+
+    @Test("Shipping profiles use the 24-character echo floor: short overlaps pass, long echoes reject")
+    func shippingProfilesUseWiderEchoFloor() async throws {
         for profile in [TildeProductProfile.production, .preview26B, .modelPreview] {
-            let suggestion = try await engine(profile, Self.echoFrames).suggestion(
+            let shortSuggestion = try await engine(profile, Self.echoFrames).suggestion(
                 textBeforeCursor: "I think ",
                 appBundleIdentifier: "com.apple.TextEdit",
                 scene: Self.scene
             )
-            #expect(suggestion == nil, "\(profile.rawValue) must keep rejecting this echo")
+            #expect(shortSuggestion?.visibleText.isEmpty == false, "\(profile.rawValue) should allow short grounded overlaps")
+            let longSuggestion = try await engine(profile, Self.longEchoFrames).suggestion(
+                textBeforeCursor: "I think ",
+                appBundleIdentifier: "com.apple.TextEdit",
+                scene: Self.scene
+            )
+            #expect(longSuggestion == nil, "\(profile.rawValue) must still reject long verbatim scene echoes")
         }
     }
 

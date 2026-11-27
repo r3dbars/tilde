@@ -54,7 +54,7 @@ enum HeldBackReason: String, CaseIterable, Sendable {
              .nonActionableScene, .completeSentenceScene, .multipleQuestionsScene,
              .ambiguousReferenceScene, .unsafeCharacter, .promptLeak,
              .prefixReplay, .contextReplay, .selfRepetition, .sceneEcho,
-             .unsupportedFact:
+             .unsupportedFact, .lowConfidence:
             self = .filtersNotConfident
         }
     }

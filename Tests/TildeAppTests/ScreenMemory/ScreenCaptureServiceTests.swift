@@ -122,6 +122,35 @@ struct ScreenCaptureServiceTests {
         #expect(await service.noteTypingPaused(sessionIdentifier: focused) == nil)
     }
 
+    @Test("Typing pauses pin a fresh matching scene to avoid mid-sentence KV cache wipes")
+    func typingPausePinsFreshMatchingScene() async {
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let slack = "com.tinyspeck.slackmacgap"
+        let session = UUID().uuidString
+        let service = ScreenCaptureService(
+            enabled: { true },
+            excludedApps: { [] },
+            permissionGranted: { false },
+            screenLocked: { false },
+            secureInputActive: { false },
+            recognizeText: { _ in [] },
+            now: { t0 },
+            diagnostics: { _, _ in }
+        )
+        let target = TypingTargetIdentity(
+            bundleIdentifier: slack,
+            processIdentifier: 99,
+            windowIdentifier: 42,
+            fieldSessionIdentifier: session,
+            generation: 0
+        )
+        #expect(await service.noteTextFieldFocused(sessionIdentifier: session, target: target) == .permissionNotGranted)
+        // Without a completed refresh, typingPaused still attempts capture.
+        #expect(await service.noteTypingPaused(sessionIdentifier: session, target: target) == .permissionNotGranted)
+        // After a content reset, the target generation advances so an older snapshot cannot pin it.
+        #expect(await service.noteContentReset(sessionIdentifier: session, target: target) == .permissionNotGranted)
+    }
+
     @Test("enabled is read fresh on every trigger, not cached at init")
     func enabledProviderIsReadLive() async {
         let flag = LockedFlag(true)

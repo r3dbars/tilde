@@ -5,7 +5,7 @@ import Foundation
 /// model's duplicate leading space from its response.
 /// Writing register inferred from the host app — the scaffold's examples teach
 /// the model the room's voice (casual chat vs email vs flowing prose).
-public enum ContinuationRegister: String, Sendable {
+public enum ContinuationRegister: String, Codable, Sendable {
     case chat
     case email
     case prose
@@ -49,7 +49,7 @@ public enum ContinuationRegister: String, Sendable {
     /// removed by owner decision 2026-08-18: stacked with other shortening
     /// they read as one-word ghosts, and the register scaffolds already set
     /// the voice.
-    public var generatedTokenBudget: Int { 20 }
+    public var generatedTokenBudget: Int { 28 }
 }
 
 public struct RawContinuationPrompt: Equatable, Sendable {
@@ -292,6 +292,37 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         return String(text.dropFirst(start))
     }
 
+    /// Builds the exact byte-identical prefix (`scaffold + sceneBlock`) that
+    /// `init(textBeforeCursor:register:scene:...)` produces for the opening
+    /// 1...`sceneBudgetQuantum` characters of a new reply or document. Used by
+    /// `ScaffoldPrewarmer` to warm the helper's KV cache on window/thread focus
+    /// so the writer's first keystroke hits warm KV instead of cold prefill.
+    public static func prewarmPrefix(
+        register: ContinuationRegister,
+        scene: ScreenScene.Scene?,
+        maxContextCharacters: Int = 3000,
+        includesWindowTitle: Bool = false,
+        customScaffold: String? = nil
+    ) -> String {
+        let base = customScaffold ?? scaffold(for: register)
+        guard let scene else { return base }
+        let totalBudget = max(80, maxContextCharacters)
+        // Use `totalBudget - 1` so `stableSceneBudget` lands on the exact same
+        // quantum (2,750 for a 3,000 budget) that every 1...250-char live
+        // request uses; using `totalBudget` (3,000) would land one quantum
+        // higher and miss the cache on long scenes.
+        let remainingForScene = max(0, totalBudget - 1)
+        let sceneBudget = min(
+            maxSceneContextCharacters,
+            stableSceneBudget(remainingForScene)
+        )
+        return base + sceneContextBlock(
+            for: scene,
+            budget: sceneBudget,
+            includesWindowTitle: includesWindowTitle
+        )
+    }
+
     /// `register` selects the scaffold voice from the host app's identity.
     /// `scene` is Screen Memory's classified on-screen context (Phase 2 PR
     /// 2a) — `nil` (no capture, capture disabled/no-permission, or stale)
@@ -308,7 +339,8 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         register: ContinuationRegister = .prose,
         scene: ScreenScene.Scene? = nil,
         maxContextCharacters: Int = 3000,
-        includesWindowTitle: Bool = false
+        includesWindowTitle: Bool = false,
+        customScaffold: String? = nil
     ) {
         let totalBudget = max(80, maxContextCharacters)
         let fullTail = String(textBeforeCursor.suffix(totalBudget))
@@ -356,7 +388,7 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         // Mid-word: the finished words go on the `Text:` line and the
         // unfinished one seeds `Continuation:`, so the model is completing a
         // word rather than opening one. See `partialWordToComplete`.
-        let body = Self.scaffold(for: register) + sceneBlock
+        let body = (customScaffold ?? Self.scaffold(for: register)) + sceneBlock
         if partial.isEmpty {
             prompt = body + "Text: " + trimmed + "\nContinuation:"
         } else {
@@ -420,8 +452,12 @@ public struct RawContinuationPrompt: Equatable, Sendable {
         return encoded
     }
 
+    private static func conversationLine(speaker: ScreenScene.Speaker, scrubbedText: String) -> String {
+        "{\"speaker\":\"\(speakerValue(speaker))\",\"text\":\(jsonString(scrubbedText))}"
+    }
+
     private static func conversationLine(_ turn: ScreenScene.ConversationTurn) -> String {
-        "{\"speaker\":\"\(speakerValue(turn.speaker))\",\"text\":\(jsonString(scrubbedForPrompt(turn.text)))}"
+        conversationLine(speaker: turn.speaker, scrubbedText: scrubbedForPrompt(turn.text))
     }
 
     /// Spend a reply block from the newest incoming turn outward, then emit
@@ -490,12 +526,13 @@ public struct RawContinuationPrompt: Equatable, Sendable {
     ) -> String? {
         let text = scrubbedForPrompt(turn.text)
         for count in stride(from: min(text.count, budget), through: 1, by: -1) {
-            let shortened = ScreenScene.ConversationTurn(
-                speaker: turn.speaker,
-                text: String(text.suffix(count))
-            )
-            let line = conversationLine(shortened)
-            if line.count <= budget { return line }
+            let suffix = String(text.suffix(count))
+            let candidate = conversationLine(speaker: turn.speaker, scrubbedText: suffix)
+            guard candidate.count <= budget else { continue }
+            // Re-scrub the final clipped suffix once so a cut boundary cannot
+            // expose a secret (e.g. an SSN whose leading digit was clipped).
+            let rescrubbed = conversationLine(speaker: turn.speaker, scrubbedText: scrubbedForPrompt(suffix))
+            if rescrubbed.count <= budget { return rescrubbed }
         }
         return nil
     }

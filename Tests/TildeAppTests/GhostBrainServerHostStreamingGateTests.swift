@@ -205,6 +205,44 @@ struct GhostBrainServerHostStreamingGateTests {
         #expect(!sink.didStream)
     }
 
+    @Test("Concurrent permission hold buffers partials until allowed and fails closed on denial")
+    func permissionHoldGatesStreaming() {
+        let writer = Writer()
+        let sink = GhostBrainServerHost.PartialResponseSink(
+            enabled: true,
+            holdingForPersonal: false,
+            holdingForPermission: true,
+            register: .prose,
+            holdDeadlineNanoseconds: 60_000_000_000,
+            targetIsCurrent: { true },
+            write: writer.write
+        )
+
+        sink.send(CompletionSuggestion(text: "sounds good "))
+        #expect(writer.written.isEmpty)
+        #expect(!sink.didStream)
+
+        sink.resolvePermission(true)
+        #expect(writer.written == ["sounds good"])
+        #expect(sink.didStream)
+
+        let deniedWriter = Writer()
+        let deniedSink = GhostBrainServerHost.PartialResponseSink(
+            enabled: true,
+            holdingForPersonal: false,
+            holdingForPermission: true,
+            register: .prose,
+            holdDeadlineNanoseconds: 60_000_000_000,
+            targetIsCurrent: { true },
+            write: deniedWriter.write
+        )
+        deniedSink.send(CompletionSuggestion(text: "should not appear "))
+        deniedSink.resolvePermission(false)
+        deniedSink.send(CompletionSuggestion(text: "still hidden "))
+        #expect(deniedWriter.written.isEmpty)
+        #expect(!deniedSink.didStream)
+    }
+
     private final class Counter: @unchecked Sendable {
         private let lock = NSLock()
         private var count = 0

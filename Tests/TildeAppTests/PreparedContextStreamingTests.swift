@@ -101,7 +101,7 @@ struct PreparedContextStreamingTests {
         #expect(result.reason == .unsupportedFact)
     }
 
-    @Test("A scene echo is withheld at the partial and at the final")
+    @Test("A scene echo is withheld once the 24-character floor is crossed and at the final")
     func sceneEchoIsWithheldAcrossPartials() async throws {
         let result = try await run(
             profile: .production,
@@ -109,7 +109,7 @@ struct PreparedContextStreamingTests {
             context: "I think ",
             scene: Self.scene
         )
-        #expect(result.partials == ["the"])
+        #expect(!result.partials.contains("the deck is ready for review"))
         #expect(result.final == nil)
         #expect(result.reason == .sceneEcho)
     }

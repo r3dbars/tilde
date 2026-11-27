@@ -24,19 +24,29 @@ struct SuggestionRevealDelayPolicyTests {
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: "a",
             calmMarkedText: false
-        ) == 10_000_000)
+        ) == 60_000_000)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: " ",
             calmMarkedText: false
-        ) == 50_000_000)
+        ) == 45_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(
+            afterUserTyped: " ",
+            calmMarkedText: false,
+            chained: true
+        ) == 0)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: "a",
+            calmMarkedText: true
+        ) == 110_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(
+            afterUserTyped: " ",
             calmMarkedText: true
         ) == 120_000_000)
         #expect(SuggestionRevealDelayPolicy.nanoseconds(
             afterUserTyped: " ",
-            calmMarkedText: true
-        ) == 200_000_000)
+            calmMarkedText: true,
+            chained: true
+        ) == 40_000_000)
     }
 
     @Test("Chromium and Electron start inference immediately and delay only reveal")
@@ -46,17 +56,18 @@ struct SuggestionRevealDelayPolicyTests {
             calmMarkedText: true
         )
         #expect(timing.inferenceDelayNanoseconds == 0)
-        #expect(timing.revealDelayNanoseconds == 200_000_000)
+        #expect(timing.revealDelayNanoseconds == 120_000_000)
     }
 
-    @Test("The preview calm pair is shorter on both edges and leaves native timing alone")
+    @Test("The preview calm pair stays distinct and keeps chained fast")
     func previewCalmDelays() {
         let preview = SuggestionRevealDelayPolicy.CalmDelays.preview
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, calm: preview) == 120_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: "a", calmMarkedText: true, calm: preview) == 80_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, chained: true, calm: preview) == 80_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: false, calm: preview) == 50_000_000)
-        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true) == 200_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, calm: preview) == 100_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: "a", calmMarkedText: true, calm: preview) == 90_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true, chained: true, calm: preview) == 40_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: false, calm: preview) == 45_000_000)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: false, chained: true, calm: preview) == 0)
+        #expect(SuggestionRevealDelayPolicy.nanoseconds(afterUserTyped: " ", calmMarkedText: true) == 120_000_000)
     }
 
     @Test("Punctuation is a request boundary only when allowed")
@@ -68,5 +79,15 @@ struct SuggestionRevealDelayPolicyTests {
         #expect(!RawContinuationPrompt.endsAtRequestBoundary("(note)", allowingPunctuation: true))
         #expect(!RawContinuationPrompt.endsAtRequestBoundary("word", allowingPunctuation: true))
         #expect(!RawContinuationPrompt.endsAtRequestBoundary("", allowingPunctuation: true))
+    }
+
+    @Test("Adaptive calm chain settle starts at the 40 ms chained floor and stays bounded")
+    func adaptiveCalmChainSettleBounds() {
+        let intervals = SuggestionRevealDelayPolicy.calmChainSettleIntervalsNanoseconds
+        #expect(!intervals.isEmpty)
+        #expect(intervals.first == SuggestionRevealDelayPolicy.CalmDelays.production.chainedNanoseconds)
+        let total = intervals.reduce(0, +)
+        #expect(total >= 100_000_000)
+        #expect(total <= 150_000_000)
     }
 }

@@ -31,16 +31,22 @@ struct SceneEchoPolicyTests {
         #expect(!SceneEchoPolicy.isEcho("are you still coming or should I go", scene: nil))
     }
 
-    @Test("Shipping profiles keep the 3-word / 10-character floor exactly")
-    func shippingProfilesUnchanged() {
+    @Test("Shipping profiles use the 3-word / 24-character echo floor")
+    func shippingProfilesUseTunedFloor() {
         for profile in [TildeProductProfile.production, .preview26B, .modelPreview] {
             #expect(profile.sceneEchoMinimumWords == 3)
-            #expect(profile.sceneEchoMinimumCharacters == 10)
-            // The same three candidates the shipped floor has always judged.
-            #expect(SceneEchoPolicy.isEcho("should I go without you", scene: scene, profile: profile))
-            #expect(SceneEchoPolicy.isEcho("Are you still coming?", scene: scene, profile: profile))
+            #expect(profile.sceneEchoMinimumCharacters == 24)
+            // Short grounded overlaps under 24 chars are allowed through.
+            #expect(!SceneEchoPolicy.isEcho("should I go without you", scene: scene, profile: profile))
+            #expect(!SceneEchoPolicy.isEcho("Are you still coming?", scene: scene, profile: profile))
+            // Real long verbatim echoes (>= 24 chars) are still caught.
             #expect(SceneEchoPolicy.isEcho(
                 "shows a $200 discrepancy versus",
+                scene: scene,
+                profile: profile
+            ))
+            #expect(SceneEchoPolicy.isEcho(
+                "are you still coming or should I go without you",
                 scene: scene,
                 profile: profile
             ))

@@ -100,7 +100,11 @@ struct ReplayEvalCommand {
             // the one JSON line on stdout" — never contaminate the shared
             // operational diagnostics log with synthetic timing/rejection
             // entries from a replay run.
-            LlamaCompletionEngine(baseURL: $0, diagnostics: .disabled)
+            LlamaCompletionEngine(
+                baseURL: $0,
+                apiKey: LlamaServerProcessHost.readRuntimeAPIKey(),
+                diagnostics: .disabled
+            )
         }
     ) {
         self.settings = settings

@@ -126,6 +126,19 @@ public enum SceneSuggestionPolicy {
         return words.isDisjoint(with: requestWords)
     }
 
+    /// Returns whether the writer has typed a reply cue or started a reply in
+    /// the current sentence/paragraph. Pure text-free boolean signal shared
+    /// with `SuggestionQuietGate`.
+    public static func hasStartedReplyCue(
+        _ text: String,
+        anchoredToCurrentSentence: Bool = true
+    ) -> Bool {
+        writerHasStartedReply(
+            text,
+            options: Options(replyCueAnchoredToCurrentSentence: anchoredToCurrentSentence)
+        )
+    }
+
     private static func hasReplyCue(_ text: String) -> Bool {
         let phrase = normalizedWords(text).joined(separator: " ")
         return replyPrefixes.contains { phrase == $0 || phrase.hasPrefix($0 + " ") }

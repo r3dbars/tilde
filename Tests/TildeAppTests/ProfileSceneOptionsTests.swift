@@ -6,14 +6,15 @@ import Testing
 /// profile keeps the measured production prompt and gate byte for byte.
 @Suite("Profile scene options")
 struct ProfileSceneOptionsTests {
-    @Test("Production and the other previews keep the measured gate and prompt")
+    @Test("Production and non-9B profiles enable anchored reply cues, chaining, punctuation boundaries, and 50/30ms calm delays")
     func productionIsUnchanged() {
         for profile in [TildeProductProfile.production, .preview26B, .modelPreview] {
-            #expect(profile.sceneSuggestionOptions == .production)
-            #expect(!profile.includesWindowTitleInScene)
-            #expect(!profile.chainsCompletionAfterAccept)
+            #expect(profile.sceneSuggestionOptions.replyCueAnchoredToCurrentSentence)
+            #expect(!profile.sceneSuggestionOptions.extendedOrdinarySilenceGate)
+            #expect(profile.includesWindowTitleInScene)
+            #expect(profile.chainsCompletionAfterAccept)
             #expect(profile.calmRevealDelays == .production)
-            #expect(!profile.requestsAfterPunctuation)
+            #expect(profile.requestsAfterPunctuation)
         }
     }
 

@@ -221,7 +221,30 @@ struct CompletionOutputCleanerTests {
 
         #expect(reason("know you are ready", after: earlier) == .replaysContext)
         #expect(reason("Intelligence of a person can vary", after: current) == .replaysContext)
+        // A single filler word followed immediately by a 4-gram replay still rejects.
+        #expect(reason("sure, I know you are ready", after: earlier) == .replaysContext)
+        // A clean 4-word suggestion after 3+ typed words never crashes or false-triggers inner-4.
+        #expect(clean("ship the patch today", after: current)?.visibleText == " ship the patch today")
         #expect(clean("the way they connect ideas", after: current)?.visibleText == " the way they connect ideas")
+    }
+
+    @Test("Trims inner-4 tail context replay after a clean 2+ word opening instead of discarding the whole suggestion")
+    func trimsTailContextReplayAfterCleanOpening() {
+        let context = "We should finalize the rollout checklist before Friday and then "
+        let outcome = cleaner.clean(
+            "send out updates, finalize the rollout checklist before Friday",
+            after: context
+        )
+        #expect(outcome.result.suggestion?.visibleText == "send out updates")
+        #expect(outcome.visibleTextIsSettled)
+
+        // A tail loop beyond the 8-word visible cap must never reject a clean 8-word opening.
+        let pastCap = cleaner.clean(
+            "share the release summary with everyone right away finalize the rollout checklist before Friday",
+            after: context
+        )
+        #expect(pastCap.result.suggestion?.visibleText == "share the release summary with everyone right away")
+        #expect(pastCap.visibleTextIsSettled)
     }
 
     @Test("Allows ordinary prose instead of judging style")

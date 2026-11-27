@@ -24,6 +24,14 @@ public enum LabRiskCoverageError: Error, LocalizedError, Equatable, Sendable {
     }
 }
 
+/// Selects which post-generation gate parameter `LabRiskCoverageAnalyzer` sweeps
+/// across cached synthetic candidates.
+public enum LabRiskCoverageGateMode: Equatable, Sendable {
+    case meanTokenProbability
+    case firstWordProbability
+    case quietGate(SuggestionQuietGate.Configuration)
+}
+
 /// Re-scores synthetic raw candidates already in the explicit local cache.
 /// Raw prompt/candidate text remains inside this call and is never represented
 /// in the returned aggregate artifact.
@@ -35,7 +43,8 @@ public enum LabRiskCoverageAnalyzer {
         runtime: LabRuntimeConfiguration,
         cache: LabSyntheticCandidateCache,
         trustLimit: Double = 0.01,
-        thresholds: [Double] = stride(from: 0.0, through: 1.0, by: 0.025).map { $0 }
+        thresholds: [Double] = stride(from: 0.0, through: 1.0, by: 0.025).map { $0 },
+        gateMode: LabRiskCoverageGateMode = .meanTokenProbability
     ) async throws -> LabRiskCoverageReport {
         guard !thresholds.isEmpty,
               Set(thresholds).count == thresholds.count,
@@ -111,7 +120,7 @@ public enum LabRiskCoverageAnalyzer {
                     var generation = report.arm.generation
                     generation.seed = seed
                     let key = try LabCandidateCacheKey(
-                        modelSHA256: report.assets.modelSHA256,
+                        modelSHA256: report.assets.effectiveModelDigestSHA256,
                         helperSHA256: report.assets.helperSHA256,
                         prompt: prepared.prompt,
                         generation: generation,
@@ -138,7 +147,20 @@ public enum LabRiskCoverageAnalyzer {
         let orderedThresholds = thresholds.sorted()
         let evaluated = orderedThresholds.map { threshold -> ThresholdEvaluation in
             var arm = report.arm
-            arm.generation.minimumMeanTokenProbability = threshold
+            switch gateMode {
+            case .meanTokenProbability:
+                arm.generation.minimumMeanTokenProbability = threshold
+            case .firstWordProbability:
+                arm.generation.minimumMeanTokenProbability = 0
+                arm.judgment.quietGate = nil
+                arm.judgment.minimumFirstWordProbability = threshold
+            case .quietGate(var gate):
+                arm.generation.minimumMeanTokenProbability = 0
+                arm.judgment.minimumFirstWordProbability = 0
+                gate.enabled = true
+                gate.threshold = threshold
+                arm.judgment.quietGate = gate
+            }
             let cases = observations.map { observation in
                 score(observation, arm: arm)
             }
@@ -207,7 +229,8 @@ public enum LabRiskCoverageAnalyzer {
             preparedPrompt: prepared,
             scenario: observation.scenario,
             configuration: arm,
-            meanTokenProbability: response.meanTokenProbability
+            meanTokenProbability: response.meanTokenProbability,
+            streamedTokens: response.streamedTokens
         )
         return LabScorer.score(
             scenario: observation.scenario,

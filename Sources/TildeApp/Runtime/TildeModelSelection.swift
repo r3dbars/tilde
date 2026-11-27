@@ -28,6 +28,7 @@ enum TildeModelSelection {
     ) -> ModelDescriptor {
         switch productionChoice {
         case .gemma4E2B: .gemma4E2BQ4KM
+        case .qwen35B4B: .qwen35B4BQ4KM
         case .qwen35B9B: .qwen35B9BQ4KM
         case nil: PreviewModelSelection.descriptor(for: profile, defaults: previewDefaults)
         }

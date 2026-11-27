@@ -189,6 +189,60 @@ struct OrderedAsyncTaskTail: Sendable {
     }
 }
 
+private final class PersonalVoiceScaffoldState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scaffolds: PersonalVoiceScaffoldSet = .empty
+    private var biasTerms: [WeightedBiasTerm] = []
+    private var phraseExpert = PersonalPhraseExpert()
+    private var onUpdatedHandler: (@Sendable () -> Void)?
+
+    func setUpdatedHandler(_ handler: (@Sendable () -> Void)?) {
+        lock.withLock { onUpdatedHandler = handler }
+    }
+
+    func snapshot() -> PersonalVoiceScaffoldSet {
+        lock.withLock { scaffolds }
+    }
+
+    func biasSnapshot() -> [WeightedBiasTerm] {
+        lock.withLock { biasTerms }
+    }
+
+    func phraseExpertSnapshot() -> PersonalPhraseExpert {
+        lock.withLock { phraseExpert }
+    }
+
+    func update(
+        _ next: PersonalVoiceScaffoldSet,
+        biasTerms nextBiasTerms: [WeightedBiasTerm],
+        phraseExpert nextPhraseExpert: PersonalPhraseExpert
+    ) {
+        let handler: (@Sendable () -> Void)? = lock.withLock {
+            scaffolds = next
+            biasTerms = nextBiasTerms
+            phraseExpert = nextPhraseExpert
+            return onUpdatedHandler
+        }
+        handler?()
+    }
+
+    func updatePhraseExpert(_ nextPhraseExpert: PersonalPhraseExpert) {
+        lock.withLock { phraseExpert = nextPhraseExpert }
+    }
+
+    func updateBiasTerms(_ nextBiasTerms: [WeightedBiasTerm]) {
+        lock.withLock { biasTerms = nextBiasTerms }
+    }
+
+    func clear() {
+        lock.withLock {
+            scaffolds = .empty
+            biasTerms = []
+            phraseExpert = PersonalPhraseExpert()
+        }
+    }
+}
+
 final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Sendable {
     /// How often the trained table is written back. It is a whole-file
     /// record — hundreds of kilobytes on a well-trained model — so writing
@@ -203,6 +257,23 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
     private let operations: PersistenceOperations
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
+    private let voiceScaffoldState = PersonalVoiceScaffoldState()
+    private let invalidationLock = NSLock()
+    private var onCachesInvalidatedHandler: (@Sendable () -> Void)?
+
+    func setCachesInvalidatedHandler(_ handler: (@Sendable () -> Void)?) {
+        invalidationLock.withLock { onCachesInvalidatedHandler = handler }
+    }
+
+    func setVoiceScaffoldUpdatedHandler(_ handler: (@Sendable () -> Void)?) {
+        voiceScaffoldState.setUpdatedHandler(handler)
+    }
+
+    private func notifyCachesInvalidated() {
+        voiceScaffoldState.clear()
+        let handler = invalidationLock.withLock { onCachesInvalidatedHandler }
+        handler?()
+    }
 
     init(
         store: any PersonalHistoryStore = EncryptedPersonalHistoryStore(),
@@ -234,6 +305,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             historyIdentifier: historyIdentifier,
             configurationState: initialConfiguration,
             storageHealthState: storageHealthState,
+            voiceScaffoldState: voiceScaffoldState,
             diagnostics: diagnostics,
             modelPersistenceInterval: modelPersistenceInterval
         )
@@ -252,6 +324,9 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             )
             settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
             settings.personalHistoryEnabled = newValue
+            if !newValue {
+                notifyCachesInvalidated()
+            }
             scheduleConfiguration(configuration)
         }
     }
@@ -268,6 +343,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
             settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
             settings.personalNextWordExperimentIdentifier = configuration.experimentIdentifier
             settings.personalHistoryExcludedApps = normalized
+            notifyCachesInvalidated()
             scheduleConfiguration(configuration)
         }
     }
@@ -312,6 +388,70 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         return await operations.predictNextWord(afterTailWords: tailWords, configuration: configuration)
     }
 
+    /// Non-blocking (<1 µs) personal vocabulary bias terms for decode-time
+    /// Word Nudge (`logit_bias`). Reads from the lock-guarded snapshot so it
+    /// can never stall behind `PersistenceOperations` replay or model saves,
+    /// and strictly enforces master toggle and per-app exclusions.
+    func personalBiasTerms(
+        afterTailWords _: [String],
+        appBundleIdentifier: String?
+    ) -> [WeightedBiasTerm] {
+        let configuration = configurationState.snapshot()
+        guard configuration.enabled,
+              let appBundleIdentifier, PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
+              !DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        else { return [] }
+        return voiceScaffoldState.biasSnapshot()
+    }
+
+    /// Non-blocking (<1 µs) lookup for the cached fact-free Personal-Voice
+    /// scaffold for `register`. Fails closed when Personal History is off,
+    /// `appBundleIdentifier` is nil/invalid/excluded, or fewer than 3 clean
+    /// fact-free examples exist.
+    func personalVoiceScaffold(
+        for register: ContinuationRegister,
+        appBundleIdentifier: String?
+    ) -> String? {
+        let configuration = configurationState.snapshot()
+        guard configuration.enabled,
+              let appBundleIdentifier,
+              PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
+              !DefaultExcludedApps.isExcluded(appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        else { return nil }
+        return voiceScaffoldState.snapshot().scaffold(for: register)
+    }
+
+    /// Non-blocking (<1 ms) chronological 2–4 gram personal phrase lookup for
+    /// `SuggestionQuietGate` agreement scoring. Reads an immutable CoW snapshot
+    /// under lock so it never stalls behind actor replay or encrypted disk I/O,
+    /// and strictly enforces the master toggle, per-app exclusions, and
+    /// word-boundary guard.
+    func personalPhraseMatch(
+        textBeforeCursor: String,
+        register: ContinuationRegister,
+        appBundleIdentifier: String?,
+        referenceTimestampMilliseconds: Int64? = nil
+    ) -> PersonalPhraseMatch? {
+        let configuration = configurationState.snapshot()
+        guard configuration.enabled,
+              let appBundleIdentifier,
+              PersonalHistoryEvent.validBundleIdentifier(appBundleIdentifier),
+              !DefaultExcludedApps.isExcluded(
+                  appBundleIdentifier,
+                  configuredExcludedApps: configuration.excludedApps
+              ),
+              RawContinuationPrompt.endsAtWordBoundary(textBeforeCursor)
+        else { return nil }
+        let expert = voiceScaffoldState.phraseExpertSnapshot()
+        guard !expert.isEmpty else { return nil }
+        let nowMs = referenceTimestampMilliseconds ?? Int64(Date().timeIntervalSince1970 * 1_000)
+        return expert.query(
+            textBeforeCursor: textBeforeCursor,
+            register: register,
+            referenceTimestampMilliseconds: nowMs
+        )
+    }
+
     func nextWordStatus() async -> PersonalNextWordShadowStatus {
         let configuration = configurationState.snapshot()
         let status = await operations.nextWordStatus(configuration: configuration)
@@ -341,6 +481,7 @@ final class PersonalHistoryController: PersonalHistoryIngesting, @unchecked Send
         settings.personalHistoryConsentIdentifier = configuration.consentIdentifier
         settings.personalNextWordExperimentIdentifier = configuration.experimentIdentifier
         settings.personalHistoryEnabled = false
+        notifyCachesInvalidated()
         let nextIdentifier = UUID().uuidString
         settings.personalHistoryIdentifier = nextIdentifier
         try await operations.deleteAll(
@@ -361,10 +502,12 @@ private actor PersistenceOperations {
     private let store: any PersonalHistoryStore
     private let configurationState: PersonalHistoryConfigurationState
     private let storageHealthState: PersonalHistoryStorageHealthState
+    private let voiceScaffoldState: PersonalVoiceScaffoldState
     private let diagnostics: DiagnosticsLog
     private let modelPersistenceInterval: TimeInterval
     private var historyIdentifier: String
     private var nextWord = PersonalNextWordShadow()
+    private var phraseExpert = PersonalPhraseExpert()
     private var nextWordPhase: PersonalNextWordShadowPhase = .inactive
     private var configurationRevision = 0
     private var replayBacklog: [PersonalHistoryEvent] = []
@@ -383,6 +526,7 @@ private actor PersistenceOperations {
         historyIdentifier: String,
         configurationState: PersonalHistoryConfigurationState,
         storageHealthState: PersonalHistoryStorageHealthState,
+        voiceScaffoldState: PersonalVoiceScaffoldState,
         diagnostics: DiagnosticsLog,
         modelPersistenceInterval: TimeInterval
     ) {
@@ -390,6 +534,7 @@ private actor PersistenceOperations {
         self.historyIdentifier = historyIdentifier
         self.configurationState = configurationState
         self.storageHealthState = storageHealthState
+        self.voiceScaffoldState = voiceScaffoldState
         self.diagnostics = diagnostics
         self.modelPersistenceInterval = modelPersistenceInterval
     }
@@ -473,6 +618,8 @@ private actor PersistenceOperations {
                 // was in flight. Warm from the durable batch without scoring it.
                 nextWord.consume(allowed, scoring: false)
             }
+            phraseExpert.consume(allowed)
+            voiceScaffoldState.updatePhraseExpert(phraseExpert)
             await persistTrainedModelIfDue(configuration: configuration)
         case .inactive:
             break
@@ -505,7 +652,8 @@ private actor PersistenceOperations {
             experimentIdentifier: configuration.experimentIdentifier,
             excludedApps: configuration.excludedApps,
             coveredThroughSequence: coverage,
-            model: nextWord.trainedModel
+            model: nextWord.trainedModel,
+            phraseExpert: phraseExpert.snapshot
         )
         let store = store
         let save = storageOperations.enqueue { try await store.saveTrainedModel(stored) }
@@ -537,6 +685,8 @@ private actor PersistenceOperations {
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
         nextWord.reset()
+        phraseExpert.reset()
+        voiceScaffoldState.clear()
         nextWordPhase = configuration.enabled ? .loading : .inactive
         guard configuration.enabled else { return }
 
@@ -592,12 +742,36 @@ private actor PersistenceOperations {
         rebuilt.consume(replayBacklog, scoring: false)
         guard configurationRevision == configuration.revision,
               configurationState.snapshot() == configuration else { return }
+        let allAllowedEvents = replay.events.filter {
+            $0.historyIdentifier == historyIdentifier
+                && !DefaultExcludedApps.isExcluded($0.appBundleIdentifier, configuredExcludedApps: configuration.excludedApps)
+        }
+        var rebuiltPhraseExpert = PersonalPhraseExpert()
+        if let coverage,
+           let storedPhrase = storedModel?.phraseExpert,
+           rebuiltPhraseExpert.restore(storedPhrase) {
+            rebuiltPhraseExpert.consume(events)
+            rebuiltPhraseExpert.consume(replayBacklog)
+        } else {
+            // Pre-upgrade model.v1.enc without a persisted phrase expert (or
+            // fresh replay): safely rebuild from allowed history without
+            // wiping old records.
+            rebuiltPhraseExpert.consume(allAllowedEvents)
+            rebuiltPhraseExpert.consume(replayBacklog)
+        }
         replayBacklog.removeAll(keepingCapacity: true)
         lastAppendedSequence = max(
             lastAppendedSequence,
             replay.records.map(\.sequence).max() ?? 0
         )
+        let biasTerms = rebuilt.topBiasTerms(afterTailWords: [])
+        voiceScaffoldState.update(
+            PersonalVoiceScaffoldBuilder.build(from: allAllowedEvents),
+            biasTerms: biasTerms,
+            phraseExpert: rebuiltPhraseExpert
+        )
         nextWord = rebuilt
+        phraseExpert = rebuiltPhraseExpert
         nextWordPhase = .ready
     }
 
@@ -610,6 +784,8 @@ private actor PersistenceOperations {
         storageHealthState.recordFailure(error, duringReplay: true)
         replayBacklog.removeAll(keepingCapacity: true)
         nextWord.reset()
+        phraseExpert.reset()
+        voiceScaffoldState.clear()
         nextWordPhase = .unavailable
     }
 
@@ -624,6 +800,14 @@ private actor PersistenceOperations {
     ) -> PersonalNextWordPrediction? {
         guard configuration.revision == configurationRevision, nextWordPhase == .ready else { return nil }
         return nextWord.predictNextWord(afterTailWords: tailWords)
+    }
+
+    func topBiasTerms(
+        afterTailWords tailWords: [String],
+        configuration: PersonalHistoryConfiguration
+    ) -> [WeightedBiasTerm] {
+        guard configuration.revision == configurationRevision, nextWordPhase == .ready else { return [] }
+        return nextWord.topBiasTerms(afterTailWords: tailWords)
     }
 
     func nextWordStatus(
@@ -646,6 +830,8 @@ private actor PersistenceOperations {
         replayBacklog.removeAll(keepingCapacity: true)
         replayBacklogOverflowed = false
         nextWord.reset()
+        phraseExpert.reset()
+        voiceScaffoldState.clear()
         nextWordPhase = .inactive
         historyIdentifier = nextHistoryIdentifier
         // The log and the trained table both go; positions restart with the

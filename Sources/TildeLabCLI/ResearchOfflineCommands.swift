@@ -145,7 +145,7 @@ extension ResearchCoordinator {
 
     static func riskCoverage(_ arguments: CLIArguments) async throws {
         try arguments.assertAllowed(
-            options: ["campaign", "arm", "trust-limit", "output"],
+            options: ["campaign", "arm", "trust-limit", "output", "gate"],
             flags: ["json"]
         )
         guard arguments.positionals.isEmpty else {
@@ -168,6 +168,17 @@ extension ResearchCoordinator {
         guard let report = reports[armID] else {
             throw ResearchCLIError.missingArtifact("complete report for arm \(armID)")
         }
+        let gateMode: LabRiskCoverageGateMode
+        switch arguments.value("gate") ?? "mean-prob" {
+        case "mean-prob":
+            gateMode = .meanTokenProbability
+        case "first-word":
+            gateMode = .firstWordProbability
+        case "quiet-gate":
+            gateMode = .quietGate(report.arm.judgment.quietGate ?? .balanced)
+        default:
+            throw ResearchCLIError.invalidValue("--gate")
+        }
         let layout = LabResearchArtifactLayout(documentURL: campaignURL)
         let artifact: LabRiskCoverageReport
         if FileManager.default.fileExists(atPath: layout.candidateCacheURL.path),
@@ -178,7 +189,8 @@ extension ResearchCoordinator {
                 protocolDefinition: research,
                 runtime: campaign.manifest.runtime,
                 cache: try LabSyntheticCandidateCache(fileURL: layout.candidateCacheURL),
-                trustLimit: trustLimit
+                trustLimit: trustLimit,
+                gateMode: gateMode
             )
         } else {
             artifact = LabPairedComparison.observedRiskCoverage(

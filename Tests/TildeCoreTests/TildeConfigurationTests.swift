@@ -4,23 +4,25 @@ import Testing
 
 @Suite("Effective configuration: four policies, one digest")
 struct TildeConfigurationTests {
-    @Test("Production keeps every measured number after the split")
+    @Test("Production enables responsive chaining, mid-word continuation after 240ms pause, anchored reply cues, and 120/110ms calm delays")
     func productionUnchanged() {
         let decision = DecisionPolicy.conservative
         #expect(decision.maximumVisibleWords == CompletionSuggestion.defaultMaxVisibleWords)
         #expect(decision.sceneEchoMinimumWords == SceneEchoPolicy.defaultMinimumWords)
-        #expect(decision.sceneEchoMinimumCharacters == SceneEchoPolicy.defaultMinimumCharacters)
+        #expect(decision.sceneEchoMinimumCharacters == 24)
         #expect(decision.factualGrounding == .off)
-        #expect(decision.sceneSuggestionOptions == .production)
-        #expect(!decision.includesWindowTitleInScene)
+        #expect(decision.replyCueAnchoredToCurrentSentence)
+        #expect(!decision.extendedOrdinarySilenceGate)
+        #expect(decision.includesWindowTitleInScene)
+        #expect(decision.minimumFirstWordProbability == WordConfidenceTruncator.defaultFirstWordFloor)
+        #expect(decision.quietGate == .production)
         let interaction = InteractionPolicy.conservative
-        #expect(!interaction.chainsCompletionAfterAccept)
+        #expect(interaction.chainsCompletionAfterAccept)
         #expect(interaction.calmRevealDelays == .production)
-        #expect(!interaction.requestsAfterPunctuation)
-        // Between spaces, production's only predictor stays the system
-        // dictionary: the model is asked at boundaries and nowhere else.
-        #expect(!interaction.requestsMidWordContinuation)
-        #expect(!TildeProductProfile.production.requestsMidWordContinuation)
+        #expect(interaction.requestsAfterPunctuation)
+        #expect(interaction.requestsMidWordContinuation)
+        #expect(interaction.midWordRequestThrottleMilliseconds == 240)
+        #expect(TildeProductProfile.production.requestsMidWordContinuation)
         #expect(TildeProductProfile.production.decisionPolicy == .conservative)
         #expect(TildeProductProfile.production.interactionPolicy == .conservative)
     }
@@ -57,10 +59,7 @@ struct TildeConfigurationTests {
         #expect(gemma.generator.temperature == 0)
         #expect(qwen.decision == .tuned9B)
         #expect(qwen.interaction == .conservative)
-        // The official Qwen choice runs the tuned filters in the production
-        // build, so it must not pick up the preview's keyboard behaviour:
-        // mid-word requests are the 9B preview's trial alone.
-        #expect(!qwen.interaction.requestsMidWordContinuation)
+        #expect(qwen.interaction.requestsMidWordContinuation)
         #expect(preview.interaction.requestsMidWordContinuation)
         #expect(qwen.generator.temperature == 0.10)
         #expect(qwen.generator.generatedTokenBudget == 12)

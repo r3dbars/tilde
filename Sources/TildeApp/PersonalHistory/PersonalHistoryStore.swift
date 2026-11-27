@@ -128,13 +128,19 @@ struct PersonalNextWordStoredModel: Codable, Equatable, Sendable {
     /// table has already consumed. Records after it still need replaying.
     let coveredThroughSequence: Int64
     let model: PersonalNextWordTrainedModel
+    /// Optional sibling 2–4 gram phrase & recency expert persisted alongside
+    /// the next-word table inside the same AES-GCM encrypted file. Absent in
+    /// pre-upgrade `model.v1.enc` files, which decode cleanly as `nil` and
+    /// rebuild the phrase expert from replayed history without wiping records.
+    let phraseExpert: PersonalPhraseExpertSnapshot?
 
     init(
         historyIdentifier: String,
         experimentIdentifier: String,
         excludedApps: Set<String>,
         coveredThroughSequence: Int64,
-        model: PersonalNextWordTrainedModel
+        model: PersonalNextWordTrainedModel,
+        phraseExpert: PersonalPhraseExpertSnapshot? = nil
     ) {
         v = Self.version
         self.historyIdentifier = historyIdentifier
@@ -142,6 +148,26 @@ struct PersonalNextWordStoredModel: Codable, Equatable, Sendable {
         self.excludedApps = PersonalHistoryCapturePolicy.normalizedExcludedApps(excludedApps)
         self.coveredThroughSequence = coveredThroughSequence
         self.model = model
+        self.phraseExpert = phraseExpert
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case v, historyIdentifier, experimentIdentifier, excludedApps
+        case coveredThroughSequence, model, phraseExpert
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        v = try c.decode(Int.self, forKey: .v)
+        historyIdentifier = try c.decode(String.self, forKey: .historyIdentifier)
+        experimentIdentifier = try c.decode(String.self, forKey: .experimentIdentifier)
+        excludedApps = try c.decode([String].self, forKey: .excludedApps)
+        coveredThroughSequence = try c.decode(Int64.self, forKey: .coveredThroughSequence)
+        model = try c.decode(PersonalNextWordTrainedModel.self, forKey: .model)
+        // Lossy decode for optional phrase expert so a future recipe/schema
+        // bump cleanly falls back to rebuilding from history rather than
+        // invalidating the entire trained model file.
+        phraseExpert = try? c.decodeIfPresent(PersonalPhraseExpertSnapshot.self, forKey: .phraseExpert)
     }
 
     func matches(

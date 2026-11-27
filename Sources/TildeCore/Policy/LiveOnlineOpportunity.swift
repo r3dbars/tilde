@@ -29,6 +29,8 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
     public private(set) var appCategory: String
     public private(set) var register: String
     public let boundary: String
+    /// `TextFreeTypingSpeedBucket` raw value when the ghost was shown.
+    public let typingSpeedBucket: String
     public let safeOpportunity: Bool
     public var candidateCharacters: Int
     public var candidateWordCount: Int
@@ -61,6 +63,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         appCategory: String,
         register: String,
         boundary: String,
+        typingSpeedBucket: TextFreeTypingSpeedBucket = .unknown,
         safeOpportunity: Bool,
         candidateCharacters: Int,
         candidateWordCount: Int,
@@ -77,6 +80,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
         self.appCategory = appCategory
         self.register = register
         self.boundary = boundary
+        self.typingSpeedBucket = typingSpeedBucket.rawValue
         self.safeOpportunity = safeOpportunity
         self.candidateCharacters = max(0, candidateCharacters)
         self.candidateWordCount = max(0, candidateWordCount)
@@ -199,6 +203,7 @@ public struct LiveOnlineOpportunity: Equatable, Sendable {
             appCategory: appCategory,
             register: register,
             boundary: boundary,
+            typingSpeedBucket: typingSpeedBucket,
             safeOpportunity: safeOpportunity,
             generated: true,
             displayed: true,

@@ -182,7 +182,8 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
         firstStableWordMilliseconds: Int?,
         nextActionMilliseconds: Int?,
         opportunityCharacters: Int,
-        configurationDigestSHA256: String? = nil
+        configurationDigestSHA256: String? = nil,
+        typingSpeedBucket: TextFreeTypingSpeedBucket = .unknown
     ) throws -> TextFreeOnlineEvent {
         TextFreeOnlineEvent(
             id: id,
@@ -192,6 +193,7 @@ public struct TextFreeOnlineEvent: Codable, Equatable, Sendable {
             appCategory: appCategory,
             register: register,
             boundary: boundary,
+            typingSpeedBucket: typingSpeedBucket.rawValue,
             safeOpportunity: true,
             generated: generated,
             displayed: false,

@@ -35,6 +35,11 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
     public let replyCueAnchoredToCurrentSentence: Bool
     public let extendedOrdinarySilenceGate: Bool
     public let includesWindowTitleInScene: Bool
+    public let minimumFirstWordProbability: Double
+    /// Optional multi-feature logistic quiet gate. When `nil` or disabled,
+    /// callers fall back to `minimumFirstWordProbability` so older builds and
+    /// existing configuration digests remain untouched.
+    public let quietGate: SuggestionQuietGate.Configuration?
 
     public init(
         maximumVisibleWords: Int,
@@ -43,7 +48,9 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         factualGrounding: FactualGroundingPolicy.Mode,
         replyCueAnchoredToCurrentSentence: Bool,
         extendedOrdinarySilenceGate: Bool,
-        includesWindowTitleInScene: Bool
+        includesWindowTitleInScene: Bool,
+        minimumFirstWordProbability: Double = 0.0,
+        quietGate: SuggestionQuietGate.Configuration? = nil
     ) {
         self.maximumVisibleWords = maximumVisibleWords
         self.sceneEchoMinimumWords = sceneEchoMinimumWords
@@ -52,17 +59,44 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         self.replyCueAnchoredToCurrentSentence = replyCueAnchoredToCurrentSentence
         self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
         self.includesWindowTitleInScene = includesWindowTitleInScene
+        self.minimumFirstWordProbability = minimumFirstWordProbability
+        self.quietGate = quietGate
     }
 
-    /// The measured production stack: Gemma's gates, byte for byte.
+    private enum CodingKeys: String, CodingKey {
+        case maximumVisibleWords, sceneEchoMinimumWords, sceneEchoMinimumCharacters
+        case factualGrounding, replyCueAnchoredToCurrentSentence
+        case extendedOrdinarySilenceGate, includesWindowTitleInScene
+        case minimumFirstWordProbability, quietGate
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        maximumVisibleWords = try c.decode(Int.self, forKey: .maximumVisibleWords)
+        sceneEchoMinimumWords = try c.decode(Int.self, forKey: .sceneEchoMinimumWords)
+        sceneEchoMinimumCharacters = try c.decode(Int.self, forKey: .sceneEchoMinimumCharacters)
+        factualGrounding = try c.decode(FactualGroundingPolicy.Mode.self, forKey: .factualGrounding)
+        replyCueAnchoredToCurrentSentence = try c.decode(Bool.self, forKey: .replyCueAnchoredToCurrentSentence)
+        extendedOrdinarySilenceGate = try c.decode(Bool.self, forKey: .extendedOrdinarySilenceGate)
+        includesWindowTitleInScene = try c.decode(Bool.self, forKey: .includesWindowTitleInScene)
+        minimumFirstWordProbability = try c.decodeIfPresent(Double.self, forKey: .minimumFirstWordProbability) ?? 0.0
+        quietGate = try c.decodeIfPresent(SuggestionQuietGate.Configuration.self, forKey: .quietGate)
+    }
+
+    /// The production decision stack: full phrase window with sentence-anchored
+    /// reply cue detection, window title context, 24-char echo floor (matching
+    /// tuned9B so tightened truncations are not falsely rejected as echo), and
+    /// the scene-invariant multi-feature Quiet Gate.
     public static let conservative = DecisionPolicy(
         maximumVisibleWords: CompletionSuggestion.defaultMaxVisibleWords,
         sceneEchoMinimumWords: SceneEchoPolicy.defaultMinimumWords,
-        sceneEchoMinimumCharacters: SceneEchoPolicy.defaultMinimumCharacters,
+        sceneEchoMinimumCharacters: 24,
         factualGrounding: .off,
-        replyCueAnchoredToCurrentSentence: false,
+        replyCueAnchoredToCurrentSentence: true,
         extendedOrdinarySilenceGate: false,
-        includesWindowTitleInScene: false
+        includesWindowTitleInScene: true,
+        minimumFirstWordProbability: WordConfidenceTruncator.defaultFirstWordFloor,
+        quietGate: .production
     )
 
     /// Q12/Q13's nominated display filters plus the owner-directed scene
@@ -75,7 +109,9 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         factualGrounding: .numbersAndNames,
         replyCueAnchoredToCurrentSentence: true,
         extendedOrdinarySilenceGate: false,
-        includesWindowTitleInScene: true
+        includesWindowTitleInScene: true,
+        minimumFirstWordProbability: WordConfidenceTruncator.defaultFirstWordFloor,
+        quietGate: .production
     )
 
     public var sceneSuggestionOptions: SceneSuggestionPolicy.Options {
@@ -108,6 +144,10 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
     /// with the rest of the policy and part of the digest, because a trial of
     /// mid-word continuation is a trial of this number too.
     public let midWordRequestThrottleMilliseconds: Int
+    /// Cadence-aware reveal, mid-word request gate, and H04 refractory
+    /// cooldown. An app that predates it serves no object, and the keyboard
+    /// then keeps the fixed delays (`FlowRevealPolicy.off`).
+    public let flowReveal: FlowRevealPolicy
 
     public init(
         chainsCompletionAfterAccept: Bool,
@@ -115,7 +155,8 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         calmRevealMidWordMilliseconds: Int,
         requestsAfterPunctuation: Bool,
         requestsMidWordContinuation: Bool,
-        midWordRequestThrottleMilliseconds: Int = 0
+        midWordRequestThrottleMilliseconds: Int = 0,
+        flowReveal: FlowRevealPolicy = .off
     ) {
         self.chainsCompletionAfterAccept = chainsCompletionAfterAccept
         self.calmRevealPostSpaceMilliseconds = calmRevealPostSpaceMilliseconds
@@ -123,11 +164,13 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         self.requestsAfterPunctuation = requestsAfterPunctuation
         self.requestsMidWordContinuation = requestsMidWordContinuation
         self.midWordRequestThrottleMilliseconds = midWordRequestThrottleMilliseconds
+        self.flowReveal = flowReveal
     }
 
     private enum CodingKeys: String, CodingKey {
         case chainsCompletionAfterAccept, calmRevealPostSpaceMilliseconds, calmRevealMidWordMilliseconds
         case requestsAfterPunctuation, requestsMidWordContinuation, midWordRequestThrottleMilliseconds
+        case flowReveal
     }
 
     /// Fields added after the first served policy decode with their
@@ -141,28 +184,36 @@ public struct InteractionPolicy: Codable, Equatable, Sendable {
         requestsAfterPunctuation = try c.decode(Bool.self, forKey: .requestsAfterPunctuation)
         requestsMidWordContinuation = try c.decodeIfPresent(Bool.self, forKey: .requestsMidWordContinuation) ?? false
         midWordRequestThrottleMilliseconds = try c.decodeIfPresent(Int.self, forKey: .midWordRequestThrottleMilliseconds) ?? 0
+        // A malformed flow object must not cost the whole interaction policy.
+        flowReveal = (try? c.decodeIfPresent(FlowRevealPolicy.self, forKey: .flowReveal)) ?? .off
     }
 
-    /// The measured production interaction.
+    /// Calm, flicker-free production interaction: instant Tab-to-Tab chaining
+    /// (40 ms calm / 0 ms native), 120/110 ms Chromium/Electron calm reveal
+    /// (above normal typing stride so ghosts never flash between letters while
+    /// inference still starts at 0 ms), punctuation boundaries, and mid-word
+    /// completion only after a genuine 240 ms mid-word pause. While the
+    /// writer types, reveal and mid-word requests also wait past their
+    /// own rolling stride (`FlowRevealPolicy.production`).
     public static let conservative = InteractionPolicy(
-        chainsCompletionAfterAccept: false,
-        calmRevealPostSpaceMilliseconds: 200,
-        calmRevealMidWordMilliseconds: 120,
-        requestsAfterPunctuation: false,
-        requestsMidWordContinuation: false
-    )
-
-    /// The owner's 9B preview trial of 2026-09-01/02: chained accept, the
-    /// shorter Electron reveal floor, punctuation as a request boundary, and
-    /// (2026-09-02) mid-word model continuation. Production stays on the
-    /// conservative interaction until a live result promotes any of them.
-    public static let tuned9B = InteractionPolicy(
         chainsCompletionAfterAccept: true,
         calmRevealPostSpaceMilliseconds: 120,
-        calmRevealMidWordMilliseconds: 80,
+        calmRevealMidWordMilliseconds: 110,
         requestsAfterPunctuation: true,
         requestsMidWordContinuation: true,
-        midWordRequestThrottleMilliseconds: 120
+        midWordRequestThrottleMilliseconds: 240,
+        flowReveal: .production
+    )
+
+    /// The owner's 9B preview trial: slightly tighter calm reveal & mid-word pause.
+    public static let tuned9B = InteractionPolicy(
+        chainsCompletionAfterAccept: true,
+        calmRevealPostSpaceMilliseconds: 100,
+        calmRevealMidWordMilliseconds: 90,
+        requestsAfterPunctuation: true,
+        requestsMidWordContinuation: true,
+        midWordRequestThrottleMilliseconds: 200,
+        flowReveal: .production
     )
 
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays {

@@ -90,6 +90,18 @@ struct ModelManagerTests {
         #expect(descriptor.downloadURL.absoluteString == "https://huggingface.co/mradermacher/gemma-4-E2B-GGUF/resolve/3762686d74ff8db6c98f8d3c389f56fbdf994d5a/gemma-4-E2B.Q4_K_M.gguf")
     }
 
+    @Test("The signed descriptor pins the Qwen 3.5 4B Base i1-Q4_K_M bytes")
+    func pinnedQwen4BDescriptor() {
+        let descriptor = ModelDescriptor.qwen35B4BQ4KM
+        #expect(descriptor.identifier == "qwen3.5-4b-base-q4km")
+        #expect(descriptor.repository == "mradermacher/Qwen3.5-4B-Base-i1-GGUF")
+        #expect(descriptor.revision == "28fac19ebf6e7b388bfd3916994b3abb43a77bf6")
+        #expect(descriptor.fileName == "Qwen3.5-4B-Base.i1-Q4_K_M.gguf")
+        #expect(descriptor.expectedBytes == 2_708_804_864)
+        #expect(descriptor.sha256 == "306f85edfd07bea006c438947d1f16fd476decb9d9aec9ea65e0cecc8671bed3")
+        #expect(descriptor.downloadURL.absoluteString == "https://huggingface.co/mradermacher/Qwen3.5-4B-Base-i1-GGUF/resolve/28fac19ebf6e7b388bfd3916994b3abb43a77bf6/Qwen3.5-4B-Base.i1-Q4_K_M.gguf")
+    }
+
     @Test("The signed descriptor pins the official Qwen 3.5 9B Q4_K_M bytes")
     func pinnedQwenDescriptor() {
         let descriptor = ModelDescriptor.qwen35B9BQ4KM

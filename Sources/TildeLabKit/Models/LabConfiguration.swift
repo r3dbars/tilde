@@ -115,7 +115,8 @@ public struct LabArmConfiguration: Codable, Equatable, Sendable {
     /// production; only a Lab arm can widen the gate.
     public var sceneSuppressionOptions: SceneSuggestionPolicy.Options {
         SceneSuggestionPolicy.Options(
-            extendedOrdinarySilenceGate: judgment.extendedOrdinarySilenceGate
+            extendedOrdinarySilenceGate: judgment.extendedOrdinarySilenceGate,
+            replyCueAnchoredToCurrentSentence: judgment.replyCueAnchoredToCurrentSentence
         )
     }
 
@@ -164,6 +165,8 @@ public struct LabArmConfiguration: Codable, Equatable, Sendable {
         guard (1...1_000).contains(judgment.maximumVisibleCharacters),
               (1...20).contains(judgment.sceneEchoMinimumWords),
               (1...500).contains(judgment.sceneEchoMinimumCharacters),
+              (0...1).contains(judgment.minimumFirstWordProbability),
+              judgment.quietGate.map({ (0...1).contains($0.threshold) && (0...1).contains($0.hardFirstWordFloor) }) ?? true,
               (0...1).contains(judgment.dynamicLength.silenceBelowConfidence),
               (0...1).contains(judgment.dynamicLength.highConfidence),
               (0...1).contains(judgment.dynamicLength.veryHighConfidence),
@@ -359,6 +362,9 @@ public struct LabModelProfile: Equatable, Sendable {
 public struct LabExecutionConfiguration: Equatable, Sendable {
     public let serverExecutable: URL
     public let modelFile: URL
+    public let loraFile: URL?
+    public let loraScale: Double?
+    public let fixedBasePort: Int?
     public let modelProfile: LabModelProfile
     public let workerCount: Int
     public let slotsPerWorker: Int
@@ -388,6 +394,9 @@ public struct LabExecutionConfiguration: Equatable, Sendable {
         serverExecutable: URL,
         modelFile: URL,
         modelProfile: LabModelProfile = .production,
+        loraFile: URL? = nil,
+        loraScale: Double? = nil,
+        fixedBasePort: Int? = nil,
         workerCount: Int = 2,
         slotsPerWorker: Int = 4,
         repetitions: Int = 10,
@@ -414,6 +423,9 @@ public struct LabExecutionConfiguration: Equatable, Sendable {
     ) {
         self.serverExecutable = serverExecutable
         self.modelFile = modelFile
+        self.loraFile = loraFile
+        self.loraScale = loraScale
+        self.fixedBasePort = fixedBasePort
         self.modelProfile = modelProfile
         self.workerCount = workerCount
         self.slotsPerWorker = slotsPerWorker
@@ -461,6 +473,12 @@ public struct LabExecutionConfiguration: Equatable, Sendable {
         }
         guard FileManager.default.fileExists(atPath: modelFile.path) else {
             throw LabConfigurationError.missingModel
+        }
+        if let loraFile, !FileManager.default.fileExists(atPath: loraFile.path) {
+            throw LabConfigurationError.missingModel
+        }
+        if let fixedBasePort, !(1_024...65_000).contains(fixedBasePort) {
+            throw LabConfigurationError.invalidRuntime
         }
         guard (1...60).contains(workerCount) else { throw LabConfigurationError.invalidWorkerCount }
         guard (1...16).contains(slotsPerWorker) else { throw LabConfigurationError.invalidSlotCount }

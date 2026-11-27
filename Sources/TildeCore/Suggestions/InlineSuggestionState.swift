@@ -40,16 +40,17 @@ public struct InlineSuggestionTicket: Equatable, Sendable {
         boundedContext: String,
         utf16Limit: Int
     ) -> Self {
+        let utf16Count = text.utf16.count
+        let nextLocation = selectionLocation < 0 ? selectionLocation : selectionLocation + utf16Count
         let nextContext = Self.boundedContext(
             boundedContext + text,
             utf16Limit: utf16Limit
         )
-        let utf16Count = text.utf16.count
         return Self(
             clientIdentifier: clientIdentifier,
             bundleIdentifier: bundleIdentifier,
             contextFingerprint: Self.fingerprint(nextContext),
-            selectionLocation: selectionLocation < 0 ? selectionLocation : selectionLocation + utf16Count,
+            selectionLocation: nextLocation,
             selectionLength: 0,
             requestIdentifier: requestIdentifier
         )
@@ -252,5 +253,93 @@ public struct InlineSuggestionState: Equatable, Sendable {
             return text
         }
         return String(text[..<nextSeparator])
+    }
+}
+
+/// Pure identity & projected-context math for speculative chained-Tab prefetch.
+/// While the user is accepting a multi-word ghost word-by-word (Tab), the
+/// keyboard already knows the exact bounded context that exhausting the visible
+/// ghost will produce (`currentContext + accepted + remainder + " "`). Keying
+/// the prefetched continuation on `(clientIdentifier, bundleIdentifier,
+/// contextFingerprint)` guarantees a stale or mismatched field can never
+/// consume a speculative result.
+public struct SpeculativeChainKey: Equatable, Sendable {
+    public let clientIdentifier: String
+    public let bundleIdentifier: String
+    public let contextFingerprint: UInt64
+
+    public init(
+        clientIdentifier: String,
+        bundleIdentifier: String,
+        contextFingerprint: UInt64
+    ) {
+        self.clientIdentifier = clientIdentifier
+        self.bundleIdentifier = bundleIdentifier
+        self.contextFingerprint = contextFingerprint
+    }
+
+    public init(clientIdentifier: String, bundleIdentifier: String, context: String) {
+        self.init(
+            clientIdentifier: clientIdentifier,
+            bundleIdentifier: bundleIdentifier,
+            contextFingerprint: InlineSuggestionTicket.fingerprint(context)
+        )
+    }
+
+    /// Computes the exact bounded context after accepting `accepted` and the
+    /// remaining visible words `remainder` (plus the trailing separator that
+    /// word-accept / chaining appends). When `selectionLocation` is known
+    /// (>= 0), mirrors `RawContinuationPrompt.stableWindowStart` so crossing
+    /// `utf16Limit` produces the exact quantized window `contextBeforeCaret`
+    /// will read from the host field.
+    public static func projectedContext(
+        beforeAccept: String,
+        accepted: String,
+        remainder: String,
+        utf16Limit: Int,
+        selectionLocation: Int = -1
+    ) -> String {
+        let inserted: String
+        if remainder.isEmpty {
+            inserted = accepted
+        } else {
+            let suffix = remainder.last?.isWhitespace == true ? remainder : remainder + " "
+            inserted = accepted + suffix
+        }
+        let combined = beforeAccept + inserted
+        guard selectionLocation >= 0 else {
+            return InlineSuggestionTicket.boundedContext(combined, utf16Limit: utf16Limit)
+        }
+        let beforeNS = beforeAccept as NSString
+        let combinedNS = combined as NSString
+        let oldStart = max(0, selectionLocation - beforeNS.length)
+        let newEnd = selectionLocation + (inserted as NSString).length
+        let newStart = RawContinuationPrompt.stableWindowStart(end: newEnd, limit: utf16Limit)
+        let dropUTF16 = max(0, newStart - oldStart)
+        guard dropUTF16 < combinedNS.length else { return "" }
+        return combinedNS.substring(from: dropUTF16)
+    }
+
+    /// Result of checking a Chromium/Electron host's live field after a
+    /// chained accept while awaiting asynchronous `insertText` settlement.
+    public enum SettleVerdict: Equatable, Sendable {
+        /// Live field matches the projected post-accept context: ready to present.
+        case settled
+        /// Live field still reflects the pre-accept context: host has not committed `insertText` yet.
+        case stillSettling
+        /// Live field moved elsewhere: bail to a fresh chained request.
+        case drifted
+    }
+
+    public static func settleVerdict(
+        liveFingerprint: UInt64,
+        expectedFingerprint: UInt64,
+        preAcceptFingerprint: UInt64?
+    ) -> SettleVerdict {
+        if liveFingerprint == expectedFingerprint { return .settled }
+        if let preAcceptFingerprint, liveFingerprint == preAcceptFingerprint {
+            return .stillSettling
+        }
+        return .drifted
     }
 }

@@ -15,6 +15,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     }
 
     private let runtime: LlamaServerProcessHost
+    private let tokenBiasCache: LlamaTokenBiasCache
     private let engine: LlamaCompletionEngine
     private let personalHistory: any PersonalHistoryIngesting
     /// Fired whenever a completion request reaches the socket — a bare
@@ -50,6 +51,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// and a permission granted mid-session resumes suggestions on the next
     /// completion too — no restart, no cached state to go stale.
     private let suggestionsGate: (@Sendable () -> Bool)?
+    /// Fast (<1 µs) synchronous master-toggle pre-check so toggling Screen
+    /// Memory off silences before inference even starts, while the slower
+    /// (~10–22 ms) TCC `CGPreflightScreenCaptureAccess()` check in
+    /// `suggestionsGate` overlaps concurrently with inference and still gates
+    /// every partial and terminal write fail-closed.
+    private let screenMemoryToggleGate: (@Sendable () -> Bool)?
     /// "Personal suggestions (experimental)" (`docs/plans/road-to-paid.md`
     /// Phase 3). Read fresh on every completion request, same shape and
     /// contract as `suggestionsGate`: `nil` means "always off" (release-
@@ -65,6 +72,9 @@ final class GhostBrainServerHost: @unchecked Sendable {
     /// covenant). `nil` means "no personal serving available" (release-
     /// proof mode and tests).
     private let personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)?
+    private let personalBiasTermsProvider: (@Sendable ([String], String?) -> [WeightedBiasTerm])?
+    private let personalVoiceScaffoldProvider: (@Sendable (ContinuationRegister, String?) -> String?)?
+    private let personalPhraseMatchProvider: (@Sendable (String, ContinuationRegister, String?) -> PersonalPhraseMatch?)?
     private let productProfile: TildeProductProfile
     /// The whole behaviour the app serves, stamped on every response line
     /// so the keyboard runs the same interaction policy and every outcome
@@ -86,8 +96,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
         onCompletionActivity: (@Sendable () -> Void)? = nil,
         onScreenMemoryEvent: (@Sendable (ScreenMemoryInputEvent) -> Void)? = nil,
         suggestionsGate: (@Sendable () -> Bool)? = nil,
+        screenMemoryToggleGate: (@Sendable () -> Bool)? = nil,
         personalSuggestionsGate: (@Sendable () -> Bool)? = nil,
         personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil,
+        personalBiasTermsProvider: (@Sendable ([String], String?) -> [WeightedBiasTerm])? = nil,
+        personalVoiceScaffoldProvider: (@Sendable (ContinuationRegister, String?) -> String?)? = nil,
+        personalPhraseMatchProvider: (@Sendable (String, ContinuationRegister, String?) -> PersonalPhraseMatch?)? = nil,
         configuration: TildeEffectiveConfiguration? = nil,
         productProfile: TildeProductProfile = PreviewModelSelection.completionProfile(
             for: TildeProductProfile.current
@@ -100,15 +114,33 @@ final class GhostBrainServerHost: @unchecked Sendable {
             completionProfile: productProfile,
             modelIdentifier: "unspecified"
         )
-        self.engine = LlamaCompletionEngine(baseURL: runtime.baseURL, productProfile: productProfile)
+        let biasCache = LlamaTokenBiasCache(
+            baseURL: runtime.baseURL,
+            apiKey: runtime.apiKey
+        )
+        self.tokenBiasCache = biasCache
+        self.engine = LlamaCompletionEngine(
+            baseURL: runtime.baseURL,
+            apiKey: runtime.apiKey,
+            tokenBiasCache: biasCache,
+            productProfile: productProfile
+        )
         self.personalHistory = personalHistory
         self.sceneProvider = sceneProvider
         self.targetProvider = targetProvider
         self.onCompletionActivity = onCompletionActivity
         self.onScreenMemoryEvent = onScreenMemoryEvent
         self.suggestionsGate = suggestionsGate
+        self.screenMemoryToggleGate = screenMemoryToggleGate
         self.personalSuggestionsGate = personalSuggestionsGate
         self.personalNextWordProvider = personalNextWordProvider
+        self.personalBiasTermsProvider = personalBiasTermsProvider
+        self.personalVoiceScaffoldProvider = personalVoiceScaffoldProvider
+        self.personalPhraseMatchProvider = personalPhraseMatchProvider
+    }
+
+    func clearTokenBiasCache() {
+        Task { await tokenBiasCache.clear() }
     }
 
     func start() -> Bool {
@@ -260,11 +292,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // plus the normal completed path) still reports its own
             // duration, the same way `defer { close(connection) }` above
             // already guarantees cleanup on every exit.
-            let requestStartedAt = Date()
+            let requestStartedAt = ProcessInfo.processInfo.systemUptime
+            var preInferenceMilliseconds: Int?
             defer {
-                DiagnosticsLog.shared.record("ghost-request-timing", metadata: [
-                    "requestMilliseconds": String(Self.milliseconds(from: requestStartedAt, to: Date())),
-                ])
+                var timing = [
+                    "requestMilliseconds": String(Self.milliseconds(since: requestStartedAt)),
+                ]
+                if let preInferenceMilliseconds {
+                    timing["preInferenceMilliseconds"] = String(preInferenceMilliseconds)
+                }
+                DiagnosticsLog.shared.record("ghost-request-timing", metadata: timing)
             }
             self.onCompletionActivity?()
             let opportunityID = completionRequest.opportunityID
@@ -277,18 +314,17 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 )
                 return
             }
-            // All-or-nothing gate (2026-08-16 owner directive): `.silence`,
-            // never `.unavailable` — `.unavailable` tells the IME the brain
-            // itself is missing and to try to summon it back
-            // (`GhostInputController.summonBrainIfNeeded`), which is wrong
-            // here: the app and model are fully up, Tilde is simply
-            // withholding a suggestion by policy. `.silence` is the same
-            // "nothing to show this time" outcome an ordinary empty
-            // completion already produces, so the IME does nothing special
-            // and nothing gets logged as a failure.
-            guard self.suggestionsGate?() ?? true else {
+            // Check the instant UserDefaults master toggle synchronously first;
+            // if off, silence immediately without touching the helper. Start
+            // the slower (~10–22 ms) TCC `suggestionsGate` right after
+            // readiness so it overlaps concurrently with target/scene/inference
+            // while still gating every partial and terminal write fail-closed.
+            guard self.screenMemoryToggleGate?() ?? true else {
                 _ = self.writeStamped(.silence(reason: .suggestionsPaused, opportunityID: opportunityID), to: connection)
                 return
+            }
+            let suggestionsGateTask: Task<Bool, Never>? = self.suggestionsGate.map { gate in
+                Task.detached(priority: .userInitiated) { gate() }
             }
 
             let expectedTarget = self.targetProvider?(
@@ -296,6 +332,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 completionRequest.fieldSessionIdentifier
             )
             if self.targetProvider != nil, expectedTarget == nil {
+                suggestionsGateTask?.cancel()
                 _ = self.writeStamped(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
@@ -317,21 +354,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 expectedTarget
             )
             guard targetIsCurrent() else {
+                suggestionsGateTask?.cancel()
                 _ = self.writeStamped(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
                 return
             }
 
-            // Trust-critical fix (2026-08-16, build 2705 dogfood): a grief
-            // conversation produced a garbled-relationship suggestion and,
-            // worse, a lateness cliché overpowering visible grief context.
-            // Small models cannot reliably do relationship reasoning or
-            // grief register, so when the current scene is emotionally
-            // sensitive Tilde stays silent rather than guesses — same
-            // `.silence` outcome (never `.unavailable`) as the permission
-            // gate above, so the IME treats it as an ordinary empty
-            // completion. Count-only diagnostic: never the matched category
-            // or any scene text, only that suppression happened.
             if SensitiveScenePolicy.isSensitive(scene: scene) {
+                suggestionsGateTask?.cancel()
                 _ = self.writeStamped(.silence(reason: .sensitiveScene, opportunityID: opportunityID), to: connection)
                 DiagnosticsLog.shared.record("suggestion-suppressed", metadata: ["reason": "sensitive-scene"])
                 return
@@ -341,6 +370,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 textBeforeCursor: completionRequest.context,
                 options: self.productProfile.sceneSuggestionOptions
             ) {
+                suggestionsGateTask?.cancel()
                 _ = self.writeStamped(
                     .silence(reason: SuggestionDecisionReason(scene: reason), opportunityID: opportunityID),
                     to: connection
@@ -371,7 +401,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // the race and can be released by its own deadline; nothing is
             // ever left blocked on the provider's task.
             let personalRace: PersonalLookupRace? = {
-                guard personalSuggestionsEnabled, let provider = self.personalNextWordProvider else {
+                guard personalSuggestionsEnabled, self.personalNextWordProvider != nil else {
                     return nil
                 }
                 let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
@@ -393,6 +423,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
             let partials = PartialResponseSink(
                 enabled: completionRequest.supportsStreamingResponses,
                 holdingForPersonal: personalPredictionTask != nil,
+                holdingForPermission: suggestionsGateTask != nil,
                 register: register,
                 midWordContext: midWordContext,
                 opportunityID: opportunityID,
@@ -402,16 +433,44 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     Self.write(response.stamped(configuration: configuration), to: connection)
                 }
             )
+            let personalVoiceScaffold = self.personalVoiceScaffoldProvider?(register, completionRequest.app)
+            let personalBiasTerms: [WeightedBiasTerm]
+            if personalSuggestionsEnabled, !midWordContext, let biasProvider = self.personalBiasTermsProvider {
+                let tailWords = Self.personalTailWords(fromContext: completionRequest.context)
+                personalBiasTerms = biasProvider(tailWords, completionRequest.app)
+            } else {
+                personalBiasTerms = []
+            }
+            let personalPhraseMatch: PersonalPhraseMatch?
+            if personalSuggestionsEnabled, !midWordContext, let phraseProvider = self.personalPhraseMatchProvider {
+                personalPhraseMatch = phraseProvider(completionRequest.context, register, completionRequest.app)
+            } else {
+                personalPhraseMatch = nil
+            }
+            preInferenceMilliseconds = Self.milliseconds(since: requestStartedAt)
             let completion = Task {
                 try await self.engine.decide(
                     textBeforeCursor: completionRequest.context,
                     appBundleIdentifier: completionRequest.app,
                     scene: scene,
                     experimentArm: completionRequest.experimentArm,
+                    personalBiasTerms: personalBiasTerms,
+                    personalVoiceScaffold: personalVoiceScaffold,
+                    personalPhraseMatch: personalPhraseMatch,
                     onPartialSuggestion: { partials.send($0, firstStableWordMilliseconds: $1) }
                 )
             }
             partials.onWriteFailure = { completion.cancel() }
+            let permissionObserver: Task<Void, Never>? = suggestionsGateTask.map { gateTask in
+                Task { [weak partials] in
+                    let allowed = await gateTask.value
+                    partials?.resolvePermission(allowed)
+                    if !allowed {
+                        completion.cancel()
+                        personalPredictionTask?.cancel()
+                    }
+                }
+            }
             // The gate must learn the answer as soon as it exists rather than
             // after generation finishes; its waiter is released by the same
             // deadline the terminal await uses.
@@ -446,6 +505,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
             // next, and a held prefix flushed after it would land inside or
             // behind the answer it is supposed to precede.
             partials.finish()
+            let suggestionsAllowed = await (suggestionsGateTask?.value ?? true)
+                && (self.screenMemoryToggleGate?() ?? true)
+            permissionObserver?.cancel()
+            guard suggestionsAllowed else {
+                personalObserver?.cancel()
+                personalPredictionTask?.cancel()
+                _ = self.writeStamped(.silence(reason: .suggestionsPaused, opportunityID: opportunityID), to: connection)
+                await withCheckedContinuation { continuation in
+                    disconnect.setCancelHandler { continuation.resume() }
+                    disconnect.cancel()
+                }
+                return
+            }
             let personalPrediction: PersonalNextWordPrediction?
             switch result {
             case .success:
@@ -468,13 +540,19 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     metadata: partials.holdDiagnostics()
                 )
             }
-            await withCheckedContinuation { continuation in
-                disconnect.setCancelHandler { continuation.resume() }
-                disconnect.cancel()
+            guard !completion.isCancelled else {
+                await withCheckedContinuation { continuation in
+                    disconnect.setCancelHandler { continuation.resume() }
+                    disconnect.cancel()
+                }
+                return
             }
-            guard !completion.isCancelled else { return }
             guard targetIsCurrent() else {
                 _ = self.writeStamped(.silence(reason: .fieldTargetLost, opportunityID: opportunityID), to: connection)
+                await withCheckedContinuation { continuation in
+                    disconnect.setCancelHandler { continuation.resume() }
+                    disconnect.cancel()
+                }
                 return
             }
 
@@ -537,6 +615,13 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 if let source {
                     PersonalSuggestionStats.record(source: source)
                 }
+            }
+            // Cancel and wait for the disconnect read source after writing the
+            // terminal response, before `defer { close(connection) }` runs, so
+            // cancellation overhead never delays delivery to the IME.
+            await withCheckedContinuation { continuation in
+                disconnect.setCancelHandler { continuation.resume() }
+                disconnect.cancel()
             }
         }
     }
@@ -875,6 +960,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         }
 
         private enum GateState { case streaming, holding, closed }
+        private enum PermissionState { case pending, allowed, denied }
 
         private let enabled: Bool
         private let register: ContinuationRegister
@@ -886,12 +972,16 @@ final class GhostBrainServerHost: @unchecked Sendable {
         private let write: @Sendable (GhostBrainResponse) -> Bool
         private let lock = NSLock()
         private var state: GateState
+        private var permission: PermissionState
+        private var pendingPermissionText: String?
+        private var lastTargetCheckAt: TimeInterval = -.greatestFiniteMagnitude
         private var failed = false
         private var failureHandler: (() -> Void)?
         private var heldPartial: String?
         private var holdStartedAt: Date?
         private var heldMilliseconds = 0
         private var wroteAnything = false
+        private var lastWrittenLength = 0
         private var personalLookup: PersonalLookupState
         private var outcome: HoldOutcome
         private var expiryTimer: Task<Void, Never>?
@@ -899,6 +989,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         init(
             enabled: Bool,
             holdingForPersonal: Bool,
+            holdingForPermission: Bool = false,
             register: ContinuationRegister,
             midWordContext: Bool = false,
             opportunityID: String? = nil,
@@ -915,8 +1006,46 @@ final class GhostBrainServerHost: @unchecked Sendable {
             self.write = write
             let holding = enabled && holdingForPersonal
             state = holding ? .holding : .streaming
+            permission = holdingForPermission ? .pending : .allowed
             personalLookup = holding ? .pending : .resolved(nil)
             outcome = .notHeld
+        }
+
+        /// Resolves the concurrent Screen Recording permission check. If a
+        /// partial already arrived while permission was still in flight, it
+        /// re-verifies the live target before flushing on `true`, or closes
+        /// the sink fail-closed on `false`.
+        func resolvePermission(_ allowed: Bool) {
+            let queuedToFlush: String? = lock.withLock {
+                guard permission == .pending else { return nil }
+                permission = allowed ? .allowed : .denied
+                if !allowed {
+                    stopHoldClockLocked()
+                    state = .closed
+                    heldPartial = nil
+                    pendingPermissionText = nil
+                    return nil
+                }
+                guard state == .streaming, let queued = pendingPermissionText else { return nil }
+                pendingPermissionText = nil
+                return queued
+            }
+            guard let queuedToFlush else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            guard targetIsCurrent() else {
+                lock.withLock {
+                    guard !failed else { return }
+                    failed = true
+                    failureHandler?()
+                }
+                return
+            }
+            lock.lock()
+            defer { lock.unlock() }
+            lastTargetCheckAt = now
+            guard !failed, state == .streaming, permission == .allowed,
+                  queuedToFlush.count > lastWrittenLength else { return }
+            writeLocked(queuedToFlush)
         }
 
         var onWriteFailure: (() -> Void)? {
@@ -928,27 +1057,38 @@ final class GhostBrainServerHost: @unchecked Sendable {
         /// honour the base ghost whenever this is true.
         var didStream: Bool { lock.withLock { wroteAnything } }
 
+        private static let partialTargetFreshnessSeconds: TimeInterval = 0.050
+
         func send(_ partial: CompletionSuggestion, firstStableWordMilliseconds: Int? = nil) {
             guard enabled else { return }
-            lock.withLock {
+            let now = ProcessInfo.processInfo.systemUptime
+            let needsTargetCheck = lock.withLock { () -> Bool in
                 if self.firstStableWordMilliseconds == nil { self.firstStableWordMilliseconds = firstStableWordMilliseconds }
+                return now - lastTargetCheckAt >= Self.partialTargetFreshnessSeconds
             }
-            guard targetIsCurrent() else {
-                lock.withLock {
-                    guard !failed else { return }
-                    failed = true
-                    failureHandler?()
+            if needsTargetCheck {
+                guard targetIsCurrent() else {
+                    lock.withLock {
+                        guard !failed else { return }
+                        failed = true
+                        failureHandler?()
+                    }
+                    return
                 }
-                return
+                lock.withLock { lastTargetCheckAt = now }
             }
             let text = GhostBrainServerHost.servedText(partial.visibleText, midWord: midWordContext)
             guard !text.isEmpty else { return }
             lock.lock()
             defer { lock.unlock() }
-            guard !failed, state != .closed else { return }
+            guard !failed, state != .closed, permission != .denied else { return }
             if state == .holding {
                 heldPartial = text
                 applyDecisionLocked()
+                return
+            }
+            if permission == .pending {
+                pendingPermissionText = text
                 return
             }
             writeLocked(text)
@@ -1022,7 +1162,11 @@ final class GhostBrainServerHost: @unchecked Sendable {
             outcome = released
             if let heldPartial {
                 self.heldPartial = nil
-                writeLocked(heldPartial)
+                if permission == .allowed {
+                    writeLocked(heldPartial)
+                } else if permission == .pending {
+                    pendingPermissionText = heldPartial
+                }
             }
         }
 
@@ -1057,6 +1201,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                 firstStableWordMilliseconds: firstStableWordMilliseconds
             )) {
                 wroteAnything = true
+                lastWrittenLength = max(lastWrittenLength, text.count)
             } else {
                 failed = true
                 DiagnosticsLog.shared.record("ghost-partial-write-failed", metadata: [:])

@@ -63,13 +63,21 @@ TIMING_FIELDS = (
     # first-word regression could not trip anything.
     "firstTokenMilliseconds",
     "firstPartialMilliseconds",
+    "settledMilliseconds",
     "duration_ms",
     "milliseconds",
     "ocrMilliseconds",
     "waitedMilliseconds",
     "requestMilliseconds",
+    "preInferenceMilliseconds",
     "handshakeMilliseconds",
 )
+# Primary field per event that keeps its bare series key even when secondary
+# breakdown fields appear on the same line, so older single-field lines and
+# newer multi-field lines never split into two under-sampled series.
+PRIMARY_TIMING_FIELDS = {
+    "ghost-request-timing": "requestMilliseconds",
+}
 LINE = re.compile(r"^(\S+)\s+(\S+)\s*(.*)$")
 PAIR = re.compile(r"(\w+)=(\S+)")
 
@@ -107,13 +115,17 @@ def parse(log_path, since):
             # OCR alone) — suffix the field name on multi-field lines so
             # both become their own p50/p95/p99 row instead of one silently
             # shadowing the other.
+            primary_field = PRIMARY_TIMING_FIELDS.get(event)
             multiple_fields = len(present) > 1
             for field in present:
                 try:
                     value = float(fields[field])
                 except ValueError:
                     continue
-                key = f"{base_key}:{field}" if multiple_fields else base_key
+                if primary_field is not None:
+                    key = base_key if field == primary_field else f"{base_key}:{field}"
+                else:
+                    key = f"{base_key}:{field}" if multiple_fields else base_key
                 series.setdefault(key, []).append(value)
     return series
 
@@ -234,6 +246,24 @@ def selftest():
         assert not rows and not violations
         rows, violations = evaluate_budget(thin_series, budgets, min_samples=5)
         assert violations, "lowering --min-samples below the sample count should re-enable it"
+
+        # Mixed single-field and multi-field ghost-request-timing lines must
+        # merge into one primary series so optional breakdown fields never
+        # split a 50-sample breach into two under-sampled series.
+        mixed_path = Path(tempdir) / "mixed.log"
+        mixed_lines = [
+            f"2026-11-26T00:00:{i:02d}Z ghost-request-timing requestMilliseconds=900"
+            for i in range(25)
+        ] + [
+            f"2026-11-26T00:01:{i:02d}Z ghost-request-timing preInferenceMilliseconds=12 requestMilliseconds=950"
+            for i in range(25)
+        ]
+        mixed_path.write_text("\n".join(mixed_lines) + "\n", encoding="utf-8")
+        mixed_series = parse(mixed_path, since=None)
+        assert len(mixed_series["ghost-request-timing"]) == 50
+        assert len(mixed_series["ghost-request-timing:preInferenceMilliseconds"]) == 25
+        _, mixed_violations = evaluate_budget(mixed_series, budgets, DEFAULT_MIN_SAMPLES)
+        assert len(mixed_violations) == 1 and mixed_violations[0]["stage"] == "ghost-request-timing"
 
     assert event_name("llama-completion-timing") == "llama-completion-timing"
     assert event_name("screen-capture-completed[browser]:duration_ms") == "screen-capture-completed"

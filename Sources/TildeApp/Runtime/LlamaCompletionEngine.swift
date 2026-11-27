@@ -8,6 +8,105 @@ import Foundation
 final class LlamaCompletionEngine: @unchecked Sendable {
     /// A llama.cpp `stream:true` line can omit `content` on its terminal
     /// timing frame, so it has a looser shape than a final response.
+    struct StreamTimings: Decodable {
+        let promptN: Int?
+        let predictedN: Int?
+        let cacheN: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case promptN = "prompt_n"
+            case predictedN = "predicted_n"
+            case cacheN = "cache_n"
+        }
+    }
+
+    struct StreamTokenAlternative: Decodable {
+        let prob: Double?
+        let logprob: Double?
+
+        var resolvedProbability: Double? {
+            if let prob, prob.isFinite, (0.0...1.0).contains(prob) {
+                return prob
+            }
+            if let logprob, logprob.isFinite, logprob <= 0.0 {
+                return exp(logprob)
+            }
+            return nil
+        }
+    }
+
+    struct StreamTokenProbabilityEntry: Decodable {
+        let token: String?
+        let tokStr: String?
+        let prob: Double?
+        let logprob: Double?
+        let topLogprobs: [StreamTokenAlternative]?
+        let topProbs: [StreamTokenAlternative]?
+        let probs: [StreamTokenAlternative]?
+
+        enum CodingKeys: String, CodingKey {
+            case token, prob, logprob, probs
+            case tokStr = "tok_str"
+            case topLogprobs = "top_logprobs"
+            case topProbs = "top_probs"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            token = try? c.decodeIfPresent(String.self, forKey: .token)
+            tokStr = try? c.decodeIfPresent(String.self, forKey: .tokStr)
+            prob = try? c.decodeIfPresent(Double.self, forKey: .prob)
+            logprob = try? c.decodeIfPresent(Double.self, forKey: .logprob)
+            // Decode alternative lists lossily so any schema shift fails open
+            // without losing the emitted token's own probability.
+            topLogprobs = try? c.decodeIfPresent([StreamTokenAlternative].self, forKey: .topLogprobs)
+            topProbs = try? c.decodeIfPresent([StreamTokenAlternative].self, forKey: .topProbs)
+            probs = try? c.decodeIfPresent([StreamTokenAlternative].self, forKey: .probs)
+        }
+
+        var pieceText: String? {
+            token ?? tokStr
+        }
+
+        /// Resolves the emitted token's own probability strictly without ever
+        /// falling back to `top_logprobs[0]` (which would replace a null/`-inf`
+        /// probability with an unchosen token's high probability).
+        var resolvedProbability: Double? {
+            if let prob, prob.isFinite, (0.0...1.0).contains(prob) {
+                return prob
+            }
+            if let logprob, logprob.isFinite, logprob <= 0.0 {
+                return exp(logprob)
+            }
+            return nil
+        }
+
+        /// Strictly text-free top-k distribution metrics (top-1 margin, local
+        /// entropy, runner-up ratio), or `nil` when fewer than 2 valid
+        /// alternatives are present.
+        var distributionMetrics: (top1Margin: Double, entropy: Double, runnerUpRatio: Double)? {
+            let candidates = topLogprobs ?? topProbs ?? probs
+            guard let candidates, candidates.count >= 2 else { return nil }
+            let values = candidates.compactMap(\.resolvedProbability)
+            guard values.count == candidates.count else { return nil }
+            return StreamedTokenProbability.distributionMetrics(fromAlternativeProbabilities: values)
+        }
+
+        func toStreamedTokenProbability(fallbackPiece: String? = nil) -> StreamedTokenProbability? {
+            guard let prob = resolvedProbability else { return nil }
+            let resolvedPiece = (pieceText?.isEmpty == false ? pieceText : nil) ?? fallbackPiece
+            guard let resolvedPiece, !resolvedPiece.isEmpty else { return nil }
+            let metrics = distributionMetrics
+            return StreamedTokenProbability(
+                piece: resolvedPiece,
+                probability: prob,
+                top1Margin: metrics?.top1Margin,
+                entropy: metrics?.entropy,
+                runnerUpRatio: metrics?.runnerUpRatio
+            )
+        }
+    }
+
     struct StreamFrame: Decodable {
         let content: String?
         let stop: Bool?
@@ -15,13 +114,33 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         let stoppedLimit: Bool?
         let stoppedWord: Bool?
         let tokensPredicted: Int?
+        let timings: StreamTimings?
+        let completionProbabilities: [StreamTokenProbabilityEntry]?
 
         enum CodingKeys: String, CodingKey {
-            case content, stop
+            case content, stop, timings
             case stoppedEOS = "stopped_eos"
             case stoppedLimit = "stopped_limit"
             case stoppedWord = "stopped_word"
             case tokensPredicted = "tokens_predicted"
+            case completionProbabilities = "completion_probabilities"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            content = try c.decodeIfPresent(String.self, forKey: .content)
+            stop = try c.decodeIfPresent(Bool.self, forKey: .stop)
+            stoppedEOS = try c.decodeIfPresent(Bool.self, forKey: .stoppedEOS)
+            stoppedLimit = try c.decodeIfPresent(Bool.self, forKey: .stoppedLimit)
+            stoppedWord = try c.decodeIfPresent(Bool.self, forKey: .stoppedWord)
+            tokensPredicted = try c.decodeIfPresent(Int.self, forKey: .tokensPredicted)
+            timings = try? c.decodeIfPresent(StreamTimings.self, forKey: .timings)
+            // Decode probability telemetry lossily so any schema shift fails
+            // open instead of aborting/restarting llama-server.
+            completionProbabilities = try? c.decodeIfPresent(
+                [StreamTokenProbabilityEntry].self,
+                forKey: .completionProbabilities
+            )
         }
 
         var hasRecognizedField: Bool {
@@ -31,29 +150,42 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     }
 
     private let baseURL: URL
+    private let apiKey: String?
     private let cleaner: CompletionOutputCleaner
     private let diagnostics: DiagnosticsLog
     private let productProfile: TildeProductProfile
     private let transport: any LlamaCompletionStreamingTransport
+    private let tokenBiasCache: LlamaTokenBiasCache?
+    private let quietGateOverride: SuggestionQuietGate.Configuration?
     /// Owner settings shared with the input method. Only the H01 harness
     /// reads them, and only in the Model Preview profile.
     private let experimentDefaults: (any H01ExperimentDefaults)?
 
     init(
         baseURL: URL,
+        apiKey: String? = nil,
         diagnostics: DiagnosticsLog = .shared,
         transport: any LlamaCompletionStreamingTransport = URLSessionLlamaCompletionTransport(),
+        tokenBiasCache: LlamaTokenBiasCache? = nil,
         productProfile: TildeProductProfile = .current,
+        quietGateOverride: SuggestionQuietGate.Configuration? = nil,
         experimentDefaults: (any H01ExperimentDefaults)? = UserDefaults(
             suiteName: PersonalHistorySettingsContract.keyboardSuiteName
         )
     ) {
         self.baseURL = baseURL
+        self.apiKey = apiKey
         self.diagnostics = diagnostics
         self.transport = transport
+        self.tokenBiasCache = tokenBiasCache
         self.productProfile = productProfile
+        self.quietGateOverride = quietGateOverride
         self.experimentDefaults = experimentDefaults
         cleaner = CompletionOutputCleaner(maxVisibleWords: productProfile.maximumVisibleWords)
+    }
+
+    private var activeQuietGate: SuggestionQuietGate.Configuration? {
+        quietGateOverride ?? productProfile.quietGate
     }
 
     /// The profile's own cleaner unless the disabled-by-default H01 harness
@@ -138,6 +270,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         appBundleIdentifier: String?,
         scene: ScreenScene.Scene?,
         experimentArm: String? = nil,
+        personalBiasTerms: [WeightedBiasTerm] = [],
+        personalVoiceScaffold: String? = nil,
+        personalPhraseMatch: PersonalPhraseMatch? = nil,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion, Int) -> Void
     ) async throws -> Decision {
         let startedAt = ProcessInfo.processInfo.systemUptime
@@ -163,12 +298,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             scene: scene,
             profile: productProfile
         )
+        let isMidWord = RawContinuationPrompt.endsMidWord(textBeforeCursor)
         let register = ContinuationRegister.following(scene: scene, hostBundleIdentifier: appBundleIdentifier)
         let recipe = RawContinuationPrompt(
             textBeforeCursor: textBeforeCursor,
             register: register,
             scene: scene,
-            includesWindowTitle: productProfile.includesWindowTitleInScene
+            includesWindowTitle: productProfile.includesWindowTitleInScene,
+            customScaffold: personalVoiceScaffold
         )
         guard !recipe.prompt.isEmpty else { return .silent(.emptyPrompt) }
 
@@ -179,21 +316,40 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             textBeforeCursor: textBeforeCursor
         )
 
-        let body: [String: Any] = [
+        let sceneBiasTerms = DecodeBiasPolicy.extractSceneTerms(scene: scene, typed: prepared.typed)
+        let mergedBiasTerms = DecodeBiasPolicy.merge(
+            scene: sceneBiasTerms,
+            personal: personalBiasTerms,
+            typed: prepared.typed
+        )
+        let logitBiasEntries: [LlamaTokenBiasCache.TokenBiasEntry] = if let tokenBiasCache, !mergedBiasTerms.isEmpty {
+            await tokenBiasCache.logitBiasEntries(for: mergedBiasTerms)
+        } else {
+            []
+        }
+
+        var body: [String: Any] = [
             "prompt": prompt,
             "n_predict": productProfile == .production
                 ? register.generatedTokenBudget
                 : productProfile.generatedTokenBudget,
             "temperature": productProfile.completionTemperature,
             "cache_prompt": true,
+            "n_probs": 3,
             "stop": ["\n"],
             "stream": true,
         ]
+        if !logitBiasEntries.isEmpty {
+            body["logit_bias"] = logitBiasEntries.map { [$0.tokenID, $0.weight] as [Any] }
+        }
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("completion"))
         urlRequest.httpMethod = "POST"
         urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        if let apiKey {
+            urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
         urlRequest.timeoutInterval = 8
 
@@ -205,7 +361,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         var firstTokenMilliseconds: Int?
         var firstPartialMilliseconds: Int?
+        var settledMilliseconds: Int?
+        var streamTimings: StreamTimings?
         var stoppedAtCap = false
+        var streamedTokens: [StreamedTokenProbability] = []
         let content = try await withTaskCancellationHandler {
             var rawOutput = ""
             var lastPartialVisibleText = ""
@@ -226,9 +385,31 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 }
                 guard frame.hasRecognizedField else { throw URLError(.cannotParseResponse) }
                 sawCompletionFrame = true
+                if let timings = frame.timings {
+                    streamTimings = timings
+                }
                 if let piece = frame.content, !piece.isEmpty {
                     if firstTokenMilliseconds == nil {
                         firstTokenMilliseconds = Self.milliseconds(since: startedAt)
+                    }
+                    if let entries = frame.completionProbabilities, !entries.isEmpty {
+                        if entries.count == 1, let entry = entries.first,
+                           let tokenProb = entry.toStreamedTokenProbability(fallbackPiece: piece) {
+                            streamedTokens.append(tokenProb)
+                        } else {
+                            // Multi-token frames (e.g. --spec-type ngram-simple):
+                            // record every token's own text, probability, and top-k metrics.
+                            var appendedAny = false
+                            for entry in entries {
+                                guard let tokenProb = entry.toStreamedTokenProbability() else { continue }
+                                streamedTokens.append(tokenProb)
+                                appendedAny = true
+                            }
+                            if !appendedAny, let entry = entries.first,
+                               let tokenProb = entry.toStreamedTokenProbability(fallbackPiece: piece) {
+                                streamedTokens.append(tokenProb)
+                            }
+                        }
                     }
                     // llama.cpp emits token deltas. Always append: a repeated
                     // token can legitimately equal the text so far (" is" + " is").
@@ -238,7 +419,15 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             rawOutput,
                             recipe: recipe,
                             context: prepared,
-                            cleaner: cleaner
+                            cleaner: cleaner,
+                            hasLogitBias: !logitBiasEntries.isEmpty,
+                            isMidWord: isMidWord,
+                            textBeforeCursor: textBeforeCursor,
+                            register: register,
+                            scene: scene,
+                            personalBiasTerms: personalBiasTerms,
+                            personalPhraseMatch: personalPhraseMatch,
+                            streamedTokens: streamedTokens
                         )
                         if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
                             if firstPartialMilliseconds == nil {
@@ -252,13 +441,11 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             onPartialSuggestion(partial, firstPartialMilliseconds ?? Self.milliseconds(since: startedAt))
                         }
                         // Everything the display cap can show has arrived, or
-                        // the output is already rejected for a reason later
-                        // tokens cannot undo. Stop the helper decoding tokens
-                        // that can never reach the screen: on the 3-word Qwen
-                        // profile that is more than half of every request's
-                        // decode budget, and the single slot is freed for the
-                        // next word that much sooner.
+                        // confidence collapsed / a repeated nudged word trimmed
+                        // the tail, or the output is already rejected. Stop
+                        // paying for wasted tail tokens.
                         if stable.settled {
+                            settledMilliseconds = Self.milliseconds(since: startedAt)
                             stoppedAtCap = true
                             stream.cancel()
                             break
@@ -275,11 +462,59 @@ final class LlamaCompletionEngine: @unchecked Sendable {
 
         let normalized = recipe.normalizedContinuation(content)
         let clean = cleaner.cleanWithReason(normalized, in: prepared.typed)
-        var suggestion = clean.suggestion
+        var suggestion = clean.suggestion.map { cleaned -> CompletionSuggestion in
+            let deduped: CompletionSuggestion
+            if !logitBiasEntries.isEmpty {
+                let trimmed = DecodeBiasPolicy.trimRepeatedContentWord(cleaned.visibleText)
+                deduped = trimmed != cleaned.visibleText && !trimmed.trimmingCharacters(in: .whitespaces).isEmpty
+                    ? CompletionSuggestion(text: trimmed, maxVisibleWords: productProfile.maximumVisibleWords)
+                    : cleaned
+            } else {
+                deduped = cleaned
+            }
+            return WordConfidenceTruncator.trim(suggestion: deduped, tokens: streamedTokens)
+        }
         var rejectionReason = clean.rejectionReason.map { String(describing: $0) }
         var decisionReason: SuggestionDecisionReason = clean.rejectionReason.map(
             SuggestionDecisionReason.init(cleaner:)
         ) ?? .shown
+        if let candidate = suggestion,
+           isMidWord,
+           candidate.visibleText.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+            suggestion = nil
+            rejectionReason = "emptyOutput"
+            decisionReason = .emptyOutput
+        }
+        if let candidate = suggestion {
+            if let quietGate = activeQuietGate, quietGate.enabled {
+                let phraseAgreement = personalPhraseMatch?.agreement(with: candidate.visibleText)
+                let gateDecision = SuggestionQuietGate.evaluate(
+                    suggestion: candidate,
+                    tokens: streamedTokens,
+                    textBeforeCursor: textBeforeCursor,
+                    register: register,
+                    scene: scene,
+                    personalBiasTerms: personalBiasTerms,
+                    replyCueAnchoredToCurrentSentence: productProfile.decisionPolicy.replyCueAnchoredToCurrentSentence,
+                    configuration: quietGate,
+                    personalPhraseAgreement: phraseAgreement?.agreed ?? false,
+                    personalPhraseLogSupport: phraseAgreement?.logSupport ?? 0.0
+                )
+                if !gateDecision.allow {
+                    suggestion = nil
+                    rejectionReason = "lowConfidence"
+                    decisionReason = .lowConfidence
+                }
+            } else if WordConfidenceTruncator.isFirstWordBelowFloor(
+                suggestion: candidate,
+                tokens: streamedTokens,
+                minimumProbability: productProfile.minimumFirstWordProbability
+            ) {
+                suggestion = nil
+                rejectionReason = "lowConfidence"
+                decisionReason = .lowConfidence
+            }
+        }
         if let candidate = suggestion,
            SceneEchoPolicy.isEcho(candidate.visibleText, in: prepared.sceneEcho) {
             suggestion = nil
@@ -301,8 +536,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 "reason": reason,
             ])
         }
+        let totalMilliseconds = Self.milliseconds(since: startedAt)
         var timing = [
-            "totalMilliseconds": String(Self.milliseconds(since: startedAt)),
+            "totalMilliseconds": String(totalMilliseconds),
             "cleanedChars": String(suggestion?.visibleText.count ?? 0),
         ]
         if let firstTokenMilliseconds {
@@ -311,13 +547,25 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         if let firstPartialMilliseconds {
             timing["firstPartialMilliseconds"] = String(firstPartialMilliseconds)
         }
+        if let settledMilliseconds {
+            timing["settledMilliseconds"] = String(settledMilliseconds)
+        }
+        if let promptTokens = streamTimings?.promptN {
+            timing["promptTokens"] = String(promptTokens)
+        }
+        if let cachedTokens = streamTimings?.cacheN {
+            timing["cachedTokens"] = String(cachedTokens)
+        }
+        if let predictedTokens = streamTimings?.predictedN {
+            timing["predictedTokens"] = String(predictedTokens)
+        }
         timing["stoppedAtCap"] = String(stoppedAtCap)
         diagnostics.record("llama-completion-timing", metadata: timing)
         return Decision(
             suggestion: suggestion,
             reason: decisionReason,
             generated: !content.isEmpty,
-            generatorMilliseconds: Self.milliseconds(since: startedAt),
+            generatorMilliseconds: totalMilliseconds,
             firstStableWordMilliseconds: firstPartialMilliseconds
         )
     }
@@ -354,7 +602,15 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         _ rawOutput: String,
         recipe: RawContinuationPrompt,
         context: PreparedCompletionContext,
-        cleaner: CompletionOutputCleaner
+        cleaner: CompletionOutputCleaner,
+        hasLogitBias: Bool = false,
+        isMidWord: Bool = false,
+        textBeforeCursor: String = "",
+        register: ContinuationRegister = .prose,
+        scene: ScreenScene.Scene? = nil,
+        personalBiasTerms: [WeightedBiasTerm] = [],
+        personalPhraseMatch: PersonalPhraseMatch? = nil,
+        streamedTokens: [StreamedTokenProbability] = []
     ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
         let outcome = cleaner.clean(
             recipe.normalizedContinuation(rawOutput),
@@ -366,18 +622,96 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         guard !SceneEchoPolicy.isEcho(
             cleaned.visibleText,
             in: context.sceneEcho
-        ) else { return (nil, outcome.visibleTextIsSettled) }
+        ) else { return (nil, true) }
         guard let prefix = StableStreamPrefix.prefix(of: cleaned.visibleText) else {
             return (nil, outcome.visibleTextIsSettled)
+        }
+        var candidateText = prefix
+        var tailTrimmed = false
+        if hasLogitBias {
+            let deduped = DecodeBiasPolicy.trimRepeatedContentWord(candidateText)
+            if deduped != candidateText {
+                tailTrimmed = true
+                candidateText = deduped
+            }
+        }
+        let trimmedCandidate = candidateText.trimmingCharacters(in: .whitespaces)
+        guard !trimmedCandidate.isEmpty else {
+            return (nil, outcome.visibleTextIsSettled || tailTrimmed)
+        }
+        if isMidWord, trimmedCandidate.count < 2 {
+            return (nil, outcome.visibleTextIsSettled || tailTrimmed)
+        }
+        var suggestion = CompletionSuggestion(
+            text: candidateText,
+            maxVisibleWords: productProfile.maximumVisibleWords
+        )
+        if !streamedTokens.isEmpty {
+            if let quietGate = activeQuietGate, quietGate.enabled {
+                if quietGate.hardFirstWordFloor > 0,
+                   WordConfidenceTruncator.isFirstWordBelowFloor(
+                       suggestion: suggestion,
+                       tokens: streamedTokens,
+                       minimumProbability: quietGate.hardFirstWordFloor
+                   ) {
+                    return (nil, true)
+                }
+                let phraseAgreement = personalPhraseMatch?.agreement(with: suggestion.visibleText)
+                let gateDecision = SuggestionQuietGate.evaluate(
+                    suggestion: suggestion,
+                    tokens: streamedTokens,
+                    textBeforeCursor: textBeforeCursor,
+                    register: register,
+                    scene: scene,
+                    personalBiasTerms: personalBiasTerms,
+                    replyCueAnchoredToCurrentSentence: productProfile.decisionPolicy.replyCueAnchoredToCurrentSentence,
+                    configuration: quietGate,
+                    personalPhraseAgreement: phraseAgreement?.agreed ?? false,
+                    personalPhraseLogSupport: phraseAgreement?.logSupport ?? 0.0
+                )
+                if !gateDecision.allow {
+                    // Hold back displaying an unapproved partial without
+                    // prematurely cancelling the stream if later words could
+                    // lift the score above threshold.
+                    return (nil, outcome.visibleTextIsSettled)
+                }
+            } else if WordConfidenceTruncator.isFirstWordBelowFloor(
+                suggestion: suggestion,
+                tokens: streamedTokens,
+                minimumProbability: productProfile.minimumFirstWordProbability
+            ) {
+                // Weak first word: stay silent and cancel remaining tail tokens immediately.
+                return (nil, true)
+            }
+            // Mid-stream: only trim truly collapsed words (< 0.04), never
+            // short healthy connectors like "to" or "the" that lead into a
+            // confident 5-8 word clause. Full E_n trimming runs on final settle.
+            let collapseCheck = WordConfidenceTruncator.trimCollapsedTail(
+                suggestion: suggestion,
+                tokens: streamedTokens
+            )
+            if collapseCheck.collapsed {
+                tailTrimmed = true
+                suggestion = collapseCheck.suggestion
+            }
         }
         // The partial is what the writer actually sees first, so it must clear
         // the same grounding bar as the final — judged on the revealed prefix,
         // which is the text that would assert the fact.
         guard !FactualGroundingPolicy.containsUnsupportedFact(
-            prefix,
+            suggestion.visibleText,
             in: context.grounding
-        ) else { return (nil, outcome.visibleTextIsSettled) }
-        return (CompletionSuggestion(text: prefix), outcome.visibleTextIsSettled)
+        ) else { return (nil, outcome.visibleTextIsSettled || tailTrimmed) }
+        // Do NOT run `WordConfidenceTruncator.trim` mid-stream: a short
+        // connector like "to" or "the" at word 2 temporarily lowers prefix
+        // utility before the rest of a 5-8 word clause arrives, prematurely
+        // killing the stream into a 1-word stub. Final trimming runs once the
+        // full clause finishes; mid-stream we only cut on true collapse (<0.04)
+        // or a completed sentence (2+ words ending in . ! ?).
+        let collapsedTail = WordConfidenceTruncator.shouldStopStreamingEarly(tokens: streamedTokens)
+        let sentenceEnded = suggestion.visibleText.split(whereSeparator: \.isWhitespace).count >= 2
+            && (suggestion.visibleText.trimmingCharacters(in: .whitespaces).last.map { ".!?".contains($0) } == true)
+        return (suggestion, outcome.visibleTextIsSettled || tailTrimmed || collapsedTail || sentenceEnded)
     }
 
     static func promptByAddingIntentFutures(

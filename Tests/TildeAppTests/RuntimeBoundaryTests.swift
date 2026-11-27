@@ -112,4 +112,27 @@ struct RuntimeBoundaryTests {
         #expect(!child.isRunning)
         #expect(ContinuousClock.now - started < .seconds(2))
     }
+
+    @Test("Helper launch arguments include tuned Apple Silicon cache, flash-attention, ngram speculation, and hardening flags")
+    func tunedHelperArguments() {
+        let args = LlamaServerProcessHost.helperArguments(model: "/dev/fd/0", port: 17_872)
+        #expect(args == [
+            "-m", "/dev/fd/0",
+            "--host", "127.0.0.1",
+            "--port", "17872",
+            "-c", "4096",
+            "-np", "1",
+            "-fa", "on",
+            "--swa-full",
+            "--cache-reuse", "64",
+            "--ctx-checkpoints", "32",
+            "--spec-type", "ngram-simple",
+            "--no-webui",
+        ])
+        // Never leak API keys on the CLI argument vector.
+        #expect(!args.contains("--api-key"))
+        let key = LlamaServerProcessHost.generateAPIKey()
+        #expect(key.count == 64)
+        #expect(key != LlamaServerProcessHost.generateAPIKey())
+    }
 }

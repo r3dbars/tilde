@@ -116,6 +116,33 @@ struct GhostInputControllerTests {
             )
         )
     }
+
+    @Test("Cadence excludes auto-repeat and active accept-all while flagging boundary keys")
+    func cadenceHygieneRules() {
+        #expect(GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "a", keyCode: 0, modifiers: [], isGhostVisible: false
+        ))
+        #expect(!GhostInputController.shouldRecordCadence(
+            isRepeat: true, typedGrapheme: "a", keyCode: 0, modifiers: [], isGhostVisible: false
+        ))
+        // Pressing `~`/backtick to accept a visible ghost must not pollute typing strides.
+        #expect(!GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "`", keyCode: 50, modifiers: [], isGhostVisible: true
+        ))
+        #expect(!GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "~", keyCode: 50, modifiers: [.shift], isGhostVisible: true
+        ))
+        // When no ghost is visible, typing literal backtick/tilde still records normally.
+        #expect(GhostInputController.shouldRecordCadence(
+            isRepeat: false, typedGrapheme: "`", keyCode: 50, modifiers: [], isGhostVisible: false
+        ))
+        // Word and punctuation boundaries flag the following keystroke as an inter-word stride.
+        #expect(GhostInputController.startsCadenceBoundary(typedGrapheme: " "))
+        #expect(GhostInputController.startsCadenceBoundary(typedGrapheme: "."))
+        #expect(GhostInputController.startsCadenceBoundary(typedGrapheme: ","))
+        #expect(!GhostInputController.startsCadenceBoundary(typedGrapheme: "a"))
+        #expect(!GhostInputController.startsCadenceBoundary(typedGrapheme: nil))
+    }
 }
 
 /// Where a request may start, and what the flight recorder files it under.
@@ -173,14 +200,31 @@ struct GhostInputControllerOpportunityTests {
         #expect(GhostInputController.requestThrottleNanoseconds(for: .wordBoundary, policy: tuned) == 0)
         #expect(GhostInputController.requestThrottleNanoseconds(for: .sentenceBoundary, policy: tuned) == 0)
         #expect(GhostInputController.requestThrottleNanoseconds(for: nil, policy: tuned) == 0)
-        // Production does not ask mid-word at all, so its throttle is moot and zero.
-        #expect(GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: .conservative) == 0)
+        // Production asks mid-word only after a genuine 240 ms mid-word pause.
+        let prodThrottle = GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: .conservative)
+        #expect(prodThrottle == 240_000_000)
         let throttle = GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: tuned)
         // A fast typist lands roughly ten characters a second. The wait has
         // to outlast that gap, or a burst still spends one request a letter.
         #expect(throttle >= 100_000_000)
         // And stay short enough that a pause still gets an answer promptly.
         #expect(throttle <= 250_000_000)
+    }
+
+    @Test("A known stride lengthens the mid-word wait, bounded, and never the boundary paths")
+    func cadenceLengthensMidWordWait() {
+        var cadence = TypingCadenceTracker()
+        var clock: TimeInterval = 100
+        cadence.noteKeystroke(atUptime: clock)
+        for interval in [180, 190, 200, 210, 220, 230] {
+            clock += Double(interval) / 1_000
+            cadence.noteKeystroke(atUptime: clock)
+        }
+        let policy = InteractionPolicy.conservative
+        let gated = GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: policy, cadence: cadence)
+        #expect(gated == 345_000_000)
+        #expect(gated <= UInt64(policy.flowReveal.maximumMidWordRequestMilliseconds) * 1_000_000)
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .wordBoundary, policy: policy, cadence: cadence) == 0)
     }
 
     @Test("The two permissions are independent doors")

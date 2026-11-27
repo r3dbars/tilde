@@ -44,7 +44,8 @@ public enum LabPromptComposer {
             textBeforeCursor: scenario.typedContext,
             register: register,
             scene: scene,
-            maxContextCharacters: configuration.maximumContextCharacters
+            maxContextCharacters: configuration.maximumContextCharacters,
+            includesWindowTitle: configuration.includesWindowTitleInScene
         )
 
         var prompt: String
@@ -148,7 +149,8 @@ public enum LabPromptComposer {
             return ScreenScene.Scene(
                 mode: .replying,
                 conversationTurns: turns,
-                referenceSnippets: []
+                referenceSnippets: [],
+                windowTitle: scene.windowTitle
             )
         case .referencing:
             let references = scene.referenceSnippets.prefix(1).map {
@@ -157,10 +159,16 @@ public enum LabPromptComposer {
             return ScreenScene.Scene(
                 mode: .referencing,
                 conversationTurns: [],
-                referenceSnippets: references
+                referenceSnippets: references,
+                windowTitle: scene.windowTitle
             )
         case .composing:
-            return ScreenScene.Scene(mode: .composing, conversationTurns: [], referenceSnippets: [])
+            return ScreenScene.Scene(
+                mode: .composing,
+                conversationTurns: [],
+                referenceSnippets: [],
+                windowTitle: scene.windowTitle
+            )
         }
     }
 

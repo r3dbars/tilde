@@ -315,6 +315,9 @@ final class TildeSettingsViewModel: ObservableObject {
     func setPersonalizationEnabled(_ enabled: Bool) {
         personalHistory.isEnabled = enabled
         personalizationEnabled = enabled
+        if !enabled {
+            appDelegate?.clearPersonalRuntimeCaches()
+        }
     }
 
     func revealLocalOCREvaluationData() {
@@ -376,6 +379,7 @@ final class TildeSettingsViewModel: ObservableObject {
             do {
                 try await personalHistory.deleteAll()
                 TildeLocalOutcomeStores.deleteAll()
+                self.appDelegate?.clearPersonalRuntimeCaches()
                 self.learningDataSize = "No learning data"
                 self.personalizationEnabled = false
                 self.message = "Learning data was deleted."

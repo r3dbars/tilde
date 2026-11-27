@@ -39,6 +39,7 @@ public enum SuggestionDecisionReason: String, Codable, CaseIterable, Sendable {
     case selfRepetition = "self-repetition"
     case sceneEcho = "scene-echo"
     case unsupportedFact = "unsupported-fact"
+    case lowConfidence = "low-confidence"
     case timeout
     case protocolError = "protocol-error"
 
