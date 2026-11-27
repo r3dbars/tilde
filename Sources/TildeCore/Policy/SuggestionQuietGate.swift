@@ -45,6 +45,8 @@ public enum SuggestionQuietGate {
         public let register: ContinuationRegister
         public let cursorBoundary: CursorBoundary
         public let personalVocabularyAgreement: Bool
+        public let personalPhraseAgreement: Bool
+        public let personalPhraseLogSupport: Double
 
         public init(
             firstWordProbability: Double,
@@ -62,7 +64,9 @@ public enum SuggestionQuietGate {
             hasReplyCue: Bool,
             register: ContinuationRegister,
             cursorBoundary: CursorBoundary,
-            personalVocabularyAgreement: Bool = false
+            personalVocabularyAgreement: Bool = false,
+            personalPhraseAgreement: Bool = false,
+            personalPhraseLogSupport: Double = 0.0
         ) {
             self.firstWordProbability = min(1.0, max(1e-6, firstWordProbability))
             self.firstWordMargin = firstWordMargin.flatMap { $0.isFinite ? min(1.0, max(0.0, $0)) : nil }
@@ -88,6 +92,52 @@ public enum SuggestionQuietGate {
             self.register = register
             self.cursorBoundary = cursorBoundary
             self.personalVocabularyAgreement = personalVocabularyAgreement
+            self.personalPhraseAgreement = personalPhraseAgreement
+            self.personalPhraseLogSupport = personalPhraseLogSupport.isFinite
+                ? max(0.0, personalPhraseLogSupport)
+                : 0.0
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case firstWordProbability, firstWordMargin, firstWordEntropy, firstWordRunnerUpRatio
+            case secondWordProbability, meanWordProbability, minimumWordProbability
+            case meanWordMargin, meanWordEntropy
+            case wordCount, characterCount, sceneGrounded, hasReplyCue
+            case register, cursorBoundary
+            case personalVocabularyAgreement, personalPhraseAgreement, personalPhraseLogSupport
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                firstWordProbability: try c.decode(Double.self, forKey: .firstWordProbability),
+                firstWordMargin: try c.decodeIfPresent(Double.self, forKey: .firstWordMargin),
+                firstWordEntropy: try c.decodeIfPresent(Double.self, forKey: .firstWordEntropy),
+                firstWordRunnerUpRatio: try c.decodeIfPresent(Double.self, forKey: .firstWordRunnerUpRatio),
+                secondWordProbability: try c.decodeIfPresent(Double.self, forKey: .secondWordProbability),
+                meanWordProbability: try c.decodeIfPresent(Double.self, forKey: .meanWordProbability),
+                minimumWordProbability: try c.decodeIfPresent(Double.self, forKey: .minimumWordProbability),
+                meanWordMargin: try c.decodeIfPresent(Double.self, forKey: .meanWordMargin),
+                meanWordEntropy: try c.decodeIfPresent(Double.self, forKey: .meanWordEntropy),
+                wordCount: try c.decode(Int.self, forKey: .wordCount),
+                characterCount: try c.decode(Int.self, forKey: .characterCount),
+                sceneGrounded: try c.decode(Bool.self, forKey: .sceneGrounded),
+                hasReplyCue: try c.decode(Bool.self, forKey: .hasReplyCue),
+                register: try c.decode(ContinuationRegister.self, forKey: .register),
+                cursorBoundary: try c.decode(CursorBoundary.self, forKey: .cursorBoundary),
+                personalVocabularyAgreement: try c.decodeIfPresent(
+                    Bool.self,
+                    forKey: .personalVocabularyAgreement
+                ) ?? false,
+                personalPhraseAgreement: try c.decodeIfPresent(
+                    Bool.self,
+                    forKey: .personalPhraseAgreement
+                ) ?? false,
+                personalPhraseLogSupport: try c.decodeIfPresent(
+                    Double.self,
+                    forKey: .personalPhraseLogSupport
+                ) ?? 0.0
+            )
         }
     }
 
@@ -95,8 +145,9 @@ public enum SuggestionQuietGate {
     /// Optional distribution features (`margin`, `entropy`, `runnerUpRatio`,
     /// `secondWordProbability`, phrase means) are centered around neutral
     /// reference points so absent telemetry contributes exactly `0.0`
-    /// (fail-neutral). Default weights are monotonic and sign-consistent,
-    /// calibrated on Certified Corpus V2 Development split.
+    /// (fail-neutral). Default weights are monotonic, sign-consistent, and
+    /// scene-invariant, calibrated jointly across open-ended prose and the
+    /// Certified Corpus V2 Development split.
     public struct Weights: Codable, Equatable, Sendable {
         public static let neutralMargin = 0.25
         public static let neutralEntropy = 1.0
@@ -125,31 +176,39 @@ public enum SuggestionQuietGate {
         public var midWordBoundary: Double
         public var punctuationBoundary: Double
         public var personalVocabularyAgreement: Double
+        public var personalPhraseAgreement: Double
+        public var personalPhraseLogSupport: Double
 
         public init(
-            bias: Double = -0.35,
-            firstWordLogProbability: Double = 0.55,
-            firstWordProbability: Double = 0.50,
+            bias: Double = 0.50,
+            firstWordLogProbability: Double = 0.45,
+            firstWordProbability: Double = 0.40,
             firstWordMargin: Double = 0.35,
-            firstWordEntropy: Double = -0.25,
-            firstWordRunnerUpRatio: Double = -0.20,
-            secondWordProbability: Double = 1.60,
-            meanWordProbability: Double = 1.20,
-            minimumWordProbability: Double = 1.10,
-            meanWordMargin: Double = 1.50,
-            meanWordEntropy: Double = -1.80,
-            wordCount: Double = -0.04,
-            characterCount: Double = 0.20,
+            firstWordEntropy: Double = -0.10,
+            firstWordRunnerUpRatio: Double = -0.15,
+            secondWordProbability: Double = 0.90,
+            meanWordProbability: Double = 1.40,
+            minimumWordProbability: Double = 2.20,
+            meanWordMargin: Double = 2.00,
+            meanWordEntropy: Double = -2.00,
+            wordCount: Double = -0.02,
+            characterCount: Double = 0.15,
             // Kept at 0.0 (scene-invariant): counterfactual wrong-scene stress
             // tests showed positive scene/reply-cue weights let 92-100% of
             // wrong-scene entity hallucinations bypass the gate.
             sceneGrounded: Double = 0.0,
             hasReplyCue: Double = 0.0,
-            chatRegister: Double = 0.10,
-            emailRegister: Double = 0.05,
+            // Chat replies have much narrower branching (higher baseline p1)
+            // and higher interruption risk than open-ended prose, so `.chat`
+            // is strictly more conservative than `.prose` (also making wrong
+            // `.replying` scenes strictly harder to leak).
+            chatRegister: Double = -1.85,
+            emailRegister: Double = -0.30,
             midWordBoundary: Double = 0.20,
             punctuationBoundary: Double = -0.10,
-            personalVocabularyAgreement: Double = 0.45
+            personalVocabularyAgreement: Double = 0.45,
+            personalPhraseAgreement: Double = 0.45,
+            personalPhraseLogSupport: Double = 0.10
         ) {
             self.bias = bias
             self.firstWordLogProbability = firstWordLogProbability
@@ -171,6 +230,8 @@ public enum SuggestionQuietGate {
             self.midWordBoundary = midWordBoundary
             self.punctuationBoundary = punctuationBoundary
             self.personalVocabularyAgreement = personalVocabularyAgreement
+            self.personalPhraseAgreement = personalPhraseAgreement
+            self.personalPhraseLogSupport = personalPhraseLogSupport
         }
 
         public static let `default` = Weights()
@@ -183,6 +244,7 @@ public enum SuggestionQuietGate {
             case wordCount, characterCount
             case sceneGrounded, hasReplyCue, chatRegister, emailRegister
             case midWordBoundary, punctuationBoundary, personalVocabularyAgreement
+            case personalPhraseAgreement, personalPhraseLogSupport
         }
 
         public init(from decoder: Decoder) throws {
@@ -222,6 +284,14 @@ public enum SuggestionQuietGate {
                 Double.self,
                 forKey: .personalVocabularyAgreement
             ) ?? d.personalVocabularyAgreement
+            personalPhraseAgreement = try c.decodeIfPresent(
+                Double.self,
+                forKey: .personalPhraseAgreement
+            ) ?? d.personalPhraseAgreement
+            personalPhraseLogSupport = try c.decodeIfPresent(
+                Double.self,
+                forKey: .personalPhraseLogSupport
+            ) ?? d.personalPhraseLogSupport
         }
     }
 
@@ -252,14 +322,13 @@ public enum SuggestionQuietGate {
 
         public static let disabled = Configuration(enabled: false)
 
-        /// Scene-invariant multi-feature Quiet Gate calibrated on Certified
-        /// Corpus V2 Dev (`0.12 / 0.40`): achieves peak NKS (`999 / 11.01%`)
-        /// on leak-free LoRA v3a @ 0.60 with `17.7%` BWS (`9/600` wrong),
-        /// `92.1%` silence restraint, and `99.5%` factuality without
-        /// over-silencing open-ended prose.
+        /// Scene-invariant multi-feature Quiet Gate calibrated jointly across
+        /// open-ended prose (18–22% live display band) and Certified Corpus V2
+        /// Dev (`0.10 / 0.50`, <20% BWS, 96.7% silence restraint, 100%
+        /// factuality, 61.0% CF pair pass on Qwen 3.5 4B Base).
         public static let production = Configuration(
             enabled: true,
-            threshold: 0.40,
+            threshold: 0.50,
             hardFirstWordFloor: WordConfidenceTruncator.defaultFirstWordFloor,
             weights: .default,
             failOpenWhenUnavailable: true
@@ -339,6 +408,8 @@ public enum SuggestionQuietGate {
         case .wordBoundary: break
         }
         if features.personalVocabularyAgreement { z += weights.personalVocabularyAgreement }
+        if features.personalPhraseAgreement { z += weights.personalPhraseAgreement }
+        z += weights.personalPhraseLogSupport * min(features.personalPhraseLogSupport, 6.0)
         return (z, sigmoid(z))
     }
 
@@ -353,7 +424,9 @@ public enum SuggestionQuietGate {
         register: ContinuationRegister,
         scene: ScreenScene.Scene?,
         personalBiasTerms: [WeightedBiasTerm] = [],
-        replyCueAnchoredToCurrentSentence: Bool = true
+        replyCueAnchoredToCurrentSentence: Bool = true,
+        personalPhraseAgreement: Bool = false,
+        personalPhraseLogSupport: Double = 0.0
     ) -> Features? {
         guard let profile = WordConfidenceTruncator.confidenceProfile(
             for: suggestion,
@@ -396,7 +469,9 @@ public enum SuggestionQuietGate {
             hasReplyCue: hasReplyCue,
             register: register,
             cursorBoundary: CursorBoundary.classify(textBeforeCursor),
-            personalVocabularyAgreement: personalAgreement
+            personalVocabularyAgreement: personalAgreement,
+            personalPhraseAgreement: personalPhraseAgreement,
+            personalPhraseLogSupport: personalPhraseLogSupport
         )
     }
 
@@ -436,7 +511,9 @@ public enum SuggestionQuietGate {
         scene: ScreenScene.Scene?,
         personalBiasTerms: [WeightedBiasTerm] = [],
         replyCueAnchoredToCurrentSentence: Bool = true,
-        configuration: Configuration
+        configuration: Configuration,
+        personalPhraseAgreement: Bool = false,
+        personalPhraseLogSupport: Double = 0.0
     ) -> Decision {
         guard configuration.enabled else {
             return Decision(allow: true, score: nil, logit: nil, failedOpen: false)
@@ -448,7 +525,9 @@ public enum SuggestionQuietGate {
             register: register,
             scene: scene,
             personalBiasTerms: personalBiasTerms,
-            replyCueAnchoredToCurrentSentence: replyCueAnchoredToCurrentSentence
+            replyCueAnchoredToCurrentSentence: replyCueAnchoredToCurrentSentence,
+            personalPhraseAgreement: personalPhraseAgreement,
+            personalPhraseLogSupport: personalPhraseLogSupport
         )
         return evaluate(features: features, configuration: configuration)
     }

@@ -110,7 +110,7 @@ struct SuggestionQuietGateTests {
         )
         #expect(abs(SuggestionQuietGate.score(sceneOnly).score - baseScore) < 1e-12)
 
-        let personalAndChat = SuggestionQuietGate.Features(
+        let personalAndMidWord = SuggestionQuietGate.Features(
             firstWordProbability: 0.35,
             firstWordMargin: 0.10,
             firstWordEntropy: 1.40,
@@ -124,11 +124,87 @@ struct SuggestionQuietGateTests {
             characterCount: 12,
             sceneGrounded: true,
             hasReplyCue: true,
-            register: .chat,
+            register: .prose,
             cursorBoundary: .midWord,
             personalVocabularyAgreement: true
         )
-        #expect(SuggestionQuietGate.score(personalAndChat).score > baseScore)
+        #expect(SuggestionQuietGate.score(personalAndMidWord).score > baseScore)
+
+        // Personal phrase agreement + log support lift score monotonically and stay neutral at defaults.
+        let phraseAgreement = SuggestionQuietGate.Features(
+            firstWordProbability: 0.35,
+            firstWordMargin: 0.10,
+            firstWordEntropy: 1.40,
+            firstWordRunnerUpRatio: 0.70,
+            secondWordProbability: 0.30,
+            meanWordProbability: 0.32,
+            minimumWordProbability: 0.30,
+            meanWordMargin: 0.12,
+            meanWordEntropy: 1.35,
+            wordCount: 2,
+            characterCount: 12,
+            sceneGrounded: false,
+            hasReplyCue: false,
+            register: .prose,
+            cursorBoundary: .wordBoundary,
+            personalVocabularyAgreement: false,
+            personalPhraseAgreement: true,
+            personalPhraseLogSupport: 2.0
+        )
+        #expect(SuggestionQuietGate.score(phraseAgreement).score > baseScore)
+
+        // Chat register is strictly more conservative than open-ended prose (and never rewards wrong-scene replies).
+        let chatRegister = SuggestionQuietGate.Features(
+            firstWordProbability: 0.35,
+            firstWordMargin: 0.10,
+            firstWordEntropy: 1.40,
+            firstWordRunnerUpRatio: 0.70,
+            secondWordProbability: 0.30,
+            meanWordProbability: 0.32,
+            minimumWordProbability: 0.30,
+            meanWordMargin: 0.12,
+            meanWordEntropy: 1.35,
+            wordCount: 2,
+            characterCount: 12,
+            sceneGrounded: false,
+            hasReplyCue: false,
+            register: .chat,
+            cursorBoundary: .wordBoundary,
+            personalVocabularyAgreement: false
+        )
+        #expect(SuggestionQuietGate.score(chatRegister).score < baseScore)
+    }
+
+    @Test("SuggestionQuietGate Features and Weights decode legacy JSON without personalPhrase fields")
+    func quietGateBackwardCompatibleCodable() throws {
+        let legacyFeaturesJSON = Data("""
+        {
+          "firstWordProbability": 0.4,
+          "wordCount": 2,
+          "characterCount": 10,
+          "sceneGrounded": false,
+          "hasReplyCue": false,
+          "register": "prose",
+          "cursorBoundary": "word-boundary",
+          "personalVocabularyAgreement": false
+        }
+        """.utf8)
+        let decodedFeatures = try JSONDecoder().decode(SuggestionQuietGate.Features.self, from: legacyFeaturesJSON)
+        #expect(!decodedFeatures.personalPhraseAgreement)
+        #expect(decodedFeatures.personalPhraseLogSupport == 0.0)
+
+        let legacyWeightsJSON = Data("""
+        {
+          "bias": 0.50,
+          "sceneGrounded": 0.0,
+          "hasReplyCue": 0.0
+        }
+        """.utf8)
+        let decodedWeights = try JSONDecoder().decode(SuggestionQuietGate.Weights.self, from: legacyWeightsJSON)
+        #expect(decodedWeights.personalPhraseAgreement == 0.45)
+        #expect(decodedWeights.personalPhraseLogSupport == 0.10)
+        #expect(decodedWeights.sceneGrounded == 0.0)
+        #expect(decodedWeights.hasReplyCue == 0.0)
     }
 
     @Test("SuggestionQuietGate fails open when telemetry is absent and honors hardFirstWordFloor and personal vocab agreement")
