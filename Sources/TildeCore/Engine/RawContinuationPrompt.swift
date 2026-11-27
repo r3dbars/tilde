@@ -5,7 +5,7 @@ import Foundation
 /// model's duplicate leading space from its response.
 /// Writing register inferred from the host app — the scaffold's examples teach
 /// the model the room's voice (casual chat vs email vs flowing prose).
-public enum ContinuationRegister: String, Sendable {
+public enum ContinuationRegister: String, Codable, Sendable {
     case chat
     case email
     case prose

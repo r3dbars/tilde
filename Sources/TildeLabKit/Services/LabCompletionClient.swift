@@ -1,4 +1,5 @@
 import Foundation
+import TildeCore
 
 public struct LabModelRequest: Sendable {
     public let prompt: String
@@ -42,6 +43,7 @@ public struct LabModelResponse: Equatable, Sendable {
     public let tokenLogProbabilities: [Double]
     public let tokenProbabilityMargins: [Double]
     public let tokenEntropies: [Double]
+    public let streamedTokens: [StreamedTokenProbability]
     public let stopReason: String?
 
     public init(
@@ -53,6 +55,7 @@ public struct LabModelResponse: Equatable, Sendable {
         tokenLogProbabilities: [Double] = [],
         tokenProbabilityMargins: [Double] = [],
         tokenEntropies: [Double] = [],
+        streamedTokens: [StreamedTokenProbability] = [],
         stopReason: String? = nil
     ) {
         self.content = content
@@ -63,6 +66,7 @@ public struct LabModelResponse: Equatable, Sendable {
         self.tokenLogProbabilities = tokenLogProbabilities
         self.tokenProbabilityMargins = tokenProbabilityMargins
         self.tokenEntropies = tokenEntropies
+        self.streamedTokens = streamedTokens
         self.stopReason = stopReason
     }
 }
@@ -211,6 +215,7 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
                 payload["completion_probabilities"]
             ),
             tokenEntropies: tokenEntropies(payload["completion_probabilities"]),
+            streamedTokens: streamedTokenProbabilities(payload["completion_probabilities"]),
             stopReason: payload["stop_type"] as? String
         )
     }
@@ -231,6 +236,7 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
         var tokenIDs: [Int] = []
         var margins: [Double] = []
         var entropies: [Double] = []
+        var streamedTokens: [StreamedTokenProbability] = []
         var stopReason: String?
         var recognizedFrame = false
         var incompleteProbabilityEvidence = false
@@ -244,7 +250,8 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
                 throw LabCompletionError.protocolFailure
             }
             recognizedFrame = true
-            if let piece = payload["content"] as? String, !piece.isEmpty {
+            let framePiece = payload["content"] as? String
+            if let piece = framePiece, !piece.isEmpty {
                 if firstTokenMilliseconds == nil { firstTokenMilliseconds = milliseconds(since: started) }
                 content += piece
                 guard content.utf8.count <= maximumResponseBytes else {
@@ -263,6 +270,10 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
                 payload["completion_probabilities"]
             ))
             entropies.append(contentsOf: tokenEntropies(payload["completion_probabilities"]))
+            streamedTokens.append(contentsOf: streamedTokenProbabilities(
+                payload["completion_probabilities"],
+                fallbackSinglePiece: framePiece
+            ))
             if let value = payload["stop_type"] as? String { stopReason = value }
             if payload["stop"] as? Bool == true { break }
         }
@@ -279,6 +290,7 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
             tokenLogProbabilities: incompleteProbabilityEvidence ? [] : logProbabilities,
             tokenProbabilityMargins: margins,
             tokenEntropies: entropies,
+            streamedTokens: incompleteProbabilityEvidence ? [] : streamedTokens,
             stopReason: stopReason
         )
     }
@@ -350,6 +362,56 @@ public final class LabHTTPCompletionClient: LabCompletionClient, @unchecked Send
                 $1 > 0 ? $0 - $1 * log($1) : $0
             }
         }
+    }
+
+    func streamedTokenProbabilities(
+        _ value: Any?,
+        fallbackSinglePiece: String? = nil
+    ) -> [StreamedTokenProbability] {
+        guard let entries = value as? [[String: Any]], !entries.isEmpty else { return [] }
+        var result: [StreamedTokenProbability] = []
+        result.reserveCapacity(entries.count)
+        for entry in entries {
+            guard let selected = selectedProbabilityEntry(entry),
+                  let prob = probability(selected) else { return [] }
+            let rawPiece = (entry["token"] as? String)
+                ?? (entry["tok_str"] as? String)
+                ?? (entry["content"] as? String)
+                ?? (selected["token"] as? String)
+                ?? (selected["tok_str"] as? String)
+            let piece: String?
+            if let rawPiece, !rawPiece.isEmpty {
+                piece = rawPiece
+            } else if entries.count == 1, let fallbackSinglePiece, !fallbackSinglePiece.isEmpty {
+                piece = fallbackSinglePiece
+            } else {
+                // EOS/control tokens often carry an empty rendered token string;
+                // skip them without discarding earlier visible token probabilities.
+                piece = nil
+            }
+            guard let piece else { continue }
+            let metrics = alternativeProbabilities(for: entry).flatMap {
+                StreamedTokenProbability.distributionMetrics(fromAlternativeProbabilities: $0)
+            }
+            result.append(StreamedTokenProbability(
+                piece: piece,
+                probability: prob,
+                top1Margin: metrics?.top1Margin,
+                entropy: metrics?.entropy,
+                runnerUpRatio: metrics?.runnerUpRatio
+            ))
+        }
+        return result
+    }
+
+    private func alternativeProbabilities(for entry: [String: Any]) -> [Double]? {
+        for key in ["top_logprobs", "top_probs", "probs"] {
+            if let alternatives = entry[key] as? [[String: Any]] {
+                let values = alternatives.compactMap(probability)
+                return values.count >= 2 && values.count == alternatives.count ? values : nil
+            }
+        }
+        return nil
     }
 
     private func alternativeProbabilityRows(_ value: Any?) -> [[Double]] {

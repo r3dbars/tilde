@@ -141,6 +141,7 @@ public enum TildeProductProfile: String, Equatable, Sendable {
     public var sceneSuggestionOptions: SceneSuggestionPolicy.Options { decisionPolicy.sceneSuggestionOptions }
     public var includesWindowTitleInScene: Bool { decisionPolicy.includesWindowTitleInScene }
     public var minimumFirstWordProbability: Double { decisionPolicy.minimumFirstWordProbability }
+    public var quietGate: SuggestionQuietGate.Configuration? { decisionPolicy.quietGate }
     public var chainsCompletionAfterAccept: Bool { interactionPolicy.chainsCompletionAfterAccept }
     public var calmRevealDelays: SuggestionRevealDelayPolicy.CalmDelays { interactionPolicy.calmRevealDelays }
     public var requestsAfterPunctuation: Bool { interactionPolicy.requestsAfterPunctuation }

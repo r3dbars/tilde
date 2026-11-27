@@ -62,6 +62,18 @@ public actor LabAssetVerifier {
             throw LabAssetError.invalidModelHash
         }
 
+        let loraDigest: String?
+        if let loraFile = configuration.loraFile {
+            let loraAttributes = try attributes(at: loraFile, error: .unreadableModel)
+            try validateGGUF(at: loraFile)
+            loraDigest = try await digest(
+                of: loraFile,
+                fingerprint: loraAttributes,
+                error: .unreadableModel
+            )
+        } else {
+            loraDigest = nil
+        }
         let helperAttributes = try attributes(
             at: configuration.serverExecutable,
             error: .unreadableServer
@@ -76,7 +88,8 @@ public actor LabAssetVerifier {
             modelIdentifier: configuration.modelProfile.identifier,
             modelRevision: configuration.modelProfile.revision,
             modelSHA256: modelDigest,
-            helperSHA256: helperDigest
+            helperSHA256: helperDigest,
+            loraSHA256: loraDigest
         )
     }
 

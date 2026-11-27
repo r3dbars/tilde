@@ -50,7 +50,7 @@ enum ResearchCoordinator {
           --seeds 17,41,73  --candidates 31  --block-size 20
           --budget-hours 12 --maximum-model-requests 250000
           --workers 2 --slots 4 --repetitions 1
-          --experimental-model --model ID --model-revision REV --model-file PATH
+          --experimental-model --model ID --model-revision REV --model-file PATH [--lora-file PATH]
           --helper PATH --output CAMPAIGN.json
         """,
         "validate": "Usage: tilde-lab validate CAMPAIGN.json",
@@ -58,7 +58,7 @@ enum ResearchCoordinator {
         "review": "Usage: tilde-lab review --campaign CAMPAIGN_OR_PLAN.json --status supported|rejected|inconclusive --conclusion TEXT [--database PATH]",
         "status": "Usage: tilde-lab status CAMPAIGN.json [--database PATH] [--json]",
         "compare": "Usage: tilde-lab compare --campaign CAMPAIGN_OR_PLAN.json [--paired-bootstrap 10000] [--database PATH]",
-        "risk-coverage": "Usage: tilde-lab risk-coverage --campaign CAMPAIGN.json --arm ID [--trust-limit 0.01] [--output report.json] [--json]",
+        "risk-coverage": "Usage: tilde-lab risk-coverage --campaign CAMPAIGN.json --arm ID [--gate mean-prob|first-word|quiet-gate] [--trust-limit 0.01] [--output report.json] [--json]",
         "personalization-replay": "Usage: tilde-lab personalization-replay --input events.jsonl [--scope app-specific|global|app-then-global] [--evaluation-start-ms UNIX_MS] [--output report.json] [--json]",
         "simulate-typist": """
         Usage: tilde-lab simulate-typist [options]
@@ -122,7 +122,7 @@ enum ResearchCoordinator {
         try arguments.assertAllowed(
             options: [
                 "name", "phase", "class", "suite", "partition", "model",
-                "model-revision", "model-file", "helper", "budget-hours", "output",
+                "model-revision", "model-file", "lora-file", "helper", "budget-hours", "output",
                 "recipe", "search", "candidates", "seeds", "workers", "slots",
                 "repetitions", "maximum-model-requests", "maximum-roots-per-trial",
                 "block-size", "hypothesis-id", "hypothesis", "primary-metric",

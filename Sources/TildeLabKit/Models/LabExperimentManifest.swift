@@ -199,12 +199,18 @@ public struct LabRuntimeConfiguration: Codable, Equatable, Sendable {
     public func materialize(
         serverExecutable: URL,
         modelFile: URL,
-        modelProfile: LabModelProfile = .production
+        modelProfile: LabModelProfile = .production,
+        loraFile: URL? = nil,
+        loraScale: Double? = nil,
+        fixedBasePort: Int? = nil
     ) -> LabExecutionConfiguration {
         LabExecutionConfiguration(
             serverExecutable: serverExecutable,
             modelFile: modelFile,
             modelProfile: modelProfile,
+            loraFile: loraFile,
+            loraScale: loraScale,
+            fixedBasePort: fixedBasePort,
             workerCount: workerCount,
             slotsPerWorker: slotsPerWorker,
             repetitions: repetitions,

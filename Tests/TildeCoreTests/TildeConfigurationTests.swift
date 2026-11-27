@@ -9,12 +9,13 @@ struct TildeConfigurationTests {
         let decision = DecisionPolicy.conservative
         #expect(decision.maximumVisibleWords == CompletionSuggestion.defaultMaxVisibleWords)
         #expect(decision.sceneEchoMinimumWords == SceneEchoPolicy.defaultMinimumWords)
-        #expect(decision.sceneEchoMinimumCharacters == SceneEchoPolicy.defaultMinimumCharacters)
+        #expect(decision.sceneEchoMinimumCharacters == 24)
         #expect(decision.factualGrounding == .off)
         #expect(decision.replyCueAnchoredToCurrentSentence)
         #expect(!decision.extendedOrdinarySilenceGate)
         #expect(decision.includesWindowTitleInScene)
         #expect(decision.minimumFirstWordProbability == WordConfidenceTruncator.defaultFirstWordFloor)
+        #expect(decision.quietGate == .production)
         let interaction = InteractionPolicy.conservative
         #expect(interaction.chainsCompletionAfterAccept)
         #expect(interaction.calmRevealDelays == .production)

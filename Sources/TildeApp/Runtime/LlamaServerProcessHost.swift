@@ -127,7 +127,16 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     /// warm p95 TTFT by 50–76% and warm 3-word p95 by 25–49% over the old
     /// `--cache-reuse 256` defaults while keeping f16 KV cache (q8_0 KV was
     /// slower on both models). `--no-webui` disables unused web UI routes.
-    static func helperArguments(model: String, port: Int, lora: String? = nil) -> [String] {
+    /// Empirically calibrated local personal LoRA scale: keeps voice & exact-1
+    /// lift while avoiding full-scale (`1.0`) wrong-scene over-triggering.
+    static let defaultLoRAScale = 0.6
+
+    static func helperArguments(
+        model: String,
+        port: Int,
+        lora: String? = nil,
+        loraScale: Double = defaultLoRAScale
+    ) -> [String] {
         var args = [
             "-m", model,
             "--host", "127.0.0.1",
@@ -142,7 +151,12 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             "--no-webui",
         ]
         if let lora, !lora.isEmpty {
-            args += ["--lora", lora]
+            let clamped = min(2.0, max(0.05, loraScale))
+            if abs(clamped - 1.0) < 1e-6 {
+                args += ["--lora", lora]
+            } else {
+                args += ["--lora-scaled", String(format: "%@:%.2f", lora, clamped)]
+            }
         }
         return args
     }

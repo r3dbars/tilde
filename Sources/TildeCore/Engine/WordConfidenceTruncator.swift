@@ -1,13 +1,102 @@
 import Foundation
 
-/// One streamed token piece paired with its emitted probability in `[0, 1]`.
-public struct StreamedTokenProbability: Equatable, Sendable {
+/// One streamed token piece paired with its emitted probability in `[0, 1]`
+/// and optional text-free top-k distribution metrics (`n_probs >= 2`).
+public struct StreamedTokenProbability: Codable, Equatable, Sendable {
     public let piece: String
     public let probability: Double
+    /// Top-1 minus top-2 probability in `[0, 1]`, or `nil` when fewer than two
+    /// alternatives were returned.
+    public let top1Margin: Double?
+    /// Local Shannon entropy (nats, `>= 0`) over the returned top-k
+    /// distribution plus remainder mass, or `nil` when unavailable.
+    public let entropy: Double?
+    /// Runner-up ratio `p_2 / max(p_1, 1e-6)` in `[0, 1]` (0 = runaway winner,
+    /// 1 = dead tie), or `nil` when fewer than two alternatives were returned.
+    public let runnerUpRatio: Double?
 
-    public init(piece: String, probability: Double) {
+    public init(
+        piece: String,
+        probability: Double,
+        top1Margin: Double? = nil,
+        entropy: Double? = nil,
+        runnerUpRatio: Double? = nil
+    ) {
         self.piece = piece
         self.probability = min(1.0, max(1e-6, probability))
+        self.top1Margin = top1Margin.flatMap { $0.isFinite ? min(1.0, max(0.0, $0)) : nil }
+        self.entropy = entropy.flatMap { $0.isFinite ? max(0.0, $0) : nil }
+        self.runnerUpRatio = runnerUpRatio.flatMap { $0.isFinite ? min(1.0, max(0.0, $0)) : nil }
+    }
+
+    /// Computes strictly text-free distribution metrics from top-k alternative
+    /// probabilities (`n_probs >= 2`). Returns `nil` (fail-open) when fewer
+    /// than two valid probabilities are available.
+    public static func distributionMetrics(
+        fromAlternativeProbabilities alternatives: [Double]
+    ) -> (top1Margin: Double, entropy: Double, runnerUpRatio: Double)? {
+        let valid = alternatives.filter { $0.isFinite && (0.0...1.0).contains($0) }
+        guard valid.count >= 2 else { return nil }
+        let sorted = valid.sorted(by: >)
+        let top1 = sorted[0]
+        let top2 = sorted[1]
+        let margin = min(1.0, max(0.0, top1 - top2))
+        let ratio = min(1.0, max(0.0, top2 / max(top1, 1e-6)))
+        let totalMass = sorted.reduce(0.0, +)
+        let remainder = max(0.0, 1.0 - totalMass)
+        var entropy = 0.0
+        for p in sorted where p > 0 {
+            entropy -= p * log(p)
+        }
+        if remainder > 0 {
+            entropy -= remainder * log(remainder)
+        }
+        return (margin, max(0.0, entropy), ratio)
+    }
+}
+
+/// Strictly text-free word-level probability and margin summary aligned to a
+/// candidate suggestion.
+public struct WordConfidenceProfile: Equatable, Sendable {
+    public let firstWordProbability: Double
+    public let firstWordMargin: Double?
+    public let firstWordEntropy: Double?
+    public let firstWordRunnerUpRatio: Double?
+    public let secondWordProbability: Double?
+    public let secondWordMargin: Double?
+    public let secondWordEntropy: Double?
+    public let meanWordProbability: Double
+    public let minimumWordProbability: Double
+    public let meanWordMargin: Double?
+    public let meanWordEntropy: Double?
+    public let alignedWordCount: Int
+
+    public init(
+        firstWordProbability: Double,
+        firstWordMargin: Double? = nil,
+        firstWordEntropy: Double? = nil,
+        firstWordRunnerUpRatio: Double? = nil,
+        secondWordProbability: Double? = nil,
+        secondWordMargin: Double? = nil,
+        secondWordEntropy: Double? = nil,
+        meanWordProbability: Double,
+        minimumWordProbability: Double? = nil,
+        meanWordMargin: Double? = nil,
+        meanWordEntropy: Double? = nil,
+        alignedWordCount: Int
+    ) {
+        self.firstWordProbability = firstWordProbability
+        self.firstWordMargin = firstWordMargin
+        self.firstWordEntropy = firstWordEntropy
+        self.firstWordRunnerUpRatio = firstWordRunnerUpRatio
+        self.secondWordProbability = secondWordProbability
+        self.secondWordMargin = secondWordMargin
+        self.secondWordEntropy = secondWordEntropy
+        self.meanWordProbability = meanWordProbability
+        self.minimumWordProbability = minimumWordProbability ?? firstWordProbability
+        self.meanWordMargin = meanWordMargin
+        self.meanWordEntropy = meanWordEntropy
+        self.alignedWordCount = alignedWordCount
     }
 }
 
@@ -23,7 +112,12 @@ public struct StreamedTokenProbability: Equatable, Sendable {
 /// that word regardless of its character length. Fails open cleanly when token
 /// probabilities are unavailable or cannot be aligned.
 public enum WordConfidenceTruncator {
-    public static let defaultTemperature = 3.8
+    /// Calibrated on held-out personal writing under a verified Qwen-9B judge
+    /// and judge-free exact-prefix scoring: `T=1.0` with `clauseBonus=2.0`
+    /// stops phrases before tail drift, cutting rejects in half with zero
+    /// retraining.
+    public static let defaultTemperature = 1.0
+    public static let defaultClauseBonus = 2.0
     public static let defaultRiskPenalty = 0.45
     public static let earlyStopWordFloor = 0.04
     /// First-word geometric-mean probability gate calibrated on held-out
@@ -34,6 +128,9 @@ public enum WordConfidenceTruncator {
     struct WordConfidence: Equatable {
         let text: String
         let geometricMeanProbability: Double
+        let firstTokenMargin: Double?
+        let firstTokenEntropy: Double?
+        let firstTokenRunnerUpRatio: Double?
     }
 
     /// Trims `suggestion` back to the optimal whole-phrase word boundary `n*`
@@ -44,7 +141,8 @@ public enum WordConfidenceTruncator {
         tokens: [StreamedTokenProbability],
         temperature: Double = defaultTemperature,
         riskPenalty: Double = defaultRiskPenalty,
-        wordFloor: Double = earlyStopWordFloor
+        wordFloor: Double = earlyStopWordFloor,
+        clauseBonus: Double = defaultClauseBonus
     ) -> CompletionSuggestion {
         let visibleWords = CompletionContextWords.wordRanges(in: suggestion.visibleText)
         guard visibleWords.count >= 2, !tokens.isEmpty else { return suggestion }
@@ -73,8 +171,8 @@ public enum WordConfidenceTruncator {
             let calibrated = min(0.99, max(0.05, pow(word.geometricMeanProbability, 1.0 / safeTemp)))
             cumulativeConfidence *= calibrated
             cumulativeChars += visibleWord.count + (n > 1 ? 1 : 0)
-            let clauseBonus: Double = visibleWord.last.map { ".!?,".contains($0) } == true ? 4.0 : 0.0
-            let expectedSaved = max(1.0, Double(cumulativeChars)) + clauseBonus
+            let appliedClauseBonus: Double = visibleWord.last.map { ".!?,".contains($0) } == true ? clauseBonus : 0.0
+            let expectedSaved = max(1.0, Double(cumulativeChars)) + appliedClauseBonus
             let utility = cumulativeConfidence * expectedSaved - riskPenalty * (1.0 - cumulativeConfidence)
             if utility > bestUtility {
                 bestUtility = utility
@@ -138,14 +236,14 @@ public enum WordConfidenceTruncator {
         return (suggestion, false)
     }
 
-    /// Geometric-mean probability of the first visible word of `suggestion`,
-    /// aligned strictly against `tokens`. Returns `nil` (fail-open) when
-    /// probabilities are missing, unaligned, or the first visible token has no
-    /// alphanumeric characters.
-    public static func firstWordConfidence(
+    /// Strictly aligned word-level confidence profile for `suggestion`,
+    /// capturing word 1 and word 2 probabilities alongside first-token margin,
+    /// entropy, and runner-up ratio. Returns `nil` (fail-open) when tokens are
+    /// missing, unaligned, or the first visible word has no alphanumeric chars.
+    public static func confidenceProfile(
         for suggestion: CompletionSuggestion,
         tokens: [StreamedTokenProbability]
-    ) -> Double? {
+    ) -> WordConfidenceProfile? {
         guard !tokens.isEmpty else { return nil }
         let visibleWords = CompletionContextWords.wordRanges(in: suggestion.visibleText)
         guard !visibleWords.isEmpty else { return nil }
@@ -156,7 +254,39 @@ public enum WordConfidenceTruncator {
         let tokenWords = wordConfidences(from: tokens)
         guard !tokenWords.isEmpty else { return nil }
         let aligned = align(visibleWords: visibleWords, in: suggestion.visibleText, to: tokenWords)
-        return aligned.first?.geometricMeanProbability
+        guard let first = aligned.first else { return nil }
+        let second = aligned.count >= 2 ? aligned[1] : nil
+        let meanWordProb = aligned.reduce(0.0) { $0 + $1.geometricMeanProbability } / Double(aligned.count)
+        let minWordProb = aligned.map(\.geometricMeanProbability).min() ?? first.geometricMeanProbability
+        let margins = aligned.compactMap(\.firstTokenMargin)
+        let entropies = aligned.compactMap(\.firstTokenEntropy)
+        let meanMargin = margins.isEmpty ? nil : margins.reduce(0.0, +) / Double(margins.count)
+        let meanEntropy = entropies.isEmpty ? nil : entropies.reduce(0.0, +) / Double(entropies.count)
+        return WordConfidenceProfile(
+            firstWordProbability: first.geometricMeanProbability,
+            firstWordMargin: first.firstTokenMargin,
+            firstWordEntropy: first.firstTokenEntropy,
+            firstWordRunnerUpRatio: first.firstTokenRunnerUpRatio,
+            secondWordProbability: second?.geometricMeanProbability,
+            secondWordMargin: second?.firstTokenMargin,
+            secondWordEntropy: second?.firstTokenEntropy,
+            meanWordProbability: meanWordProb,
+            minimumWordProbability: minWordProb,
+            meanWordMargin: meanMargin,
+            meanWordEntropy: meanEntropy,
+            alignedWordCount: aligned.count
+        )
+    }
+
+    /// Geometric-mean probability of the first visible word of `suggestion`,
+    /// aligned strictly against `tokens`. Returns `nil` (fail-open) when
+    /// probabilities are missing, unaligned, or the first visible token has no
+    /// alphanumeric characters.
+    public static func firstWordConfidence(
+        for suggestion: CompletionSuggestion,
+        tokens: [StreamedTokenProbability]
+    ) -> Double? {
+        confidenceProfile(for: suggestion, tokens: tokens)?.firstWordProbability
     }
 
     /// Returns `true` when `minimumProbability > 0` and the first visible word
@@ -198,13 +328,35 @@ public enum WordConfidenceTruncator {
         var result: [WordConfidence] = []
         var currentText = ""
         var currentLogProbs: [Double] = []
+        var currentFirstMargin: Double?
+        var currentFirstEntropy: Double?
+        var currentFirstRunnerUpRatio: Double?
 
         func flushCurrent() {
             guard !currentText.isEmpty, !currentLogProbs.isEmpty else { return }
             let gm = exp(currentLogProbs.reduce(0, +) / Double(currentLogProbs.count))
-            result.append(WordConfidence(text: currentText, geometricMeanProbability: gm))
+            result.append(WordConfidence(
+                text: currentText,
+                geometricMeanProbability: gm,
+                firstTokenMargin: currentFirstMargin,
+                firstTokenEntropy: currentFirstEntropy,
+                firstTokenRunnerUpRatio: currentFirstRunnerUpRatio
+            ))
             currentText = ""
             currentLogProbs = []
+            currentFirstMargin = nil
+            currentFirstEntropy = nil
+            currentFirstRunnerUpRatio = nil
+        }
+
+        func appendSegment(_ segment: String, logP: Double, token: StreamedTokenProbability) {
+            if currentText.isEmpty {
+                currentFirstMargin = token.top1Margin
+                currentFirstEntropy = token.entropy
+                currentFirstRunnerUpRatio = token.runnerUpRatio
+            }
+            currentText += segment
+            currentLogProbs.append(logP)
         }
 
         for token in tokens {
@@ -218,8 +370,7 @@ public enum WordConfidenceTruncator {
                 }
                 if ch.isWhitespace {
                     if !segment.isEmpty {
-                        currentText += segment
-                        currentLogProbs.append(logP)
+                        appendSegment(segment, logP: logP, token: token)
                         segment = ""
                     }
                     flushCurrent()
@@ -228,8 +379,7 @@ public enum WordConfidenceTruncator {
                 }
             }
             if !segment.isEmpty {
-                currentText += segment
-                currentLogProbs.append(logP)
+                appendSegment(segment, logP: logP, token: token)
             }
             if hitNewline {
                 flushCurrent()

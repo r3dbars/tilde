@@ -322,6 +322,7 @@ public struct LabPromptConfiguration: Codable, Equatable, Sendable {
     public var includesIntentFutures: Bool
     public var maximumIntentFutures: Int
     public var intentPriorWeight: Double
+    public var includesWindowTitleInScene: Bool
 
     public init(
         registerOverride: LabRegisterOverride = .automatic,
@@ -339,7 +340,8 @@ public struct LabPromptConfiguration: Codable, Equatable, Sendable {
         scenePlacement: LabScenePlacement = .beforeText,
         includesIntentFutures: Bool = false,
         maximumIntentFutures: Int = 4,
-        intentPriorWeight: Double = 0.35
+        intentPriorWeight: Double = 0.35,
+        includesWindowTitleInScene: Bool = false
     ) {
         self.registerOverride = registerOverride
         self.recipe = recipe
@@ -357,6 +359,38 @@ public struct LabPromptConfiguration: Codable, Equatable, Sendable {
         self.includesIntentFutures = includesIntentFutures
         self.maximumIntentFutures = maximumIntentFutures
         self.intentPriorWeight = intentPriorWeight
+        self.includesWindowTitleInScene = includesWindowTitleInScene
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case registerOverride, recipe, includesScene
+        case maximumContextCharacters, maximumSceneCharacters
+        case replyReserveCharacters, sceneBudgetQuantum
+        case conversationTurnLimit, conversationCharacterBudget, referenceCharacterBudget
+        case conversationSelection, conversationFormat, scenePlacement
+        case includesIntentFutures, maximumIntentFutures, intentPriorWeight
+        case includesWindowTitleInScene
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        registerOverride = try c.decodeIfPresent(LabRegisterOverride.self, forKey: .registerOverride) ?? .automatic
+        recipe = try c.decodeIfPresent(LabPromptRecipe.self, forKey: .recipe) ?? .production
+        includesScene = try c.decodeIfPresent(Bool.self, forKey: .includesScene) ?? true
+        maximumContextCharacters = try c.decodeIfPresent(Int.self, forKey: .maximumContextCharacters) ?? 3_000
+        maximumSceneCharacters = try c.decodeIfPresent(Int.self, forKey: .maximumSceneCharacters) ?? 3_000
+        replyReserveCharacters = try c.decodeIfPresent(Int.self, forKey: .replyReserveCharacters) ?? 1_200
+        sceneBudgetQuantum = try c.decodeIfPresent(Int.self, forKey: .sceneBudgetQuantum) ?? 250
+        conversationTurnLimit = try c.decodeIfPresent(Int.self, forKey: .conversationTurnLimit) ?? 8
+        conversationCharacterBudget = try c.decodeIfPresent(Int.self, forKey: .conversationCharacterBudget) ?? 2_000
+        referenceCharacterBudget = try c.decodeIfPresent(Int.self, forKey: .referenceCharacterBudget) ?? 1_000
+        conversationSelection = try c.decodeIfPresent(LabConversationSelection.self, forKey: .conversationSelection) ?? .production
+        conversationFormat = try c.decodeIfPresent(LabConversationFormat.self, forKey: .conversationFormat) ?? .productionJSON
+        scenePlacement = try c.decodeIfPresent(LabScenePlacement.self, forKey: .scenePlacement) ?? .beforeText
+        includesIntentFutures = try c.decodeIfPresent(Bool.self, forKey: .includesIntentFutures) ?? false
+        maximumIntentFutures = try c.decodeIfPresent(Int.self, forKey: .maximumIntentFutures) ?? 4
+        intentPriorWeight = try c.decodeIfPresent(Double.self, forKey: .intentPriorWeight) ?? 0.35
+        includesWindowTitleInScene = try c.decodeIfPresent(Bool.self, forKey: .includesWindowTitleInScene) ?? false
     }
 }
 
@@ -446,6 +480,10 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
     /// (complete sentence, multiple questions, ambiguous reference) to the
     /// pre-inference scene gate. Production ships with this off.
     public var extendedOrdinarySilenceGate: Bool
+    public var replyCueAnchoredToCurrentSentence: Bool
+    public var appliesWordConfidenceTruncation: Bool
+    public var minimumFirstWordProbability: Double
+    public var quietGate: SuggestionQuietGate.Configuration?
     public var lengthPolicy: LabSuggestionLengthPolicy
     public var dynamicLength: LabDynamicLengthConfiguration
 
@@ -463,6 +501,10 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
         rejectsContextReplay: Bool = true,
         rejectsSelfRepetition: Bool = true,
         extendedOrdinarySilenceGate: Bool = false,
+        replyCueAnchoredToCurrentSentence: Bool = false,
+        appliesWordConfidenceTruncation: Bool = false,
+        minimumFirstWordProbability: Double = 0.0,
+        quietGate: SuggestionQuietGate.Configuration? = nil,
         lengthPolicy: LabSuggestionLengthPolicy = .fixed,
         dynamicLength: LabDynamicLengthConfiguration = .init()
     ) {
@@ -479,6 +521,10 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
         self.rejectsContextReplay = rejectsContextReplay
         self.rejectsSelfRepetition = rejectsSelfRepetition
         self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
+        self.replyCueAnchoredToCurrentSentence = replyCueAnchoredToCurrentSentence
+        self.appliesWordConfidenceTruncation = appliesWordConfidenceTruncation
+        self.minimumFirstWordProbability = minimumFirstWordProbability
+        self.quietGate = quietGate
         self.lengthPolicy = lengthPolicy
         self.dynamicLength = dynamicLength
     }
@@ -488,7 +534,8 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
         case rejectsSceneEcho, sceneEchoMinimumWords, sceneEchoMinimumCharacters
         case repairsDanglingTail, factualGrounding, suppressesSensitiveScenes
         case rejectsPromptLeaks, rejectsContextReplay, rejectsSelfRepetition
-        case extendedOrdinarySilenceGate
+        case extendedOrdinarySilenceGate, replyCueAnchoredToCurrentSentence
+        case appliesWordConfidenceTruncation, minimumFirstWordProbability, quietGate
         case lengthPolicy, dynamicLength
     }
 
@@ -529,6 +576,22 @@ public struct LabJudgmentConfiguration: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .extendedOrdinarySilenceGate
         ) ?? false
+        replyCueAnchoredToCurrentSentence = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .replyCueAnchoredToCurrentSentence
+        ) ?? false
+        appliesWordConfidenceTruncation = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .appliesWordConfidenceTruncation
+        ) ?? false
+        minimumFirstWordProbability = try values.decodeIfPresent(
+            Double.self,
+            forKey: .minimumFirstWordProbability
+        ) ?? 0.0
+        quietGate = try values.decodeIfPresent(
+            SuggestionQuietGate.Configuration.self,
+            forKey: .quietGate
+        )
         lengthPolicy = try values.decodeIfPresent(
             LabSuggestionLengthPolicy.self,
             forKey: .lengthPolicy

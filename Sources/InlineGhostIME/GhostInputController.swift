@@ -54,12 +54,30 @@ final class GhostInputController: IMKInputController {
     /// punctuation boundaries never wait; only the mid-word path, which a
     /// keystroke can retrigger ten times a second, is held back — by the
     /// served policy's throttle, so the number is part of the digest.
+    /// Once the writer's stride is known the mid-word wait also outlasts
+    /// their upper stride, so a fast burst never spends a request per letter.
     static func requestThrottleNanoseconds(
         for boundary: TextFreeCursorBoundary?,
-        policy: InteractionPolicy
+        policy: InteractionPolicy,
+        cadence: TypingCadenceTracker = TypingCadenceTracker()
     ) -> UInt64 {
-        boundary == .midWord ? UInt64(max(0, policy.midWordRequestThrottleMilliseconds)) * 1_000_000 : 0
+        guard boundary == .midWord else { return 0 }
+        let milliseconds = policy.flowReveal.midWordThrottleMilliseconds(
+            baseMilliseconds: policy.midWordRequestThrottleMilliseconds,
+            cadence: cadence
+        )
+        return UInt64(max(0, milliseconds)) * 1_000_000
     }
+
+    /// The writer's rolling keystroke cadence. Shared by every input session
+    /// because typing speed belongs to the person, not the field. Times
+    /// only; main thread only, like every other touch of keyboard state.
+    private static var cadence = TypingCadenceTracker()
+    private static var flowReveal: FlowRevealPolicy { ServedConfiguration.interaction.flowReveal }
+    /// H04 cooldown for this input session.
+    private var refractory = FlowRefractoryState()
+    /// Uptime the visible ghost became a fresh presentation.
+    private var ghostShownAtUptime: TimeInterval?
 
     struct SlowKeyTiming {
         let totalMilliseconds: Int
@@ -191,10 +209,23 @@ final class GhostInputController: IMKInputController {
             notifyScreenMemory(.textFieldBlurred)
             PersonalHistoryCapture.shared.sensitiveInputBegan()
             GhostOutcomeLedger.markPrivacyExcluded()
+            Self.cadence.breakRun()
             breakHistorySegment()
             dismiss(client)
             resetFallback()
             return false
+        }
+
+        // Any key reads the field before the host applies it: exactly the
+        // post-commit state a pending Return is waiting to see.
+        if GhostOutcomeLedger.hasPendingCommit {
+            GhostOutcomeLedger.resolvePendingCommit(
+                postCommitWindow: contextBeforeCaret(client),
+                final: true
+            )
+        }
+        if event.keyCode == 36 || event.keyCode == 76 { // Return, keypad Enter
+            noteCommitKey(client)
         }
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -202,6 +233,7 @@ final class GhostInputController: IMKInputController {
             || modifiers.contains(.control)
             || modifiers.contains(.function)
             || modifiers.contains(.option) {
+            Self.cadence.breakRun()
             breakHistorySegment()
             dismiss(client)
             resetFallback()
@@ -209,6 +241,12 @@ final class GhostInputController: IMKInputController {
         }
 
         let typedGrapheme = printableGrapheme(from: event)
+        let keyUptime = ProcessInfo.processInfo.systemUptime
+        let idleBeforeMilliseconds = Self.cadence.idleMilliseconds(atUptime: keyUptime)
+        // Auto-repeat is the keyboard's rhythm, not the writer's.
+        if !event.isARepeat, typedGrapheme != nil || event.keyCode == 51 || event.keyCode == 117 {
+            Self.cadence.noteKeystroke(atUptime: keyUptime)
+        }
         let defaults = UserDefaults.standard
         let suggestionsEnabled = defaults.object(forKey: "GhostSuggestionsEnabled") as? Bool ?? true
         let paused = defaults.double(forKey: "GhostPausedUntil") > Date().timeIntervalSince1970
@@ -248,7 +286,9 @@ final class GhostInputController: IMKInputController {
                 return true
             }
             let accepted = acceptSuggestion(client, observation: insertionObservation)
-            if !accepted {
+            if accepted {
+                refractory.noteGhostClosed(.accepted, policy: Self.flowReveal)
+            } else {
                 breakHistorySegment()
             }
             return accepted
@@ -259,7 +299,11 @@ final class GhostInputController: IMKInputController {
                 modifiers: modifiers
             ) else { break }
             let accepted = acceptAllSuggestion(client, observation: insertionObservation)
-            if !accepted { breakHistorySegment() }
+            if accepted {
+                refractory.noteGhostClosed(.accepted, policy: Self.flowReveal)
+            } else {
+                breakHistorySegment()
+            }
             return accepted
 
         case 53: // Escape dismisses only when something is visible.
@@ -267,6 +311,7 @@ final class GhostInputController: IMKInputController {
             dismiss(client)
             if wasVisible {
                 GhostOutcomeLedger.noteDismissed()
+                refractory.noteGhostClosed(.dismissed, policy: Self.flowReveal)
             } else {
                 breakHistorySegment()
             }
@@ -293,7 +338,23 @@ final class GhostInputController: IMKInputController {
                 )
             }
             let current = match?.ticket
+            refractory.noteKeystroke(
+                endsSentence: FlowRefractoryState.endsSentence(grapheme),
+                idleBeforeMilliseconds: idleBeforeMilliseconds,
+                policy: Self.flowReveal
+            )
+            let wasVisible = state.isVisible
             let effects = state.reduce(.type(grapheme, current: current, advanced: advanced))
+            // Typed past rather than through: the reducer only reschedules
+            // when the key did not follow the ghost. Noted before `apply`,
+            // so the request this key schedules already sees the cooldown.
+            if wasVisible, !state.isVisible, effects.contains(.schedule(afterTyping: grapheme)) {
+                let shownAt = ghostShownAtUptime ?? keyUptime
+                refractory.noteGhostClosed(
+                    .typedPast(visibleMilliseconds: Int(((keyUptime - shownAt) * 1_000).rounded())),
+                    policy: Self.flowReveal
+                )
+            }
             apply(effects, to: client)
             GhostOutcomeLedger.noteTyped()
             GhostOutcomeLedger.closeIfGhostGone(stillVisible: state.isVisible)
@@ -323,6 +384,7 @@ final class GhostInputController: IMKInputController {
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
+        Self.cadence.breakRun()
         GhostOutcomeLedger.configure { [weak self] in
             guard let self, let liveClient = self.client() else { return nil }
             if IsSecureEventInputEnabled() { return nil }
@@ -343,6 +405,26 @@ final class GhostInputController: IMKInputController {
         breakHistorySegment()
         resetFallback()
         super.deactivateServer(sender)
+    }
+
+    /// Return in a chat composer sends and clears the field. Hold the field
+    /// as it stands now, before the host handles the key, and read it again
+    /// shortly after (or at the next key): a cleared field closes the segment
+    /// on the pre-send text instead of scoring the sent span as deleted.
+    private func noteCommitKey(_ client: IMKTextInput) {
+        refractory.reset()
+        guard let generation = GhostOutcomeLedger.noteCommitKey(readWindow: { [self] in
+            Self.isOutcomeExcluded(bundleIdentifier: client.bundleIdentifier() ?? "")
+                ? nil
+                : contextBeforeCaret(client)
+        }) else { return }
+        let delays = CommitClearRule.checkDelaysMilliseconds
+        for (index, delay) in delays.enumerated() {
+            let final = index == delays.count - 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
+                GhostOutcomeLedger.resolvePendingCommitFromLiveField(final: final, generation: generation)
+            }
+        }
     }
 
     private func scheduleScreenMemoryTypingPause() {
@@ -425,7 +507,8 @@ final class GhostInputController: IMKInputController {
             precedingCharacter: context.last,
             excluded: false,
             variant: h01SessionArm()?.eventVariant ?? "champion",
-            receipt: provenance.receipt
+            receipt: provenance.receipt,
+            typingSpeed: Self.cadence.speedBucket
         )
     }
 
@@ -469,7 +552,8 @@ final class GhostInputController: IMKInputController {
             hostRegister: ContinuationRegister.from(bundleIdentifier: field.bundleIdentifier),
             precedingCharacter: context.last,
             excluded: false,
-            variant: h01SessionArm()?.eventVariant ?? "champion"
+            variant: h01SessionArm()?.eventVariant ?? "champion",
+            typingSpeed: Self.cadence.speedBucket
         )
         return id
     }
@@ -583,6 +667,7 @@ final class GhostInputController: IMKInputController {
             case let .schedule(afterTyping: grapheme):
                 scheduleSuggestion(for: client, afterUserTyped: grapheme)
             case .shown:
+                ghostShownAtUptime = ProcessInfo.processInfo.systemUptime
                 GhostStats.recordSuggestionShown()
                 recordOutcomeShown(client)
             case .accepted:
@@ -1159,7 +1244,10 @@ final class GhostInputController: IMKInputController {
             afterUserTyped: grapheme,
             calmMarkedText: calm,
             chained: chained,
-            calm: Self.calmRevealDelays
+            calm: Self.calmRevealDelays,
+            flow: Self.flowReveal,
+            cadence: Self.cadence,
+            refractory: refractory
         )
         guard scheduleRevision == revision else { return }
         let revealNotBefore = Date().addingTimeInterval(
@@ -1395,7 +1483,8 @@ final class GhostInputController: IMKInputController {
     ) {
         let throttleNanoseconds = Self.requestThrottleNanoseconds(
             for: boundary,
-            policy: ServedConfiguration.interaction
+            policy: ServedConfiguration.interaction,
+            cadence: Self.cadence
         )
         let tail = String(context.suffix(Self.contextLimit))
         let bundle = bundleIdentifier.isEmpty ? nil : bundleIdentifier

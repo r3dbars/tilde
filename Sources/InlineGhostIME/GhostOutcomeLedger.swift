@@ -28,9 +28,14 @@ enum GhostOutcomeLedger {
         let variant: String
         let hostRegister: ContinuationRegister
         let boundary: String
+        let typingSpeed: TextFreeTypingSpeedBucket
     }
 
     private static var pending: PendingOpportunity?
+    /// The field as it stood when Return was pressed, held in RAM only until
+    /// the field is read again; see `CommitClearRule`.
+    private static var pendingCommitWindow: String?
+    private static var commitGeneration = 0
 
     /// The keyboard is about to ask the app. From here the opportunity ends
     /// exactly once: shown, or silent with a terminal reason.
@@ -41,6 +46,7 @@ enum GhostOutcomeLedger {
         precedingCharacter: Character?,
         excluded: Bool,
         variant: String = "champion",
+        typingSpeed: TextFreeTypingSpeedBucket = .unknown,
         at time: Date = Date()
     ) {
         _ = dropIfWiped()
@@ -65,7 +71,8 @@ enum GhostOutcomeLedger {
             sessionDigestSHA256: TextFreeOnlineEvent.sessionDigest(sessionIdentifier: sessionIdentifier),
             variant: variant,
             hostRegister: hostRegister,
-            boundary: TextFreeCursorBoundary.from(precedingCharacter: precedingCharacter).rawValue
+            boundary: TextFreeCursorBoundary.from(precedingCharacter: precedingCharacter).rawValue,
+            typingSpeed: typingSpeed
         )
         lock.unlock()
     }
@@ -109,7 +116,8 @@ enum GhostOutcomeLedger {
             firstStableWordMilliseconds: receipt?.firstStableWordMilliseconds,
             nextActionMilliseconds: min(300_000, elapsed),
             opportunityCharacters: opportunityCharacters,
-            configurationDigestSHA256: digest
+            configurationDigestSHA256: digest,
+            typingSpeedBucket: open.typingSpeed
         ) else { return }
         let diary = LocalOutcomeDiaryEntry(
             id: event.id,
@@ -147,6 +155,7 @@ enum GhostOutcomeLedger {
         excluded: Bool,
         variant: String = "champion",
         receipt: GhostDecisionReceipt? = nil,
+        typingSpeed: TextFreeTypingSpeedBucket = .unknown,
         at time: Date = Date()
     ) {
         _ = dropIfWiped()
@@ -184,6 +193,7 @@ enum GhostOutcomeLedger {
             appCategory: TextFreeAppCategory.from(register: register).rawValue,
             register: register.rawValue,
             boundary: TextFreeCursorBoundary.from(precedingCharacter: precedingCharacter).rawValue,
+            typingSpeedBucket: typingSpeed,
             safeOpportunity: !excluded,
             candidateCharacters: candidateCharacters,
             candidateWordCount: candidateWordCount,
@@ -286,6 +296,7 @@ enum GhostOutcomeLedger {
         lock.lock()
         excluded = true
         pending = nil
+        pendingCommitWindow = nil
         meter.reset()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
@@ -318,8 +329,99 @@ enum GhostOutcomeLedger {
     static func closeSegment(at time: Date = Date()) {
         if dropIfWiped() { return }
         closeOpenOpportunity(at: time)
-        let window = currentWindow()
+        // Leaving the field right after Return: the pre-commit text is the
+        // segment as the writer left it, sent or not.
         lock.lock()
+        let committed = pendingCommitWindow
+        lock.unlock()
+        closeSegment(window: committed ?? currentWindow(), at: time)
+    }
+
+    /// Whether any accepted span is still being watched. Return reads the
+    /// field only when this is true.
+    static var isWatchingAcceptedSpans: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !watches.isEmpty && !excluded
+    }
+
+    /// Return (or Enter) was pressed, before the host handled the key. An
+    /// accepted ghost still on screen starts its watch now, and the field is
+    /// read only when some accepted span is being watched. The window stays
+    /// in RAM until `resolvePendingCommit`. Returns the commit's generation,
+    /// or `nil` when nothing is pending.
+    @discardableResult
+    static func noteCommitKey(
+        at time: Date = Date(),
+        readWindow: () -> String?
+    ) -> Int? {
+        if dropIfWiped() { return nil }
+        lock.lock()
+        if var open = opportunity, open.didAccept {
+            opportunity = nil
+            open.settleVisible(at: time)
+            lock.unlock()
+            startWatch(open)
+            lock.lock()
+        }
+        let watching = !excluded && !watches.isEmpty
+        pendingCommitWindow = nil
+        lock.unlock()
+        guard watching, let window = readWindow(), !window.isEmpty else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        commitGeneration += 1
+        pendingCommitWindow = window
+        return commitGeneration
+    }
+
+    static var hasPendingCommit: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return pendingCommitWindow != nil
+    }
+
+    /// Reads the field after a Return. A send that cleared the field closes
+    /// the segment on the pre-send text, so a sent span counts as kept; a
+    /// newline keeps watching. `final` gives up on an unreadable field.
+    @discardableResult
+    static func resolvePendingCommit(
+        postCommitWindow: String?,
+        final: Bool,
+        generation: Int? = nil,
+        at time: Date = Date()
+    ) -> CommitClearRule.Verdict {
+        lock.lock()
+        // A check scheduled by an earlier Return never resolves a later one.
+        if let generation, generation != commitGeneration {
+            lock.unlock()
+            return .unknown
+        }
+        let before = pendingCommitWindow
+        let verdict = CommitClearRule.classify(
+            preCommitWindow: before,
+            postCommitWindow: postCommitWindow
+        )
+        // Electron composers clear asynchronously: text still in place on an
+        // early read may yet be cleared, so only the final read believes it.
+        if verdict == .sentAndCleared || final { pendingCommitWindow = nil }
+        lock.unlock()
+        guard verdict == .sentAndCleared, let before else { return verdict }
+        if dropIfWiped() { return verdict }
+        closeOpenOpportunity(at: time)
+        closeSegment(window: before, at: time)
+        return verdict
+    }
+
+    /// Resolves a pending commit against the live field, if one is pending.
+    static func resolvePendingCommitFromLiveField(final: Bool, generation: Int) {
+        guard hasPendingCommit else { return }
+        resolvePendingCommit(postCommitWindow: currentWindow(), final: final, generation: generation)
+    }
+
+    private static func closeSegment(window: String?, at time: Date) {
+        lock.lock()
+        pendingCommitWindow = nil
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
             try? watches[index].closeSegment(window: window)
@@ -338,7 +440,13 @@ enum GhostOutcomeLedger {
 
     static func observeDueHorizons(now: Date = Date()) {
         if dropIfWiped() { return }
-        let window = currentWindow()
+        // A horizon that lands between Return and the field being read again
+        // sees the pre-commit text: the same span for a newline, and the
+        // span as sent for a chat send that is about to clear the field.
+        lock.lock()
+        let committed = pendingCommitWindow
+        lock.unlock()
+        let window = committed ?? currentWindow()
         lock.lock()
         var completed: [PendingRetainedWatch] = []
         for index in watches.indices {
@@ -461,6 +569,7 @@ enum GhostOutcomeLedger {
         opportunity = nil
         pending = nil
         watches = []
+        pendingCommitWindow = nil
         meter.reset()
         excluded = true
         return true

@@ -815,7 +815,7 @@ public enum LabExperimentEngine {
         )
         let cacheKey = try candidateCache.map { context in
             try LabCandidateCacheKey(
-                modelSHA256: context.assets.modelSHA256,
+                modelSHA256: context.assets.effectiveModelDigestSHA256,
                 helperSHA256: context.assets.helperSHA256,
                 prompt: request.prompt,
                 generation: request.generation,
@@ -845,7 +845,8 @@ public enum LabExperimentEngine {
                     preparedPrompt: prepared,
                     scenario: scenario,
                     configuration: arm,
-                    meanTokenProbability: response.meanTokenProbability
+                    meanTokenProbability: response.meanTokenProbability,
+                    streamedTokens: response.streamedTokens
                 )
                 await candidateObserved(LabCandidateObservation(
                     scenarioID: scenario.id,

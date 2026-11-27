@@ -184,6 +184,22 @@ struct GhostInputControllerOpportunityTests {
         #expect(throttle <= 250_000_000)
     }
 
+    @Test("A known stride lengthens the mid-word wait, bounded, and never the boundary paths")
+    func cadenceLengthensMidWordWait() {
+        var cadence = TypingCadenceTracker()
+        var clock: TimeInterval = 100
+        cadence.noteKeystroke(atUptime: clock)
+        for interval in [180, 190, 200, 210, 220, 230] {
+            clock += Double(interval) / 1_000
+            cadence.noteKeystroke(atUptime: clock)
+        }
+        let policy = InteractionPolicy.conservative
+        let gated = GhostInputController.requestThrottleNanoseconds(for: .midWord, policy: policy, cadence: cadence)
+        #expect(gated == 345_000_000)
+        #expect(gated <= UInt64(policy.flowReveal.maximumMidWordRequestMilliseconds) * 1_000_000)
+        #expect(GhostInputController.requestThrottleNanoseconds(for: .wordBoundary, policy: policy, cadence: cadence) == 0)
+    }
+
     @Test("The two permissions are independent doors")
     func permissionsAreIndependent() {
         #expect(boundary("one thing,", punctuation: true) == .wordBoundary)

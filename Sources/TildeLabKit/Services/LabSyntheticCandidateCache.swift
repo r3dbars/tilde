@@ -1,6 +1,7 @@
 import CSQLite
 import CryptoKit
 import Foundation
+import TildeCore
 
 public enum LabSyntheticCandidateCacheError: Error, LocalizedError, Equatable, Sendable {
     case privateSourceForbidden
@@ -76,6 +77,7 @@ public struct LabCachedCandidate: Codable, Equatable, Sendable {
     public let tokenLogProbabilities: [Double]
     public let tokenProbabilityMargins: [Double]?
     public let tokenEntropies: [Double]?
+    public let streamedTokens: [StreamedTokenProbability]?
     public let firstTokenMilliseconds: Int?
     public let totalMilliseconds: Int
     public let stopReason: String?
@@ -89,6 +91,7 @@ public struct LabCachedCandidate: Codable, Equatable, Sendable {
         tokenLogProbabilities = response.tokenLogProbabilities
         tokenProbabilityMargins = response.tokenProbabilityMargins
         tokenEntropies = response.tokenEntropies
+        streamedTokens = response.streamedTokens.isEmpty ? nil : response.streamedTokens
         firstTokenMilliseconds = response.firstTokenMilliseconds
         totalMilliseconds = response.latencyMilliseconds
         stopReason = response.stopReason
@@ -107,6 +110,7 @@ public struct LabCachedCandidate: Codable, Equatable, Sendable {
             tokenLogProbabilities: tokenLogProbabilities,
             tokenProbabilityMargins: tokenProbabilityMargins ?? [],
             tokenEntropies: tokenEntropies ?? [],
+            streamedTokens: streamedTokens ?? [],
             stopReason: stopReason
         )
     }

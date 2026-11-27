@@ -65,7 +65,8 @@ public enum LabOutputJudge {
         preparedPrompt: LabPreparedPrompt,
         scenario: LabScenario,
         configuration: LabArmConfiguration,
-        meanTokenProbability: Double?
+        meanTokenProbability: Double?,
+        streamedTokens: [StreamedTokenProbability] = []
     ) -> LabSuggestionDecision {
         if configuration.judgment.lengthPolicy == .confidenceBased,
            let meanTokenProbability,
@@ -86,11 +87,40 @@ public enum LabOutputJudge {
             ),
             policy: policy
         ).cleanWithReason(normalized, after: scenario.typedContext)
-        guard let candidate = clean.suggestion?.visibleText else {
+        guard var cleanedSuggestion = clean.suggestion else {
             return LabSuggestionDecision(
                 suggestion: nil,
                 reason: decisionReason(clean.rejectionReason)
             )
+        }
+        if configuration.judgment.appliesWordConfidenceTruncation, !streamedTokens.isEmpty {
+            cleanedSuggestion = WordConfidenceTruncator.trim(
+                suggestion: cleanedSuggestion,
+                tokens: streamedTokens
+            )
+        }
+        let candidate = cleanedSuggestion.visibleText
+
+        if let quietGate = configuration.judgment.quietGate, quietGate.enabled {
+            let gateDecision = SuggestionQuietGate.evaluate(
+                suggestion: cleanedSuggestion,
+                tokens: streamedTokens,
+                textBeforeCursor: scenario.typedContext,
+                register: preparedPrompt.register,
+                scene: preparedPrompt.scene,
+                replyCueAnchoredToCurrentSentence: configuration.judgment.replyCueAnchoredToCurrentSentence,
+                configuration: quietGate
+            )
+            if !gateDecision.allow {
+                return LabSuggestionDecision(suggestion: nil, reason: .lowConfidence)
+            }
+        } else if configuration.judgment.minimumFirstWordProbability > 0,
+                  WordConfidenceTruncator.isFirstWordBelowFloor(
+                      suggestion: cleanedSuggestion,
+                      tokens: streamedTokens,
+                      minimumProbability: configuration.judgment.minimumFirstWordProbability
+                  ) {
+            return LabSuggestionDecision(suggestion: nil, reason: .lowConfidence)
         }
 
         if configuration.judgment.rejectsSceneEcho,

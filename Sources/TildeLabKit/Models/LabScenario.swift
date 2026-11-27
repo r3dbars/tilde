@@ -200,15 +200,36 @@ public struct LabScene: Codable, Equatable, Sendable {
     public let mode: Mode
     public let turns: [LabSceneTurn]
     public let references: [String]
+    public let windowTitle: String?
 
-    public init(mode: Mode, turns: [LabSceneTurn] = [], references: [String] = []) {
+    public init(
+        mode: Mode,
+        turns: [LabSceneTurn] = [],
+        references: [String] = [],
+        windowTitle: String? = nil
+    ) {
         self.mode = mode
         self.turns = turns
         self.references = references
+        self.windowTitle = windowTitle
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, turns, references, windowTitle
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try c.decode(Mode.self, forKey: .mode)
+        turns = try c.decodeIfPresent([LabSceneTurn].self, forKey: .turns) ?? []
+        references = try c.decodeIfPresent([String].self, forKey: .references) ?? []
+        windowTitle = try c.decodeIfPresent(String.self, forKey: .windowTitle)
     }
 
     var allTextCount: Int {
-        turns.reduce(0) { $0 + $1.text.count } + references.reduce(0) { $0 + $1.count }
+        turns.reduce(0) { $0 + $1.text.count }
+            + references.reduce(0) { $0 + $1.count }
+            + (windowTitle?.count ?? 0)
     }
 
     public func productionScene() -> ScreenScene.Scene {
@@ -221,7 +242,8 @@ public struct LabScene: Codable, Equatable, Sendable {
         return ScreenScene.Scene(
             mode: productionMode,
             conversationTurns: turns.map(\.productionTurn),
-            referenceSnippets: references
+            referenceSnippets: references,
+            windowTitle: windowTitle
         )
     }
 }

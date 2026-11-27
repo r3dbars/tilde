@@ -76,6 +76,9 @@ public struct LabResearchModelConfiguration: Codable, Equatable, Sendable {
     public var revision: String
     public var helperPath: String
     public var modelPath: String
+    public var loraPath: String?
+    public var loraScale: Double?
+    public var fixedBasePort: Int?
 
     public init(
         verificationMode: LabModelVerificationMode = .productionPinned,
@@ -86,13 +89,35 @@ public struct LabResearchModelConfiguration: Codable, Equatable, Sendable {
             .appendingPathComponent("Library/Application Support/Tilde/Models", isDirectory: true)
             .appendingPathComponent(ProductionModelAsset.identifier, isDirectory: true)
             .appendingPathComponent("model.gguf")
-            .path
+            .path,
+        loraPath: String? = nil,
+        loraScale: Double? = nil,
+        fixedBasePort: Int? = nil
     ) {
         self.verificationMode = verificationMode
         self.identifier = identifier
         self.revision = revision
         self.helperPath = helperPath
         self.modelPath = modelPath
+        self.loraPath = loraPath
+        self.loraScale = loraScale
+        self.fixedBasePort = fixedBasePort
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case verificationMode, identifier, revision, helperPath, modelPath, loraPath, loraScale, fixedBasePort
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        verificationMode = try c.decode(LabModelVerificationMode.self, forKey: .verificationMode)
+        identifier = try c.decode(String.self, forKey: .identifier)
+        revision = try c.decode(String.self, forKey: .revision)
+        helperPath = try c.decode(String.self, forKey: .helperPath)
+        modelPath = try c.decode(String.self, forKey: .modelPath)
+        loraPath = try c.decodeIfPresent(String.self, forKey: .loraPath)
+        loraScale = try c.decodeIfPresent(Double.self, forKey: .loraScale)
+        fixedBasePort = try c.decodeIfPresent(Int.self, forKey: .fixedBasePort)
     }
 
     public var profile: LabModelProfile {
@@ -110,6 +135,11 @@ public struct LabResearchModelConfiguration: Codable, Equatable, Sendable {
               helperPath.hasPrefix("/"), modelPath.hasPrefix("/") else {
             throw LabResearchCampaignFileError.invalidModelLocation
         }
+        if let loraPath {
+            guard !loraPath.isEmpty, loraPath.utf8.count <= 4_096, loraPath.hasPrefix("/") else {
+                throw LabResearchCampaignFileError.invalidModelLocation
+            }
+        }
         return self
     }
 
@@ -117,7 +147,10 @@ public struct LabResearchModelConfiguration: Codable, Equatable, Sendable {
         runtime.materialize(
             serverExecutable: URL(fileURLWithPath: helperPath),
             modelFile: URL(fileURLWithPath: modelPath),
-            modelProfile: profile
+            modelProfile: profile,
+            loraFile: loraPath.map(URL.init(fileURLWithPath:)),
+            loraScale: loraScale,
+            fixedBasePort: fixedBasePort
         )
     }
 }

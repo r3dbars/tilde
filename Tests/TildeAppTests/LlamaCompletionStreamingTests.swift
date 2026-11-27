@@ -232,12 +232,12 @@ struct LlamaCompletionStreamingTests {
     @Test("Short connector words at word 2 do not prematurely cut a multi-word clause mid-stream")
     func connectorWordDoesNotKillStreamEarly() async throws {
         let transport = FixedFrameTransport(lines: [
-            #"data: {"content":" probably","completion_probabilities":[{"token":" probably","prob":0.55}]}"#,
-            #"data: {"content":" to","completion_probabilities":[{"token":" to","prob":0.25}]}"#,
-            #"data: {"content":" wait","completion_probabilities":[{"token":" wait","prob":0.65}]}"#,
-            #"data: {"content":" until","completion_probabilities":[{"token":" until","prob":0.78}]}"#,
-            #"data: {"content":" tomorrow","completion_probabilities":[{"token":" tomorrow","prob":0.82}]}"#,
-            #"data: {"content":" morning.","completion_probabilities":[{"token":" morning.","prob":0.75}]}"#,
+            #"data: {"content":" probably","completion_probabilities":[{"token":" probably","prob":0.85}]}"#,
+            #"data: {"content":" to","completion_probabilities":[{"token":" to","prob":0.78}]}"#,
+            #"data: {"content":" wait","completion_probabilities":[{"token":" wait","prob":0.86}]}"#,
+            #"data: {"content":" until","completion_probabilities":[{"token":" until","prob":0.88}]}"#,
+            #"data: {"content":" tomorrow","completion_probabilities":[{"token":" tomorrow","prob":0.90}]}"#,
+            #"data: {"content":" morning.","completion_probabilities":[{"token":" morning.","prob":0.85}]}"#,
             #"data: {"stop":true,"tokens_predicted":6,"stopped_eos":true}"#,
         ])
         let engine = LlamaCompletionEngine(
@@ -300,6 +300,56 @@ struct LlamaCompletionStreamingTests {
                 // Expected: protocol incompatibility is not successful silence.
             }
         }
+    }
+
+    @Test("Completion requests send n_probs=3 and parse top_logprobs margin and entropy into SuggestionQuietGate")
+    func requestSendsNProbs3AndQuietGateUsesMargin() async throws {
+        let capture = BodyCaptureTransport(lines: [
+            #"data: {"content":" works","completion_probabilities":[{"id":1,"token":" works","logprob":-0.35667494,"top_logprobs":[{"id":1,"token":" works","logprob":-0.35667494},{"id":2,"token":" sounds","logprob":-2.302585},{"id":3,"token":" looks","logprob":-2.995732}]}]}"#,
+            #"data: {"content":" well.","completion_probabilities":[{"id":4,"token":" well.","logprob":-0.22314355,"top_logprobs":[{"id":4,"token":" well.","logprob":-0.22314355},{"id":5,"token":" great.","logprob":-2.302585},{"id":6,"token":" fine.","logprob":-2.995732}]}]}"#,
+            #"data: {"stop":true,"tokens_predicted":2,"stopped_eos":true}"#,
+        ])
+        let gateConfig = SuggestionQuietGate.Configuration(enabled: true, threshold: 0.65)
+        let strongEngine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: capture,
+            quietGateOverride: gateConfig
+        )
+        let strongDecision = try await strongEngine.decide(
+            textBeforeCursor: "That ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil,
+            onPartialSuggestion: { _, _ in }
+        )
+        #expect(strongDecision.reason == .shown)
+        #expect(strongDecision.suggestion?.visibleText == "works well.")
+        let sentBody = try #require(capture.capturedBodies.first)
+        let sentJSON = try #require(try JSONSerialization.jsonObject(with: sentBody) as? [String: Any])
+        #expect(sentJSON["n_probs"] as? Int == 3)
+
+        // Low-margin, high-entropy candidate with p_w1 >= 0.18 is quietly suppressed by QuietGate.
+        let ambiguousTransport = FixedFrameTransport(lines: [
+            #"data: {"content":" maybe","completion_probabilities":[{"id":1,"token":" maybe","logprob":-1.386294,"top_logprobs":[{"id":1,"token":" maybe","logprob":-1.386294},{"id":2,"token":" perhaps","logprob":-1.427116},{"id":3,"token":" could","logprob":-1.514127}]}]}"#,
+            #"data: {"content":" later","completion_probabilities":[{"id":4,"token":" later","logprob":-1.514127,"top_logprobs":[{"id":4,"token":" later","logprob":-1.514127},{"id":5,"token":" soon","logprob":-1.560648},{"id":6,"token":" tomorrow","logprob":-1.609438}]}]}"#,
+            #"data: {"stop":true,"tokens_predicted":2,"stopped_eos":true}"#,
+        ])
+        let gatedEngine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: ambiguousTransport,
+            quietGateOverride: gateConfig
+        )
+        let partials = PartialCollector()
+        let gatedDecision = try await gatedEngine.decide(
+            textBeforeCursor: "That ",
+            appBundleIdentifier: "com.apple.TextEdit",
+            scene: nil,
+            onPartialSuggestion: { partial, _ in partials.append(partial.visibleText) }
+        )
+        #expect(gatedDecision.suggestion == nil)
+        #expect(gatedDecision.reason == .lowConfidence)
+        #expect(partials.values.isEmpty)
     }
 }
 
@@ -481,6 +531,29 @@ private final class AuthHeaderCaptureTransport: LlamaCompletionStreamingTranspor
             lines: AsyncThrowingStream { continuation in
                 continuation.yield(#"data: {"content":" great"}"#)
                 continuation.yield(#"data: {"stop":true,"tokens_predicted":1,"timings":{"prompt_n":12,"cache_n":100,"predicted_n":1}}"#)
+                continuation.finish()
+            },
+            cancel: {}
+        )
+    }
+}
+
+private final class BodyCaptureTransport: LlamaCompletionStreamingTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private let lines: [String]
+    private var bodies: [Data] = []
+    var capturedBodies: [Data] { lock.withLock { bodies } }
+
+    init(lines: [String]) { self.lines = lines }
+
+    func open(request: URLRequest) async throws -> LlamaCompletionHTTPStream {
+        if let body = request.httpBody {
+            lock.withLock { bodies.append(body) }
+        }
+        return LlamaCompletionHTTPStream(
+            statusCode: 200,
+            lines: AsyncThrowingStream { continuation in
+                for line in lines { continuation.yield(line) }
                 continuation.finish()
             },
             cancel: {}

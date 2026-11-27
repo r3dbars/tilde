@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum LabCaseOutcome: String, Codable, CaseIterable, Sendable {
@@ -554,6 +555,7 @@ public struct LabAssetSnapshot: Codable, Equatable, Sendable {
     public let modelRevision: String
     public let modelSHA256: String
     public let helperSHA256: String
+    public let loraSHA256: String?
 
     public init(
         inferenceBackend: InferenceBackend = .localLlama,
@@ -561,7 +563,8 @@ public struct LabAssetSnapshot: Codable, Equatable, Sendable {
         modelIdentifier: String,
         modelRevision: String,
         modelSHA256: String,
-        helperSHA256: String
+        helperSHA256: String,
+        loraSHA256: String? = nil
     ) {
         self.inferenceBackend = inferenceBackend
         self.verificationMode = verificationMode
@@ -569,10 +572,20 @@ public struct LabAssetSnapshot: Codable, Equatable, Sendable {
         self.modelRevision = modelRevision
         self.modelSHA256 = modelSHA256
         self.helperSHA256 = helperSHA256
+        self.loraSHA256 = loraSHA256
+    }
+
+    /// Distinguishes base vs. LoRA-adapted weights in candidate cache keys
+    /// while leaving `modelSHA256` equal to the underlying GGUF digest.
+    public var effectiveModelDigestSHA256: String {
+        guard let loraSHA256, !loraSHA256.isEmpty else { return modelSHA256 }
+        let combined = "\(modelSHA256)+lora:\(loraSHA256)"
+        return SHA256.hash(data: Data(combined.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     private enum CodingKeys: String, CodingKey {
-        case inferenceBackend, verificationMode, modelIdentifier, modelRevision, modelSHA256, helperSHA256
+        case inferenceBackend, verificationMode, modelIdentifier, modelRevision
+        case modelSHA256, helperSHA256, loraSHA256
     }
 
     public init(from decoder: Decoder) throws {
@@ -589,6 +602,7 @@ public struct LabAssetSnapshot: Codable, Equatable, Sendable {
         modelRevision = try values.decode(String.self, forKey: .modelRevision)
         modelSHA256 = try values.decode(String.self, forKey: .modelSHA256)
         helperSHA256 = try values.decode(String.self, forKey: .helperSHA256)
+        loraSHA256 = try values.decodeIfPresent(String.self, forKey: .loraSHA256)
     }
 }
 

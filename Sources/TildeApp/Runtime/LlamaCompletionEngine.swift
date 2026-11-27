@@ -20,15 +20,48 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         }
     }
 
+    struct StreamTokenAlternative: Decodable {
+        let prob: Double?
+        let logprob: Double?
+
+        var resolvedProbability: Double? {
+            if let prob, prob.isFinite, (0.0...1.0).contains(prob) {
+                return prob
+            }
+            if let logprob, logprob.isFinite, logprob <= 0.0 {
+                return exp(logprob)
+            }
+            return nil
+        }
+    }
+
     struct StreamTokenProbabilityEntry: Decodable {
         let token: String?
         let tokStr: String?
         let prob: Double?
         let logprob: Double?
+        let topLogprobs: [StreamTokenAlternative]?
+        let topProbs: [StreamTokenAlternative]?
+        let probs: [StreamTokenAlternative]?
 
         enum CodingKeys: String, CodingKey {
-            case token, prob, logprob
+            case token, prob, logprob, probs
             case tokStr = "tok_str"
+            case topLogprobs = "top_logprobs"
+            case topProbs = "top_probs"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            token = try? c.decodeIfPresent(String.self, forKey: .token)
+            tokStr = try? c.decodeIfPresent(String.self, forKey: .tokStr)
+            prob = try? c.decodeIfPresent(Double.self, forKey: .prob)
+            logprob = try? c.decodeIfPresent(Double.self, forKey: .logprob)
+            // Decode alternative lists lossily so any schema shift fails open
+            // without losing the emitted token's own probability.
+            topLogprobs = try? c.decodeIfPresent([StreamTokenAlternative].self, forKey: .topLogprobs)
+            topProbs = try? c.decodeIfPresent([StreamTokenAlternative].self, forKey: .topProbs)
+            probs = try? c.decodeIfPresent([StreamTokenAlternative].self, forKey: .probs)
         }
 
         var pieceText: String? {
@@ -46,6 +79,31 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 return exp(logprob)
             }
             return nil
+        }
+
+        /// Strictly text-free top-k distribution metrics (top-1 margin, local
+        /// entropy, runner-up ratio), or `nil` when fewer than 2 valid
+        /// alternatives are present.
+        var distributionMetrics: (top1Margin: Double, entropy: Double, runnerUpRatio: Double)? {
+            let candidates = topLogprobs ?? topProbs ?? probs
+            guard let candidates, candidates.count >= 2 else { return nil }
+            let values = candidates.compactMap(\.resolvedProbability)
+            guard values.count == candidates.count else { return nil }
+            return StreamedTokenProbability.distributionMetrics(fromAlternativeProbabilities: values)
+        }
+
+        func toStreamedTokenProbability(fallbackPiece: String? = nil) -> StreamedTokenProbability? {
+            guard let prob = resolvedProbability else { return nil }
+            let resolvedPiece = (pieceText?.isEmpty == false ? pieceText : nil) ?? fallbackPiece
+            guard let resolvedPiece, !resolvedPiece.isEmpty else { return nil }
+            let metrics = distributionMetrics
+            return StreamedTokenProbability(
+                piece: resolvedPiece,
+                probability: prob,
+                top1Margin: metrics?.top1Margin,
+                entropy: metrics?.entropy,
+                runnerUpRatio: metrics?.runnerUpRatio
+            )
         }
     }
 
@@ -98,6 +156,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
     private let productProfile: TildeProductProfile
     private let transport: any LlamaCompletionStreamingTransport
     private let tokenBiasCache: LlamaTokenBiasCache?
+    private let quietGateOverride: SuggestionQuietGate.Configuration?
     /// Owner settings shared with the input method. Only the H01 harness
     /// reads them, and only in the Model Preview profile.
     private let experimentDefaults: (any H01ExperimentDefaults)?
@@ -109,6 +168,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         transport: any LlamaCompletionStreamingTransport = URLSessionLlamaCompletionTransport(),
         tokenBiasCache: LlamaTokenBiasCache? = nil,
         productProfile: TildeProductProfile = .current,
+        quietGateOverride: SuggestionQuietGate.Configuration? = nil,
         experimentDefaults: (any H01ExperimentDefaults)? = UserDefaults(
             suiteName: PersonalHistorySettingsContract.keyboardSuiteName
         )
@@ -119,8 +179,13 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         self.transport = transport
         self.tokenBiasCache = tokenBiasCache
         self.productProfile = productProfile
+        self.quietGateOverride = quietGateOverride
         self.experimentDefaults = experimentDefaults
         cleaner = CompletionOutputCleaner(maxVisibleWords: productProfile.maximumVisibleWords)
+    }
+
+    private var activeQuietGate: SuggestionQuietGate.Configuration? {
+        quietGateOverride ?? productProfile.quietGate
     }
 
     /// The profile's own cleaner unless the disabled-by-default H01 harness
@@ -269,7 +334,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                 : productProfile.generatedTokenBudget,
             "temperature": productProfile.completionTemperature,
             "cache_prompt": true,
-            "n_probs": 1,
+            "n_probs": 3,
             "stop": ["\n"],
             "stream": true,
         ]
@@ -327,26 +392,21 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                         firstTokenMilliseconds = Self.milliseconds(since: startedAt)
                     }
                     if let entries = frame.completionProbabilities, !entries.isEmpty {
-                        if entries.count == 1, let entry = entries.first, let prob = entry.resolvedProbability {
-                            streamedTokens.append(StreamedTokenProbability(
-                                piece: entry.pieceText ?? piece,
-                                probability: prob
-                            ))
+                        if entries.count == 1, let entry = entries.first,
+                           let tokenProb = entry.toStreamedTokenProbability(fallbackPiece: piece) {
+                            streamedTokens.append(tokenProb)
                         } else {
                             // Multi-token frames (e.g. --spec-type ngram-simple):
-                            // record every token's own text and probability.
+                            // record every token's own text, probability, and top-k metrics.
                             var appendedAny = false
                             for entry in entries {
-                                guard let prob = entry.resolvedProbability,
-                                      let tokenPiece = entry.pieceText, !tokenPiece.isEmpty else { continue }
-                                streamedTokens.append(StreamedTokenProbability(
-                                    piece: tokenPiece,
-                                    probability: prob
-                                ))
+                                guard let tokenProb = entry.toStreamedTokenProbability() else { continue }
+                                streamedTokens.append(tokenProb)
                                 appendedAny = true
                             }
-                            if !appendedAny, let prob = entries.first?.resolvedProbability {
-                                streamedTokens.append(StreamedTokenProbability(piece: piece, probability: prob))
+                            if !appendedAny, let entry = entries.first,
+                               let tokenProb = entry.toStreamedTokenProbability(fallbackPiece: piece) {
+                                streamedTokens.append(tokenProb)
                             }
                         }
                     }
@@ -361,6 +421,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             cleaner: cleaner,
                             hasLogitBias: !logitBiasEntries.isEmpty,
                             isMidWord: isMidWord,
+                            textBeforeCursor: textBeforeCursor,
+                            register: register,
+                            scene: scene,
+                            personalBiasTerms: personalBiasTerms,
                             streamedTokens: streamedTokens
                         )
                         if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
@@ -419,15 +483,32 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             rejectionReason = "emptyOutput"
             decisionReason = .emptyOutput
         }
-        if let candidate = suggestion,
-           WordConfidenceTruncator.isFirstWordBelowFloor(
-               suggestion: candidate,
-               tokens: streamedTokens,
-               minimumProbability: productProfile.minimumFirstWordProbability
-           ) {
-            suggestion = nil
-            rejectionReason = "lowConfidence"
-            decisionReason = .lowConfidence
+        if let candidate = suggestion {
+            if let quietGate = activeQuietGate, quietGate.enabled {
+                let gateDecision = SuggestionQuietGate.evaluate(
+                    suggestion: candidate,
+                    tokens: streamedTokens,
+                    textBeforeCursor: textBeforeCursor,
+                    register: register,
+                    scene: scene,
+                    personalBiasTerms: personalBiasTerms,
+                    replyCueAnchoredToCurrentSentence: productProfile.decisionPolicy.replyCueAnchoredToCurrentSentence,
+                    configuration: quietGate
+                )
+                if !gateDecision.allow {
+                    suggestion = nil
+                    rejectionReason = "lowConfidence"
+                    decisionReason = .lowConfidence
+                }
+            } else if WordConfidenceTruncator.isFirstWordBelowFloor(
+                suggestion: candidate,
+                tokens: streamedTokens,
+                minimumProbability: productProfile.minimumFirstWordProbability
+            ) {
+                suggestion = nil
+                rejectionReason = "lowConfidence"
+                decisionReason = .lowConfidence
+            }
         }
         if let candidate = suggestion,
            SceneEchoPolicy.isEcho(candidate.visibleText, in: prepared.sceneEcho) {
@@ -519,6 +600,10 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         cleaner: CompletionOutputCleaner,
         hasLogitBias: Bool = false,
         isMidWord: Bool = false,
+        textBeforeCursor: String = "",
+        register: ContinuationRegister = .prose,
+        scene: ScreenScene.Scene? = nil,
+        personalBiasTerms: [WeightedBiasTerm] = [],
         streamedTokens: [StreamedTokenProbability] = []
     ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
         let outcome = cleaner.clean(
@@ -556,7 +641,32 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             maxVisibleWords: productProfile.maximumVisibleWords
         )
         if !streamedTokens.isEmpty {
-            if WordConfidenceTruncator.isFirstWordBelowFloor(
+            if let quietGate = activeQuietGate, quietGate.enabled {
+                if quietGate.hardFirstWordFloor > 0,
+                   WordConfidenceTruncator.isFirstWordBelowFloor(
+                       suggestion: suggestion,
+                       tokens: streamedTokens,
+                       minimumProbability: quietGate.hardFirstWordFloor
+                   ) {
+                    return (nil, true)
+                }
+                let gateDecision = SuggestionQuietGate.evaluate(
+                    suggestion: suggestion,
+                    tokens: streamedTokens,
+                    textBeforeCursor: textBeforeCursor,
+                    register: register,
+                    scene: scene,
+                    personalBiasTerms: personalBiasTerms,
+                    replyCueAnchoredToCurrentSentence: productProfile.decisionPolicy.replyCueAnchoredToCurrentSentence,
+                    configuration: quietGate
+                )
+                if !gateDecision.allow {
+                    // Hold back displaying an unapproved partial without
+                    // prematurely cancelling the stream if later words could
+                    // lift the score above threshold.
+                    return (nil, outcome.visibleTextIsSettled)
+                }
+            } else if WordConfidenceTruncator.isFirstWordBelowFloor(
                 suggestion: suggestion,
                 tokens: streamedTokens,
                 minimumProbability: productProfile.minimumFirstWordProbability

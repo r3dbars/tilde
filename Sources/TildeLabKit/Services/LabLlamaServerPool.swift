@@ -72,7 +72,12 @@ public actor LabLlamaServerPool {
             return activeClients
         }
         stop()
-        let ports = try LabPortAllocator.allocate(configuration.workerCount)
+        let ports: [Int]
+        if let basePort = configuration.fixedBasePort {
+            ports = (0..<configuration.workerCount).map { basePort + $0 }
+        } else {
+            ports = try LabPortAllocator.allocate(configuration.workerCount)
+        }
 
         do {
             let started = try await withThrowingTaskGroup(of: LabLlamaServerWorker.self) { group in
@@ -172,6 +177,13 @@ private final class LabLlamaServerWorker: @unchecked Sendable {
         if !configuration.KVOffload { arguments.append("--no-kv-offload") }
         if configuration.promptCaching {
             arguments.append(contentsOf: ["--cache-reuse", String(configuration.cacheReuseTokens)])
+        }
+        if let loraFile = configuration.loraFile {
+            if let scale = configuration.loraScale, abs(scale - 1.0) > 1e-6 {
+                arguments.append(contentsOf: ["--lora-scaled", String(format: "%@:%.2f", loraFile.path, scale)])
+            } else {
+                arguments.append(contentsOf: ["--lora", loraFile.path])
+            }
         }
         process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice

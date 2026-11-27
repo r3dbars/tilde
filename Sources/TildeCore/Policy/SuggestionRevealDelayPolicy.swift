@@ -98,4 +98,34 @@ public enum SuggestionRevealDelayPolicy {
             )
         )
     }
+
+    /// The fixed schedule, with presentation held past the writer's rolling
+    /// stride (and any H04 cooldown) by `flow`. A chained accept keeps its
+    /// fixed 0/40 ms floor; `FlowRevealPolicy.off` returns the fixed schedule.
+    public static func schedule(
+        afterUserTyped grapheme: String,
+        calmMarkedText: Bool,
+        chained: Bool = false,
+        calm: CalmDelays = .production,
+        flow: FlowRevealPolicy,
+        cadence: TypingCadenceTracker,
+        refractory: FlowRefractoryState
+    ) -> Schedule {
+        let fixed = schedule(
+            afterUserTyped: grapheme,
+            calmMarkedText: calmMarkedText,
+            chained: chained,
+            calm: calm
+        )
+        let milliseconds = flow.revealMilliseconds(
+            baseMilliseconds: Int(fixed.revealDelayNanoseconds / 1_000_000),
+            chained: chained,
+            cadence: cadence,
+            refractory: refractory
+        )
+        return Schedule(
+            inferenceDelayNanoseconds: fixed.inferenceDelayNanoseconds,
+            revealDelayNanoseconds: max(fixed.revealDelayNanoseconds, UInt64(milliseconds) * 1_000_000)
+        )
+    }
 }

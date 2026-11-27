@@ -87,7 +87,7 @@ struct LlamaTokenBiasCacheTests {
         let sentBody = try #require(capture.lastBodyJSON)
         let bias = sentBody["logit_bias"] as? [[Any]]
         #expect(bias?.isEmpty == false)
-        #expect((sentBody["n_probs"] as? Int) == 1)
+        #expect((sentBody["n_probs"] as? Int) == 3)
         // Collapsing tail word "banana" is neither flashed as a partial nor kept in the final suggestion.
         #expect(partials.all.allSatisfy { !$0.contains("banana") && !$0.contains("xylophone") })
         #expect(decision.suggestion?.visibleText.contains("Thursday") == true)
@@ -128,7 +128,14 @@ struct LlamaTokenBiasCacheTests {
             port: 17_872,
             lora: "/tmp/personal.lora.gguf"
         )
-        #expect(loraArgs.suffix(2) == ["--lora", "/tmp/personal.lora.gguf"])
+        #expect(loraArgs.suffix(2) == ["--lora-scaled", "/tmp/personal.lora.gguf:0.60"])
+        let fullScaleArgs = LlamaServerProcessHost.helperArguments(
+            model: "/dev/fd/0",
+            port: 17_872,
+            lora: "/tmp/personal.lora.gguf",
+            loraScale: 1.0
+        )
+        #expect(fullScaleArgs.suffix(2) == ["--lora", "/tmp/personal.lora.gguf"])
 
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("tilde-lora-test-\(UUID().uuidString)", isDirectory: true)
