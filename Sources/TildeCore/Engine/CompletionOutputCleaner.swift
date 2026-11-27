@@ -170,13 +170,31 @@ public struct CompletionOutputCleaner: Sendable {
         guard !continuation.trimmingCharacters(in: .whitespaces).isEmpty else {
             return .unsettled(.rejected(.emptyAfterPrefixTrimming))
         }
-        if policy.rejectsContextReplay,
-           context.isPresent,
-           replaysContext(continuation, contextWords: context.words) {
-            return CompletionCleanOutcome(
-                result: .rejected(.replaysContext),
-                visibleTextIsSettled: true
-            )
+        var trimmedContextReplay = false
+        if policy.rejectsContextReplay, context.isPresent {
+            switch contextReplayHandling(continuation, contextWords: context.words) {
+            case .none:
+                break
+            case .reject:
+                return CompletionCleanOutcome(
+                    result: .rejected(.replaysContext),
+                    visibleTextIsSettled: true
+                )
+            case let .trimBefore(cutIndex):
+                var trimmed = String(continuation[..<cutIndex])
+                while let last = trimmed.last,
+                      last.isWhitespace || last == "," || last == ";" || last == ":" {
+                    trimmed.removeLast()
+                }
+                guard trimmed.contains(where: { $0.isLetter || $0.isNumber }) else {
+                    return CompletionCleanOutcome(
+                        result: .rejected(.replaysContext),
+                        visibleTextIsSettled: true
+                    )
+                }
+                continuation = trimmed
+                trimmedContextReplay = true
+            }
         }
 
         if policy.trimsSelfRepetition {
@@ -196,7 +214,7 @@ public struct CompletionOutputCleaner: Sendable {
                 maxVisibleCharacters: maxVisibleCharacters,
                 repairsDanglingTail: policy.repairsDanglingTail
             )),
-            visibleTextIsSettled: capHasBitten(continuation)
+            visibleTextIsSettled: trimmedContextReplay || capHasBitten(continuation)
         )
     }
 
@@ -333,17 +351,46 @@ public struct CompletionOutputCleaner: Sendable {
         return suggestion
     }
 
-    private func replaysContext(_ suggestion: String, contextWords typed: [String]) -> Bool {
-        let offered = CompletionContextWords.normalizedWords(in: suggestion)
-        guard offered.count >= 3, typed.count >= 3 else { return false }
+    private enum ContextReplayHandling {
+        case none
+        case reject
+        case trimBefore(String.Index)
+    }
+
+    /// Detects whether `suggestion` replays an n-gram from the typed context.
+    ///
+    /// Opening 3–4 word replays (index 0) and single-filler-word + 4-gram
+    /// replays (index 1) reject the entire candidate. When a clean opening of
+    /// 2+ words is followed by an inner 4-gram replay later in the raw
+    /// 28-token stream (e.g. a rambling tail loop past the visible cap or
+    /// confidence truncation point), trim right before the replayed tail
+    /// instead of discarding the clean opening.
+    private func contextReplayHandling(
+        _ suggestion: String,
+        contextWords typed: [String]
+    ) -> ContextReplayHandling {
+        guard typed.count >= 3 else { return .none }
+        var offered: [String] = []
+        var wordStarts: [String.Index] = []
+        for range in CompletionContextWords.wordRanges(in: suggestion) {
+            let word = CompletionContextWords.normalized(String(suggestion[range]))
+            if !word.isEmpty {
+                offered.append(word)
+                wordStarts.append(range.lowerBound)
+            }
+        }
+        guard offered.count >= 3 else { return .none }
 
         for size in stride(from: min(4, offered.count), through: 3, by: -1) {
-            if contains(Array(offered.prefix(size)), in: typed) { return true }
+            if contains(Array(offered.prefix(size)), in: typed) { return .reject }
         }
-        guard offered.count >= 4 else { return false }
-        return offered.indices.dropLast(3).contains { index in
-            contains(Array(offered[index..<offered.index(index, offsetBy: 4)]), in: typed)
+        guard offered.count >= 5 else { return .none }
+        for index in 1...(offered.count - 4) {
+            if contains(Array(offered[index..<(index + 4)]), in: typed) {
+                return index < 2 ? .reject : .trimBefore(wordStarts[index])
+            }
         }
+        return .none
     }
 
     /// Live dogfood regression (build 2705, rapid-fire chat): typed
