@@ -26,6 +26,10 @@ public enum WordConfidenceTruncator {
     public static let defaultTemperature = 2.8
     public static let defaultRiskPenalty = 0.45
     public static let earlyStopWordFloor = 0.04
+    /// First-word geometric-mean probability gate calibrated on held-out
+    /// personal writing: suppresses low-confidence guesses before they flash,
+    /// lifting precision-when-shown while keeping healthy coverage.
+    public static let defaultFirstWordFloor = 0.18
 
     struct WordConfidence: Equatable {
         let text: String
@@ -94,6 +98,42 @@ public enum WordConfidenceTruncator {
             maxVisibleWords: bestCount,
             repairsDanglingTail: true
         )
+    }
+
+    /// Geometric-mean probability of the first visible word of `suggestion`,
+    /// aligned strictly against `tokens`. Returns `nil` (fail-open) when
+    /// probabilities are missing, unaligned, or the first visible token has no
+    /// alphanumeric characters.
+    public static func firstWordConfidence(
+        for suggestion: CompletionSuggestion,
+        tokens: [StreamedTokenProbability]
+    ) -> Double? {
+        guard !tokens.isEmpty else { return nil }
+        let visibleWords = CompletionContextWords.wordRanges(in: suggestion.visibleText)
+        guard !visibleWords.isEmpty else { return nil }
+        let firstNormalized = CompletionContextWords.normalized(
+            String(suggestion.visibleText[visibleWords[0]])
+        )
+        guard !firstNormalized.isEmpty else { return nil }
+        let tokenWords = wordConfidences(from: tokens)
+        guard !tokenWords.isEmpty else { return nil }
+        let aligned = align(visibleWords: visibleWords, in: suggestion.visibleText, to: tokenWords)
+        return aligned.first?.geometricMeanProbability
+    }
+
+    /// Returns `true` when `minimumProbability > 0` and the first visible word
+    /// is aligned with a geometric-mean probability strictly below the floor.
+    /// Always returns `false` (fail-open) when `tokens.isEmpty` or unaligned.
+    public static func isFirstWordBelowFloor(
+        suggestion: CompletionSuggestion,
+        tokens: [StreamedTokenProbability],
+        minimumProbability: Double
+    ) -> Bool {
+        guard minimumProbability > 0,
+              let confidence = firstWordConfidence(for: suggestion, tokens: tokens) else {
+            return false
+        }
+        return confidence < minimumProbability
     }
 
     /// Returns `true` when streaming has already emitted at least one word and
@@ -181,12 +221,15 @@ public enum WordConfidenceTruncator {
             }
         }
         // 2. Mid-word suffix match on word 0 (e.g. token "writing" -> visible "ting")
-        //    with exact matches for all remaining words.
-        let tailTarget = Array(targetNormalized.dropFirst())
-        for start in 0...maxStart {
-            if tokenNormalized[start].hasSuffix(targetNormalized[0]),
-               Array(tokenNormalized[(start + 1)..<(start + targetNormalized.count)]) == tailTarget {
-                return Array(tokenWords[start..<(start + targetNormalized.count)])
+        //    with exact matches for all remaining words. Guard non-empty word 0 so
+        //    punctuation-only tokens cannot trivially match `hasSuffix("")`.
+        if !targetNormalized[0].isEmpty {
+            let tailTarget = Array(targetNormalized.dropFirst())
+            for start in 0...maxStart {
+                if tokenNormalized[start].hasSuffix(targetNormalized[0]),
+                   Array(tokenNormalized[(start + 1)..<(start + targetNormalized.count)]) == tailTarget {
+                    return Array(tokenWords[start..<(start + targetNormalized.count)])
+                }
             }
         }
         // Fail open when unaligned rather than attaching shifted probabilities.

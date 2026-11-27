@@ -127,8 +127,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     /// warm p95 TTFT by 50–76% and warm 3-word p95 by 25–49% over the old
     /// `--cache-reuse 256` defaults while keeping f16 KV cache (q8_0 KV was
     /// slower on both models). `--no-webui` disables unused web UI routes.
-    static func helperArguments(model: String, port: Int) -> [String] {
-        [
+    static func helperArguments(model: String, port: Int, lora: String? = nil) -> [String] {
+        var args = [
             "-m", model,
             "--host", "127.0.0.1",
             "--port", String(port),
@@ -141,17 +141,23 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             "--spec-type", "ngram-simple",
             "--no-webui",
         ]
+        if let lora, !lora.isEmpty {
+            args += ["--lora", lora]
+        }
+        return args
     }
 
     struct Assets: Sendable {
         let binary: String
         let model: String
         let modelInput: FileHandle?
+        let loraPath: String?
 
-        init(binary: String, model: String, modelInput: FileHandle? = nil) {
+        init(binary: String, model: String, modelInput: FileHandle? = nil, loraPath: String? = nil) {
             self.binary = binary
             self.model = model
             self.modelInput = modelInput
+            self.loraPath = loraPath
         }
     }
 
@@ -164,6 +170,8 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private var stopped = false
     private var preparing = false
     private var wroteRuntimeAPIKey = false
+    private var loraDisabledForSession = false
+    private var activeChildUsesLoRA = false
     private var launchedAt = Date.distantPast
     private var restartPolicy = LlamaRestartPolicy()
     private var readinessObserver: (@Sendable (Bool) -> Void)?
@@ -172,13 +180,14 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         port: Int,
         apiKey: String? = nil,
         modelFileProvider: @escaping @Sendable () -> VerifiedModelFile? = developmentModelFile,
+        loraPathProvider: (@Sendable () -> String?)? = nil,
         assetResolver: (@Sendable () -> Assets?)? = nil
     ) {
         precondition((1...65_535).contains(port))
         self.port = port
         self.apiKey = apiKey
         self.assetResolver = assetResolver ?? {
-            Self.resolveAssets(modelFileProvider: modelFileProvider)
+            Self.resolveAssets(modelFileProvider: modelFileProvider, loraPathProvider: loraPathProvider)
         }
     }
 
@@ -205,6 +214,7 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             healthTask = nil
             let removeKey = wroteRuntimeAPIKey
             wroteRuntimeAPIKey = false
+            activeChildUsesLoRA = false
             let observer = readinessObserver
             defer { process = nil }
             return (process, removeKey, observer)
@@ -242,7 +252,10 @@ final class LlamaServerProcessHost: @unchecked Sendable {
 
     /// The executable remains nested inside the signed app. The model is
     /// supplied only after ModelManager has verified the external bytes.
-    private static func resolveAssets(modelFileProvider: @Sendable () -> VerifiedModelFile?) -> Assets? {
+    private static func resolveAssets(
+        modelFileProvider: @Sendable () -> VerifiedModelFile?,
+        loraPathProvider: (@Sendable () -> String?)? = nil
+    ) -> Assets? {
         let binary = Bundle.main.bundlePath + "/Contents/Helpers/llama-server"
 #if DEBUG
         if !FileManager.default.fileExists(atPath: binary) {
@@ -250,13 +263,23 @@ final class LlamaServerProcessHost: @unchecked Sendable {
             guard let devBinary = environment["TILDE_DEV_LLAMA_SERVER"],
                   FileManager.default.isExecutableFile(atPath: devBinary),
                   let model = modelFileProvider() else { return nil }
-            return Assets(binary: devBinary, model: "/dev/fd/0", modelInput: model.handle)
+            return Assets(
+                binary: devBinary,
+                model: "/dev/fd/0",
+                modelInput: model.handle,
+                loraPath: loraPathProvider?()
+            )
         }
 #endif
         guard validCurrentBundleSeal(),
               FileManager.default.isExecutableFile(atPath: binary),
               let model = modelFileProvider() else { return nil }
-        return Assets(binary: binary, model: "/dev/fd/0", modelInput: model.handle)
+        return Assets(
+            binary: binary,
+            model: "/dev/fd/0",
+            modelInput: model.handle,
+            loraPath: loraPathProvider?()
+        )
     }
 
     private static func developmentModelFile() -> VerifiedModelFile? {
@@ -323,8 +346,9 @@ final class LlamaServerProcessHost: @unchecked Sendable {
     private func launchPrepared(_ assets: Assets) {
         guard !stopped, process == nil else { return }
         let child = Process()
+        let loraPath = loraDisabledForSession ? nil : assets.loraPath
         child.executableURL = URL(fileURLWithPath: assets.binary)
-        child.arguments = Self.helperArguments(model: assets.model, port: port)
+        child.arguments = Self.helperArguments(model: assets.model, port: port, lora: loraPath)
         var environment = ProcessInfo.processInfo.environment
         if let apiKey {
             environment["LLAMA_API_KEY"] = apiKey
@@ -346,14 +370,22 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         do {
             try child.run()
         } catch {
+            if loraPath != nil {
+                loraDisabledForSession = true
+                activeChildUsesLoRA = false
+                DiagnosticsLog.shared.record("llama-server-lora-fallback", metadata: ["reason": "launch-failed"])
+                prepareLaunch()
+                return
+            }
             DiagnosticsLog.shared.record("llama-server-unavailable", metadata: ["reason": "launch-failed"])
             scheduleRestart(reason: .launchFailed, wasHealthy: false, uptime: 0)
             return
         }
         process = child
+        activeChildUsesLoRA = loraPath != nil
         runtimeSnapshot = .starting
         launchedAt = Date()
-        DiagnosticsLog.shared.record("llama-server-start", metadata: [:])
+        DiagnosticsLog.shared.record("llama-server-start", metadata: ["lora": String(activeChildUsesLoRA)])
         pollHealth(of: child)
     }
 
@@ -362,12 +394,29 @@ final class LlamaServerProcessHost: @unchecked Sendable {
         let wasHealthy = runtimeSnapshot.wasHealthyBeforeExit
         let reason = runtimeSnapshot.restartReasonAfterExit
         let uptime = Date().timeIntervalSince(launchedAt)
+        let usedLoRA = activeChildUsesLoRA
+        activeChildUsesLoRA = false
         process = nil
         healthTask?.cancel()
         healthTask = nil
         let shouldRestart = !stopped
         DiagnosticsLog.shared.record("llama-server-exit", metadata: ["willRestart": String(shouldRestart)])
         if wasHealthy { readinessObserver?(false) }
+        if shouldRestart, usedLoRA, (!wasHealthy || reason == .completionFailed || uptime < 30) {
+            loraDisabledForSession = true
+            let fallbackReason: String = switch reason {
+            case .healthTimeout: "health-timeout"
+            case .completionFailed: "completion-failed"
+            case .launchFailed: "launch-failed"
+            default: "process-exited"
+            }
+            DiagnosticsLog.shared.record("llama-server-lora-fallback", metadata: ["reason": fallbackReason])
+            if !wasHealthy {
+                runtimeSnapshot = .retrying(reason)
+                prepareLaunch()
+                return
+            }
+        }
         if shouldRestart { scheduleRestart(reason: reason, wasHealthy: wasHealthy, uptime: uptime) }
     }
 

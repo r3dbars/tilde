@@ -411,6 +411,16 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             SuggestionDecisionReason.init(cleaner:)
         ) ?? .shown
         if let candidate = suggestion,
+           WordConfidenceTruncator.isFirstWordBelowFloor(
+               suggestion: candidate,
+               tokens: streamedTokens,
+               minimumProbability: productProfile.minimumFirstWordProbability
+           ) {
+            suggestion = nil
+            rejectionReason = "lowConfidence"
+            decisionReason = .lowConfidence
+        }
+        if let candidate = suggestion,
            SceneEchoPolicy.isEcho(candidate.visibleText, in: prepared.sceneEcho) {
             suggestion = nil
             rejectionReason = "replaysScene"
@@ -532,6 +542,14 @@ final class LlamaCompletionEngine: @unchecked Sendable {
             maxVisibleWords: productProfile.maximumVisibleWords
         )
         if !streamedTokens.isEmpty {
+            if WordConfidenceTruncator.isFirstWordBelowFloor(
+                suggestion: suggestion,
+                tokens: streamedTokens,
+                minimumProbability: productProfile.minimumFirstWordProbability
+            ) {
+                // Weak first word: stay silent and cancel remaining tail tokens immediately.
+                return (nil, true)
+            }
             let trimmed = WordConfidenceTruncator.trim(
                 suggestion: suggestion,
                 tokens: streamedTokens

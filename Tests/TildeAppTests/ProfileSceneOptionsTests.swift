@@ -11,7 +11,7 @@ struct ProfileSceneOptionsTests {
         for profile in [TildeProductProfile.production, .preview26B, .modelPreview] {
             #expect(profile.sceneSuggestionOptions.replyCueAnchoredToCurrentSentence)
             #expect(!profile.sceneSuggestionOptions.extendedOrdinarySilenceGate)
-            #expect(!profile.includesWindowTitleInScene)
+            #expect(profile.includesWindowTitleInScene)
             #expect(profile.chainsCompletionAfterAccept)
             #expect(profile.calmRevealDelays == .production)
             #expect(profile.requestsAfterPunctuation)

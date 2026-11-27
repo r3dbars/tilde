@@ -93,6 +93,75 @@ struct LlamaTokenBiasCacheTests {
         #expect(decision.suggestion?.visibleText.contains("Thursday") == true)
         #expect(decision.suggestion?.visibleText.contains("banana") == false)
     }
+
+    @Test("LlamaCompletionEngine suppresses weak first-word guesses before flashing any partial")
+    func engineSuppressesLowConfidenceFirstWord() async throws {
+        let capture = BodyCaptureTransport(lines: [
+            #"data: {"content":" probably","completion_probabilities":[{"prob":0.09}]}"#,
+            #"data: {"content":" tomorrow","completion_probabilities":[{"prob":0.85}]}"#,
+            #"data: {"content":" morning","completion_probabilities":[{"prob":0.90}]}"#,
+            #"data: {"stop":true,"tokens_predicted":3,"stopped_eos":true}"#,
+        ])
+        let engine = LlamaCompletionEngine(
+            baseURL: URL(string: "http://127.0.0.1:17872")!,
+            diagnostics: .disabled,
+            transport: capture
+        )
+        let partials = PartialRecorder()
+        let decision = try await engine.decide(
+            textBeforeCursor: "I think we should ",
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            scene: nil,
+            onPartialSuggestion: { suggestion, _ in partials.record(suggestion.visibleText) }
+        )
+        #expect(partials.all.isEmpty)
+        #expect(decision.suggestion == nil)
+        #expect(decision.reason == .lowConfidence)
+    }
+
+    @Test("LlamaServerProcessHost appends --lora only when provided and ModelManager validates 0600 GGUF")
+    func loraValidationAndArguments() throws {
+        let baseArgs = LlamaServerProcessHost.helperArguments(model: "/dev/fd/0", port: 17_872)
+        #expect(!baseArgs.contains("--lora"))
+        let loraArgs = LlamaServerProcessHost.helperArguments(
+            model: "/dev/fd/0",
+            port: 17_872,
+            lora: "/tmp/personal.lora.gguf"
+        )
+        #expect(loraArgs.suffix(2) == ["--lora", "/tmp/personal.lora.gguf"])
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tilde-lora-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        let canonicalRoot = tempRoot.resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: canonicalRoot) }
+
+        let manager = ModelManager(descriptor: .qwen35B4BQ4KM, rootDirectory: canonicalRoot)
+        try FileManager.default.createDirectory(
+            at: manager.modelDirectory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        #expect(manager.verifiedLocalLoRAPath() == nil)
+
+        // Valid GGUF v3 header + >=64 bytes + 0600 -> accepted.
+        var validGGUF = Data([0x47, 0x47, 0x55, 0x46, 0x03, 0x00, 0x00, 0x00])
+        validGGUF.append(Data(repeating: 0, count: 64))
+        try validGGUF.write(to: manager.loraURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manager.loraURL.path)
+        #expect(manager.verifiedLocalLoRAPath() != nil)
+        #expect(URL(fileURLWithPath: try #require(manager.verifiedLocalLoRAPath())).resolvingSymlinksInPath().standardizedFileURL.path
+            == manager.loraURL.resolvingSymlinksInPath().standardizedFileURL.path)
+
+        // Loose permissions (0644) -> fail closed.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: manager.loraURL.path)
+        #expect(manager.verifiedLocalLoRAPath() == nil)
+
+        // Bad magic with 0600 -> fail closed.
+        try Data(repeating: 0x41, count: 72).write(to: manager.loraURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manager.loraURL.path)
+        #expect(manager.verifiedLocalLoRAPath() == nil)
+    }
 }
 
 private final class PartialRecorder: @unchecked Sendable {

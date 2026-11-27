@@ -35,6 +35,7 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
     public let replyCueAnchoredToCurrentSentence: Bool
     public let extendedOrdinarySilenceGate: Bool
     public let includesWindowTitleInScene: Bool
+    public let minimumFirstWordProbability: Double
 
     public init(
         maximumVisibleWords: Int,
@@ -43,7 +44,8 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         factualGrounding: FactualGroundingPolicy.Mode,
         replyCueAnchoredToCurrentSentence: Bool,
         extendedOrdinarySilenceGate: Bool,
-        includesWindowTitleInScene: Bool
+        includesWindowTitleInScene: Bool,
+        minimumFirstWordProbability: Double = 0.0
     ) {
         self.maximumVisibleWords = maximumVisibleWords
         self.sceneEchoMinimumWords = sceneEchoMinimumWords
@@ -52,11 +54,31 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         self.replyCueAnchoredToCurrentSentence = replyCueAnchoredToCurrentSentence
         self.extendedOrdinarySilenceGate = extendedOrdinarySilenceGate
         self.includesWindowTitleInScene = includesWindowTitleInScene
+        self.minimumFirstWordProbability = minimumFirstWordProbability
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case maximumVisibleWords, sceneEchoMinimumWords, sceneEchoMinimumCharacters
+        case factualGrounding, replyCueAnchoredToCurrentSentence
+        case extendedOrdinarySilenceGate, includesWindowTitleInScene
+        case minimumFirstWordProbability
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        maximumVisibleWords = try c.decode(Int.self, forKey: .maximumVisibleWords)
+        sceneEchoMinimumWords = try c.decode(Int.self, forKey: .sceneEchoMinimumWords)
+        sceneEchoMinimumCharacters = try c.decode(Int.self, forKey: .sceneEchoMinimumCharacters)
+        factualGrounding = try c.decode(FactualGroundingPolicy.Mode.self, forKey: .factualGrounding)
+        replyCueAnchoredToCurrentSentence = try c.decode(Bool.self, forKey: .replyCueAnchoredToCurrentSentence)
+        extendedOrdinarySilenceGate = try c.decode(Bool.self, forKey: .extendedOrdinarySilenceGate)
+        includesWindowTitleInScene = try c.decode(Bool.self, forKey: .includesWindowTitleInScene)
+        minimumFirstWordProbability = try c.decodeIfPresent(Double.self, forKey: .minimumFirstWordProbability) ?? 0.0
     }
 
     /// The production decision stack: full phrase window with sentence-anchored
-    /// reply cue detection so active paragraphs are not silenced by
-    /// `non-actionable-scene`.
+    /// reply cue detection, window title context, and calibrated first-word
+    /// confidence gating.
     public static let conservative = DecisionPolicy(
         maximumVisibleWords: CompletionSuggestion.defaultMaxVisibleWords,
         sceneEchoMinimumWords: SceneEchoPolicy.defaultMinimumWords,
@@ -64,7 +86,8 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         factualGrounding: .off,
         replyCueAnchoredToCurrentSentence: true,
         extendedOrdinarySilenceGate: false,
-        includesWindowTitleInScene: false
+        includesWindowTitleInScene: true,
+        minimumFirstWordProbability: WordConfidenceTruncator.defaultFirstWordFloor
     )
 
     /// Q12/Q13's nominated display filters plus the owner-directed scene
@@ -77,7 +100,8 @@ public struct DecisionPolicy: Codable, Equatable, Sendable {
         factualGrounding: .numbersAndNames,
         replyCueAnchoredToCurrentSentence: true,
         extendedOrdinarySilenceGate: false,
-        includesWindowTitleInScene: true
+        includesWindowTitleInScene: true,
+        minimumFirstWordProbability: WordConfidenceTruncator.defaultFirstWordFloor
     )
 
     public var sceneSuggestionOptions: SceneSuggestionPolicy.Options {

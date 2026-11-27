@@ -224,6 +224,28 @@ struct MindReaderAccuracyTests {
         // Empty token probabilities fail open cleanly.
         let failOpen = WordConfidenceTruncator.trim(suggestion: strongSuggestion, tokens: [])
         #expect(failOpen.visibleText == " works for me")
+
+        // First-word confidence gate rejects weak word-1 and fails open when empty/unaligned.
+        let weakTokens = [
+            StreamedTokenProbability(piece: " maybe", probability: 0.08),
+            StreamedTokenProbability(piece: " later", probability: 0.85),
+        ]
+        let weakSuggestion = CompletionSuggestion(text: " maybe later", maxVisibleWords: 3)
+        #expect(WordConfidenceTruncator.isFirstWordBelowFloor(
+            suggestion: weakSuggestion,
+            tokens: weakTokens,
+            minimumProbability: 0.18
+        ))
+        #expect(!WordConfidenceTruncator.isFirstWordBelowFloor(
+            suggestion: strongSuggestion,
+            tokens: strongTokens,
+            minimumProbability: 0.18
+        ))
+        #expect(!WordConfidenceTruncator.isFirstWordBelowFloor(
+            suggestion: weakSuggestion,
+            tokens: [],
+            minimumProbability: 0.18
+        ))
     }
 
     @Test("PersonalNextWordShadow.topBiasTerms is read-only and returns high-support personal terms")

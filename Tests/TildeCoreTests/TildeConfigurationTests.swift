@@ -13,7 +13,8 @@ struct TildeConfigurationTests {
         #expect(decision.factualGrounding == .off)
         #expect(decision.replyCueAnchoredToCurrentSentence)
         #expect(!decision.extendedOrdinarySilenceGate)
-        #expect(!decision.includesWindowTitleInScene)
+        #expect(decision.includesWindowTitleInScene)
+        #expect(decision.minimumFirstWordProbability == WordConfidenceTruncator.defaultFirstWordFloor)
         let interaction = InteractionPolicy.conservative
         #expect(interaction.chainsCompletionAfterAccept)
         #expect(interaction.calmRevealDelays == .production)

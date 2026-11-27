@@ -326,11 +326,16 @@ final class ModelManager: @unchecked Sendable {
         }
     }
 
+    static let loraFileName = "personal.lora.gguf"
+    static let loraMinimumBytes: Int64 = 64
+    static let loraMaximumBytes: Int64 = 2_000_000_000
+
     let descriptor: ModelDescriptor
     let rootDirectory: URL
     let modelDirectory: URL
     let modelURL: URL
     let partialURL: URL
+    let loraURL: URL
 
     var state: ModelState { stateQueue.sync { stateStorage } }
     var currentState: ModelState { state }
@@ -375,6 +380,60 @@ final class ModelManager: @unchecked Sendable {
         return VerifiedModelFile(url: modelURL, handle: handle)
     }
 
+    /// Validates an optional, owner-only (`0600`) local LoRA GGUF adapter for
+    /// this exact model directory. Fails closed on symlinks, loose permissions,
+    /// wrong ownership, bad size, or invalid GGUF magic/version so a corrupted
+    /// or untrusted adapter never reaches `llama-server`.
+    func verifiedLocalLoRAPath() -> String? {
+        switch SecureLocalStorage.openExistingOwnerOnlyFileForReadOnlyStatus(at: loraURL) {
+        case .missing:
+            return nil
+        case .rejected:
+            DiagnosticsLog.shared.record("llama-server-lora-skipped", metadata: ["reason": "permissions"])
+            return nil
+        case let .opened(handle):
+            defer { try? handle.close() }
+            let fd = handle.fileDescriptor
+            var statBuf = stat()
+            guard fstat(fd, &statBuf) == 0,
+                  (Self.loraMinimumBytes...Self.loraMaximumBytes).contains(statBuf.st_size) else {
+                DiagnosticsLog.shared.record("llama-server-lora-skipped", metadata: ["reason": "size"])
+                return nil
+            }
+            guard let header = try? handle.read(upToCount: 8),
+                  header.count == 8,
+                  header[0] == 0x47, header[1] == 0x47, header[2] == 0x55, header[3] == 0x46 else {
+                DiagnosticsLog.shared.record("llama-server-lora-skipped", metadata: ["reason": "header"])
+                return nil
+            }
+            let version = UInt32(header[4])
+                | (UInt32(header[5]) << 8)
+                | (UInt32(header[6]) << 16)
+                | (UInt32(header[7]) << 24)
+            guard (2...3).contains(version) else {
+                DiagnosticsLog.shared.record("llama-server-lora-skipped", metadata: ["reason": "header"])
+                return nil
+            }
+            var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            guard fcntl(fd, F_GETPATH, &pathBuf) == 0 else {
+                DiagnosticsLog.shared.record("llama-server-lora-skipped", metadata: ["reason": "permissions"])
+                return nil
+            }
+            let canonical = String(
+                decoding: pathBuf.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) },
+                as: UTF8.self
+            )
+            guard !canonical.isEmpty,
+                  !canonical.contains(where: { $0.isNewline || ($0.asciiValue ?? 32) < 32 }),
+                  URL(fileURLWithPath: canonical).resolvingSymlinksInPath().standardizedFileURL.path
+                    == loraURL.resolvingSymlinksInPath().standardizedFileURL.path else {
+                DiagnosticsLog.shared.record("llama-server-lora-skipped", metadata: ["reason": "permissions"])
+                return nil
+            }
+            return canonical
+        }
+    }
+
     /// Number of full content hashes this manager has computed; tests only.
     var fullVerificationCount: Int { stateQueue.sync { fullVerifications } }
 
@@ -410,6 +469,7 @@ final class ModelManager: @unchecked Sendable {
         self.modelDirectory = self.rootDirectory.appendingPathComponent(descriptor.identifier, isDirectory: true)
         self.modelURL = self.modelDirectory.appendingPathComponent("model.gguf", isDirectory: false)
         self.partialURL = self.modelDirectory.appendingPathComponent("model.gguf.partial", isDirectory: false)
+        self.loraURL = self.modelDirectory.appendingPathComponent(Self.loraFileName, isDirectory: false)
         self.transport = transport
         self.callbackQueue = callbackQueue
         self.stateHandler = onStateChange

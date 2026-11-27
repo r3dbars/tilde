@@ -3,9 +3,10 @@ import Foundation
 public enum DiagnosticsMetadataRedactor {
     private static let enumValues: Set<String> = [
         "launch-failed", "assets-missing", "port-in-use", "health-timeout", "directory",
-        "already-running",
+        "already-running", "process-exited", "completion-failed",
         "unsafeHiddenOrControlCharacter", "emptyOutput", "noSuggestionSentinel",
         "promptInstructionEcho", "emptyAfterPrefixTrimming", "replaysContext", "replaysScene",
+        "lowConfidence", "unsupportedFact", "repeatsItself",
         "notRegistered", "enabled", "requiresApproval", "notFound", "unknown",
         "store-corrupt", "key-unavailable", "storage-unavailable", "internal-error",
         // Screen Memory's `screen-capture-skipped` reason vocabulary
@@ -97,7 +98,7 @@ public enum DiagnosticsMetadataRedactor {
              // `personal-stream-hold`: how long the first prefix was held.
              "heldMilliseconds":
             safe = matches(value, #"^(?:[0-9]+(?:\.[0-9]+)?|none|unknown)$"#)
-        case "willRestart", "firstInstall",
+        case "willRestart", "firstInstall", "lora",
              // `llama-completion-timing`: whether the stream was cut once the
              // display cap had settled the visible text. A bare flag, no text.
              "stoppedAtCap":

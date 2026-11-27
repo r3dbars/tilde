@@ -384,10 +384,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let modelManager = ModelManager(descriptor: descriptor)
         self.modelManager = modelManager
+        let loraProvider: (@Sendable () -> String?)? = launchMode == .production
+            ? { @Sendable in modelManager.verifiedLocalLoRAPath() }
+            : nil
         self.llamaServerHost = LlamaServerProcessHost(
             port: launchMode.llamaServerPort,
             apiKey: launchMode == .production ? LlamaServerProcessHost.generateAPIKey() : nil,
-            modelFileProvider: { modelManager.verifiedInstalledModelFile() }
+            modelFileProvider: { modelManager.verifiedInstalledModelFile() },
+            loraPathProvider: loraProvider
         )
     }
 
