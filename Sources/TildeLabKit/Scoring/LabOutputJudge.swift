@@ -66,7 +66,8 @@ public enum LabOutputJudge {
         scenario: LabScenario,
         configuration: LabArmConfiguration,
         meanTokenProbability: Double?,
-        streamedTokens: [StreamedTokenProbability] = []
+        streamedTokens: [StreamedTokenProbability] = [],
+        personalPhraseMatch: PersonalPhraseMatch? = nil
     ) -> LabSuggestionDecision {
         if configuration.judgment.lengthPolicy == .confidenceBased,
            let meanTokenProbability,
@@ -102,6 +103,7 @@ public enum LabOutputJudge {
         let candidate = cleanedSuggestion.visibleText
 
         if let quietGate = configuration.judgment.quietGate, quietGate.enabled {
+            let phraseAgreement = personalPhraseMatch?.agreement(with: cleanedSuggestion.visibleText)
             let gateDecision = SuggestionQuietGate.evaluate(
                 suggestion: cleanedSuggestion,
                 tokens: streamedTokens,
@@ -109,7 +111,9 @@ public enum LabOutputJudge {
                 register: preparedPrompt.register,
                 scene: preparedPrompt.scene,
                 replyCueAnchoredToCurrentSentence: configuration.judgment.replyCueAnchoredToCurrentSentence,
-                configuration: quietGate
+                configuration: quietGate,
+                personalPhraseAgreement: phraseAgreement?.agreed ?? false,
+                personalPhraseLogSupport: phraseAgreement?.logSupport ?? 0.0
             )
             if !gateDecision.allow {
                 return LabSuggestionDecision(suggestion: nil, reason: .lowConfidence)

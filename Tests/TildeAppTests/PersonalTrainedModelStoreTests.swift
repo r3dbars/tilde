@@ -196,6 +196,55 @@ struct PersonalTrainedModelStoreTests {
         ))
     }
 
+    @Test("PersonalPhraseExpert snapshot round-trips encrypted inside model.v1.enc, stays absent in plaintext, and legacy files decode cleanly")
+    func phraseExpertEncryptedRoundTripAndLegacyDecode() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let event = fixture.event(id: "p1", text: " secretphrase alpha beta gamma ")
+        let seq = try await fixture.store.append([event])
+
+        var phraseExpert = PersonalPhraseExpert()
+        phraseExpert.consume([event, fixture.event(id: "p2", text: " secretphrase alpha beta gamma ")])
+        let stored = PersonalNextWordStoredModel(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            coveredThroughSequence: seq,
+            model: Fixture.trainedModel(text: " secretphrase alpha beta gamma "),
+            phraseExpert: phraseExpert.snapshot
+        )
+        try await fixture.store.saveTrainedModel(stored)
+
+        let replay = try await fixture.store.loadReplay(maximumBytes: .max)
+        #expect(replay.trainedModel?.phraseExpert == phraseExpert.snapshot)
+
+        let rawDisk = String(decoding: try Data(contentsOf: fixture.store.modelLocation), as: UTF8.self)
+        #expect(!rawDisk.contains("secretphrase"))
+        #expect(!rawDisk.contains("gamma"))
+
+        // Legacy PersonalNextWordStoredModel JSON without phraseExpert field decodes with phraseExpert == nil.
+        let legacy = PersonalNextWordStoredModel(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            coveredThroughSequence: seq,
+            model: Fixture.trainedModel(text: " one two "),
+            phraseExpert: nil
+        )
+        let encoded = try JSONEncoder().encode(legacy)
+        var obj = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        obj.removeValue(forKey: "phraseExpert")
+        let stripped = try JSONSerialization.data(withJSONObject: obj)
+        let decodedLegacy = try JSONDecoder().decode(PersonalNextWordStoredModel.self, from: stripped)
+        #expect(decodedLegacy.phraseExpert == nil)
+        #expect(decodedLegacy.coveredThroughSequence == seq)
+
+        // Delete-everything removes the encrypted file and key completely.
+        try await fixture.store.deleteAll()
+        #expect(!FileManager.default.fileExists(atPath: fixture.store.modelLocation.path))
+        #expect(fixture.keys.deleted)
+    }
+
     private final class Keys: PersonalHistoryKeyProviding, @unchecked Sendable {
         private let lock = NSLock()
         private let keyData: Data
