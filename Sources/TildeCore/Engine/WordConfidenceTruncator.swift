@@ -120,10 +120,11 @@ public enum WordConfidenceTruncator {
     public static let defaultClauseBonus = 2.0
     public static let defaultRiskPenalty = 0.45
     public static let earlyStopWordFloor = 0.04
-    /// First-word geometric-mean probability gate calibrated on held-out
-    /// personal writing: suppresses low-confidence guesses before they flash,
-    /// lifting precision-when-shown while keeping healthy coverage.
-    public static let defaultFirstWordFloor = 0.18
+    /// First-word geometric-mean probability floor calibrated alongside the
+    /// scene-invariant `SuggestionQuietGate` (`0.12 / 0.40`): prevents two
+    /// stacked gates from silencing prose while still stopping genuinely weak
+    /// guesses before they flash.
+    public static let defaultFirstWordFloor = 0.12
 
     struct WordConfidence: Equatable {
         let text: String

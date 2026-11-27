@@ -28,6 +28,14 @@ How we work: [`lab-partnership.md`](lab-partnership.md).
 - **Next:** the one following question. Not a list.
 ```
 
+## 2026-11-27 — Retune QuietGate + word-1 floor (`0.12 / 0.40`) after live silence check
+
+- **Try:** After early live dogfood on build `202611270521` showed `0/2` mid-stride flashes (flow reveal worked) but only `2/59` (`3.4%`) shown in open-ended prose (`27` blocked by `p_w1 < 0.18` + `16` blocked post-gen by `QuietGate < 0.50`), swept 7 `(hardFirstWordFloor, QuietGate.threshold)` pairs from `0.08/0.20` to `0.18/0.50` on the 600-case Certified Corpus V2 Dev split with leak-free LoRA `v3a-500 @ 0.60`.
+- **Learn:** `0.12 / 0.40` ("Balanced") beat `0.18 / 0.50` on Net Keystrokes Saved, hitting the highest score yet (**`999 NKS / 11.01%`**, up from `964`), raising shown coverage `23.0% → 26.3%` (`138 → 158`) and useful displays `119 → 130` while holding `17.7%` bad-when-shown (`9/600` wrong), `92.1%` silence restraint, `99.5%` factuality, and lifting CF pair pass `54.0% → 56.0%`. Going looser to `0.08 / 0.20` regressed NKS (`936`) and spiked bad-when-shown to `42.0%`.
+- **Fail:** Still Development-split calibration plus a short 59-event live prose session; real multi-app F03 retention and felt responsiveness on `0.12 / 0.40` remain to be measured.
+- **Where:** `Sources/TildeCore/Engine/WordConfidenceTruncator.swift`, `Sources/TildeCore/Policy/SuggestionQuietGate.swift`; local campaign `c02-v3a06-threshold-sweep`; branch `feat/mindreader-speed-and-accuracy`.
+- **Next:** Dogfood `0.12 / 0.40` across Slack, Notes, Mail, and T3 Code and check live display rate, `<120 ms` flash rate, and F03 retained characters.
+
 ## 2026-11-27 — Combined Neon + Opus stack verified on Certified Corpus V2 Dev (Base vs. LoRA v3a @ 0.60)
 
 - **Try:** Stack all four Meat-Grinder winners together in Swift — `WordConfidenceTruncator` (`T=1.0`, `clauseBonus=2.0`), `SceneEchoPolicy` `minChars=24`, scene-invariant `SuggestionQuietGate` (`sceneGrounded=0`, `hasReplyCue=0`) across thresholds `0.50 / 0.65 / 0.75 / 0.85`, and `--lora-scaled` at `0.60` — and evaluate both Qwen 3.5 4B Base and leak-free LoRA `v3a-500` on the 600-case Certified Corpus V2 Development split (360 speak, 240 silence, 300 counterfactual pairs) via `tilde-lab`.

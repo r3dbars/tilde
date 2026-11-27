@@ -253,12 +253,13 @@ public enum SuggestionQuietGate {
         public static let disabled = Configuration(enabled: false)
 
         /// Scene-invariant multi-feature Quiet Gate calibrated on Certified
-        /// Corpus V2 Dev: `threshold: 0.50` achieves peak NKS on both Base
-        /// (`837 NKS`, `100%` factuality) and leak-free LoRA v3a @ 0.60
-        /// (`964 NKS`, `13.8%` BWS, `93.3%` silence, `99.8%` factuality).
+        /// Corpus V2 Dev (`0.12 / 0.40`): achieves peak NKS (`999 / 11.01%`)
+        /// on leak-free LoRA v3a @ 0.60 with `17.7%` BWS (`9/600` wrong),
+        /// `92.1%` silence restraint, and `99.5%` factuality without
+        /// over-silencing open-ended prose.
         public static let production = Configuration(
             enabled: true,
-            threshold: 0.50,
+            threshold: 0.40,
             hardFirstWordFloor: WordConfidenceTruncator.defaultFirstWordFloor,
             weights: .default,
             failOpenWhenUnavailable: true
