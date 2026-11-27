@@ -309,4 +309,96 @@ struct SuggestionQuietGateTests {
         #expect(roundTripped == withGate)
         #expect(roundTripped.quietGate == .balanced)
     }
+
+    @Test("SuggestionQuietGate rewards personal phrase agreement and stays strictly neutral when absent")
+    func personalPhraseAgreementSignalAndCodable() throws {
+        let base = SuggestionQuietGate.Features(
+            firstWordProbability: 0.25,
+            firstWordMargin: 0.15,
+            firstWordEntropy: 1.0,
+            secondWordProbability: 0.50,
+            meanWordProbability: 0.45,
+            minimumWordProbability: 0.25,
+            meanWordMargin: 0.20,
+            meanWordEntropy: 0.95,
+            wordCount: 2,
+            characterCount: 11,
+            sceneGrounded: false,
+            hasReplyCue: false,
+            register: .prose,
+            cursorBoundary: .wordBoundary
+        )
+        let baseResult = SuggestionQuietGate.score(base)
+
+        // Neutral defaults match explicit false / 0.0 identically (zero cold-start / Certified V2 impact).
+        let explicitNeutral = SuggestionQuietGate.Features(
+            firstWordProbability: 0.25,
+            firstWordMargin: 0.15,
+            firstWordEntropy: 1.0,
+            secondWordProbability: 0.50,
+            meanWordProbability: 0.45,
+            minimumWordProbability: 0.25,
+            meanWordMargin: 0.20,
+            meanWordEntropy: 0.95,
+            wordCount: 2,
+            characterCount: 11,
+            sceneGrounded: false,
+            hasReplyCue: false,
+            register: .prose,
+            cursorBoundary: .wordBoundary,
+            personalPhraseAgreement: false,
+            personalPhraseLogSupport: 0.0
+        )
+        #expect(abs(SuggestionQuietGate.score(explicitNeutral).logit - baseResult.logit) < 1e-12)
+
+        // Personal phrase agreement + log support lifts logit monotonically.
+        let agreedLow = SuggestionQuietGate.Features(
+            firstWordProbability: 0.25,
+            firstWordMargin: 0.15,
+            firstWordEntropy: 1.0,
+            secondWordProbability: 0.50,
+            meanWordProbability: 0.45,
+            minimumWordProbability: 0.25,
+            meanWordMargin: 0.20,
+            meanWordEntropy: 0.95,
+            wordCount: 2,
+            characterCount: 11,
+            sceneGrounded: false,
+            hasReplyCue: false,
+            register: .prose,
+            cursorBoundary: .wordBoundary,
+            personalPhraseAgreement: true,
+            personalPhraseLogSupport: log(1.0 + 2.0)
+        )
+        let agreedHigh = SuggestionQuietGate.Features(
+            firstWordProbability: 0.25,
+            firstWordMargin: 0.15,
+            firstWordEntropy: 1.0,
+            secondWordProbability: 0.50,
+            meanWordProbability: 0.45,
+            minimumWordProbability: 0.25,
+            meanWordMargin: 0.20,
+            meanWordEntropy: 0.95,
+            wordCount: 2,
+            characterCount: 11,
+            sceneGrounded: false,
+            hasReplyCue: false,
+            register: .prose,
+            cursorBoundary: .wordBoundary,
+            personalPhraseAgreement: true,
+            personalPhraseLogSupport: log(1.0 + 12.0)
+        )
+        #expect(SuggestionQuietGate.score(agreedLow).logit > baseResult.logit)
+        #expect(SuggestionQuietGate.score(agreedHigh).logit > SuggestionQuietGate.score(agreedLow).logit)
+
+        // Scene weights stay strictly 0.0 even when personal phrase agreement is present.
+        #expect(SuggestionQuietGate.Weights.default.sceneGrounded == 0.0)
+        #expect(SuggestionQuietGate.Weights.default.hasReplyCue == 0.0)
+
+        // Legacy Weights JSON without personalPhrase* fields decodes backward-compatibly.
+        let legacyWeightsJSON = Data(#"{"bias":-0.35,"firstWordLogProbability":0.55}"#.utf8)
+        let decodedWeights = try JSONDecoder().decode(SuggestionQuietGate.Weights.self, from: legacyWeightsJSON)
+        #expect(decodedWeights.personalPhraseAgreement == SuggestionQuietGate.Weights.default.personalPhraseAgreement)
+        #expect(decodedWeights.personalPhraseLogSupport == SuggestionQuietGate.Weights.default.personalPhraseLogSupport)
+    }
 }

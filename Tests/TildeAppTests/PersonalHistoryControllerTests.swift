@@ -1011,7 +1011,7 @@ struct PersonalHistoryControllerTests {
     }
 
     private struct Fixture {
-        private static let freshTimestamp = PersonalNextWordShadow.evaluationStartMilliseconds
+        static let freshTimestamp = PersonalNextWordShadow.evaluationStartMilliseconds
             + 24 * 60 * 60 * 1_000
 
         let defaults: UserDefaults
@@ -1120,6 +1120,116 @@ struct PersonalHistoryControllerTests {
             try? await Task.sleep(for: .milliseconds(1))
         }
         return await controller.nextWordStatus()
+    }
+
+    @Test("PersonalPhraseExpert integrates with PersonalHistoryController lifecycle: hot-path lookup, exclusions, disable, deleteAll, and legacy restore")
+    func phraseExpertControllerLifecycle() async throws {
+        let fixture = Fixture(enabled: true, modelPersistenceInterval: 0)
+        #expect(await settledStatus(fixture.controller).phase == .ready)
+
+        #expect(await fixture.controller.ingest([
+            fixture.event(id: "e1", text: "let me circle back tomorrow ", app: "com.tinyspeck.slackmacgap"),
+            fixture.event(id: "e2", text: "let me circle back tomorrow ", app: "com.tinyspeck.slackmacgap"),
+        ]))
+
+        let match = try #require(fixture.controller.personalPhraseMatch(
+            textBeforeCursor: "let me circle ",
+            register: .chat,
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ))
+        #expect(match.firstWord == "back")
+        #expect(match.phrase == "back tomorrow")
+        #expect(match.order == 4)
+
+        // Mid-word context is refused.
+        #expect(fixture.controller.personalPhraseMatch(
+            textBeforeCursor: "let me cir",
+            register: .chat,
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ) == nil)
+
+        // Persisted trained model carries phraseExpert snapshot across restart.
+        let savedModel = await fixture.store.trainedModel
+        #expect(savedModel?.phraseExpert != nil)
+
+        let restarted = fixture.restart(modelPersistenceInterval: 0)
+        #expect(await settledStatus(restarted).phase == .ready)
+        let afterRestart = try #require(restarted.personalPhraseMatch(
+            textBeforeCursor: "let me circle ",
+            register: .chat,
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ))
+        #expect(afterRestart.firstWord == "back")
+
+        // App exclusion immediately blocks lookup.
+        restarted.excludedApps = ["com.tinyspeck.slackmacgap"]
+        #expect(restarted.personalPhraseMatch(
+            textBeforeCursor: "let me circle ",
+            register: .chat,
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ) == nil)
+        restarted.excludedApps = []
+        #expect(await settledStatus(restarted).phase == .ready)
+
+        // Disabling Personal History immediately clears in-memory phrase expert.
+        restarted.isEnabled = false
+        #expect(restarted.personalPhraseMatch(
+            textBeforeCursor: "let me circle ",
+            register: .chat,
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ) == nil)
+
+        // Re-enable, then deleteAll wipes both disk and memory completely.
+        restarted.isEnabled = true
+        #expect(await settledStatus(restarted).phase == .ready)
+        try await restarted.deleteAll()
+        #expect(restarted.personalPhraseMatch(
+            textBeforeCursor: "let me circle ",
+            register: .chat,
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ) == nil)
+        #expect(await fixture.store.events.isEmpty)
+        #expect(await fixture.store.trainedModel == nil)
+    }
+
+    @Test("Legacy model.v1.enc without phraseExpert rebuilds phrase expert from history without wiping records")
+    func legacyModelWithoutPhraseExpertRebuildsSafely() async throws {
+        let fixture = Fixture(
+            enabled: true,
+            preloaded: [
+                (id: "old1", text: "happy to jump on ", app: "com.example.Editor"),
+                (id: "old2", text: "happy to jump on ", app: "com.example.Editor"),
+            ],
+            modelPersistenceInterval: 0
+        )
+        // Pre-seed a legacy stored model with phraseExpert == nil covering sequence 1.
+        var shadow = PersonalNextWordShadow()
+        shadow.consume([fixture.event(id: "old1", text: "happy to jump on ")], scoring: false)
+        try await fixture.store.saveTrainedModel(PersonalNextWordStoredModel(
+            historyIdentifier: "history",
+            experimentIdentifier: "experiment",
+            excludedApps: [],
+            coveredThroughSequence: 1,
+            model: shadow.trainedModel,
+            phraseExpert: nil
+        ))
+
+        let restarted = fixture.restart(modelPersistenceInterval: 0)
+        #expect(await settledStatus(restarted).phase == .ready)
+        let match = try #require(restarted.personalPhraseMatch(
+            textBeforeCursor: "happy to ",
+            register: .prose,
+            appBundleIdentifier: "com.example.Editor",
+            referenceTimestampMilliseconds: Fixture.freshTimestamp + 1_000
+        ))
+        #expect(match.firstWord == "jump")
+        #expect(await fixture.store.events.count == 2)
     }
 
 }

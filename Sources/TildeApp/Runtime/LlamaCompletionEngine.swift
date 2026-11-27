@@ -272,6 +272,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         experimentArm: String? = nil,
         personalBiasTerms: [WeightedBiasTerm] = [],
         personalVoiceScaffold: String? = nil,
+        personalPhraseMatch: PersonalPhraseMatch? = nil,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion, Int) -> Void
     ) async throws -> Decision {
         let startedAt = ProcessInfo.processInfo.systemUptime
@@ -425,6 +426,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                             register: register,
                             scene: scene,
                             personalBiasTerms: personalBiasTerms,
+                            personalPhraseMatch: personalPhraseMatch,
                             streamedTokens: streamedTokens
                         )
                         if let partial = stable.suggestion, partial.visibleText != lastPartialVisibleText {
@@ -485,6 +487,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         }
         if let candidate = suggestion {
             if let quietGate = activeQuietGate, quietGate.enabled {
+                let phraseAgreement = personalPhraseMatch?.agreement(with: candidate.visibleText)
                 let gateDecision = SuggestionQuietGate.evaluate(
                     suggestion: candidate,
                     tokens: streamedTokens,
@@ -493,7 +496,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                     scene: scene,
                     personalBiasTerms: personalBiasTerms,
                     replyCueAnchoredToCurrentSentence: productProfile.decisionPolicy.replyCueAnchoredToCurrentSentence,
-                    configuration: quietGate
+                    configuration: quietGate,
+                    personalPhraseAgreement: phraseAgreement?.agreed ?? false,
+                    personalPhraseLogSupport: phraseAgreement?.logSupport ?? 0.0
                 )
                 if !gateDecision.allow {
                     suggestion = nil
@@ -604,6 +609,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
         register: ContinuationRegister = .prose,
         scene: ScreenScene.Scene? = nil,
         personalBiasTerms: [WeightedBiasTerm] = [],
+        personalPhraseMatch: PersonalPhraseMatch? = nil,
         streamedTokens: [StreamedTokenProbability] = []
     ) -> (suggestion: CompletionSuggestion?, settled: Bool) {
         let outcome = cleaner.clean(
@@ -650,6 +656,7 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                    ) {
                     return (nil, true)
                 }
+                let phraseAgreement = personalPhraseMatch?.agreement(with: suggestion.visibleText)
                 let gateDecision = SuggestionQuietGate.evaluate(
                     suggestion: suggestion,
                     tokens: streamedTokens,
@@ -658,7 +665,9 @@ final class LlamaCompletionEngine: @unchecked Sendable {
                     scene: scene,
                     personalBiasTerms: personalBiasTerms,
                     replyCueAnchoredToCurrentSentence: productProfile.decisionPolicy.replyCueAnchoredToCurrentSentence,
-                    configuration: quietGate
+                    configuration: quietGate,
+                    personalPhraseAgreement: phraseAgreement?.agreed ?? false,
+                    personalPhraseLogSupport: phraseAgreement?.logSupport ?? 0.0
                 )
                 if !gateDecision.allow {
                     // Hold back displaying an unapproved partial without

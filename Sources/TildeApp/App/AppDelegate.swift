@@ -144,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalNextWordProvider: Self.personalNextWordProvider(for: personalHistoryController),
         personalBiasTermsProvider: Self.personalBiasTermsProvider(for: personalHistoryController),
         personalVoiceScaffoldProvider: Self.personalVoiceScaffoldProvider(for: personalHistoryController),
+        personalPhraseMatchProvider: Self.personalPhraseMatchProvider(for: personalHistoryController),
         configuration: effectiveConfiguration,
         productProfile: completionProductProfile
     )
@@ -190,6 +191,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         { register, appBundleIdentifier in
             controller.personalVoiceScaffold(
                 for: register,
+                appBundleIdentifier: appBundleIdentifier
+            )
+        }
+    }
+
+    private nonisolated static func personalPhraseMatchProvider(
+        for controller: PersonalHistoryController
+    ) -> @Sendable (String, ContinuationRegister, String?) -> PersonalPhraseMatch? {
+        { textBeforeCursor, register, appBundleIdentifier in
+            controller.personalPhraseMatch(
+                textBeforeCursor: textBeforeCursor,
+                register: register,
                 appBundleIdentifier: appBundleIdentifier
             )
         }

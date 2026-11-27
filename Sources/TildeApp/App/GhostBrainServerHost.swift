@@ -74,6 +74,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
     private let personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)?
     private let personalBiasTermsProvider: (@Sendable ([String], String?) -> [WeightedBiasTerm])?
     private let personalVoiceScaffoldProvider: (@Sendable (ContinuationRegister, String?) -> String?)?
+    private let personalPhraseMatchProvider: (@Sendable (String, ContinuationRegister, String?) -> PersonalPhraseMatch?)?
     private let productProfile: TildeProductProfile
     /// The whole behaviour the app serves, stamped on every response line
     /// so the keyboard runs the same interaction policy and every outcome
@@ -100,6 +101,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         personalNextWordProvider: (@Sendable ([String], String?) async -> PersonalNextWordPrediction?)? = nil,
         personalBiasTermsProvider: (@Sendable ([String], String?) -> [WeightedBiasTerm])? = nil,
         personalVoiceScaffoldProvider: (@Sendable (ContinuationRegister, String?) -> String?)? = nil,
+        personalPhraseMatchProvider: (@Sendable (String, ContinuationRegister, String?) -> PersonalPhraseMatch?)? = nil,
         configuration: TildeEffectiveConfiguration? = nil,
         productProfile: TildeProductProfile = PreviewModelSelection.completionProfile(
             for: TildeProductProfile.current
@@ -134,6 +136,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
         self.personalNextWordProvider = personalNextWordProvider
         self.personalBiasTermsProvider = personalBiasTermsProvider
         self.personalVoiceScaffoldProvider = personalVoiceScaffoldProvider
+        self.personalPhraseMatchProvider = personalPhraseMatchProvider
     }
 
     func clearTokenBiasCache() {
@@ -438,6 +441,12 @@ final class GhostBrainServerHost: @unchecked Sendable {
             } else {
                 personalBiasTerms = []
             }
+            let personalPhraseMatch: PersonalPhraseMatch?
+            if personalSuggestionsEnabled, !midWordContext, let phraseProvider = self.personalPhraseMatchProvider {
+                personalPhraseMatch = phraseProvider(completionRequest.context, register, completionRequest.app)
+            } else {
+                personalPhraseMatch = nil
+            }
             preInferenceMilliseconds = Self.milliseconds(since: requestStartedAt)
             let completion = Task {
                 try await self.engine.decide(
@@ -447,6 +456,7 @@ final class GhostBrainServerHost: @unchecked Sendable {
                     experimentArm: completionRequest.experimentArm,
                     personalBiasTerms: personalBiasTerms,
                     personalVoiceScaffold: personalVoiceScaffold,
+                    personalPhraseMatch: personalPhraseMatch,
                     onPartialSuggestion: { partials.send($0, firstStableWordMilliseconds: $1) }
                 )
             }

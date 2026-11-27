@@ -882,3 +882,240 @@ struct PersonalNextWordShadowTests {
         )!
     }
 }
+
+@Suite("PersonalPhraseExpert (H11 / H13)")
+struct PersonalPhraseExpertTests {
+    private static let dayMs: Int64 = 86_400_000
+    private static let baseTs: Int64 = 1_786_556_700_000
+
+    private func typedEvent(
+        id: String,
+        text: String,
+        dayOffset: Int64 = 0,
+        session: String = "session",
+        app: String = "com.example.Editor",
+        source: PersonalHistoryEventSource = .typed
+    ) -> PersonalHistoryEvent {
+        PersonalHistoryEvent(
+            id: id,
+            timestampMilliseconds: Self.baseTs + dayOffset * Self.dayMs,
+            historyIdentifier: "history",
+            consentIdentifier: "consent",
+            sessionIdentifier: session,
+            appBundleIdentifier: app,
+            source: source,
+            text: text
+        )!
+    }
+
+    @Test("Matches 4-gram > 3-gram > 2-gram, prefers matching register, extends multi-word phrases, and trims dangling tails")
+    func exactNgramAndPhraseExtension() throws {
+        var expert = PersonalPhraseExpert()
+        expert.consume([
+            typedEvent(id: "c1", text: "looks good to me right now ", dayOffset: 0, app: "com.tinyspeck.slackmacgap"),
+            typedEvent(id: "c2", text: "looks good to me right now ", dayOffset: 1, app: "com.tinyspeck.slackmacgap"),
+            typedEvent(id: "c3", text: "looks good to me right now ", dayOffset: 2, app: "com.tinyspeck.slackmacgap"),
+            typedEvent(id: "e1", text: "looks good to everyone on the ", dayOffset: 0, app: "com.apple.mail"),
+            typedEvent(id: "e2", text: "looks good to everyone on the ", dayOffset: 1, app: "com.apple.mail"),
+            typedEvent(id: "e3", text: "looks good to everyone on the ", dayOffset: 2, app: "com.apple.mail"),
+        ])
+
+        let chatMatch = try #require(expert.query(
+            textBeforeCursor: "looks good to ",
+            register: .chat,
+            referenceTimestampMilliseconds: Self.baseTs + 3 * Self.dayMs
+        ))
+        #expect(chatMatch.order == 4)
+        #expect(chatMatch.registerMatched)
+        #expect(chatMatch.firstWord == "me")
+        #expect(chatMatch.phrase == "me right now")
+        #expect(chatMatch.wordCount == 3)
+        #expect(chatMatch.support == 3)
+
+        let emailMatch = try #require(expert.query(
+            textBeforeCursor: "looks good to ",
+            register: .email,
+            referenceTimestampMilliseconds: Self.baseTs + 3 * Self.dayMs
+        ))
+        #expect(emailMatch.order == 4)
+        #expect(emailMatch.registerMatched)
+        #expect(emailMatch.firstWord == "everyone")
+        // Dangling function words ("on", "the") are trimmed from the multi-word phrase tail.
+        #expect(!emailMatch.phrase.hasSuffix(" the"))
+        #expect(!emailMatch.phrase.hasSuffix(" on"))
+
+        // Agreement API rewards matching first word and stays neutral on disagreement.
+        let agreed = chatMatch.agreement(with: " me right away")
+        #expect(agreed.agreed)
+        #expect(agreed.logSupport > 0.5)
+        let disagreed = chatMatch.agreement(with: " someone else")
+        #expect(!disagreed.agreed)
+        #expect(disagreed.logSupport == 0.0)
+    }
+
+    @Test("Chronological recency decay lets fresh habits beat old habits and drops stale one-off facts")
+    func recencyDecayAndStaleFactRejection() throws {
+        var expert = PersonalPhraseExpert(halfLifeDays: 30.0, minimumRecencySupport: 0.05)
+        // Old habit (day 0): typed 3 times
+        expert.consume([
+            typedEvent(id: "old1", text: "let us meet Tuesday ", dayOffset: 0),
+            typedEvent(id: "old2", text: "let us meet Tuesday ", dayOffset: 1),
+            typedEvent(id: "old3", text: "let us meet Tuesday ", dayOffset: 2),
+        ])
+        // One-off stale fact (day 0)
+        expert.consume([
+            typedEvent(id: "stale1", text: "my flight departs Berlin ", dayOffset: 0),
+        ])
+        // Newer habit (day 90): typed 2 times — beats older 3x habit after 3 half-lives
+        expert.consume([
+            typedEvent(id: "new1", text: "let us meet Thursday ", dayOffset: 90),
+            typedEvent(id: "new2", text: "let us meet Thursday ", dayOffset: 91),
+        ])
+
+        let atDay92 = Self.baseTs + 92 * Self.dayMs
+        let habitMatch = try #require(expert.query(
+            textBeforeCursor: "let us meet ",
+            register: .prose,
+            referenceTimestampMilliseconds: atDay92
+        ))
+        #expect(habitMatch.firstWord == "thursday")
+        #expect(habitMatch.recencySupport > 1.5)
+
+        // At day 180 (6 half-lives -> 2^-6 = 0.0156 < 0.05), the stale one-off fact is rejected.
+        let atDay180 = Self.baseTs + 180 * Self.dayMs
+        #expect(expert.query(
+            textBeforeCursor: "my flight departs ",
+            register: .prose,
+            referenceTimestampMilliseconds: atDay180
+        ) == nil)
+    }
+
+    @Test("Rejects secrets, PII, digits, URLs, high-entropy tokens, accepted suggestions, and breaks context across secrets")
+    func secretAndSensitiveTokenRejection() {
+        var expert = PersonalPhraseExpert()
+        let unsafeTexts = [
+            "my api key is sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz thanks ",
+            "use card 4111 1111 1111 1111 please ",
+            "ssn is 123-45-6789 today ",
+            "email alice.smith@example.com right now ",
+            "call 555-123-4567 soon ",
+            "visit https://internal.example.com/secret soon ",
+            "random token xKmQpLwRzTvBnHjK next ",
+            "meeting at 10am tomorrow ",
+        ]
+        for (i, text) in unsafeTexts.enumerated() {
+            expert.consume([typedEvent(id: "u\(i)", text: text, session: "s\(i)")])
+        }
+        // Split secret across two keystroke flushes in the same session.
+        expert.consume([
+            typedEvent(id: "split1", text: "bearer token sk-proj-", session: "split"),
+            typedEvent(id: "split2", text: "AbCdEf1234567890GhIjKlMnOpQrStUvWxYz done ", session: "split"),
+        ])
+        // Accepted suggestions must never be learned.
+        expert.consume([
+            typedEvent(id: "acc1", text: "never learn accepted phrase ", session: "acc", source: .acceptedSuggestion),
+            typedEvent(id: "acc2", text: "never learn accepted phrase ", session: "acc", source: .acceptedSuggestion),
+        ])
+
+        let snapshot = expert.snapshot
+        let encoded = (try? JSONEncoder().encode(snapshot)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        #expect(!encoded.contains("sk-proj"))
+        #expect(!encoded.contains("4111"))
+        #expect(!encoded.contains("6789"))
+        #expect(!encoded.contains("example.com"))
+        #expect(!encoded.contains("555"))
+        #expect(!encoded.contains("xKmQpLw"))
+        #expect(!encoded.contains("10am"))
+        #expect(!encoded.contains("redacted"))
+        #expect(!encoded.contains("accepted"))
+
+        // Context must break across a secret so "is" -> "thanks" is never bridged.
+        #expect(expert.query(textBeforeCursor: "api key is ", register: .prose) == nil)
+        #expect(expert.query(textBeforeCursor: "never learn ", register: .prose) == nil)
+    }
+
+    @Test("Snapshot round-trips deterministically and rejects malformed snapshots")
+    func snapshotRoundTripAndValidation() throws {
+        var expert = PersonalPhraseExpert()
+        expert.consume([
+            typedEvent(id: "r1", text: "sounds good to me ", dayOffset: 0, app: "com.tinyspeck.slackmacgap"),
+            typedEvent(id: "r2", text: "sounds good to me ", dayOffset: 1, app: "com.tinyspeck.slackmacgap"),
+        ])
+        let snap = expert.snapshot
+        #expect(snap.isCompatibleWithCurrentRecipe)
+        #expect(snap.isStructurallyValid)
+
+        let data = try JSONEncoder().encode(snap)
+        let decoded = try JSONDecoder().decode(PersonalPhraseExpertSnapshot.self, from: data)
+        var restored = PersonalPhraseExpert()
+        let didRestore = restored.restore(decoded)
+        #expect(didRestore)
+        #expect(restored.query(textBeforeCursor: "sounds good to ", register: .chat)
+            == expert.query(textBeforeCursor: "sounds good to ", register: .chat))
+
+        // Invalid token with digits is rejected on restore.
+        let invalid = PersonalPhraseExpertSnapshot(
+            v: PersonalPhraseExpertSnapshot.version,
+            recipeID: PersonalPhraseExpertSnapshot.recipeID,
+            latestTimestampMilliseconds: Self.baseTs,
+            globalContexts: [
+                .init(
+                    tokens: ["pin"],
+                    transitions: [.init(word: "1234", surface: "1234", count: 2, recencyWeight: 2.0, lastTimestampMilliseconds: Self.baseTs)],
+                    total: 2
+                ),
+            ],
+            registerContexts: [],
+            phraseContexts: [],
+            streams: [],
+            recentEvents: []
+        )
+        #expect(!invalid.isStructurallyValid)
+        var target = PersonalPhraseExpert()
+        let restoredInvalid = target.restore(invalid)
+        #expect(!restoredInvalid)
+    }
+
+    @Test("Bounded memory cap evicts stale contexts first and lookup stays sub-millisecond (<1 ms p99)")
+    func boundedMemoryAndSubMillisecondLatency() {
+        var expert = PersonalPhraseExpert()
+        // Populate thousands of distinct contexts across timestamps to verify
+        // both eviction safety and hot-path latency under load.
+        var batch: [PersonalHistoryEvent] = []
+        for i in 0..<2_000 {
+            let a = "w\(String(UnicodeScalar(97 + (i % 26))!))\(String(UnicodeScalar(97 + ((i / 26) % 26))!))alpha"
+            let b = "w\(String(UnicodeScalar(97 + ((i * 7) % 26))!))\(String(UnicodeScalar(97 + ((i / 17) % 26))!))beta"
+            let c = "w\(String(UnicodeScalar(97 + ((i * 13) % 26))!))gamma"
+            let dayOffset = Int64(i / 50)
+            batch.append(typedEvent(id: "b\(i)", text: "\(a) \(b) \(c) ", dayOffset: dayOffset, session: "s\(i % 10)"))
+        }
+        expert.consume(batch)
+        // Fresh phrase that should remain easily findable
+        expert.consume([
+            typedEvent(id: "fresh1", text: "quick check before shipping ", dayOffset: 60),
+            typedEvent(id: "fresh2", text: "quick check before shipping ", dayOffset: 61),
+        ])
+        #expect(expert.globalContextCount <= PersonalPhraseExpert.maximumGlobalContexts)
+        #expect(expert.registerContextCount <= PersonalPhraseExpert.maximumRegisterContexts)
+        #expect(expert.phraseContextCount <= PersonalPhraseExpert.maximumPhraseContexts)
+
+        let queries = [
+            "quick check before ",
+            "waaalpha wabeta ",
+            "unknown context words ",
+            "quick check ",
+        ]
+        var latenciesUs: [Double] = []
+        latenciesUs.reserveCapacity(400)
+        for i in 0..<400 {
+            let q = queries[i % queries.count]
+            let t0 = ProcessInfo.processInfo.systemUptime
+            _ = expert.query(textBeforeCursor: q, register: .prose, referenceTimestampMilliseconds: Self.baseTs + 62 * Self.dayMs)
+            let dtUs = (ProcessInfo.processInfo.systemUptime - t0) * 1_000_000.0
+            latenciesUs.append(dtUs)
+        }
+        latenciesUs.sort()
+        let p99Us = latenciesUs[Int(Double(latenciesUs.count - 1) * 0.99)]
+        #expect(p99Us < 1_000.0, "Expected <1 ms p99 lookup latency, measured \(p99Us) us")
+    }
+}

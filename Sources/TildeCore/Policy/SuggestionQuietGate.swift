@@ -409,7 +409,9 @@ public enum SuggestionQuietGate {
         }
         if features.personalVocabularyAgreement { z += weights.personalVocabularyAgreement }
         if features.personalPhraseAgreement { z += weights.personalPhraseAgreement }
-        z += weights.personalPhraseLogSupport * min(features.personalPhraseLogSupport, 6.0)
+        if features.personalPhraseLogSupport > 0 {
+            z += weights.personalPhraseLogSupport * min(features.personalPhraseLogSupport, 6.0)
+        }
         return (z, sigmoid(z))
     }
 
