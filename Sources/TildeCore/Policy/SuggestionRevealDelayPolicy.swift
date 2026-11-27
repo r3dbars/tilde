@@ -58,6 +58,19 @@ public enum SuggestionRevealDelayPolicy {
         )
     }
 
+    /// Incremental sleep checkpoints for polling asynchronous `insertText`
+    /// settlement in Chromium/Electron hosts during a chained accept.
+    /// Checking first at the 40 ms chained floor lets settled hosts reveal
+    /// immediately (saving 50 ms over a blind 90 ms sleep), while bounded
+    /// follow-up checks (130 ms total) absorb an occasional busy Electron
+    /// frame without discarding a ready speculative prefetch as context drift.
+    public static let calmChainSettleIntervalsNanoseconds: [UInt64] = [
+        40_000_000,
+        25_000_000,
+        30_000_000,
+        35_000_000,
+    ]
+
     /// `chained` marks a request issued by an accept rather than a
     /// keystroke: no key is being processed, so native editors reveal
     /// immediately (0 ms) and Chromium/Electron hosts use the short chained

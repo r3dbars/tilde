@@ -101,6 +101,7 @@ enum GhostOutcomeLedger {
         let register = receipt?.register ?? open.hostRegister
         let digest = receipt?.configurationDigest ?? ServedConfiguration.digest
         let elapsed = Int((max(0, time.timeIntervalSince(open.openedAt)) * 1_000).rounded())
+        let resolvedReason = (receipt?.reason == .shown ? nil : receipt?.reason) ?? reason
         guard let event = try? TextFreeOnlineEvent.silent(
             id: open.id,
             occurredAt: open.openedAt,
@@ -109,7 +110,7 @@ enum GhostOutcomeLedger {
             appCategory: TextFreeAppCategory.from(register: register).rawValue,
             register: register.rawValue,
             boundary: open.boundary,
-            reason: receipt?.reason ?? reason,
+            reason: resolvedReason,
             generated: receipt?.generated ?? false,
             deadlineMissed: deadlineMissed,
             generatorMilliseconds: receipt?.generatorMilliseconds,

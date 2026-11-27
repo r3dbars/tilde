@@ -154,22 +154,156 @@ struct FlowRevealPolicyTests {
         #expect(!FlowRevealPolicy.production.isOff)
     }
 
-    @Test("Reveal waits past 1.2x the upper stride, capped at 300 ms")
+    @Test("Reveal waits past 1.35x the upper stride, capped at 300 ms")
     func revealOutlastsStride() {
         let flow = FlowRevealPolicy.production
         let fast = TypingCadenceTrackerTestsSupport.fastTracker() // upper stride 140
         #expect(fast.upperStrideMilliseconds == 140)
-        #expect(flow.revealMilliseconds(baseMilliseconds: 120, chained: false, cadence: fast, refractory: .init()) == 168)
+        #expect(flow.revealMilliseconds(baseMilliseconds: 120, chained: false, cadence: fast, refractory: .init()) == 189)
         let medium = TypingCadenceTrackerTestsSupport.tracker(intervals: [240, 250, 260, 250, 255]) // upper 260
         #expect(flow.revealMilliseconds(baseMilliseconds: 120, chained: false, cadence: medium, refractory: .init()) == 300)
         // A native editor's 45 ms floor rises the same way.
-        #expect(flow.revealMilliseconds(baseMilliseconds: 45, chained: false, cadence: fast, refractory: .init()) == 168)
+        #expect(flow.revealMilliseconds(baseMilliseconds: 45, chained: false, cadence: fast, refractory: .init()) == 189)
         // Unknown cadence keeps the fixed floor.
         #expect(flow.revealMilliseconds(baseMilliseconds: 120, chained: false, cadence: TypingCadenceTracker(), refractory: .init()) == 120)
         // The first key after a long pause usually opens another burst, so
         // it is gated by the same stride.
         let afterPause = TypingCadenceTrackerTestsSupport.tracker(intervals: [130, 130, 130, 130, 1_800])
-        #expect(flow.revealMilliseconds(baseMilliseconds: 120, chained: false, cadence: afterPause, refractory: .init()) == 156)
+        #expect(flow.revealMilliseconds(baseMilliseconds: 120, chained: false, cadence: afterPause, refractory: .init()) == 175)
+    }
+
+    @Test("Post-boundary inter-word strides protect fast typists without slowing their speed bucket")
+    func boundaryStridesProtectBimodalFastTypists() {
+        var cadence = TypingCadenceTracker()
+        var clock: TimeInterval = 100
+        cadence.noteKeystroke(atUptime: clock, startsBoundary: false)
+        // 3 words of fast intra-word digraphs (75-95 ms) separated by slower
+        // post-space inter-word transitions (180, 195, 210 ms).
+        let steps: [(ms: Int, startsBoundary: Bool)] = [
+            (80, false), (85, false), (90, false), (85, true),   // space typed
+            (180, false), (80, false), (75, false), (90, true),  // space typed
+            (195, false), (85, false), (80, false), (95, true),  // space typed
+            (210, false), (80, false), (85, false),
+        ]
+        for step in steps {
+            clock += Double(step.ms) / 1_000
+            cadence.noteKeystroke(atUptime: clock, startsBoundary: step.startsBoundary)
+        }
+        // Overall speed bucket stays fast (median ~85 ms), while boundary
+        // upper stride captures the 210 ms inter-word rhythm.
+        #expect(cadence.speedBucket == .fast)
+        #expect(cadence.boundaryStrides == [180, 195, 210])
+        #expect(cadence.boundaryUpperStrideMilliseconds == 210)
+        #expect(cadence.revealUpperStrideMilliseconds == 210)
+        let reveal = FlowRevealPolicy.production.revealMilliseconds(
+            baseMilliseconds: 120,
+            chained: false,
+            cadence: cadence,
+            refractory: .init()
+        )
+        #expect(reveal == 283) // 210 * 135 / 100, below 300 ms cap
+        // breakRun clears pending boundary flag while keeping history.
+        cadence.noteKeystroke(atUptime: clock + 0.08, startsBoundary: true)
+        cadence.breakRun()
+        cadence.noteKeystroke(atUptime: clock + 5.0, startsBoundary: false)
+        cadence.noteKeystroke(atUptime: clock + 5.09, startsBoundary: false)
+        #expect(cadence.boundaryStrides == [180, 195, 210])
+    }
+
+    @Test("Replay: bimodal fast and ultrafast typists get zero mid-stride flickers while every pause reveals")
+    func bimodalFastTypistReplayHasZeroMidStrideFlickers() {
+        func runBimodalReplay(
+            intraRange: ClosedRange<Int>,
+            interRange: ClosedRange<Int>,
+            flow: FlowRevealPolicy,
+            tracksBoundary: Bool,
+            seed: UInt64
+        ) -> (midStrideFlickers: Int, pausesShown: Int, totalPauses: Int, maxDelay: Int) {
+            var rng = seed
+            func next(_ range: ClosedRange<Int>) -> Int {
+                rng = rng &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                let span = UInt64(range.upperBound - range.lowerBound + 1)
+                return range.lowerBound + Int((rng >> 33) % span)
+            }
+            var cadence = TypingCadenceTracker()
+            let refractory = FlowRefractoryState()
+            var clock: TimeInterval = 500
+            cadence.noteKeystroke(atUptime: clock)
+            var midStrideFlickers = 0
+            var pausesShown = 0
+            var totalPauses = 0
+            var maxDelay = 0
+            for word in 0..<120 {
+                for _ in 0..<next(3...6) {
+                    let gap = next(intraRange)
+                    clock += Double(gap) / 1_000
+                    cadence.noteKeystroke(atUptime: clock, startsBoundary: false)
+                }
+                // Space typed: opens a word-boundary reveal gate.
+                clock += Double(next(intraRange)) / 1_000
+                cadence.noteKeystroke(atUptime: clock, startsBoundary: tracksBoundary)
+                let isPause = word % 4 == 3
+                let gap = isPause ? next(700...1_400) : next(interRange)
+                let schedule = SuggestionRevealDelayPolicy.schedule(
+                    afterUserTyped: " ",
+                    calmMarkedText: true,
+                    flow: flow,
+                    cadence: cadence,
+                    refractory: refractory
+                )
+                let delay = Int(schedule.revealDelayNanoseconds / 1_000_000)
+                if word >= 4 {
+                    maxDelay = max(maxDelay, delay)
+                    if isPause {
+                        totalPauses += 1
+                        if gap >= delay { pausesShown += 1 }
+                    } else if gap >= delay, (gap - delay) < 120 {
+                        midStrideFlickers += 1
+                    }
+                }
+                clock += Double(gap) / 1_000
+                cadence.noteKeystroke(atUptime: clock, startsBoundary: false)
+            }
+            return (midStrideFlickers, pausesShown, totalPauses, maxDelay)
+        }
+
+        let oldPolicy = FlowRevealPolicy(
+            strideRevealPercent: 120,
+            maximumStrideRevealMilliseconds: 300,
+            midWordStridePercent: 150,
+            maximumMidWordRequestMilliseconds: 360,
+            refractoryRejectStreak: 2,
+            refractoryRevealMilliseconds: 450,
+            refractoryMaximumKeystrokes: 12,
+            pauseResetMilliseconds: 900
+        )
+        // 105 WPM bimodal fast typist: 60-130 ms intra-word, 100-235 ms post-space.
+        let oldFast = runBimodalReplay(
+            intraRange: 60...130, interRange: 100...235,
+            flow: oldPolicy, tracksBoundary: false, seed: 0xBEEF_0001
+        )
+        let newFast = runBimodalReplay(
+            intraRange: 60...130, interRange: 100...235,
+            flow: .production, tracksBoundary: true, seed: 0xBEEF_0001
+        )
+        #expect(oldFast.midStrideFlickers > 25)
+        #expect(newFast.midStrideFlickers == 0)
+        #expect(newFast.pausesShown == newFast.totalPauses)
+        #expect(newFast.maxDelay <= 300)
+
+        // 130 WPM ultrafast typist: 50-105 ms intra-word, 90-200 ms post-space.
+        let oldUltra = runBimodalReplay(
+            intraRange: 50...105, interRange: 90...200,
+            flow: oldPolicy, tracksBoundary: false, seed: 0xBEEF_0002
+        )
+        let newUltra = runBimodalReplay(
+            intraRange: 50...105, interRange: 90...200,
+            flow: .production, tracksBoundary: true, seed: 0xBEEF_0002
+        )
+        #expect(oldUltra.midStrideFlickers > 25)
+        #expect(newUltra.midStrideFlickers == 0)
+        #expect(newUltra.pausesShown == newUltra.totalPauses)
+        #expect(newUltra.maxDelay <= 300)
     }
 
     @Test("Chained Tab-to-Tab stays 0 ms native and 40 ms calm, even mid-burst and in cooldown")
